@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Nome commerciale non ancora deciso: va allineato ad AppIdentity.displayName
+      nel modulo shared-ui quando verra' scelto.
+    -->
+    <string name="app_name">INSERIRE NOME</string>
+</resources>

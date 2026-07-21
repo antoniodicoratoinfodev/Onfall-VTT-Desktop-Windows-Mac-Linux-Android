@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Tema di sistema volutamente minimo: i colori veri li applica Compose con
+      AppTheme, cosi' desktop e Android restano identici nell'aspetto.
+    -->
+    <style name="Theme.App" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#FF070A12</item>
+        <item name="android:navigationBarColor">#FF070A12</item>
+        <item name="android:windowBackground">#FF0C1120</item>
+    </style>
+</resources>

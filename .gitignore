@@ -1,0 +1,38 @@
+# --- Build (Gradle) ---
+# 'build/' e '.gradle/' senza slash iniziale coprono ogni cartella con quel nome
+# a qualunque profondita', quindi anche i build annidati dei moduli.
+build/
+.gradle/
+out/
+.kotlin/
+
+# --- Percorso SDK specifico della macchina ---
+# Contiene il percorso locale dell'Android SDK: non va versionato, ognuno ha il suo.
+local.properties
+
+# --- Android ---
+.cxx/
+captures/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# --- IDE ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.fleet/
+
+# --- Log e crash della JVM ---
+*.log
+hs_err_pid*
+replay_pid*
+
+# --- Sistema ---
+.DS_Store
+Thumbs.db
+
+# Il gradle-wrapper.jar NON va ignorato: fa parte del wrapper e serve a chi clona.

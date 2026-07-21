@@ -1,0 +1,187 @@
+package app.d6d.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import app.d6d.persistence.catalog.ActorCatalogStore
+import app.d6d.ui.battle.BattleScreen
+import app.d6d.ui.components.initials
+import app.d6d.ui.content.SampleEncounter
+import app.d6d.sheet.SheetStore
+import app.d6d.ui.roster.RosterScreen
+import app.d6d.ui.roster.RosterViewModel
+import app.d6d.sheet.ImageStore
+import app.d6d.ui.images.FilePicker
+import app.d6d.ui.images.PortraitRepository
+import app.d6d.persistence.session.SessionArchiveStore
+import app.d6d.ui.session.SessionManager
+import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.AppTheme
+import java.nio.file.Path
+
+enum class Destination(val label: String, val glyph: String) {
+    BATTAGLIA("Battaglia", "⚔"),
+    COMPENDIO("Compendio", "📜"),
+}
+
+/**
+ * Radice dell'applicazione, condivisa fra desktop e Android.
+ *
+ * `compact` e' l'unico interruttore di forma: sotto una certa larghezza si passa
+ * alla shell mobile. Motore, stato e schermate restano gli stessi, come chiede il
+ * documento quando distingue shell adattive da un motore unico.
+ */
+@Composable
+fun AppRoot(
+    dataDirectory: Path,
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+    // Desktop e Android aprono selettori di file diversi: la shell lo fornisce.
+    filePicker: FilePicker = FilePicker { null },
+) {
+    AppTheme {
+        var destination by remember { mutableStateOf(Destination.BATTAGLIA) }
+
+        // Il roster unifica schede e compendio: le schede sono la fonte, il catalogo
+        // da combattimento ne discende.
+        val roster = remember {
+            RosterViewModel(
+                ActorCatalogStore(dataDirectory),
+                SheetStore(dataDirectory.resolve("schede.json")),
+            )
+        }
+        // La taglia dei segnaposti viene dal Compendio; le correzioni in battaglia
+        // confluiscono nella scheda autorevole.
+        val battleViewModel = remember {
+            BattleViewModel(
+                SampleEncounter.startedSession(),
+                footprintProvider = { definitionId -> roster.footprintFor(definitionId) },
+            ) { definitionId, snapshot ->
+                roster.applyCombatEdit(definitionId, snapshot)
+            }
+        }
+        val portraits = remember { PortraitRepository(ImageStore(dataDirectory), filePicker) }
+        val sessions = remember {
+            SessionManager(SessionArchiveStore(dataDirectory.resolve("sessions")), battleViewModel)
+        }
+
+        val content: @Composable (Modifier) -> Unit = { contentModifier ->
+            when (destination) {
+                Destination.BATTAGLIA ->
+                    BattleScreen(battleViewModel, portraits, sessions, compact = compact, modifier = contentModifier)
+
+                Destination.COMPENDIO ->
+                    RosterScreen(roster, portraits, compact = compact, modifier = contentModifier)
+            }
+        }
+
+        if (compact) {
+            Column(modifier.fillMaxSize().background(Palette.Night)) {
+                Box(Modifier.weight(1f)) { content(Modifier.fillMaxSize()) }
+                BottomNav(destination) { destination = it }
+            }
+        } else {
+            Row(modifier.fillMaxSize().background(Palette.Night)) {
+                NavRail(destination) { destination = it }
+                content(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun NavRail(current: Destination, onSelect: (Destination) -> Unit) {
+    Column(
+        Modifier
+            .width(94.dp)
+            .fillMaxSize()
+            .background(Palette.Abyss)
+            .padding(vertical = 13.dp, horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Box(
+            Modifier
+                .background(Palette.Gold, RoundedCornerShape(10.dp))
+                .padding(horizontal = 11.dp, vertical = 7.dp),
+        ) {
+            Text(
+                // Iniziali derivate dal nome: si aggiornano da sole quando
+                // il nome commerciale viene deciso.
+                text = initials(AppIdentity.displayName),
+                color = Palette.Abyss,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        Destination.entries.forEach { entry ->
+            NavItem(entry, entry == current, Modifier.fillMaxWidth()) { onSelect(entry) }
+        }
+    }
+}
+
+@Composable
+private fun BottomNav(current: Destination, onSelect: (Destination) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.Abyss)
+            .padding(7.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Destination.entries.forEach { entry ->
+            NavItem(entry, entry == current, Modifier.weight(1f)) { onSelect(entry) }
+        }
+    }
+}
+
+@Composable
+private fun NavItem(
+    destination: Destination,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val tint = if (selected) Palette.Gold else Palette.TextMuted
+    Column(
+        modifier
+            .background(
+                if (selected) Palette.Gold.copy(alpha = 0.12f) else Color.Transparent,
+                RoundedCornerShape(9.dp),
+            )
+            .clickable { onClick() }
+            .padding(vertical = 9.dp, horizontal = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text(text = destination.glyph, color = tint, style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = destination.label,
+            color = tint,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
