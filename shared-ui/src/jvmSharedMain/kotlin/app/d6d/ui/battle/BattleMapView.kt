@@ -388,10 +388,9 @@ private fun MovementReach(
     cellSize: Dp,
     mapOffset: Offset,
 ) {
-    val budget = viewModel.budget(placement.combatantId()) ?: return
-    val grid = viewModel.battleMap.grid()
-    val squares = budget.movementRemainingFeet() / grid.feetPerSquare()
+    val squares = viewModel.movementSquaresRemaining(placement.combatantId())
     if (squares <= 0) return
+    val grid = viewModel.battleMap.grid()
 
     val origin = placement.origin()
     val startColumn = (origin.column() - squares).coerceAtLeast(0)
@@ -501,36 +500,62 @@ private fun MapToken(
                     if (defeated) append(", fuori combattimento")
                 }
             }
-            .pointerInput(id, placement.origin(), cellSize, viewModel.editMode) {
-                if (!viewModel.editMode) return@pointerInput
-                // In modalità modifica il segnaposto si trascina subito, senza tenere
-                // premuto: basta cliccarlo e spostarlo. La collocazione e' libera e
-                // ignora i limiti di movimento del turno, perche' serve a comporre la
-                // scena, non a giocare il turno.
+            // Modalità modifica: qualunque segnaposto si trascina liberamente per
+            // comporre la scena. Modalità normale: solo il combattente di turno si
+            // trascina, e lo spostamento vero passa dal motore, quindi consuma il
+            // budget e non supera il raggio percorribile. Gli altri segnaposti non
+            // si trascinano: il clic li seleziona come bersaglio, come prima.
+            .pointerInput(id, placement.origin(), cellSize, viewModel.editMode, active) {
+                if (!viewModel.editMode && !active) return@pointerInput
                 detectDragGestures(
                     onDragStart = {
-                        viewModel.selectedTargetId = id
                         dragOffset = Offset.Zero
+                        if (viewModel.editMode) viewModel.selectedTargetId = id
                     },
                     onDragCancel = { dragOffset = Offset.Zero },
                     onDragEnd = {
-                        // Il bersaglio viene riportato dentro la griglia tenendo conto
-                        // dell'ingombro, cosi' trascinare oltre il bordo non fallisce
-                        // ma si ferma all'ultima casella valida.
                         val grid = viewModel.battleMap.grid()
+                        val origin = placement.origin()
                         val squares = placement.squaresPerSide()
-                        val column = (placement.origin().column() + (dragOffset.x / cellPx).roundToInt())
-                            .coerceIn(0, (grid.columns() - squares).coerceAtLeast(0))
-                        val row = (placement.origin().row() + (dragOffset.y / cellPx).roundToInt())
-                            .coerceIn(0, (grid.rows() - squares).coerceAtLeast(0))
-                        dragOffset = Offset.Zero
-                        if (column != placement.origin().column() || row != placement.origin().row()) {
-                            viewModel.reposition(id, column, row)
+                        if (viewModel.editMode) {
+                            // Collocazione libera: riportata dentro la griglia tenendo
+                            // conto dell'ingombro, cosi' trascinare oltre il bordo si
+                            // ferma all'ultima casella valida invece di fallire.
+                            val column = (origin.column() + (dragOffset.x / cellPx).roundToInt())
+                                .coerceIn(0, (grid.columns() - squares).coerceAtLeast(0))
+                            val row = (origin.row() + (dragOffset.y / cellPx).roundToInt())
+                                .coerceIn(0, (grid.rows() - squares).coerceAtLeast(0))
+                            dragOffset = Offset.Zero
+                            if (column != origin.column() || row != origin.row()) {
+                                viewModel.reposition(id, column, row)
+                            }
+                        } else {
+                            // Movimento del turno: la destinazione e' limitata al raggio
+                            // percorribile (distanza di Chebyshev) prima di finire dentro
+                            // la griglia, cosi' il motore non la rifiuta per budget. Con
+                            // il residuo a zero il segnaposto resta dov'e'.
+                            val reach = viewModel.movementSquaresRemaining(id)
+                            val column = (origin.column() + (dragOffset.x / cellPx).roundToInt().coerceIn(-reach, reach))
+                                .coerceIn(0, (grid.columns() - squares).coerceAtLeast(0))
+                            val row = (origin.row() + (dragOffset.y / cellPx).roundToInt().coerceIn(-reach, reach))
+                                .coerceIn(0, (grid.rows() - squares).coerceAtLeast(0))
+                            dragOffset = Offset.Zero
+                            if (column != origin.column() || row != origin.row()) {
+                                viewModel.move(id, column, row)
+                            }
                         }
                     },
                     onDrag = { change, amount ->
                         change.consume()
-                        dragOffset += amount
+                        val next = dragOffset + amount
+                        dragOffset = if (viewModel.editMode) {
+                            next
+                        } else {
+                            // Non si lascia trascinare oltre il raggio percorribile:
+                            // il segnaposto si ferma al bordo dell'alone di movimento.
+                            val reachPx = viewModel.movementSquaresRemaining(id) * cellPx
+                            Offset(next.x.coerceIn(-reachPx, reachPx), next.y.coerceIn(-reachPx, reachPx))
+                        }
                     },
                 )
             }

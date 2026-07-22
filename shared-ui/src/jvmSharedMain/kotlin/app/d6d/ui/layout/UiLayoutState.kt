@@ -30,6 +30,9 @@ class UiLayoutState(
     var logHeight by mutableStateOf(initial.logHeightDp.dp)
     var logCollapsed by mutableStateOf(initial.logCollapsed)
     var turnsCollapsed by mutableStateOf(initial.turnsCollapsed)
+    var topBarHeight by mutableStateOf(initial.topBarHeightDp.dp)
+    var commandBarHeight by mutableStateOf(initial.commandBarHeightDp.dp)
+    var commandsCollapsed by mutableStateOf(initial.commandsCollapsed)
     var mapCellSize by mutableStateOf(initial.mapCellSizeDp.dp)
     var mapShowGrid by mutableStateOf(initial.mapShowGrid)
     var targetPlate by mutableStateOf(initial.targetPlate?.toOffset())
@@ -46,6 +49,9 @@ class UiLayoutState(
         logHeightDp = logHeight.value,
         logCollapsed = logCollapsed,
         turnsCollapsed = turnsCollapsed,
+        topBarHeightDp = topBarHeight.value,
+        commandBarHeightDp = commandBarHeight.value,
+        commandsCollapsed = commandsCollapsed,
         mapCellSizeDp = mapCellSize.value,
         mapShowGrid = mapShowGrid,
         targetPlate = targetPlate?.toFraction(),

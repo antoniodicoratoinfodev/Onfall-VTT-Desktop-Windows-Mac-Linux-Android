@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,6 +43,8 @@ import app.d6d.ui.components.Chip
 import app.d6d.ui.components.CombatantPortrait
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.Faction
+import app.d6d.ui.components.HorizontalResizeHandle
+import app.d6d.ui.components.ScaledDensity
 import app.d6d.ui.components.VerticalResizeHandle
 import kotlin.math.roundToInt
 import app.d6d.ui.images.PortraitRepository
@@ -51,6 +54,12 @@ import app.d6d.ui.session.SessionMenuButton
 import app.d6d.ui.session.SessionMenuDialog
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
+
+// Altezza a cui i riquadri dell'ordine turni hanno la dimensione naturale (scala
+// 1). Piu' la fascia supera questa quota, piu' i riquadri crescono; sotto,
+// rimpiccioliscono. Cosi' il contenuto riempie sempre la fascia mentre la si
+// trascina, invece di restare fermo con dello spazio vuoto.
+private val TOP_BAR_BASE = 64.dp
 
 /**
  * Schermata di combattimento.
@@ -67,8 +76,20 @@ fun BattleScreen(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val layout = LocalUiLayout.current
+    val density = LocalDensity.current
     Column(modifier.fillMaxSize().background(Palette.Night)) {
         BattleTopBar(viewModel, sessions, compact)
+        // Il bordo inferiore della fascia turni: trascinandolo verso il basso la
+        // fascia cresce. Solo sul desktop e solo quando l'ordine turni e' visibile.
+        if (!compact && !layout.turnsCollapsed) {
+            HorizontalResizeHandle(
+                onDrag = { dragPx ->
+                    layout.topBarHeight = (layout.topBarHeight + with(density) { dragPx.toDp() })
+                        .coerceIn(56.dp, 240.dp)
+                },
+            )
+        }
         SessionMenuDialog(sessions)
 
         viewModel.message?.let { text ->
@@ -135,6 +156,17 @@ private fun WideBattleBody(
                     dropTarget = dropTarget,
                     floatingPlates = false,
                 )
+                // Il bordo superiore della fascia comandi: trascinandolo verso l'alto
+                // la fascia cresce a scapito della mappa. Sparisce quando i comandi
+                // sono contratti, che non hanno un'altezza da regolare.
+                if (!layout.commandsCollapsed) {
+                    HorizontalResizeHandle(
+                        onDrag = { dragPx ->
+                            layout.commandBarHeight = (layout.commandBarHeight - with(density) { dragPx.toDp() })
+                                .coerceIn(76.dp, 480.dp)
+                        },
+                    )
+                }
                 CommandBar(viewModel, compact = false)
             }
 
@@ -427,6 +459,7 @@ private fun BattleTopBar(
     Row(
         Modifier
             .fillMaxWidth()
+            .then(if (layout.turnsCollapsed) Modifier else Modifier.height(layout.topBarHeight))
             .background(Palette.Surface)
             .padding(horizontal = 12.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(9.dp),
@@ -434,24 +467,32 @@ private fun BattleTopBar(
     ) {
         BattleTitle(sessions)
 
-        // Contratto: la striscia dei turni sparisce e resta solo lo spazio elastico,
-        // cosi' titolo e comandi restano ai due lati senza allargare la barra.
+        // Contratto: la striscia sparisce e resta solo lo spazio elastico. Da
+        // espansa la colonna riempie l'altezza scelta e il contenuto viene scalato
+        // di conseguenza: piu' la fascia e' alta, piu' grandi sono i riquadri turno.
         if (layout.turnsCollapsed) {
             Spacer(Modifier.weight(1f))
         } else {
             Column(
-                Modifier.weight(1f),
+                Modifier.weight(1f).fillMaxHeight(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(1.dp),
+                verticalArrangement = Arrangement.Center,
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Eyebrow("Ordine dei turni")
-                    if (viewModel.isSimultaneousTurn) Chip("Turno simultaneo", Palette.GoldBright)
+                ScaledDensity((layout.topBarHeight / TOP_BAR_BASE).coerceIn(0.6f, 3.5f)) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Eyebrow("Ordine dei turni")
+                            if (viewModel.isSimultaneousTurn) Chip("Turno simultaneo", Palette.GoldBright)
+                        }
+                        TurnOrderStrip(viewModel, editing = viewModel.editMode)
+                    }
                 }
-                TurnOrderStrip(viewModel, editing = viewModel.editMode)
             }
         }
 

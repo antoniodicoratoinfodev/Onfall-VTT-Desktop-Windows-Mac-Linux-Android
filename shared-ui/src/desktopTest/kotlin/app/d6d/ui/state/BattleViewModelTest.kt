@@ -311,4 +311,47 @@ class BattleViewModelTest {
         assertEquals(5, model.placementOf(actor)!!.origin().row())
         assertEquals(movementBefore, model.budget(actor)!!.movementRemainingFeet())
     }
+
+    @Test
+    fun `il raggio percorribile deriva da budget e dimensione della casella`() {
+        val model = viewModel()
+        val actor = model.activeCombatantId!!
+        model.place(actor, 2, 2, model.squaresPerSideFor(actor))
+        val grid = model.battleMap.grid()
+
+        val expected = model.budget(actor)!!.movementRemainingFeet() / grid.feetPerSquare()
+        assertEquals(expected, model.movementSquaresRemaining(actor))
+        assertTrue(expected >= 4, "il combattente di turno deve poter percorrere il tragitto di prova")
+    }
+
+    @Test
+    fun `trascinare il token attivo in gioco consuma il budget e riduce il raggio`() {
+        val model = viewModel()
+        val actor = model.activeCombatantId!!
+        model.place(actor, 2, 2, model.squaresPerSideFor(actor))
+        val reachBefore = model.movementSquaresRemaining(actor)
+
+        // Da (2,2) a (6,5): quattro caselle di distanza di Chebyshev, come il
+        // rilascio del trascinamento con modifica disattivata.
+        model.move(actor, 6, 5)
+
+        assertEquals(6, model.placementOf(actor)!!.origin().column())
+        assertEquals(5, model.placementOf(actor)!!.origin().row())
+        assertEquals(reachBefore - 4, model.movementSquaresRemaining(actor))
+    }
+
+    @Test
+    fun `con il raggio a zero il token attivo non ha piu' caselle da percorrere`() {
+        val model = viewModel()
+        val actor = model.activeCombatantId!!
+        model.place(actor, 2, 2, model.squaresPerSideFor(actor))
+        val grid = model.battleMap.grid()
+
+        // Esaurisce il budget spostandosi fino a dove arriva, poi verifica che non
+        // resti spazio: e' il caso in cui il trascinamento non deve piu' muoverlo.
+        val reach = model.movementSquaresRemaining(actor)
+        model.move(actor, (2 + reach).coerceAtMost(grid.columns() - 1), 2)
+
+        assertEquals(0, model.movementSquaresRemaining(actor))
+    }
 }

@@ -2,11 +2,14 @@ package app.d6d.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +27,12 @@ import app.d6d.ui.theme.Palette
  * (desktop). Su Android e' un'operazione a vuoto: il tocco non ha cursore.
  */
 expect fun Modifier.horizontalResizeCursor(): Modifier
+
+/**
+ * Cursore di ridimensionamento verticale dove la piattaforma lo espone (desktop).
+ * Su Android e' un'operazione a vuoto: il tocco non ha cursore.
+ */
+expect fun Modifier.verticalResizeCursor(): Modifier
 
 /**
  * Barra verticale sottile e trascinabile fra due pannelli affiancati.
@@ -66,6 +75,52 @@ fun VerticalResizeHandle(
             Modifier
                 .fillMaxHeight()
                 .width(if (active) 3.dp else 1.dp)
+                .background(if (active) Palette.Gold else Palette.Line),
+        )
+    }
+}
+
+/**
+ * Barra orizzontale sottile e trascinabile fra due pannelli impilati.
+ *
+ * La controparte verticale della barra fra le colonne: `onDrag` riceve lo
+ * spostamento verticale in pixel (positivo verso il basso); chi la usa lo
+ * converte in una nuova altezza applicando i propri limiti. Si illumina al
+ * passaggio del mouse e durante il trascinamento, con il cursore nord-sud.
+ */
+@Composable
+fun HorizontalResizeHandle(
+    onDrag: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    var dragging by remember { mutableStateOf(false) }
+    val active = hovered || dragging
+
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(9.dp)
+            .verticalResizeCursor()
+            .hoverable(interaction)
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragStart = { dragging = true },
+                    onDragEnd = { dragging = false },
+                    onDragCancel = { dragging = false },
+                    onVerticalDrag = { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount)
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(if (active) 3.dp else 1.dp)
                 .background(if (active) Palette.Gold else Palette.Line),
         )
     }

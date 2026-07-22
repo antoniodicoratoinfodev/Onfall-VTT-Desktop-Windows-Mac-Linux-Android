@@ -424,6 +424,21 @@ class BattleViewModel(
         battleMap.placementOf(combatantId).orElse(null)
 
     /**
+     * Caselle di movimento ancora disponibili nel turno del combattente.
+     *
+     * Zero quando il budget e' esaurito o quando il combattente non ne ha uno
+     * (non e' il suo turno). E' la stessa misura dell'alone di movimento, cosi' il
+     * trascinamento sulla mappa e il raggio disegnato coincidono sempre.
+     */
+    fun movementSquaresRemaining(combatantId: String): Int {
+        if (!mapConfigured) return 0
+        val budget = budget(combatantId) ?: return 0
+        val feetPerSquare = battleMap.grid().feetPerSquare()
+        if (feetPerSquare <= 0) return 0
+        return budget.movementRemainingFeet() / feetPerSquare
+    }
+
+    /**
      * Ingombro dei segnaposti, in caselle per lato.
      *
      * Lo snapshot da combattimento non porta la taglia — al motore serve la

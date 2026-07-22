@@ -38,6 +38,12 @@ data class UiLayout(
     val logHeightDp: Float = 230f,
     val logCollapsed: Boolean = false,
     val turnsCollapsed: Boolean = false,
+    // Altezza fissa della fascia turni sopra la mappa: i riquadri turno vengono
+    // scalati per riempirla, quindi allargandola crescono e restringendola calano.
+    val topBarHeightDp: Float = 64f,
+    // Altezza fissa della fascia comandi sotto la mappa, con scorrimento interno.
+    val commandBarHeightDp: Float = 176f,
+    val commandsCollapsed: Boolean = false,
     val mapCellSizeDp: Float = 46f,
     val mapShowGrid: Boolean = true,
     val targetPlate: PlateFraction? = null,
@@ -55,6 +61,8 @@ data class UiLayout(
         squadWidthDp = squadWidthDp.clampOr(100f, 640f, 230f),
         enemyWidthDp = enemyWidthDp.clampOr(120f, 720f, 310f),
         logHeightDp = logHeightDp.clampOr(40f, 640f, 230f),
+        topBarHeightDp = topBarHeightDp.clampOr(48f, 320f, 64f),
+        commandBarHeightDp = commandBarHeightDp.clampOr(48f, 640f, 176f),
         mapCellSizeDp = mapCellSizeDp.clampOr(14f, 140f, 46f),
         targetPlate = targetPlate?.sanitized(),
         activePlate = activePlate?.sanitized(),

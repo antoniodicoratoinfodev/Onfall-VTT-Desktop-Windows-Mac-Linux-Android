@@ -11,10 +11,10 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -40,8 +40,14 @@ import app.d6d.domain.combat.D20Mode
 import app.d6d.sheet.feetWithMetres
 import app.d6d.sheet.withMetricFeet
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.components.ScaledDensity
+import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
+
+// Altezza a cui i comandi hanno la dimensione naturale (scala 1). Oltre questa la
+// fascia ingrandisce abilita', oggetti e strumenti; sotto li rimpicciolisce.
+private val COMMAND_BAR_BASE = 176.dp
 
 /**
  * Pulsante in stile gioco: bordo acceso, riempimento scuro, etichetta marcata.
@@ -121,9 +127,13 @@ fun CommandBar(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
+    val layout = LocalUiLayout.current
     var toolsOpen by remember { mutableStateOf(false) }
     var itemsOpen by remember { mutableStateOf(false) }
-    var collapsed by remember { mutableStateOf(false) }
+    // Il collasso vive nel layout persistito, cosi' si ricorda fra un avvio e
+    // l'altro e la maniglia di ridimensionamento sa quando mostrarsi.
+    val collapsed = layout.commandsCollapsed
+    val scrollState = rememberScrollState()
     val activeId = viewModel.activeActorId
     val abilities = activeId?.let { viewModel.abilities(it) }.orEmpty()
     val budget = activeId?.let { viewModel.budget(it) }
@@ -132,11 +142,27 @@ fun CommandBar(
     BattleToolsDialog(viewModel, open = toolsOpen, onDismiss = { toolsOpen = false })
     BattleItemsDialog(items = sampleBattleItems, open = itemsOpen, onDismiss = { itemsOpen = false })
 
-    Column(
+    // Sul desktop, da espansa, la fascia ha un'altezza fissa scelta dall'utente e il
+    // contenuto viene scalato per riempirla: allargandola i pulsanti di abilita',
+    // oggetti e strumenti crescono, restringendola calano (e scorrono se non basta).
+    val scaled = !compact && !collapsed
+    val scale = if (scaled) (layout.commandBarHeight / COMMAND_BAR_BASE).coerceIn(0.6f, 2.4f) else 1f
+    val outerModifier = if (scaled) {
+        modifier
+            .fillMaxWidth()
+            .height(layout.commandBarHeight)
+            .background(Palette.Night)
+            .verticalScroll(scrollState)
+    } else {
         modifier
             .fillMaxWidth()
             .background(Palette.Night)
-            .padding(11.dp),
+    }
+
+    Box(outerModifier) {
+    ScaledDensity(scale) {
+    Column(
+        Modifier.fillMaxWidth().padding(11.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         // Intestazione sempre visibile: turno e bersaglio a capo se manca spazio
@@ -165,7 +191,7 @@ fun CommandBar(
                 collapsed = collapsed,
                 expandedLabel = "Comandi ▾",
                 collapsedLabel = "Comandi ▸",
-                onToggle = { collapsed = !collapsed },
+                onToggle = { layout.commandsCollapsed = !layout.commandsCollapsed },
             )
         }
 
@@ -196,8 +222,14 @@ fun CommandBar(
                 style = MaterialTheme.typography.bodySmall,
             )
         } else {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(abilities, key = { it.id() }) { ability ->
+            // Le capacita' vanno a capo per riempire l'altezza scelta per la fascia:
+            // allargandola si vedono tutte in griglia, restringendola scorrono.
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                abilities.forEach { ability ->
                     val affordable = combatActive && when (ability.activationCost()) {
                         ActivationCost.ACTION -> budget?.actionAvailable() ?: false
                         ActivationCost.BONUS_ACTION -> budget?.bonusActionAvailable() ?: false
@@ -291,6 +323,8 @@ fun CommandBar(
             )
         }
         } // fine del blocco nascondibile
+    }
+    }
     }
 }
 
