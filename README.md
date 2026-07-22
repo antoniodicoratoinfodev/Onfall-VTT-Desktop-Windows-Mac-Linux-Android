@@ -23,8 +23,7 @@ the event log stays below the enemies. The side columns **resize by dragging the
 they get narrow each combatant's information folds into a vertical list instead of being truncated.
 
 On the phone the same screen becomes one surface at a time (Stage, Party, Enemies, Log), with the
-controls always within thumb reach. The project brief explicitly asks **not** to turn the desktop
-into an enlarged mobile UI, nor the other way around: the layout changes, the engine does not.
+controls always within thumb reach.
 
 The tactical map is a grid. You **zoom with the mouse wheel**, drag the tokens to move them, and
 change the scale (feet per square) and the size on screen. With **Edit mode** on, the table composes
