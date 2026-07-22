@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +46,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -89,6 +92,7 @@ fun BattleMapView(
     showGrid: Boolean,
     modifier: Modifier = Modifier,
     dropTarget: TokenPlacementDrag? = null,
+    onCellSizeChange: (Dp) -> Unit = {},
 ) {
     if (!viewModel.mapConfigured) {
         MapNotConfigured(viewModel, modifier)
@@ -108,10 +112,33 @@ fun BattleMapView(
         dropTarget.rows = grid.rows()
     }
 
+    // La rotellina ingrandisce e riduce la mappa. I valori correnti passano da
+    // `rememberUpdatedState` cosi' il gestore non va riavviato a ogni zoom.
+    val currentCellSize by rememberUpdatedState(cellSize)
+    val onZoom by rememberUpdatedState(onCellSizeChange)
+
     Box(
         modifier
             .fillMaxSize()
             .background(Palette.Abyss)
+            // Intercetta lo scorrimento nella fase iniziale e lo consuma: cosi'
+            // zooma invece di far scorrere la mappa. Il trascinamento resta libero.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Scroll) {
+                            val dy = event.changes.fold(0f) { acc, change -> acc + change.scrollDelta.y }
+                            if (dy != 0f) {
+                                val factor = if (dy < 0f) 1.12f else 1f / 1.12f
+                                val next = (currentCellSize * factor).coerceIn(MIN_CELL, MAX_CELL)
+                                if (next != currentCellSize) onZoom(next)
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                }
+            }
             .horizontalScroll(rememberScrollState())
             .verticalScroll(rememberScrollState()),
     ) {

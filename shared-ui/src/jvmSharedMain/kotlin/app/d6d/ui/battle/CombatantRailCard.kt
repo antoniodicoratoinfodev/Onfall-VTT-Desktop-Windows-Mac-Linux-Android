@@ -337,11 +337,23 @@ private fun CombatantStats(
     }
     val initiative: (@Composable () -> Unit)? = viewModel.initiativeScore(combatantId)?.let { score ->
         @Composable {
-            Text(
-                text = "Iniz. $score",
-                color = Palette.TextMuted,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            EditableValue(
+                value = score.toString(),
+                editMode = viewModel.editMode,
+                numeric = true,
+                fieldWidth = 44.dp,
+                onCommit = { text ->
+                    text.trim().toIntOrNull()?.let {
+                        viewModel.overrideInitiative(combatantId, it)
+                    }
+                },
+            ) {
+                Text(
+                    text = "Iniz. $score",
+                    color = Palette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
     val items = listOfNotNull(armorClass, hitPoints, initiative)

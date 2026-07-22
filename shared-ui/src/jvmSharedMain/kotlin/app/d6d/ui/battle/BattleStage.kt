@@ -74,6 +74,7 @@ fun BattleStage(
                 showGrid = showGrid,
                 modifier = Modifier.fillMaxSize(),
                 dropTarget = dropTarget,
+                onCellSizeChange = { cellSize = it },
             )
 
             viewModel.effectiveTargetId()?.let { targetId ->

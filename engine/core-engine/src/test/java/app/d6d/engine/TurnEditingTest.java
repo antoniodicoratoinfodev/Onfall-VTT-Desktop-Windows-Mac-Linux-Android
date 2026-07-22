@@ -46,4 +46,16 @@ class TurnEditingTest {
         CombatSession session = CombatFixtures.active(53L);
         assertThrows(CombatRuleException.class, () -> session.reorderTurns(List.of("hero")));
     }
+
+    @Test
+    void overrideInitiativeReordersTheQueueAndKeepsCurrentActor() {
+        CombatSession session = CombatFixtures.active(54L);
+        // order [hero(20), goblin(10)], hero current
+        session.overrideInitiative("goblin", 30);
+
+        assertEquals(30, session.currentState().initiativeScores().get("goblin"));
+        assertEquals(List.of("goblin", "hero"), session.currentState().initiativeOrder());
+        assertEquals("hero", session.currentState().currentCombatantId().orElseThrow());
+        assertEquals(1, session.currentState().turnIndex());
+    }
 }

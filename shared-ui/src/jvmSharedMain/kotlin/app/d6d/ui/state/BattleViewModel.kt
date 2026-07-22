@@ -251,6 +251,19 @@ class BattleViewModel(
         reorderTurns(order)
     }
 
+    /**
+     * Cambia il punteggio d'iniziativa di un combattente (quello mostrato nelle
+     * barre) riordinando di conseguenza la coda. A scontro avviato passa
+     * dall'override; in fase di preparazione usa il comando ordinario.
+     */
+    fun overrideInitiative(combatantId: String, total: Int) = command {
+        if (status == CombatStatus.ACTIVE || status == CombatStatus.PAUSED) {
+            session.overrideInitiative(combatantId, total)
+        } else {
+            session.setInitiative(combatantId, total)
+        }
+    }
+
     fun undo() {
         message = null
         val effect = undoEffects.lastOrNull() ?: UndoEffect.None

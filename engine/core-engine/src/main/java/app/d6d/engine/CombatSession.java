@@ -950,6 +950,40 @@ public final class CombatSession {
     }
 
     /**
+     * Cambia a mano l'iniziativa di un combattente a scontro avviato e riordina la
+     * coda di conseguenza.
+     *
+     * <p>La coda viene riordinata per punteggio decrescente (le parita' seguono
+     * l'ordine di inserimento, come all'avvio). Chi sta agendo ora resta il
+     * combattente corrente, anche se la sua iniziativa e' cambiata.</p>
+     */
+    public synchronized void overrideInitiative(String combatantId, int total) {
+        if (state.status != CombatStatus.ACTIVE && state.status != CombatStatus.PAUSED) {
+            throw rule("Initiative can only be overridden during active play");
+        }
+        combatant(combatantId);
+        String anchor = currentCombatantIds().get(0);
+        beginCommand();
+        state.initiativeScores.put(combatantId, total);
+        List<String> resorted = state.initiativeOrder.stream()
+                .sorted(Comparator
+                        .<String>comparingInt(id -> state.initiativeScores.get(id)).reversed()
+                        .thenComparingInt(state.rosterOrder::indexOf))
+                .collect(Collectors.toList());
+        state.initiativeOrder.clear();
+        state.initiativeOrder.addAll(resorted);
+        List<List<String>> groups = turnGroups();
+        for (int i = 0; i < groups.size(); i++) {
+            if (groups.get(i).contains(anchor)) {
+                state.turnIndex = i;
+                break;
+            }
+        }
+        state.turnIndex = Math.max(0, Math.min(state.turnIndex, groups.size() - 1));
+        append(EventType.INITIATIVE_SET, combatantId, "", details("total", total));
+    }
+
+    /**
      * Dichiara se i pareggi d'iniziativa vengono giocati insieme.
      *
      * <p>Il regolamento fa risolvere le parita' al DM: renderle simultanee resta

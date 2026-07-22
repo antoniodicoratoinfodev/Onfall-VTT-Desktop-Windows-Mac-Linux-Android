@@ -147,6 +147,6 @@ fun MapControls(
     }
 }
 
-/** Dimensione minima e massima di una casella, in dp. */
-private val MIN_CELL = 14.dp
-private val MAX_CELL = 140.dp
+/** Dimensione minima e massima di una casella, in dp. Condivise con lo zoom a rotellina. */
+internal val MIN_CELL = 14.dp
+internal val MAX_CELL = 140.dp
