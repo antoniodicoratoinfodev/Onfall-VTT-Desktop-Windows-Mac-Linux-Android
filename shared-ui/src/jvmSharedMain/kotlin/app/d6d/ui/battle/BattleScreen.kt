@@ -34,6 +34,7 @@ import app.d6d.domain.combat.CombatStatus
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.Faction
+import app.d6d.ui.components.VerticalResizeHandle
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.SessionMenuButton
@@ -89,13 +90,25 @@ private fun WideBattleBody(
     portraits: PortraitRepository,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
+    var squadWidth by remember { mutableStateOf(230.dp) }
+    var enemyWidth by remember { mutableStateOf(310.dp) }
+
     Row(modifier) {
         Rail(
             viewModel = viewModel,
             title = "Squadra",
             ids = viewModel.partyIds,
             faction = Faction.PARTY,
-            modifier = Modifier.width(230.dp),
+            modifier = Modifier.width(squadWidth),
+        )
+
+        // Trascinando verso destra la squadra si allarga a scapito del palco.
+        VerticalResizeHandle(
+            onDrag = { dragPx ->
+                squadWidth = (squadWidth + with(density) { dragPx.toDp() })
+                    .coerceIn(150.dp, 420.dp)
+            },
         )
 
         Column(Modifier.weight(1f)) {
@@ -103,7 +116,15 @@ private fun WideBattleBody(
             CommandBar(viewModel, compact = false)
         }
 
-        Column(Modifier.width(310.dp)) {
+        // Il bordo sinistro dei nemici: trascinandolo verso sinistra la colonna cresce.
+        VerticalResizeHandle(
+            onDrag = { dragPx ->
+                enemyWidth = (enemyWidth - with(density) { dragPx.toDp() })
+                    .coerceIn(200.dp, 480.dp)
+            },
+        )
+
+        Column(Modifier.width(enemyWidth)) {
             Rail(
                 viewModel = viewModel,
                 title = "Nemici",

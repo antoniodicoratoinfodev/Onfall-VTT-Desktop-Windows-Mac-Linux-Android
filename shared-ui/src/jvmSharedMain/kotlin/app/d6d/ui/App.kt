@@ -22,13 +22,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.engine.CombatSession
 import app.d6d.ui.battle.BattleScreen
+import app.d6d.ui.components.VerticalResizeHandle
 import app.d6d.ui.components.initials
 import app.d6d.ui.content.SampleEncounter
 import app.d6d.ui.encounter.EncounterBuilderScreen
@@ -157,8 +160,16 @@ fun AppRoot(
                 BottomNav(destination) { destination = it }
             }
         } else {
+            val density = LocalDensity.current
+            var railWidth by remember { mutableStateOf(108.dp) }
             Row(modifier.fillMaxSize().background(Palette.Night)) {
-                NavRail(destination) { destination = it }
+                NavRail(destination, railWidth) { destination = it }
+                VerticalResizeHandle(
+                    onDrag = { dragPx ->
+                        railWidth = (railWidth + with(density) { dragPx.toDp() })
+                            .coerceIn(84.dp, 240.dp)
+                    },
+                )
                 content(Modifier.weight(1f))
             }
         }
@@ -180,10 +191,10 @@ fun AppRoot(
 }
 
 @Composable
-private fun NavRail(current: Destination, onSelect: (Destination) -> Unit) {
+private fun NavRail(current: Destination, width: Dp, onSelect: (Destination) -> Unit) {
     Column(
         Modifier
-            .width(108.dp)
+            .width(width)
             .fillMaxSize()
             .background(Palette.Abyss)
             .padding(vertical = 13.dp, horizontal = 8.dp),

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -40,6 +41,10 @@ import app.d6d.ui.theme.Palette
  *
  * Deve restare leggibile a colpo d'occhio durante il turno, quindi mostra solo
  * cio' che serve a decidere: PF, CA, condizioni e risorse del turno.
+ *
+ * La carta e' responsiva: misura la larghezza reale disponibile e, quando la barra
+ * viene stretta col mouse, ripiega ritratto, nome e statistiche in un elenco
+ * verticale invece di troncarli su una riga sola.
  */
 @Composable
 fun CombatantRailCard(
@@ -69,156 +74,247 @@ fun CombatantRailCard(
         if (defeated) append(" Sconfitto.")
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .minimumInteractiveComponentSize()
-            .background(
-                when {
-                    targeted -> faction.color.copy(alpha = 0.12f)
-                    active -> Palette.SurfaceHigh
-                    else -> Palette.Surface
-                },
-                shape,
-            )
-            .then(outline)
-            .semantics {
-                contentDescription = "Combattente ${snapshot.name()}"
-                stateDescription = cardState
-                selected = targeted
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        // Sotto questa soglia la riga ritratto + nome + statistiche non entra piu':
+        // si passa a una disposizione verticale in modo che nulla venga tagliato.
+        val narrow = maxWidth < 208.dp
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .minimumInteractiveComponentSize()
+                .background(
+                    when {
+                        targeted -> faction.color.copy(alpha = 0.12f)
+                        active -> Palette.SurfaceHigh
+                        else -> Palette.Surface
+                    },
+                    shape,
+                )
+                .then(outline)
+                .semantics {
+                    contentDescription = "Combattente ${snapshot.name()}"
+                    stateDescription = cardState
+                    selected = targeted
+                }
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = "Seleziona ${snapshot.name()} come bersaglio",
+                ) { viewModel.selectedTargetId = combatantId }
+                .padding(9.dp)
+                .alpha(if (defeated) 0.5f else 1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (active || targeted) {
+                Text(
+                    text = buildList {
+                        if (active) add("IN TURNO")
+                        if (targeted) add("BERSAGLIO")
+                    }.joinToString(" · "),
+                    color = if (targeted) faction.color else Palette.Gold,
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
-            .clickable(
-                role = Role.Button,
-                onClickLabel = "Seleziona ${snapshot.name()} come bersaglio",
-            ) { viewModel.selectedTargetId = combatantId }
-            .padding(9.dp)
-            .alpha(if (defeated) 0.5f else 1f),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        if (active || targeted) {
+
+            CombatantHeader(
+                viewModel = viewModel,
+                combatantId = combatantId,
+                snapshot = snapshot,
+                faction = faction,
+                active = active,
+                currentHitPoints = combatant.currentHitPoints(),
+                defeated = defeated,
+                narrow = narrow,
+            )
+
+            HealthBar(
+                current = combatant.currentHitPoints(),
+                max = snapshot.maxHitPoints(),
+                temporary = combatant.temporaryHitPoints(),
+            )
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = buildString {
+                        append("${combatant.currentHitPoints()}/${snapshot.maxHitPoints()}")
+                        if (combatant.temporaryHitPoints() > 0) append(" +${combatant.temporaryHitPoints()}")
+                    },
+                    color = Palette.Text,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (active && budget != null) {
+                    ResourcePips(
+                        actionAvailable = budget.actionAvailable(),
+                        bonusAvailable = budget.bonusActionAvailable(),
+                        reactionAvailable = budget.reactionAvailable(),
+                    )
+                }
+            }
+
+            if (combatant.conditions().isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    combatant.conditions().forEach { condition ->
+                        ConditionChip(
+                            type = condition.type(),
+                            rounds = condition.duration().remainingOccurrences(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Testata della carta: ritratto, nome e statistiche.
+ *
+ * `narrow` sceglie fra la disposizione affiancata (barra larga) e quella
+ * impilata a elenco verticale (barra stretta), senza mai troncare i valori.
+ */
+@Composable
+private fun CombatantHeader(
+    viewModel: BattleViewModel,
+    combatantId: String,
+    snapshot: app.d6d.domain.combat.CombatantSnapshot,
+    faction: Faction,
+    active: Boolean,
+    currentHitPoints: Int,
+    defeated: Boolean,
+    narrow: Boolean,
+) {
+    val name = @Composable {
+        EditableValue(
+            value = snapshot.name(),
+            editMode = viewModel.editMode,
+            onCommit = { viewModel.editCombatant(combatantId, name = it) },
+            fieldWidth = 128.dp,
+        ) {
             Text(
-                text = buildList {
-                    if (active) add("IN TURNO")
-                    if (targeted) add("BERSAGLIO")
-                }.joinToString(" · "),
-                color = if (targeted) faction.color else Palette.Gold,
-                style = MaterialTheme.typography.labelSmall,
+                text = snapshot.name(),
+                color = if (defeated) Palette.TextMuted else Palette.Text,
+                fontWeight = FontWeight.Bold,
+                // Quando la barra e' stretta il nome puo' andare a capo invece di
+                // essere troncato con i puntini.
+                maxLines = if (narrow) 2 else 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleMedium,
             )
         }
+    }
+    val stats = @Composable { CombatantStats(viewModel, combatantId, snapshot, narrow) }
 
+    val portrait = @Composable {
+        CombatantPortrait(
+            name = snapshot.name(),
+            currentHitPoints = currentHitPoints,
+            maxHitPoints = snapshot.maxHitPoints(),
+            faction = faction,
+            active = active,
+            diameter = if (narrow) 34.dp else 42.dp,
+        )
+    }
+
+    if (narrow) {
+        // Elenco verticale: ritratto e nome in cima, statistiche impilate sotto.
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                portrait()
+                Column(Modifier.weight(1f)) { name() }
+            }
+            stats()
+        }
+    } else {
         Row(
             horizontalArrangement = Arrangement.spacedBy(9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CombatantPortrait(
-                name = snapshot.name(),
-                currentHitPoints = combatant.currentHitPoints(),
-                maxHitPoints = snapshot.maxHitPoints(),
-                faction = faction,
-                active = active,
-                diameter = 42.dp,
-            )
-
+            portrait()
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                EditableValue(
-                    value = snapshot.name(),
-                    editMode = viewModel.editMode,
-                    onCommit = { viewModel.editCombatant(combatantId, name = it) },
-                    fieldWidth = 128.dp,
-                ) {
-                    Text(
-                        text = snapshot.name(),
-                        color = if (defeated) Palette.TextMuted else Palette.Text,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EditableValue(
-                        value = snapshot.armorClass().toString(),
-                        editMode = viewModel.editMode,
-                        numeric = true,
-                        fieldWidth = 46.dp,
-                        onCommit = { text ->
-                            text.trim().toIntOrNull()?.let {
-                                viewModel.editCombatant(combatantId, armorClass = it)
-                            }
-                        },
-                    ) {
-                        Text(
-                            text = "CA ${snapshot.armorClass()}",
-                            color = Palette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    EditableValue(
-                        value = snapshot.maxHitPoints().toString(),
-                        editMode = viewModel.editMode,
-                        numeric = true,
-                        fieldWidth = 52.dp,
-                        onCommit = { text ->
-                            text.trim().toIntOrNull()?.let {
-                                viewModel.editCombatant(combatantId, maxHitPoints = it)
-                            }
-                        },
-                    ) {
-                        Text(
-                            text = "PF max ${snapshot.maxHitPoints()}",
-                            color = Palette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    viewModel.initiativeScore(combatantId)?.let {
-                        Text(
-                            text = "Iniz. $it",
-                            color = Palette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
+                name()
+                stats()
             }
         }
+    }
+}
 
-        HealthBar(
-            current = combatant.currentHitPoints(),
-            max = snapshot.maxHitPoints(),
-            temporary = combatant.temporaryHitPoints(),
-        )
-
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+/**
+ * CA, PF massimi e iniziativa. In riga quando c'e' spazio, altrimenti in colonna
+ * (un valore per riga) cosi' restano tutti leggibili nella barra stretta.
+ */
+@Composable
+private fun CombatantStats(
+    viewModel: BattleViewModel,
+    combatantId: String,
+    snapshot: app.d6d.domain.combat.CombatantSnapshot,
+    narrow: Boolean,
+) {
+    val armorClass = @Composable {
+        EditableValue(
+            value = snapshot.armorClass().toString(),
+            editMode = viewModel.editMode,
+            numeric = true,
+            fieldWidth = 46.dp,
+            onCommit = { text ->
+                text.trim().toIntOrNull()?.let {
+                    viewModel.editCombatant(combatantId, armorClass = it)
+                }
+            },
         ) {
             Text(
-                text = buildString {
-                    append("${combatant.currentHitPoints()}/${snapshot.maxHitPoints()}")
-                    if (combatant.temporaryHitPoints() > 0) append(" +${combatant.temporaryHitPoints()}")
-                },
-                color = Palette.Text,
-                fontWeight = FontWeight.Bold,
+                text = "CA ${snapshot.armorClass()}",
+                color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (active && budget != null) {
-                ResourcePips(
-                    actionAvailable = budget.actionAvailable(),
-                    bonusAvailable = budget.bonusActionAvailable(),
-                    reactionAvailable = budget.reactionAvailable(),
-                )
-            }
         }
-
-        if (combatant.conditions().isNotEmpty()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                combatant.conditions().forEach { condition ->
-                    ConditionChip(
-                        type = condition.type(),
-                        rounds = condition.duration().remainingOccurrences(),
-                    )
+    }
+    val hitPoints = @Composable {
+        EditableValue(
+            value = snapshot.maxHitPoints().toString(),
+            editMode = viewModel.editMode,
+            numeric = true,
+            fieldWidth = 52.dp,
+            onCommit = { text ->
+                text.trim().toIntOrNull()?.let {
+                    viewModel.editCombatant(combatantId, maxHitPoints = it)
                 }
-            }
+            },
+        ) {
+            Text(
+                text = "PF max ${snapshot.maxHitPoints()}",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+    val initiative: (@Composable () -> Unit)? = viewModel.initiativeScore(combatantId)?.let { score ->
+        @Composable {
+            Text(
+                text = "Iniz. $score",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+    val items = listOfNotNull(armorClass, hitPoints, initiative)
+
+    if (narrow) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            items.forEach { it() }
+        }
+    } else {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            items.forEach { it() }
         }
     }
 }
