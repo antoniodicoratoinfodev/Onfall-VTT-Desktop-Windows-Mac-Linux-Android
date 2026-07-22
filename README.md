@@ -1,93 +1,85 @@
 # Onfall
 
-Strumento di combattimento e gestione incontri **compatibile con 5.5e / SRD**, offline-first,
-con interfaccia da videogioco. Desktop e Android condividono motore, dati e schermate.
+Onfall is a combat and encounter tracker compatible with 5.5e/SRD. It is offline first and has a
+video game style interface. Desktop and Android share the same engine, data, and screens.
 
-> **Repository di sola consultazione.** Questo codice è pubblicato **unicamente per la revisione
-> e la valutazione tecnica** (analisi del codice e delle capacità dell'autore). Non è destinato
-> all'uso, all'esecuzione per gioco, al fork né al riutilizzo, nemmeno parziale. Termini completi
-> in [`LICENSE.md`](LICENSE.md).
+> **Read only repository.** This code is published solely for review and technical evaluation, that
+> is, for analysis of the code and of the author's technical ability. It is not meant to be used, run
+> as a game, forked, or reused in any part. See [`LICENSE.md`](LICENSE.md).
 
-> Il nome evita volutamente il marchio "D&D", come raccomanda il paragrafo 1 del documento di
-> progetto: l'applicazione si dichiara *compatibile con 5.5e*, non approvata ufficialmente.
+## What it is
 
-## Cos'è
+Three products living on the same engine:
 
-Tre prodotti che convivono sullo stesso motore:
+1. an **archive** of characters, creatures, and abilities (the Compendium);
+2. a **combat engine** that is independent from the interface, deterministic, and undoable;
+3. a **game interface** that presents the fight as a turn based battle.
 
-1. un **archivio** di personaggi, creature e capacità (il Compendio);
-2. un **motore di combattimento** indipendente dall'interfaccia, deterministico e annullabile;
-3. una **interfaccia di gioco** che presenta lo scontro come una battaglia a turni.
+## Interface
 
-## Interfaccia
+On the desktop the battle screen keeps three areas visible together: the **party** on the left, the
+**battle scene** in the center, the **enemies** on the right. The turn order runs across the top, and
+the event log stays below the enemies. The side columns **resize by dragging their edge**, and when
+they get narrow each combatant's information folds into a vertical list instead of being truncated.
 
-Sul desktop la schermata di battaglia tiene tre aree visibili insieme: la **squadra** a
-sinistra, la **scena di battaglia** al centro, i **nemici** a destra; in alto scorre l'ordine
-dei turni, sotto i nemici resta il registro degli eventi. Le colonne laterali si
-**ridimensionano trascinandone il bordo**, e quando si stringono le informazioni di ogni
-combattente si ripiegano in verticale invece di essere troncate.
+On the phone the same screen becomes one surface at a time (Stage, Party, Enemies, Log), with the
+controls always within thumb reach. The project brief explicitly asks **not** to turn the desktop
+into an enlarged mobile UI, nor the other way around: the layout changes, the engine does not.
 
-Su telefono la stessa schermata diventa una superficie alla volta (Palco / Squadra / Nemici /
-Registro) con i comandi sempre a portata di pollice. Il documento chiede esplicitamente di
-**non** fare del desktop una UI mobile ingrandita, né viceversa: cambia il layout, non il
-motore.
+The tactical map is a grid. You **zoom with the mouse wheel**, drag the tokens to move them, and
+change the scale (feet per square) and the size on screen. With **Edit mode** on, the table composes
+the scene freely: it corrects name, AC, HP, and initiative directly on the cards, reorders the turns
+and picks the current one, drags characters from the side bars onto the map, and moves tokens
+ignoring the movement limits. Outside Edit mode those shortcuts disappear, so a session is not
+altered by mistake.
 
-La mappa tattica è a griglia: si **zooma con la rotellina**, si trascinano i segnaposti per
-spostarli, e scala (piedi per casella) e dimensioni si cambiano a schermo. Con la **modalità
-Modifica** attiva il tavolo compone la scena liberamente — corregge nome, CA, PF e iniziativa
-direttamente sulle carte, riordina i turni e sceglie quello corrente, trascina i personaggi
-dalle barre laterali sulla mappa e sposta i token ignorando i limiti di movimento. Fuori dalla
-modifica quelle scorciatoie spariscono, così non si altera una partita per sbaglio.
+All portraits are drawn as vectors from code. There is no imported image, so every creature added
+has an immediate visual representation and there are no licensing constraints on the graphics.
 
-Tutti i ritratti sono disegnati a vettori dal codice. Non esiste nessuna immagine importata,
-quindi ogni creatura inserita ha subito una rappresentazione visiva e non ci sono vincoli di
-licenza sulla grafica.
+## Architecture
 
-## Architettura
-
-| Modulo | Linguaggio | Ruolo |
+| Module | Language | Role |
 |---|---|---|
-| `engine/domain-model` | Java 17 | attori, capacità, condizioni, stato, campagne. Immutabile, zero dipendenze |
-| `engine/core-engine` | Java 17 | dadi con seed, macchina a stati, audit append-only, budget XP |
-| `engine/persistence-json` | Java 17 | salvataggi atomici, backup, import/export |
-| `engine/sheet-model` | Kotlin | scheda personaggio 2024 e stat block mostri 2025 |
-| `shared-ui` | Kotlin + Compose MP | tema, componenti, schermate, stato di presentazione |
-| `desktop-app` | Kotlin | finestra JVM, shell densa |
-| `android-app` | Kotlin | Activity, shell touch |
+| `engine/domain-model` | Java 17 | actors, abilities, conditions, state, campaigns. Immutable, zero dependencies |
+| `engine/core-engine` | Java 17 | seeded dice, state machine, append only audit, XP budget |
+| `engine/persistence-json` | Java 17 | atomic saves, backups, import and export |
+| `engine/sheet-model` | Kotlin | 2024 character sheet and 2025 monster stat block |
+| `shared-ui` | Kotlin + Compose MP | theme, components, screens, presentation state |
+| `desktop-app` | Kotlin | JVM window, dense shell |
+| `android-app` | Kotlin | Activity, touch shell |
 
-Il motore è Java e resta consumabile da entrambe le piattaforme perché Android e desktop girano
-entrambi su bytecode JVM. La UI condivisa vive in `jvmSharedMain` anziché in `commonMain`, il che
-le permette di usare direttamente le classi Java del motore.
+The engine is Java and stays usable from both platforms because Android and desktop both run on JVM
+bytecode. The shared UI lives in `jvmSharedMain` rather than `commonMain`, which lets it use the
+engine's Java classes directly.
 
-`core-engine` non conosce testi, classi o mostri: le regole stanno nel motore, i contenuti nei
-pacchetti separati.
+`core-engine` knows nothing about texts, classes, or monsters: the rules live in the engine, the
+content in separate packages.
 
-## Build e verifica
+## Build and verification
 
-Per chi revisiona il codice e vuole controllare che compili e che i test passino. Serve un
-JDK 17 o superiore (verificato con JDK 26); l'Android SDK occorre solo per l'APK e il suo percorso
-va in `local.properties`.
+For anyone reviewing the code who wants to check that it compiles and that the tests pass. A JDK 17
+or later is required (verified with JDK 26); the Android SDK is needed only for the APK, and its path
+goes in `local.properties`.
 
 ```bash
-# compila ed esegue l'intera suite di test
+# compile and run the whole test suite
 ./gradlew test :shared-ui:desktopTest
 
-# verifica che l'APK Android si costruisca
+# check that the Android APK builds
 ./gradlew :android-app:assembleDebug
 ```
 
-L'esecuzione dell'applicazione per l'uso o per gioco non è consentita: vedi la licenza.
+Running the application for use or for play is not allowed. See the license.
 
-## Licenza
+## License
 
-**Tutti i diritti riservati.** Il codice è consultabile **solo a fini di analisi e valutazione
-tecnica**: non è consentito eseguirlo per l'uso, forkarlo, ridistribuirlo o riutilizzarne parti —
-neppure singoli frammenti — in altri progetti. I termini completi sono in
-[`LICENSE.md`](LICENSE.md).
+**All rights reserved.** The code may be consulted **only for analysis and technical evaluation**. It
+may not be run for use, forked, redistributed, or reused in part, not even single fragments, in other
+projects. The full terms are in [`LICENSE.md`](LICENSE.md).
 
-Il materiale dimostrativo incluso (`SampleEncounter`) è **interamente originale**: nessuno stat
-block, testo, nome o illustrazione proviene dai manuali commerciali. Vedi `NOTICE-SRD.md`.
+The demo material included (`SampleEncounter`) is **entirely original**. No stat block, text, name,
+or illustration comes from the commercial manuals. See `NOTICE-SRD.md`.
 
-## Stato
+## Status
 
-Vedi `docs/STATO.md` per la mappa onesta fra il documento di progetto e ciò che gira davvero.
+See `docs/STATO.md` for the honest map between the project brief and what actually runs.
