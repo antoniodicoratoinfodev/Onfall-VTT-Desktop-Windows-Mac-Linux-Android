@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -391,6 +392,9 @@ private fun BattleTopBar(
     sessions: SessionManager,
     compact: Boolean,
 ) {
+    // Il pannello ordine turni si puo' contrarre per liberare spazio in cima.
+    var turnsCollapsed by remember { mutableStateOf(false) }
+
     if (compact) {
         Column(
             Modifier.fillMaxWidth().background(Palette.Surface).padding(horizontal = 10.dp, vertical = 7.dp),
@@ -429,20 +433,33 @@ private fun BattleTopBar(
     ) {
         BattleTitle(sessions)
 
-        Column(
-            Modifier.weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(1.dp),
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        // Contratto: la striscia dei turni sparisce e resta solo lo spazio elastico,
+        // cosi' titolo e comandi restano ai due lati senza allargare la barra.
+        if (turnsCollapsed) {
+            Spacer(Modifier.weight(1f))
+        } else {
+            Column(
+                Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
-                Eyebrow("Ordine dei turni")
-                if (viewModel.isSimultaneousTurn) Chip("Turno simultaneo", Palette.GoldBright)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Eyebrow("Ordine dei turni")
+                    if (viewModel.isSimultaneousTurn) Chip("Turno simultaneo", Palette.GoldBright)
+                }
+                TurnOrderStrip(viewModel, editing = viewModel.editMode)
             }
-            TurnOrderStrip(viewModel, editing = viewModel.editMode)
         }
+
+        CollapseToggle(
+            collapsed = turnsCollapsed,
+            expandedLabel = "Turni ▾",
+            collapsedLabel = "Turni ▸",
+            onToggle = { turnsCollapsed = !turnsCollapsed },
+        )
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(7.dp),

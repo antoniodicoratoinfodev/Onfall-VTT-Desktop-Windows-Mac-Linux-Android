@@ -5,11 +5,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -111,6 +114,7 @@ private val D20Mode.italianLabel: String
  * Le capacita' vengono lette dallo snapshot del combattente attivo: e' il motore
  * a decidere se un'azione e' legale, qui si mostra soltanto cio' che possiede.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CommandBar(
     viewModel: BattleViewModel,
@@ -119,6 +123,7 @@ fun CommandBar(
 ) {
     var toolsOpen by remember { mutableStateOf(false) }
     var itemsOpen by remember { mutableStateOf(false) }
+    var collapsed by remember { mutableStateOf(false) }
     val activeId = viewModel.activeActorId
     val abilities = activeId?.let { viewModel.abilities(it) }.orEmpty()
     val budget = activeId?.let { viewModel.budget(it) }
@@ -134,21 +139,37 @@ fun CommandBar(
             .padding(11.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
+        // Intestazione sempre visibile: turno e bersaglio a capo se manca spazio
+        // (responsive), con a destra il tasto per contrarre o riaprire i comandi.
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            activeId?.let { Eyebrow("Turno: ${viewModel.name(it)}", Palette.Gold) }
-            viewModel.effectiveTargetId()?.let {
-                Text(
-                    text = "Bersaglio: ${viewModel.name(it)}",
-                    color = Palette.TextMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            FlowRow(
+                Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                activeId?.let { Eyebrow("Turno: ${viewModel.name(it)}", Palette.Gold) }
+                viewModel.effectiveTargetId()?.let {
+                    Text(
+                        text = "Bersaglio: ${viewModel.name(it)}",
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
+            CollapseToggle(
+                collapsed = collapsed,
+                expandedLabel = "Comandi ▾",
+                collapsedLabel = "Comandi ▸",
+                onToggle = { collapsed = !collapsed },
+            )
         }
 
+        if (!collapsed) {
         if (viewModel.isSimultaneousTurn) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -269,5 +290,33 @@ fun CommandBar(
                 onClick = { viewModel.endTurn() },
             )
         }
+        } // fine del blocco nascondibile
+    }
+}
+
+/**
+ * Tasto compatto per contrarre o riaprire una barra: stesso linguaggio visivo del
+ * resto, ma leggero, cosi' non ruba spazio ai comandi veri.
+ */
+@Composable
+internal fun CollapseToggle(
+    collapsed: Boolean,
+    expandedLabel: String,
+    collapsedLabel: String,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(role = Role.Button, onClick = onToggle)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = if (collapsed) collapsedLabel else expandedLabel,
+            color = Palette.TextMuted,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }

@@ -2,7 +2,6 @@ package app.d6d.ui.battle
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -20,12 +19,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -41,11 +42,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -107,71 +109,90 @@ fun BattleMapView(
     val density = LocalDensity.current
     val background = portraits.rememberBitmap(map.backgroundImage())
 
-    // La mappa pubblica la propria griglia cosi' che il trascinamento dalle barre
-    // laterali sappia tradurre il punto di rilascio in una casella.
-    if (dropTarget != null) {
-        dropTarget.cellPx = with(density) { cellSize.toPx() }
-        dropTarget.columns = grid.columns()
-        dropTarget.rows = grid.rows()
-    }
-
-    // Rotellina = zoom, trascinamento = spostamento. I valori correnti passano da
-    // `rememberUpdatedState` cosi' i gestori non vanno riavviati a ogni frame.
-    val currentCellSize by rememberUpdatedState(cellSize)
+    // Scala effettiva, aggiornata subito dal gestore della rotella. In questo modo
+    // piu' eventi ricevuti prima della ricomposizione si compongono sul valore appena
+    // calcolato, invece di riutilizzare ogni volta il vecchio parametro `cellSize`.
+    var liveCell by remember { mutableStateOf(cellSize) }
+    var appliedDensity by remember { mutableStateOf(density.density) }
     val onZoom by rememberUpdatedState(onCellSizeChange)
 
-    // La mappa non scorre piu' con le barre: vive dentro un riquadro e si sposta
-    // trascinandola. `viewport` e' la dimensione visibile, `pan` la traslazione
-    // corrente in pixel. Lo zoom resta ancorato al punto sotto il puntatore.
+    // La camera vive in pixel del viewport. `pan == null` significa che la mappa non
+    // e' ancora stata spostata e deve partire esattamente centrata.
     var viewport by remember { mutableStateOf(IntSize.Zero) }
-    var pan by remember { mutableStateOf(Offset.Zero) }
-    var centered by remember { mutableStateOf(false) }
-    val cellPx = with(density) { cellSize.toPx() }
+    var pan by remember { mutableStateOf<Offset?>(null) }
+    val cellPx = with(density) { liveCell.toPx() }
 
-    // Limiti dello spostamento. Il trascinamento non viene mai bloccato: una mappa
-    // piu' grande del riquadro scorre fino a mostrarne i bordi; una piu' piccola si
-    // sposta comunque dentro il riquadro. In nessun caso puo' uscirne del tutto.
-    // `slack` e' lo spazio di manovra su un asse: se positivo (mappa piu' piccola)
-    // la si muove fra 0 e slack, se negativo (mappa piu' grande) fra slack e 0.
-    fun clampPan(raw: Offset, cell: Float): Offset {
+    fun geometry(cell: Float): MapViewportGeometry {
         val gridNow = viewModel.battleMap.grid()
-        val slackX = viewport.width - cell * gridNow.columns()
-        val slackY = viewport.height - cell * gridNow.rows()
-        return Offset(
-            raw.x.coerceIn(minOf(0f, slackX), maxOf(0f, slackX)),
-            raw.y.coerceIn(minOf(0f, slackY), maxOf(0f, slackY)),
+        return MapViewportGeometry(
+            viewportSize = viewport,
+            columns = gridNow.columns(),
+            rows = gridNow.rows(),
+            cellPx = cell,
         )
     }
 
-    // La mappa parte centrata; poi ogni zoom o ridimensionamento del riquadro
-    // ricontrolla la traslazione perche' resti nei limiti, senza ricentrarla,
-    // cosi' non annulla lo spostamento scelto dall'utente.
-    LaunchedEffect(viewport, cellPx) {
-        if (viewport == IntSize.Zero) return@LaunchedEffect
-        pan = if (!centered) {
-            centered = true
-            val gridNow = viewModel.battleMap.grid()
-            clampPan(
-                Offset(
-                    (viewport.width - cellPx * gridNow.columns()) / 2f,
-                    (viewport.height - cellPx * gridNow.rows()) / 2f,
-                ),
-                cellPx,
-            )
-        } else {
-            clampPan(pan, cellPx)
+    fun effectiveOffset(camera: MapViewportGeometry): Offset =
+        camera.constrain(pan ?: camera.centeredOffset())
+
+    // I pulsanti e lo slider aggiornano `cellSize` dall'esterno. Anche quel cambio
+    // passa dalla stessa trasformazione della rotella, ancorata al centro del
+    // viewport, cosi' non salta improvvisamente verso l'origine della mappa. Anche
+    // un cambio di densita' (per esempio spostando la finestra su un altro monitor)
+    // e' uno zoom in pixel e deve conservare lo stesso punto centrale.
+    LaunchedEffect(cellSize, density.density) {
+        val currentCellPx = liveCell.value * appliedDensity
+        val nextCellPx = with(density) { cellSize.toPx() }
+        if (nextCellPx != currentCellPx) {
+            val camera = geometry(currentCellPx)
+            val anchor = Offset(viewport.width / 2f, viewport.height / 2f)
+            val nextPan = camera.zoomedOffset(effectiveOffset(camera), nextCellPx, anchor)
+            pan = nextPan
+            dropTarget?.gridOriginPx = nextPan
+            dropTarget?.cellPx = nextCellPx
         }
+        liveCell = cellSize
+        appliedDensity = density.density
+    }
+
+    val camera = MapViewportGeometry(viewport, grid.columns(), grid.rows(), cellPx)
+    val mapOffset = effectiveOffset(camera)
+
+    // Il trascinamento dalle barre usa lo stesso viewport e lo stesso offset della
+    // camera: non esiste piu' una seconda, implicita geometria del nodo griglia.
+    if (dropTarget != null) {
+        dropTarget.gridOriginPx = mapOffset
+        dropTarget.cellPx = cellPx
+        dropTarget.columns = grid.columns()
+        dropTarget.rows = grid.rows()
     }
 
     Box(
         modifier
             .fillMaxSize()
             .background(Palette.Abyss)
-            .onGloballyPositioned { viewport = it.size }
+            .clipToBounds()
+            .onGloballyPositioned {
+                val nextViewport = it.size
+                if (nextViewport != viewport) {
+                    pan = if (pan == null || viewport == IntSize.Zero) {
+                        null
+                    } else {
+                        // `pan` e' ancora espresso con la densita' gia' applicata.
+                        // Se resize e cambio monitor arrivano nello stesso frame, la
+                        // nuova densita' verra' trasformata subito dopo dall'effect.
+                        val currentCamera = geometry(liveCell.value * appliedDensity)
+                        currentCamera.resizedOffset(effectiveOffset(currentCamera), nextViewport)
+                    }
+                    viewport = nextViewport
+                    pan?.let { nextPan -> dropTarget?.gridOriginPx = nextPan }
+                }
+                dropTarget?.gridCoordinates = it
+            }
             // Lo scorrimento viene intercettato nella fase iniziale e consumato: la
             // casella sotto il puntatore resta ferma mentre la scala cambia, cosi' si
             // ingrandisce il punto che si sta guardando e non l'angolo della mappa.
-            .pointerInput(Unit) {
+            .pointerInput(viewModel, density.density, dropTarget) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -184,17 +205,23 @@ fun BattleMapView(
                         // spinta piu' decisa (trackpad) zooma di piu', ma entro un limite
                         // cosi' un gesto ampio non fa saltare la mappa da un estremo all'altro.
                         val steps = (-dy).coerceIn(-4f, 4f)
-                        val next = (currentCellSize * 1.10f.pow(steps)).coerceIn(MIN_CELL, MAX_CELL)
-                        if (next != currentCellSize) {
-                            val factor = next.value / currentCellSize.value
+                        val next = (liveCell * 1.10f.pow(steps)).coerceIn(MIN_CELL, MAX_CELL)
+                        if (next != liveCell) {
+                            val currentPx = with(density) { liveCell.toPx() }
                             val nextPx = with(density) { next.toPx() }
-                            pan = clampPan(
-                                Offset(
-                                    anchor.x * (1f - factor) + pan.x * factor,
-                                    anchor.y * (1f - factor) + pan.y * factor,
-                                ),
+                            val currentCamera = geometry(currentPx)
+                            val nextPan = currentCamera.zoomedOffset(
+                                effectiveOffset(currentCamera),
                                 nextPx,
+                                anchor,
                             )
+                            pan = nextPan
+                            dropTarget?.gridOriginPx = nextPan
+                            dropTarget?.cellPx = nextPx
+                            // Aggiornata SUBITO, prima di `onZoom`: il colpo di rotella
+                            // successivo nello stesso frame parte da questa scala e non
+                            // da quella vecchia, cosi' l'ancoraggio non si somma due volte.
+                            liveCell = next
                             onZoom(next)
                         }
                         event.changes.forEach { it.consume() }
@@ -203,12 +230,12 @@ fun BattleMapView(
             }
             // Premi e trascina su una zona libera per spostare la mappa, come afferrare
             // un foglio e farlo scorrere sotto il riquadro; un tocco secco senza
-            // trascinamento resta un comando sulla casella. Il gestore e' legato a
-            // `Unit`, quindi NON si riavvia quando `pan` cambia: senza questo, ogni
-            // spostamento ricomponeva e interrompeva il trascinamento a meta'. I
-            // segnaposti consumano da soli la pressione e hanno la precedenza, percio'
-            // trascinarli non viene mai scambiato per uno spostamento della mappa.
-            .pointerInput(Unit) {
+            // trascinamento resta un comando sulla casella. Le chiavi sono soltanto
+            // dipendenze stabili, non `pan`: ogni spostamento puo' quindi ricomporre
+            // senza interrompere il gesto a meta'. I segnaposti consumano da soli la
+            // pressione e hanno la precedenza, percio' trascinarli non viene mai
+            // scambiato per uno spostamento della mappa.
+            .pointerInput(viewModel, density.density, dropTarget) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = true)
                     var panning = false
@@ -221,12 +248,11 @@ fun BattleMapView(
                             // punto torna in coordinate della griglia togliendo la
                             // traslazione, perche' la mappa puo' essere stata spostata.
                             if (!panning) {
-                                val cell = with(density) { currentCellSize.toPx() }
-                                onCellTapped(
-                                    viewModel,
-                                    ((down.position.x - pan.x) / cell).toInt(),
-                                    ((down.position.y - pan.y) / cell).toInt(),
-                                )
+                                val cell = with(density) { liveCell.toPx() }
+                                val currentCamera = geometry(cell)
+                                currentCamera.cellAt(down.position, effectiveOffset(currentCamera))?.let {
+                                    onCellTapped(viewModel, it.x, it.y)
+                                }
                             }
                             change.consume()
                             break
@@ -237,65 +263,63 @@ fun BattleMapView(
                             if (travelled.getDistance() > viewConfiguration.touchSlop) panning = true
                         }
                         if (panning) {
-                            pan = clampPan(pan + movement, with(density) { currentCellSize.toPx() })
+                            val currentCamera = geometry(with(density) { liveCell.toPx() })
+                            val nextPan = currentCamera.constrain(effectiveOffset(currentCamera) + movement)
+                            pan = nextPan
+                            dropTarget?.gridOriginPx = nextPan
                             change.consume()
                         }
                     }
                 }
             },
     ) {
-        Box(
-            Modifier
-                .width(cellSize * grid.columns())
-                .height(cellSize * grid.rows())
-                .graphicsLayer {
-                    val clamped = clampPan(pan, cellPx)
-                    translationX = clamped.x
-                    translationY = clamped.y
-                }
-                .onGloballyPositioned { dropTarget?.gridCoordinates = it },
-        ) {
-            // Lo sfondo si adatta alla griglia: e' la griglia a definire la scala,
-            // non l'immagine, altrimenti le distanze non corrisponderebbero.
+        // Il Canvas ha sempre la dimensione del viewport. La mappa e' un mondo
+        // virtuale disegnato applicando `mapOffset + casella * cellPx`: quindi non
+        // puo' essere compressa dai constraints di Compose, neppure a zoom alto o
+        // con una griglia 400 x 400. Le linee fuori schermo non vengono iterate.
+        Canvas(Modifier.fillMaxSize()) {
             if (background != null) {
-                Image(
-                    bitmap = background,
-                    contentDescription = null,
-                    contentScale = ContentScale.FillBounds,
-                    modifier = Modifier.fillMaxSize(),
+                drawImage(
+                    image = background,
+                    dstOffset = IntOffset(mapOffset.x.roundToInt(), mapOffset.y.roundToInt()),
+                    dstSize = IntSize(
+                        camera.contentSize.width.roundToInt().coerceAtLeast(1),
+                        camera.contentSize.height.roundToInt().coerceAtLeast(1),
+                    ),
+                    filterQuality = FilterQuality.Medium,
                 )
             }
 
             if (showGrid) {
-                Canvas(Modifier.fillMaxSize()) {
-                    val cellPx = size.width / grid.columns()
-                    val line = Palette.Line.copy(alpha = if (background != null) 0.55f else 0.35f)
-                    for (column in 0..grid.columns()) {
-                        val x = column * cellPx
-                        drawLine(line, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
-                    }
-                    val rowPx = size.height / grid.rows()
-                    for (row in 0..grid.rows()) {
-                        val y = row * rowPx
-                        drawLine(line, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
-                    }
+                val line = Palette.Line.copy(alpha = if (background != null) 0.55f else 0.35f)
+                val mapRight = mapOffset.x + camera.contentSize.width
+                val mapBottom = mapOffset.y + camera.contentSize.height
+                for (column in camera.visibleColumns(mapOffset)) {
+                    val x = mapOffset.x + column * cellPx
+                    drawLine(line, Offset(x, mapOffset.y), Offset(x, mapBottom), strokeWidth = 1f)
+                }
+                for (row in camera.visibleRows(mapOffset)) {
+                    val y = mapOffset.y + row * cellPx
+                    drawLine(line, Offset(mapOffset.x, y), Offset(mapRight, y), strokeWidth = 1f)
                 }
             }
+        }
 
-            // Raggio di movimento residuo del combattente attivo.
-            viewModel.activeCombatantIds.forEach { activeId ->
-                viewModel.placementOf(activeId)?.let { placement ->
-                    MovementReach(viewModel, placement, cellSize)
-                }
+        // Raggio di movimento residuo del combattente attivo.
+        viewModel.activeCombatantIds.forEach { activeId ->
+            viewModel.placementOf(activeId)?.let { placement ->
+                MovementReach(viewModel, placement, liveCell, mapOffset)
             }
+        }
 
-            map.orderedPlacements().forEach { placement ->
-                MapToken(viewModel, portraits, placement, cellSize)
+        map.orderedPlacements().forEach { placement ->
+            key(placement.combatantId()) {
+                MapToken(viewModel, portraits, placement, liveCell, mapOffset)
             }
+        }
 
-            if (dropTarget != null) {
-                DropHighlight(dropTarget, cellSize)
-            }
+        if (dropTarget != null) {
+            DropHighlight(dropTarget, liveCell, mapOffset)
         }
     }
 }
@@ -305,12 +329,19 @@ fun BattleMapView(
  * la casella in cui il segnaposto verra' collocato al rilascio.
  */
 @Composable
-private fun DropHighlight(dropTarget: TokenPlacementDrag, cellSize: Dp) {
+private fun DropHighlight(dropTarget: TokenPlacementDrag, cellSize: Dp, mapOffset: Offset) {
     if (dropTarget.activeId == null) return
     val cell = dropTarget.overCell ?: return
+    val cellPx = with(LocalDensity.current) { cellSize.toPx() }
     Box(
         Modifier
-            .offset(x = cellSize * cell.x, y = cellSize * cell.y)
+            .absoluteOffset {
+                IntOffset(
+                    (mapOffset.x + cell.x * cellPx).roundToInt(),
+                    (mapOffset.y + cell.y * cellPx).roundToInt(),
+                )
+            }
+            .wrapContentSize(Alignment.TopStart, unbounded = true)
             .size(cellSize)
             .background(Palette.Gold.copy(alpha = 0.22f), RoundedCornerShape(4.dp))
             .border(2.dp, Palette.GoldBright, RoundedCornerShape(4.dp)),
@@ -351,7 +382,12 @@ private fun onCellTapped(viewModel: BattleViewModel, column: Int, row: Int) {
  * dalla mappa, perche' Compose non ritaglia i figli di predefinito.
  */
 @Composable
-private fun MovementReach(viewModel: BattleViewModel, placement: TokenPlacement, cellSize: Dp) {
+private fun MovementReach(
+    viewModel: BattleViewModel,
+    placement: TokenPlacement,
+    cellSize: Dp,
+    mapOffset: Offset,
+) {
     val budget = viewModel.budget(placement.combatantId()) ?: return
     val grid = viewModel.battleMap.grid()
     val squares = budget.movementRemainingFeet() / grid.feetPerSquare()
@@ -363,10 +399,17 @@ private fun MovementReach(viewModel: BattleViewModel, placement: TokenPlacement,
     val endColumn = (origin.column() + placement.squaresPerSide() + squares).coerceAtMost(grid.columns())
     val endRow = (origin.row() + placement.squaresPerSide() + squares).coerceAtMost(grid.rows())
     if (endColumn <= startColumn || endRow <= startRow) return
+    val cellPx = with(LocalDensity.current) { cellSize.toPx() }
 
     Box(
         Modifier
-            .offset(x = cellSize * startColumn, y = cellSize * startRow)
+            .absoluteOffset {
+                IntOffset(
+                    (mapOffset.x + startColumn * cellPx).roundToInt(),
+                    (mapOffset.y + startRow * cellPx).roundToInt(),
+                )
+            }
+            .wrapContentSize(Alignment.TopStart, unbounded = true)
             .width(cellSize * (endColumn - startColumn))
             .height(cellSize * (endRow - startRow))
             .background(Palette.Party.copy(alpha = 0.07f), RoundedCornerShape(4.dp))
@@ -387,6 +430,7 @@ private fun MapToken(
     portraits: PortraitRepository,
     placement: TokenPlacement,
     cellSize: Dp,
+    mapOffset: Offset,
 ) {
     val id = placement.combatantId()
     val combatant = viewModel.combatant(id) ?: return
@@ -397,10 +441,21 @@ private fun MapToken(
     val defeated = combatant.defeated()
 
     val side = cellSize * placement.squaresPerSide()
-    // Lo spostamento viene animato: si vede il segnaposto scorrere, non saltare.
-    val x by animateDpAsState(cellSize * placement.origin().column(), tween(260, easing = FastOutSlowInEasing), label = "tokenX")
-    val y by animateDpAsState(cellSize * placement.origin().row(), tween(260, easing = FastOutSlowInEasing), label = "tokenY")
-
+    // La posizione anima in coordinate di casella, non in pixel. Un movimento vero
+    // (cambia colonna/riga) scorre dolcemente; uno zoom (cambia solo `cellSize`)
+    // riallinea invece il segnaposto nello stesso frame della griglia. Animare il
+    // prodotto `cellSize * coordinata` lascerebbe il token temporaneamente indietro
+    // rispetto alla mappa durante ogni scatto di rotellina.
+    val animColumn by animateFloatAsState(
+        targetValue = placement.origin().column().toFloat(),
+        animationSpec = tween(260, easing = FastOutSlowInEasing),
+        label = "tokenColumn",
+    )
+    val animRow by animateFloatAsState(
+        targetValue = placement.origin().row().toFloat(),
+        animationSpec = tween(260, easing = FastOutSlowInEasing),
+        label = "tokenRow",
+    )
     val ratio by animateFloatAsState(
         targetValue = (combatant.currentHitPoints().toFloat() / snapshot.maxHitPoints().coerceAtLeast(1))
             .coerceIn(0f, 1f),
@@ -423,12 +478,18 @@ private fun MapToken(
     val ring = if (defeated) Palette.TextFaint else healthColor(combatant.currentHitPoints(), snapshot.maxHitPoints())
     val portrait = portraits.rememberPortrait(snapshot.definitionId())
     val density = LocalDensity.current
+    val cellPx = with(density) { cellSize.toPx() }
     var dragOffset by remember(id, placement.origin(), viewModel.editMode) { mutableStateOf(Offset.Zero) }
 
     Box(
         Modifier
-            .offset(x = x, y = y)
-            .offset { IntOffset(dragOffset.x.roundToInt(), dragOffset.y.roundToInt()) }
+            .absoluteOffset {
+                IntOffset(
+                    (mapOffset.x + animColumn * cellPx + dragOffset.x).roundToInt(),
+                    (mapOffset.y + animRow * cellPx + dragOffset.y).roundToInt(),
+                )
+            }
+            .wrapContentSize(Alignment.TopStart, unbounded = true)
             .size(side)
             .semantics {
                 role = Role.Button
@@ -453,7 +514,6 @@ private fun MapToken(
                     },
                     onDragCancel = { dragOffset = Offset.Zero },
                     onDragEnd = {
-                        val cellPx = with(density) { cellSize.toPx() }
                         // Il bersaglio viene riportato dentro la griglia tenendo conto
                         // dell'ingombro, cosi' trascinare oltre il bordo non fallisce
                         // ma si ferma all'ultima casella valida.

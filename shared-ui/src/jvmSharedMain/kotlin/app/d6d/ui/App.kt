@@ -1,16 +1,20 @@
 package app.d6d.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,6 +61,13 @@ enum class Destination(val label: String, val glyph: String) {
     INCONTRO("Nuova partita", "+"),
     COMPENDIO("Compendio", "≡"),
 }
+
+// Larghezze della barra di navigazione desktop. Parte al minimo — solo le icone —
+// e si allarga trascinando il bordo, esattamente come le colonne squadra e nemici.
+// Oltre la soglia compaiono anche le etichette: sotto resta compatta.
+private val RAIL_MIN = 54.dp
+private val RAIL_MAX = 240.dp
+private val RAIL_LABELS_FROM = 96.dp
 
 /**
  * Radice dell'applicazione, condivisa fra desktop e Android.
@@ -161,15 +172,28 @@ fun AppRoot(
             }
         } else {
             val density = LocalDensity.current
-            var railWidth by remember { mutableStateOf(108.dp) }
+            // Parte gia' aperta ma al minimo; il bordo si trascina per allargarla.
+            var railWidth by remember { mutableStateOf(RAIL_MIN) }
+            var railOpen by remember { mutableStateOf(true) }
             Row(modifier.fillMaxSize().background(Palette.Night)) {
-                NavRail(destination, railWidth) { destination = it }
-                VerticalResizeHandle(
-                    onDrag = { dragPx ->
-                        railWidth = (railWidth + with(density) { dragPx.toDp() })
-                            .coerceIn(84.dp, 240.dp)
-                    },
-                )
+                if (railOpen) {
+                    NavRail(
+                        current = destination,
+                        width = railWidth,
+                        onSelect = { destination = it },
+                        onCollapse = { railOpen = false },
+                    )
+                    VerticalResizeHandle(
+                        onDrag = { dragPx ->
+                            railWidth = (railWidth + with(density) { dragPx.toDp() })
+                                .coerceIn(RAIL_MIN, RAIL_MAX)
+                        },
+                    )
+                } else {
+                    // Chiusa: resta una striscia sottile col solo tasto per riaprirla,
+                    // cosi' non copre i contenuti e resta sempre raggiungibile.
+                    CollapsedRail(onExpand = { railOpen = true })
+                }
                 content(Modifier.weight(1f))
             }
         }
@@ -191,20 +215,43 @@ fun AppRoot(
 }
 
 @Composable
-private fun NavRail(current: Destination, width: Dp, onSelect: (Destination) -> Unit) {
+private fun NavRail(
+    current: Destination,
+    width: Dp,
+    onSelect: (Destination) -> Unit,
+    onCollapse: () -> Unit,
+) {
+    // Sotto la soglia si mostrano solo le icone: la barra resta leggibile anche
+    // stretta, come le colonne squadra e nemici quando si restringono.
+    val showLabels = width >= RAIL_LABELS_FROM
     Column(
         Modifier
             .width(width)
             .fillMaxSize()
             .background(Palette.Abyss)
-            .padding(vertical = 13.dp, horizontal = 8.dp),
+            .padding(vertical = 7.dp, horizontal = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(9.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
+        // Tasto per chiudere la barra: in cima, dove non copre le voci.
         Box(
             Modifier
-                .background(Palette.Gold, RoundedCornerShape(10.dp))
-                .padding(horizontal = 11.dp, vertical = 7.dp),
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(7.dp))
+                .clickable(role = Role.Button, onClick = onCollapse)
+                .padding(vertical = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (showLabels) "‹  Chiudi" else "‹",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        Box(
+            Modifier
+                .background(Palette.Gold, RoundedCornerShape(8.dp))
+                .padding(horizontal = 8.dp, vertical = 5.dp),
         ) {
             Text(
                 // Iniziali derivate dal nome: si aggiornano da sole quando
@@ -212,11 +259,34 @@ private fun NavRail(current: Destination, width: Dp, onSelect: (Destination) -> 
                 text = initials(AppIdentity.displayName),
                 color = Palette.Abyss,
                 fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
             )
         }
         Destination.entries.forEach { entry ->
-            NavItem(entry, entry == current, Modifier.fillMaxWidth()) { onSelect(entry) }
+            NavItem(entry, entry == current, showLabels, Modifier.fillMaxWidth()) { onSelect(entry) }
+        }
+    }
+}
+
+/** Barra chiusa: una striscia sottile col solo tasto per riaprirla. */
+@Composable
+private fun CollapsedRail(onExpand: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxHeight()
+            .width(26.dp)
+            .background(Palette.Abyss)
+            .padding(vertical = 7.dp, horizontal = 3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(7.dp))
+                .clickable(role = Role.Button, onClick = onExpand)
+                .padding(vertical = 6.dp, horizontal = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "›", color = Palette.Gold, style = MaterialTheme.typography.titleMedium)
         }
     }
 }
@@ -231,7 +301,7 @@ private fun BottomNav(current: Destination, onSelect: (Destination) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         Destination.entries.forEach { entry ->
-            NavItem(entry, entry == current, Modifier.weight(1f)) { onSelect(entry) }
+            NavItem(entry, entry == current, showLabel = true, Modifier.weight(1f)) { onSelect(entry) }
         }
     }
 }
@@ -240,6 +310,7 @@ private fun BottomNav(current: Destination, onSelect: (Destination) -> Unit) {
 private fun NavItem(
     destination: Destination,
     selected: Boolean,
+    showLabel: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -248,23 +319,25 @@ private fun NavItem(
         modifier
             .background(
                 if (selected) Palette.Gold.copy(alpha = 0.12f) else Color.Transparent,
-                RoundedCornerShape(9.dp),
+                RoundedCornerShape(8.dp),
             )
             .selectable(
                 selected = selected,
                 role = Role.Tab,
                 onClick = onClick,
             )
-            .padding(vertical = 9.dp, horizontal = 5.dp),
+            .padding(vertical = 6.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text(text = destination.glyph, color = tint, style = MaterialTheme.typography.titleLarge)
-        Text(
-            text = destination.label,
-            color = tint,
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelSmall,
-        )
+        Text(text = destination.glyph, color = tint, style = MaterialTheme.typography.titleMedium)
+        if (showLabel) {
+            Text(
+                text = destination.label,
+                color = tint,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
     }
 }

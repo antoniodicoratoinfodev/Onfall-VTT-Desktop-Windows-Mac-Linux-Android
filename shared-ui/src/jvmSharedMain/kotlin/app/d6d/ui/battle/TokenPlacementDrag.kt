@@ -27,8 +27,11 @@ class TokenPlacementDrag {
     var windowPosition by mutableStateOf(Offset.Zero)
         private set
 
-    // Riferimenti alla griglia, pubblicati dalla mappa quando viene disposta.
+    // Riferimenti al viewport e alla trasformazione della griglia, pubblicati dalla
+    // mappa quando viene disposta. La griglia e' un mondo virtuale: non esiste piu'
+    // un enorme nodo di layout da usare come sistema di coordinate.
     var gridCoordinates: LayoutCoordinates? = null
+    var gridOriginPx: Offset = Offset.Zero
     var cellPx: Float = 0f
     var columns: Int = 0
     var rows: Int = 0
@@ -50,12 +53,12 @@ class TokenPlacementDrag {
     private fun cellAt(window: Offset): IntOffset? {
         val coords = gridCoordinates ?: return null
         if (!coords.isAttached || cellPx <= 0f) return null
-        val local = coords.windowToLocal(window)
-        if (local.x < 0f || local.y < 0f) return null
-        val column = (local.x / cellPx).toInt()
-        val row = (local.y / cellPx).toInt()
-        if (column !in 0 until columns || row !in 0 until rows) return null
-        return IntOffset(column, row)
+        val viewportPoint = coords.windowToLocal(window)
+        if (
+            viewportPoint.x < 0f || viewportPoint.y < 0f ||
+            viewportPoint.x >= coords.size.width || viewportPoint.y >= coords.size.height
+        ) return null
+        return mapCellAt(viewportPoint, gridOriginPx, cellPx, columns, rows)
     }
 
     /** Chiude il trascinamento e restituisce la casella di rilascio, se valida. */
