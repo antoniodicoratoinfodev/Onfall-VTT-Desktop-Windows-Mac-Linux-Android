@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -45,6 +46,7 @@ import app.d6d.ui.components.Faction
 import app.d6d.ui.components.HealthBar
 import app.d6d.ui.components.color
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
 
@@ -66,18 +68,17 @@ fun BattleStage(
     // solo nella shell compatta, dove il palco occupa da solo la superficie.
     floatingPlates: Boolean = true,
 ) {
-    var cellSize by remember { mutableStateOf(46.dp) }
-    var showGrid by remember { mutableStateOf(true) }
+    val layout = LocalUiLayout.current
 
     Column(modifier.fillMaxSize()) {
         if (viewModel.mapConfigured) {
             MapControls(
                 viewModel = viewModel,
                 portraits = portraits,
-                cellSize = cellSize,
-                onCellSizeChange = { cellSize = it },
-                showGrid = showGrid,
-                onShowGridChange = { showGrid = it },
+                cellSize = layout.mapCellSize,
+                onCellSizeChange = { layout.mapCellSize = it },
+                showGrid = layout.mapShowGrid,
+                onShowGridChange = { layout.mapShowGrid = it },
             )
         }
 
@@ -85,11 +86,11 @@ fun BattleStage(
             BattleMapView(
                 viewModel = viewModel,
                 portraits = portraits,
-                cellSize = cellSize,
-                showGrid = showGrid,
+                cellSize = layout.mapCellSize,
+                showGrid = layout.mapShowGrid,
                 modifier = Modifier.fillMaxSize(),
                 dropTarget = dropTarget,
-                onCellSizeChange = { cellSize = it },
+                onCellSizeChange = { layout.mapCellSize = it },
             )
 
             if (floatingPlates) {
@@ -114,17 +115,16 @@ fun BattleStage(
  */
 @Composable
 internal fun BoxScope.FloatingCombatantPlates(viewModel: BattleViewModel) {
-    var targetOffset by remember { mutableStateOf<IntOffset?>(null) }
-    var activeOffset by remember { mutableStateOf<IntOffset?>(null) }
+    val layout = LocalUiLayout.current
 
     viewModel.effectiveTargetId()?.let { targetId ->
-        FloatingPanel(Alignment.TopEnd, targetOffset, { targetOffset = it }) {
+        FloatingPanel(Alignment.TopEnd, layout.targetPlate, { layout.targetPlate = it }) {
             StagePlate(viewModel, targetId, "Bersaglio selezionato")
         }
     }
 
     viewModel.activeCombatantId?.let { activeId ->
-        FloatingPanel(Alignment.BottomStart, activeOffset, { activeOffset = it }) {
+        FloatingPanel(Alignment.BottomStart, layout.activePlate, { layout.activePlate = it }) {
             StagePlate(
                 viewModel,
                 activeId,
@@ -139,19 +139,28 @@ internal fun BoxScope.FloatingCombatantPlates(viewModel: BattleViewModel) {
  *
  * Finche' non viene spostato parte dall'angolo indicato da `initialAlignment`,
  * con un piccolo margine; poi segue il trascinamento e non esce mai dai bordi,
- * cosi' non puo' sparire fuori schermo.
+ * cosi' non puo' sparire fuori schermo. La posizione ricordata e' una frazione
+ * dello spazio libero (0..1), non un pixel: cosi' resta valida anche riaprendo
+ * l'app su una finestra di dimensioni diverse.
  */
 @Composable
 internal fun FloatingPanel(
     initialAlignment: Alignment,
-    offset: IntOffset?,
-    onOffsetChange: (IntOffset) -> Unit,
+    fraction: Offset?,
+    onFractionChange: (Offset) -> Unit,
     content: @Composable () -> Unit,
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val inset = with(LocalDensity.current) { 10.dp.roundToPx() }
     var panelSize by remember { mutableStateOf(IntSize.Zero) }
     var parentSize by remember { mutableStateOf(IntSize.Zero) }
+
+    // Spazio in cui la targa puo' scorrere: quanto resta del contenitore una volta
+    // sottratto l'ingombro della targa stessa.
+    fun freeSpace(): IntSize = IntSize(
+        (parentSize.width - panelSize.width).coerceAtLeast(0),
+        (parentSize.height - panelSize.height).coerceAtLeast(0),
+    )
 
     // Posizione di partenza: l'angolo richiesto, rientrato del margine.
     fun start(): IntOffset {
@@ -164,9 +173,18 @@ internal fun FloatingPanel(
         return IntOffset(aligned.x + inset, aligned.y + inset)
     }
 
+    // Dalla frazione ricordata al pixel attuale, dentro lo spazio disponibile.
+    fun toPixels(f: Offset): IntOffset {
+        val free = freeSpace()
+        return IntOffset(
+            (f.x * free.width).roundToInt().coerceIn(0, free.width),
+            (f.y * free.height).roundToInt().coerceIn(0, free.height),
+        )
+    }
+
     // Il gestore del trascinamento non va riavviato a ogni spostamento, ma deve
-    // leggere sempre l'offset piu' recente: `rememberUpdatedState` lo tiene fresco.
-    val currentOffset by rememberUpdatedState(offset)
+    // leggere sempre la frazione piu' recente: `rememberUpdatedState` la tiene fresca.
+    val currentFraction by rememberUpdatedState(fraction)
 
     Box(
         Modifier
@@ -174,17 +192,18 @@ internal fun FloatingPanel(
                 panelSize = it.size
                 parentSize = it.parentLayoutCoordinates?.size ?: parentSize
             }
-            .offset { offset ?: start() }
+            .offset { fraction?.let(::toPixels) ?: start() }
             .pointerInput(Unit) {
                 detectDragGestures { change, amount ->
                     change.consume()
-                    val base = currentOffset ?: start()
-                    val maxX = (parentSize.width - panelSize.width).coerceAtLeast(0)
-                    val maxY = (parentSize.height - panelSize.height).coerceAtLeast(0)
-                    onOffsetChange(
-                        IntOffset(
-                            (base.x + amount.x.roundToInt()).coerceIn(0, maxX),
-                            (base.y + amount.y.roundToInt()).coerceIn(0, maxY),
+                    val free = freeSpace()
+                    val base = currentFraction?.let(::toPixels) ?: start()
+                    val x = (base.x + amount.x.roundToInt()).coerceIn(0, free.width)
+                    val y = (base.y + amount.y.roundToInt()).coerceIn(0, free.height)
+                    onFractionChange(
+                        Offset(
+                            if (free.width == 0) 0f else x.toFloat() / free.width,
+                            if (free.height == 0) 0f else y.toFloat() / free.height,
                         ),
                     )
                 }

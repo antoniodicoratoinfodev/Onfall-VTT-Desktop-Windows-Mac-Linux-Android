@@ -87,7 +87,10 @@ class LayoutStore(private val file: Path) {
 
     fun load(): UiLayout {
         if (!Files.exists(file)) return UiLayout()
-        val text = runCatching { Files.readString(file) }.getOrNull()
+        // `Files.readAllBytes`/`write` invece di `readString`/`writeString`: questi
+        // ultimi sono Java 11 e non esistono nell'SDK Android che compila lo stesso
+        // sorgente condiviso.
+        val text = runCatching { String(Files.readAllBytes(file)) }.getOrNull()
         if (text.isNullOrBlank()) return UiLayout()
         return runCatching { json.decodeFromString(UiLayout.serializer(), text) }
             .getOrDefault(UiLayout())
@@ -103,7 +106,7 @@ class LayoutStore(private val file: Path) {
         }
 
         val temporary = file.resolveSibling("${file.fileName}.tmp")
-        Files.writeString(temporary, json.encodeToString(UiLayout.serializer(), layout.sanitized()))
+        Files.write(temporary, json.encodeToString(UiLayout.serializer(), layout.sanitized()).toByteArray())
         Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING)
     }
 }

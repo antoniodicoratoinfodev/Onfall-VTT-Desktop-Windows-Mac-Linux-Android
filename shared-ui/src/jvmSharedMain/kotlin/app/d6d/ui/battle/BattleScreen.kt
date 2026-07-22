@@ -141,12 +141,12 @@ private fun WideBattleBody(
             // Il bordo sinistro dei nemici: trascinandolo verso sinistra la colonna cresce.
             VerticalResizeHandle(
                 onDrag = { dragPx ->
-                    enemyWidth = (enemyWidth - with(density) { dragPx.toDp() })
+                    layout.enemyWidth = (layout.enemyWidth - with(density) { dragPx.toDp() })
                         .coerceIn(200.dp, 480.dp)
                 },
             )
 
-            Column(Modifier.width(enemyWidth)) {
+            Column(Modifier.width(layout.enemyWidth)) {
                 Rail(
                     viewModel = viewModel,
                     title = "Nemici",
@@ -207,12 +207,12 @@ private fun TokenDragGhost(
 @Composable
 private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
     val density = LocalDensity.current
-    val minHeightPx = with(density) { 130.dp.toPx() }
-    val maxHeightPx = with(density) { 360.dp.toPx() }
-    val defaultHeightPx = with(density) { 230.dp.toPx() }
-    var expandedHeightPx by remember { mutableStateOf(defaultHeightPx) }
-    var collapsed by remember { mutableStateOf(false) }
-    val panelHeight = if (collapsed) 42.dp else with(density) { expandedHeightPx.toDp() }
+    val layout = LocalUiLayout.current
+    val minHeight = 130.dp
+    val maxHeight = 360.dp
+    val defaultHeight = 230.dp
+    val collapsed = layout.logCollapsed
+    val panelHeight = if (collapsed) 42.dp else layout.logHeight
 
     Column(
         Modifier
@@ -229,18 +229,19 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
                     detectVerticalDragGestures(
                         onVerticalDrag = { change, dragAmount ->
                             change.consume()
+                            val dragDp = with(density) { dragAmount.toDp() }
                             if (collapsed && dragAmount < 0f) {
-                                expandedHeightPx = defaultHeightPx
-                                collapsed = false
+                                layout.logHeight = defaultHeight
+                                layout.logCollapsed = false
                             } else if (!collapsed) {
-                                expandedHeightPx = (expandedHeightPx - dragAmount)
-                                    .coerceIn(with(density) { 72.dp.toPx() }, maxHeightPx)
+                                layout.logHeight = (layout.logHeight - dragDp)
+                                    .coerceIn(72.dp, maxHeight)
                             }
                         },
                         onDragEnd = {
-                            if (!collapsed && expandedHeightPx < minHeightPx) {
-                                expandedHeightPx = defaultHeightPx
-                                collapsed = true
+                            if (!collapsed && layout.logHeight < minHeight) {
+                                layout.logHeight = defaultHeight
+                                layout.logCollapsed = true
                             }
                         },
                     )
@@ -270,8 +271,8 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.clickable {
-                    if (collapsed) expandedHeightPx = defaultHeightPx
-                    collapsed = !collapsed
+                    if (collapsed) layout.logHeight = defaultHeight
+                    layout.logCollapsed = !collapsed
                 }.padding(5.dp),
             )
         }
@@ -393,7 +394,7 @@ private fun BattleTopBar(
     compact: Boolean,
 ) {
     // Il pannello ordine turni si puo' contrarre per liberare spazio in cima.
-    var turnsCollapsed by remember { mutableStateOf(false) }
+    val layout = LocalUiLayout.current
 
     if (compact) {
         Column(
@@ -435,7 +436,7 @@ private fun BattleTopBar(
 
         // Contratto: la striscia dei turni sparisce e resta solo lo spazio elastico,
         // cosi' titolo e comandi restano ai due lati senza allargare la barra.
-        if (turnsCollapsed) {
+        if (layout.turnsCollapsed) {
             Spacer(Modifier.weight(1f))
         } else {
             Column(
@@ -455,10 +456,10 @@ private fun BattleTopBar(
         }
 
         CollapseToggle(
-            collapsed = turnsCollapsed,
+            collapsed = layout.turnsCollapsed,
             expandedLabel = "Turni ▾",
             collapsedLabel = "Turni ▸",
-            onToggle = { turnsCollapsed = !turnsCollapsed },
+            onToggle = { layout.turnsCollapsed = !layout.turnsCollapsed },
         )
 
         Row(
