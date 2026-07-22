@@ -13,7 +13,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -284,7 +284,11 @@ private fun MapToken(
             }
             .pointerInput(id, placement.origin(), cellSize, viewModel.editMode) {
                 if (!viewModel.editMode) return@pointerInput
-                detectDragGesturesAfterLongPress(
+                // In modalità modifica il segnaposto si trascina subito, senza tenere
+                // premuto: basta cliccarlo e spostarlo. La collocazione e' libera e
+                // ignora i limiti di movimento del turno, perche' serve a comporre la
+                // scena, non a giocare il turno.
+                detectDragGestures(
                     onDragStart = {
                         viewModel.selectedTargetId = id
                         dragOffset = Offset.Zero
@@ -292,8 +296,15 @@ private fun MapToken(
                     onDragCancel = { dragOffset = Offset.Zero },
                     onDragEnd = {
                         val cellPx = with(density) { cellSize.toPx() }
-                        val column = placement.origin().column() + (dragOffset.x / cellPx).roundToInt()
-                        val row = placement.origin().row() + (dragOffset.y / cellPx).roundToInt()
+                        // Il bersaglio viene riportato dentro la griglia tenendo conto
+                        // dell'ingombro, cosi' trascinare oltre il bordo non fallisce
+                        // ma si ferma all'ultima casella valida.
+                        val grid = viewModel.battleMap.grid()
+                        val squares = placement.squaresPerSide()
+                        val column = (placement.origin().column() + (dragOffset.x / cellPx).roundToInt())
+                            .coerceIn(0, (grid.columns() - squares).coerceAtLeast(0))
+                        val row = (placement.origin().row() + (dragOffset.y / cellPx).roundToInt())
+                            .coerceIn(0, (grid.rows() - squares).coerceAtLeast(0))
                         dragOffset = Offset.Zero
                         if (column != placement.origin().column() || row != placement.origin().row()) {
                             viewModel.reposition(id, column, row)

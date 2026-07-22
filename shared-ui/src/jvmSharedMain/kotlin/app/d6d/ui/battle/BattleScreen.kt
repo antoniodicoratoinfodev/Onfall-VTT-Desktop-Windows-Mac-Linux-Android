@@ -433,7 +433,7 @@ private fun BattleTitle(sessions: SessionManager, modifier: Modifier = Modifier)
 private fun EditModeButton(viewModel: BattleViewModel) {
     GameButton(
         label = if (viewModel.editMode) "Modifica attiva" else "Modifica",
-        subtitle = if (viewModel.editMode) "Tieni premuto e trascina i token" else null,
+        subtitle = if (viewModel.editMode) "Trascina i token per riposizionarli liberamente" else null,
         accent = if (viewModel.editMode) Palette.Heal else Palette.TextMuted,
         selected = viewModel.editMode,
         onClick = { viewModel.editMode = !viewModel.editMode },
