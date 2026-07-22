@@ -95,7 +95,7 @@ comporta esattamente come prima che la mappa esistesse.
 
 ## Immagini dell'utente
 
-Le immagini vengono **copiate** in `~/.turnforge/images/` e referenziate per nome: spostare o
+Le immagini vengono **copiate** in `~/.onfall/images/` e referenziate per nome: spostare o
 cancellare il file originale non rompe una scheda. La decodifica usa `decodeToImageBitmap`, che
 Compose Multiplatform espone su desktop e Android, quindi non serve codice di piattaforma.
 
@@ -106,7 +106,7 @@ esportazione e va allegato solo con una scelta esplicita.
 
 ## Salvataggio e ripresa delle sessioni
 
-Ogni sessione e' un file JSON in `~/.turnforge/sessions/`, scritto in modo atomico con copie di
+Ogni sessione e' un file JSON in `~/.onfall/sessions/`, scritto in modo atomico con copie di
 backup: un'interruzione durante il salvataggio non lascia mai una partita troncata.
 
 Il file contiene **tutto il necessario a riprendere il tavolo**:
@@ -201,11 +201,12 @@ Il motore copre il combattimento base 2024 piu' morte ed Exhaustion. Restano fuo
 - `./gradlew :engine:sheet-model:test` — 25 test su valori derivati e archivio immagini, 0 falliti;
 - `./gradlew :desktop-app:run` — avvio reale verificato, nessuna eccezione;
 - `./gradlew :android-app:assembleDebug` — APK prodotto;
-- catalogo e archivio schede scritti e riletti da `~/.turnforge/`.
+- catalogo e archivio schede scritti e riletti da `~/.onfall/`.
 
 ## Nome commerciale
 
-Non ancora deciso. Le ricerche in rete non hanno trovato software o strumenti da tavolo chiamati
-"Turnforge", ma **una ricerca non e' una verifica di marchio** e il paragrafo 17 del documento
-richiede un controllo legale specifico prima di pubblicare. Finche' non c'e', il nome visibile e'
-il segnaposto in `AppIdentity.displayName`, unico punto da cambiare.
+Il nome scelto e' **Onfall** (parola inglese arcaica per "assalto, onset"). Le ricerche in rete
+non hanno trovato software, giochi o strumenti da tavolo con questo nome, ma **una ricerca non e'
+una verifica di marchio** e il paragrafo 17 del documento richiede un controllo legale specifico
+prima di pubblicare. Il nome visibile vive in `AppIdentity.displayName`; lo slug tecnico (cartella
+dati `~/.onfall`, `applicationId`, nome del progetto) lo rispecchia.

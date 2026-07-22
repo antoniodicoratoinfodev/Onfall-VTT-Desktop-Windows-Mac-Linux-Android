@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "app.d6d.turnforge"
+        applicationId = "app.d6d.onfall"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

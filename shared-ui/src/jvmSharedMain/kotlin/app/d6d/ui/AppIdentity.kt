@@ -3,7 +3,7 @@ package app.d6d.ui
 /**
  * Identita' visibile dell'applicazione, raccolta in un punto solo.
  *
- * Il nome di prodotto usato dal progetto e' TurnForge. Prima di una pubblicazione
+ * Il nome di prodotto usato dal progetto e' Onfall. Prima di una pubblicazione
  * commerciale resta comunque necessario il controllo legale su marchio e
  * attribuzioni richiesto dal documento di progetto.
  *
@@ -13,7 +13,7 @@ package app.d6d.ui
 object AppIdentity {
 
     /** Nome mostrato all'utente. */
-    const val displayName: String = "TurnForge"
+    const val displayName: String = "Onfall"
 
     /**
      * Dicitura di compatibilita'.

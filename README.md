@@ -1,4 +1,4 @@
-# TurnForge
+# Onfall
 
 Strumento di combattimento e gestione incontri **compatibile con 5.5e / SRD**, offline-first,
 con interfaccia da videogioco. Desktop e Android condividono motore, dati e schermate.
@@ -57,13 +57,13 @@ licenza sulla grafica.
 ```
 
 Su macOS, dopo aver creato il pacchetto con `./gradlew :desktop-app:packageDmg`, si può anche
-aprire **TurnForge.app** dal Finder come una normale applicazione. Durante lo sviluppo il comando
+aprire **Onfall.app** dal Finder come una normale applicazione. Durante lo sviluppo il comando
 `run` qui sopra è il modo più rapido e non richiede installazione.
 
-I dati risiedono in `~/.turnforge`. Si può cambiare percorso:
+I dati risiedono in `~/.onfall`. Si può cambiare percorso:
 
 ```bash
-./gradlew :desktop-app:run -Dturnforge.dataDir=/percorso/scelto
+./gradlew :desktop-app:run -Donfall.dataDir=/percorso/scelto
 ```
 
 ## Moduli

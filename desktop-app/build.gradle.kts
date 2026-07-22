@@ -28,7 +28,7 @@ compose.desktop {
         // esplicitamente per evitare l'avviso e il futuro blocco di System.load.
         jvmArgs += listOf(
             "--enable-native-access=ALL-UNNAMED",
-            "-Dapple.awt.application.name=TurnForge",
+            "-Dapple.awt.application.name=Onfall",
         )
 
         nativeDistributions {
@@ -36,7 +36,7 @@ compose.desktop {
             // l'utente non deve installare Java per conto proprio.
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             // Nome tecnico del pacchetto: jpackage non accetta spazi.
-            packageName = "TurnForge"
+            packageName = "Onfall"
             packageVersion = "1.0.0"
             description = "Strumento di combattimento compatibile con 5.5e / SRD"
         }
@@ -45,9 +45,9 @@ compose.desktop {
 
 // Le proprieta' -D passate a Gradle non vengono inoltrate automaticamente al
 // processo JavaExec creato dal plugin Compose. Questa configurazione rende
-// effettivo il comando documentato `-Dturnforge.dataDir=...`.
+// effettivo il comando documentato `-Donfall.dataDir=...`.
 tasks.withType<JavaExec>().configureEach {
-    providers.systemProperty("turnforge.dataDir").orNull?.let { directory ->
-        systemProperty("turnforge.dataDir", directory)
+    providers.systemProperty("onfall.dataDir").orNull?.let { directory ->
+        systemProperty("onfall.dataDir", directory)
     }
 }

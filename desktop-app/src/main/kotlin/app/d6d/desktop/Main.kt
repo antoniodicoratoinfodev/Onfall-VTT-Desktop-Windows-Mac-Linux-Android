@@ -19,14 +19,14 @@ import java.nio.file.Path
  * Cartella dati locale.
  *
  * L'applicazione e' offline-first: il disco locale e' la fonte di verita'.
- * Il percorso e' sovrascrivibile con `-Dturnforge.dataDir=...` per test e sviluppo.
+ * Il percorso e' sovrascrivibile con `-Donfall.dataDir=...` per test e sviluppo.
  */
 private fun dataDirectory(): Path {
-    val override = System.getProperty("turnforge.dataDir")
+    val override = System.getProperty("onfall.dataDir")
     val directory = if (!override.isNullOrBlank()) {
         Path.of(override)
     } else {
-        Path.of(System.getProperty("user.home"), ".turnforge")
+        Path.of(System.getProperty("user.home"), ".onfall")
     }
     Files.createDirectories(directory)
     return directory

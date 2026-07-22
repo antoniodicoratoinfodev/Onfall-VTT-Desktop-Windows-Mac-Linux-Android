@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "turnforge"
+rootProject.name = "onfall"
 
 // Motore condiviso: Java puro, senza dipendenze esterne, consumato
 // sia dal desktop JVM sia da Android.

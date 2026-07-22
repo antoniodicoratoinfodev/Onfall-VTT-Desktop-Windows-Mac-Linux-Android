@@ -104,7 +104,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 },
-                "turnforge-image-import",
+                "onfall-image-import",
             ).start()
         }
 
@@ -149,7 +149,7 @@ class MainActivity : ComponentActivity() {
         val temporaryDirectory = cacheDir.resolve("selected-images").also { it.mkdirs() }
         val temporary = kotlin.io.path.createTempFile(
             directory = temporaryDirectory.toPath(),
-            prefix = "turnforge-image-",
+            prefix = "onfall-image-",
             suffix = ".$extension",
         )
         val input = contentResolver.openInputStream(uri)
