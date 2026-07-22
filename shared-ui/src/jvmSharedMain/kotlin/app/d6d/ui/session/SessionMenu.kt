@@ -5,17 +5,22 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import app.d6d.persistence.session.SessionSummary
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
@@ -41,7 +47,8 @@ import app.d6d.ui.theme.Palette
 @Composable
 fun SessionMenuButton(manager: SessionManager, modifier: Modifier = Modifier) {
     GameButton(
-        label = "💾 Sessione",
+        label = "Sessione",
+        subtitle = if (manager.hasUnsavedChanges) "Da salvare" else null,
         accent = Palette.Gold,
         onClick = {
             manager.refresh()
@@ -62,16 +69,41 @@ fun SessionMenuDialog(manager: SessionManager) {
     if (!manager.menuOpen) return
 
     var name by remember(manager.currentName) { mutableStateOf(manager.currentName) }
+    var overwriteName by remember { mutableStateOf<String?>(null) }
+    var discardForSession by remember { mutableStateOf<SessionSummary?>(null) }
+    var deleteSession by remember { mutableStateOf<SessionSummary?>(null) }
 
-    Dialog(onDismissRequest = { manager.menuOpen = false }) {
-        Column(
-            Modifier
-                .width(520.dp)
-                .background(Palette.Surface, RoundedCornerShape(12.dp))
-                .border(1.dp, Palette.Line, RoundedCornerShape(12.dp))
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+    val saveSession: (String) -> Unit = { requestedName ->
+        if (manager.save(requestedName) == SessionSaveResult.NAME_COLLISION) {
+            overwriteName = requestedName
+        }
+    }
+    val openSession: (SessionSummary) -> Unit = { summary ->
+        if (manager.requestLoad(summary) == SessionLoadResult.UNSAVED_CHANGES) {
+            discardForSession = summary
+        }
+    }
+
+    Dialog(
+        onDismissRequest = { manager.menuOpen = false },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        BoxWithConstraints(
+            Modifier.fillMaxSize().padding(12.dp),
+            contentAlignment = Alignment.Center,
         ) {
+            val compact = maxWidth < 460.dp
+            Column(
+                Modifier
+                    .widthIn(max = 520.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeight)
+                    .background(Palette.Surface, RoundedCornerShape(12.dp))
+                    .border(1.dp, Palette.Line, RoundedCornerShape(12.dp))
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             Text(
                 text = "Sessioni",
                 color = Palette.Text,
@@ -98,30 +130,43 @@ fun SessionMenuDialog(manager: SessionManager) {
                 )
             }
 
-            Eyebrow("Salva con nome")
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BasicTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    singleLine = true,
-                    textStyle = TextStyle(color = Palette.Text, fontSize = 13.sp),
-                    cursorBrush = SolidColor(Palette.Gold),
+            if (manager.hasUnsavedChanges) {
+                Text(
+                    text = "Ci sono modifiche alla battaglia non ancora salvate.",
+                    color = Palette.Bloodied,
+                    style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier
-                        .weight(1f)
-                        .background(Palette.Night, RoundedCornerShape(5.dp))
-                        .border(1.dp, Palette.Line, RoundedCornerShape(5.dp))
-                        .padding(horizontal = 8.dp, vertical = 7.dp),
-                )
-                GameButton(
-                    label = "Salva",
-                    accent = Palette.Heal,
-                    enabled = name.isNotBlank(),
-                    onClick = { manager.save(name) },
+                        .fillMaxWidth()
+                        .background(Palette.Bloodied.copy(alpha = 0.10f), RoundedCornerShape(5.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
                 )
             }
+
+            Eyebrow("Salva con nome")
+                if (compact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SessionNameField(name, onNameChange = { name = it })
+                        GameButton(
+                            label = "Salva",
+                            accent = Palette.Heal,
+                            enabled = name.isNotBlank(),
+                            onClick = { saveSession(name) },
+                        )
+                    }
+                } else {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SessionNameField(name, onNameChange = { name = it }, modifier = Modifier.weight(1f))
+                        GameButton(
+                            label = "Salva",
+                            accent = Palette.Heal,
+                            enabled = name.isNotBlank(),
+                            onClick = { saveSession(name) },
+                        )
+                    }
+                }
 
             Eyebrow("Sessioni salvate (${manager.sessions.size})")
             if (manager.sessions.isEmpty()) {
@@ -131,12 +176,14 @@ fun SessionMenuDialog(manager: SessionManager) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else {
-                LazyColumn(
-                    Modifier.heightIn(max = 260.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(manager.sessions) { summary ->
-                        SessionRow(summary, manager)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    manager.sessions.forEach { summary ->
+                        SessionRow(
+                            summary = summary,
+                            compact = compact,
+                            onOpen = openSession,
+                            onDelete = { deleteSession = it },
+                        )
                     }
                 }
             }
@@ -145,23 +192,142 @@ fun SessionMenuDialog(manager: SessionManager) {
                 GameButton("Chiudi", accent = Palette.TextMuted, onClick = { manager.menuOpen = false })
             }
         }
+        }
+    }
+
+    overwriteName?.let { requestedName ->
+        AlertDialog(
+            onDismissRequest = { overwriteName = null },
+            containerColor = Palette.Surface,
+            title = { Text("Sostituire la sessione?", color = Palette.Text) },
+            text = {
+                Text(
+                    "Esiste già una sessione con questo nome. Il salvataggio precedente verrà sostituito.",
+                    color = Palette.TextMuted,
+                )
+            },
+            confirmButton = {
+                GameButton("Sostituisci", accent = Palette.Enemy, onClick = {
+                    manager.save(requestedName, overwriteExisting = true)
+                    overwriteName = null
+                })
+            },
+            dismissButton = {
+                GameButton("Annulla", accent = Palette.TextMuted, onClick = { overwriteName = null })
+            },
+        )
+    }
+
+    discardForSession?.let { summary ->
+        AlertDialog(
+            onDismissRequest = { discardForSession = null },
+            containerColor = Palette.Surface,
+            title = { Text("Scartare le modifiche?", color = Palette.Text) },
+            text = {
+                Text(
+                    "Aprendo «${summary.displayName}» perderai le modifiche non salvate della battaglia corrente.",
+                    color = Palette.TextMuted,
+                )
+            },
+            confirmButton = {
+                GameButton("Scarta e apri", accent = Palette.Enemy, onClick = {
+                    manager.requestLoad(summary, discardUnsavedChanges = true)
+                    discardForSession = null
+                })
+            },
+            dismissButton = {
+                GameButton("Annulla", accent = Palette.TextMuted, onClick = { discardForSession = null })
+            },
+        )
+    }
+
+    deleteSession?.let { summary ->
+        AlertDialog(
+            onDismissRequest = { deleteSession = null },
+            containerColor = Palette.Surface,
+            title = { Text("Eliminare la sessione?", color = Palette.Text) },
+            text = {
+                Text(
+                    "«${summary.displayName}» verrà eliminata definitivamente dal dispositivo.",
+                    color = Palette.TextMuted,
+                )
+            },
+            confirmButton = {
+                GameButton("Elimina", accent = Palette.Enemy, onClick = {
+                    manager.delete(summary)
+                    deleteSession = null
+                })
+            },
+            dismissButton = {
+                GameButton("Annulla", accent = Palette.TextMuted, onClick = { deleteSession = null })
+            },
+        )
     }
 }
 
 @Composable
-private fun SessionRow(summary: SessionSummary, manager: SessionManager) {
+private fun SessionNameField(
+    name: String,
+    onNameChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BasicTextField(
+        value = name,
+        onValueChange = onNameChange,
+        singleLine = true,
+        textStyle = TextStyle(color = Palette.Text, fontSize = 13.sp),
+        cursorBrush = SolidColor(Palette.Gold),
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Palette.Night, RoundedCornerShape(5.dp))
+            .border(1.dp, Palette.Line, RoundedCornerShape(5.dp))
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+    )
+}
+
+@Composable
+private fun SessionRow(
+    summary: SessionSummary,
+    compact: Boolean,
+    onOpen: (SessionSummary) -> Unit,
+    onDelete: (SessionSummary) -> Unit,
+) {
     val damaged = summary.status == "ILLEGGIBILE"
 
-    Row(
-        Modifier
+    val container = Modifier
             .fillMaxWidth()
             .background(Palette.Night, RoundedCornerShape(8.dp))
             .border(1.dp, if (damaged) Palette.Critical else Palette.Line, RoundedCornerShape(8.dp))
-            .padding(9.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            .padding(9.dp)
+
+    if (compact) {
+        Column(container, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SessionSummaryContent(summary, damaged)
+            SessionActions(summary, damaged, onOpen, onDelete)
+        }
+    } else {
+        Row(
+            container,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SessionSummaryContent(summary, damaged, Modifier.weight(1f))
+            if (!damaged) {
+                GameButton("Apri", accent = Palette.Party, onClick = { onOpen(summary) })
+            }
+            GameButton("Elimina", accent = Palette.Enemy, onClick = { onDelete(summary) })
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SessionSummaryContent(
+    summary: SessionSummary,
+    damaged: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 text = summary.displayName,
                 color = if (damaged) Palette.Critical else Palette.Text,
@@ -170,7 +336,10 @@ private fun SessionRow(summary: SessionSummary, manager: SessionManager) {
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleMedium,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 if (damaged) {
                     Chip("File danneggiato", Palette.Critical)
                 } else {
@@ -187,11 +356,24 @@ private fun SessionRow(summary: SessionSummary, manager: SessionManager) {
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-        }
+    }
+}
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SessionActions(
+    summary: SessionSummary,
+    damaged: Boolean,
+    onOpen: (SessionSummary) -> Unit,
+    onDelete: (SessionSummary) -> Unit,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
         if (!damaged) {
-            GameButton("Apri", accent = Palette.Party, onClick = { manager.load(summary) })
+            GameButton("Apri", accent = Palette.Party, onClick = { onOpen(summary) })
         }
-        GameButton("Elimina", accent = Palette.Enemy, onClick = { manager.delete(summary) })
+        GameButton("Elimina", accent = Palette.Enemy, onClick = { onDelete(summary) })
     }
 }

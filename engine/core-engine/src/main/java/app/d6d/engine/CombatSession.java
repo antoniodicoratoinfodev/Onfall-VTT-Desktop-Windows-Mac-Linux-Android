@@ -889,6 +889,8 @@ public final class CombatSession {
      * una scelta del tavolo, quindi e' una bandiera esplicita e registrata.</p>
      */
     public synchronized void setSimultaneousTies(boolean simultaneous) {
+        requireSetupPhase();
+        if (state.simultaneousTies == simultaneous) return;
         beginCommand();
         state.simultaneousTies = simultaneous;
         append(EventType.INITIATIVE_ORDER_SET, "", "", details(

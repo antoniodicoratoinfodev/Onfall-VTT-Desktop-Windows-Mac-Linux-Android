@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">TurnForge</string>
+    <color name="launcher_background">#070A12</color>
 </resources>

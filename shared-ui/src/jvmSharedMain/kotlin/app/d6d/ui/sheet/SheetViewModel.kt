@@ -18,6 +18,14 @@ enum class SheetKind(val label: String) {
     MOSTRO("Mostri"),
 }
 
+/** Esito di un cambio editor che potrebbe scartare una bozza. */
+enum class SheetNavigationResult {
+    APPLIED,
+    UNSAVED_CHANGES,
+    NOT_FOUND,
+    FAILED,
+}
+
 /**
  * Stato dell'archivio di schede.
  *
@@ -29,7 +37,17 @@ class SheetViewModel(private val store: SheetStore) {
     var library by mutableStateOf(SheetLibrary())
         private set
 
-    var kind by mutableStateOf(SheetKind.PERSONAGGIO)
+    private var currentKind by mutableStateOf(SheetKind.PERSONAGGIO)
+
+    /**
+     * Il setter resta compatibile con gli editor esistenti, ma non scarta mai una
+     * bozza: per forzare il cambio la UI deve usare [requestKind] esplicitamente.
+     */
+    var kind: SheetKind
+        get() = currentKind
+        set(value) {
+            requestKind(value)
+        }
 
     var character by mutableStateOf(CharacterSheet())
 
@@ -39,6 +57,31 @@ class SheetViewModel(private val store: SheetStore) {
         private set
 
     var status by mutableStateOf<String?>(null)
+
+    private var pristineNewCharacter: CharacterSheet? = null
+    private var pristineNewMonster: MonsterStatBlock? = null
+
+    /** Vero quando il modulo aperto differisce dalla copia persistita. */
+    val isDirty: Boolean
+        get() = when (kind) {
+            SheetKind.PERSONAGGIO -> {
+                val baseline = selectedId
+                    ?.let { id -> library.characters.firstOrNull { it.id == id } }
+                    ?: pristineNewCharacter
+                baseline == null || character != baseline
+            }
+
+            SheetKind.MOSTRO -> {
+                val baseline = selectedId
+                    ?.let { id -> library.monsters.firstOrNull { it.id == id } }
+                    ?: pristineNewMonster
+                baseline == null || monster != baseline
+            }
+        }
+
+    val hasUnsavedChanges: Boolean get() = isDirty
+
+    private var initialized = false
 
     /**
      * Notificato dopo un salvataggio riuscito.
@@ -55,42 +98,87 @@ class SheetViewModel(private val store: SheetStore) {
         load()
     }
 
-    fun load() = guard("Archivio caricato.") {
-        library = if (store.exists()) store.load() else seeded().also { store.save(it) }
+    fun load(discardUnsavedChanges: Boolean = false): SheetNavigationResult {
+        if (initialized && isDirty && !discardUnsavedChanges) return unsavedResult()
+        val loaded = try {
+            if (store.exists()) store.load() else seeded().also { store.save(it) }
+        } catch (failure: IOException) {
+            status = "Errore su disco: ${failure.message}"
+            return SheetNavigationResult.FAILED
+        } catch (failure: IllegalArgumentException) {
+            status = "Scheda non valida: ${failure.message}"
+            return SheetNavigationResult.FAILED
+        }
+
+        // Il nuovo archivio diventa visibile soltanto dopo che lettura (ed eventuale
+        // prima scrittura del seed) sono terminate con successo.
+        library = loaded
+        initialized = true
         when (kind) {
-            SheetKind.PERSONAGGIO -> library.characters.firstOrNull()?.let { selectCharacter(it.id) }
-            SheetKind.MOSTRO -> library.monsters.firstOrNull()?.let { selectMonster(it.id) }
+            SheetKind.PERSONAGGIO -> loaded.characters.firstOrNull()?.let(::selectCharacterInternal)
+                ?: newSheetInternal()
+            SheetKind.MOSTRO -> loaded.monsters.firstOrNull()?.let(::selectMonsterInternal)
+                ?: newSheetInternal()
         }
+        status = "Archivio caricato."
+        return SheetNavigationResult.APPLIED
     }
 
-    fun selectCharacter(id: String) {
-        library.characters.firstOrNull { it.id == id }?.let {
-            character = it
-            selectedId = id
-            status = null
-        }
-    }
-
-    fun selectMonster(id: String) {
-        library.monsters.firstOrNull { it.id == id }?.let {
-            monster = it
-            selectedId = id
-            status = null
-        }
-    }
-
-    fun newSheet() {
+    fun requestKind(
+        requested: SheetKind,
+        discardUnsavedChanges: Boolean = false,
+    ): SheetNavigationResult {
+        if (requested == kind) return SheetNavigationResult.APPLIED
+        if (isDirty && !discardUnsavedChanges) return unsavedResult()
+        currentKind = requested
         selectedId = null
-        val stamp = System.currentTimeMillis()
-        when (kind) {
-            SheetKind.PERSONAGGIO -> character = CharacterSheet(id = "pg-$stamp")
-            SheetKind.MOSTRO -> monster = MonsterStatBlock(id = "mostro-$stamp")
+        when (requested) {
+            SheetKind.PERSONAGGIO -> library.characters.firstOrNull()?.let(::selectCharacterInternal)
+                ?: newSheetInternal()
+            SheetKind.MOSTRO -> library.monsters.firstOrNull()?.let(::selectMonsterInternal)
+                ?: newSheetInternal()
         }
-        status = "Nuova scheda: compila e salva."
+        status = null
+        return SheetNavigationResult.APPLIED
     }
 
-    fun save() = guard("Scheda salvata.") {
-        library = when (kind) {
+    fun selectCharacter(
+        id: String,
+        discardUnsavedChanges: Boolean = false,
+    ): SheetNavigationResult {
+        if (kind == SheetKind.PERSONAGGIO && selectedId == id) return SheetNavigationResult.APPLIED
+        if (isDirty && !discardUnsavedChanges) return unsavedResult()
+        val selected = library.characters.firstOrNull { it.id == id }
+            ?: return notFoundResult()
+        currentKind = SheetKind.PERSONAGGIO
+        selectCharacterInternal(selected)
+        status = null
+        return SheetNavigationResult.APPLIED
+    }
+
+    fun selectMonster(
+        id: String,
+        discardUnsavedChanges: Boolean = false,
+    ): SheetNavigationResult {
+        if (kind == SheetKind.MOSTRO && selectedId == id) return SheetNavigationResult.APPLIED
+        if (isDirty && !discardUnsavedChanges) return unsavedResult()
+        val selected = library.monsters.firstOrNull { it.id == id }
+            ?: return notFoundResult()
+        currentKind = SheetKind.MOSTRO
+        selectMonsterInternal(selected)
+        status = null
+        return SheetNavigationResult.APPLIED
+    }
+
+    fun newSheet(discardUnsavedChanges: Boolean = false): SheetNavigationResult {
+        if (isDirty && !discardUnsavedChanges) return unsavedResult()
+        newSheetInternal()
+        status = "Nuova scheda: compila e salva."
+        return SheetNavigationResult.APPLIED
+    }
+
+    fun save(): Boolean = guard("Scheda salvata.") {
+        val updatedLibrary = when (kind) {
             SheetKind.PERSONAGGIO -> library.copy(
                 characters = library.characters.filterNot { it.id == character.id } + character,
             )
@@ -99,20 +187,34 @@ class SheetViewModel(private val store: SheetStore) {
                 monsters = library.monsters.filterNot { it.id == monster.id } + monster,
             )
         }
-        store.save(library)
+        // Commit in memoria solo dopo la sostituzione atomica su disco.
+        store.save(updatedLibrary)
+        library = updatedLibrary
         selectedId = if (kind == SheetKind.PERSONAGGIO) character.id else monster.id
+        when (kind) {
+            SheetKind.PERSONAGGIO -> pristineNewCharacter = null
+            SheetKind.MOSTRO -> pristineNewMonster = null
+        }
         onSaved?.invoke(kind)
     }
 
-    fun delete(id: String) = guard("Scheda eliminata.") {
+    fun delete(id: String): Boolean = guard("Scheda eliminata.") {
         val deletedKind = kind
-        library = when (kind) {
+        val deletingSelection = selectedId == id
+        val updatedLibrary = when (kind) {
             SheetKind.PERSONAGGIO -> library.copy(characters = library.characters.filterNot { it.id == id })
             SheetKind.MOSTRO -> library.copy(monsters = library.monsters.filterNot { it.id == id })
         }
-        store.save(library)
-        selectedId = null
-        newSheet()
+        store.save(updatedLibrary)
+        library = updatedLibrary
+        if (deletingSelection) {
+            when (kind) {
+                SheetKind.PERSONAGGIO -> updatedLibrary.characters.firstOrNull()
+                    ?.let(::selectCharacterInternal) ?: newSheetInternal()
+                SheetKind.MOSTRO -> updatedLibrary.monsters.firstOrNull()
+                    ?.let(::selectMonsterInternal) ?: newSheetInternal()
+            }
+        }
         onDeleted?.invoke(deletedKind, id)
     }
 
@@ -123,21 +225,27 @@ class SheetViewModel(private val store: SheetStore) {
      * resta autorevole, quindi un'edit al tavolo deve confluire nella scheda, non
      * solo nel catalogo. Non sposta la selezione ne' la scheda in modifica.
      */
-    fun upsertCharacterSilently(sheet: CharacterSheet) = guard("Scheda aggiornata dalla battaglia.") {
-        library = library.copy(
+    fun upsertCharacterSilently(sheet: CharacterSheet): Boolean = guard("Scheda aggiornata dalla battaglia.") {
+        val editingThisSheet = selectedId == sheet.id && kind == SheetKind.PERSONAGGIO
+        val preserveDraft = editingThisSheet && isDirty
+        val updatedLibrary = library.copy(
             characters = library.characters.filterNot { it.id == sheet.id } + sheet,
         )
-        store.save(library)
-        if (selectedId == sheet.id && kind == SheetKind.PERSONAGGIO) character = sheet
+        store.save(updatedLibrary)
+        library = updatedLibrary
+        if (editingThisSheet && !preserveDraft) character = sheet
         onSaved?.invoke(SheetKind.PERSONAGGIO)
     }
 
-    fun upsertMonsterSilently(block: MonsterStatBlock) = guard("Stat block aggiornato dalla battaglia.") {
-        library = library.copy(
+    fun upsertMonsterSilently(block: MonsterStatBlock): Boolean = guard("Stat block aggiornato dalla battaglia.") {
+        val editingThisBlock = selectedId == block.id && kind == SheetKind.MOSTRO
+        val preserveDraft = editingThisBlock && isDirty
+        val updatedLibrary = library.copy(
             monsters = library.monsters.filterNot { it.id == block.id } + block,
         )
-        store.save(library)
-        if (selectedId == block.id && kind == SheetKind.MOSTRO) monster = block
+        store.save(updatedLibrary)
+        library = updatedLibrary
+        if (editingThisBlock && !preserveDraft) monster = block
         onSaved?.invoke(SheetKind.MOSTRO)
     }
 
@@ -165,7 +273,44 @@ class SheetViewModel(private val store: SheetStore) {
         )
     }
 
-    private fun guard(successMessage: String, block: () -> Unit) {
+    private fun selectCharacterInternal(sheet: CharacterSheet) {
+        character = sheet
+        selectedId = sheet.id
+        pristineNewCharacter = null
+    }
+
+    private fun selectMonsterInternal(block: MonsterStatBlock) {
+        monster = block
+        selectedId = block.id
+        pristineNewMonster = null
+    }
+
+    private fun newSheetInternal() {
+        selectedId = null
+        val stamp = System.currentTimeMillis()
+        when (kind) {
+            SheetKind.PERSONAGGIO -> {
+                character = CharacterSheet(id = "pg-$stamp")
+                pristineNewCharacter = character
+            }
+            SheetKind.MOSTRO -> {
+                monster = MonsterStatBlock(id = "mostro-$stamp")
+                pristineNewMonster = monster
+            }
+        }
+    }
+
+    private fun unsavedResult(): SheetNavigationResult {
+        status = "Ci sono modifiche non salvate: salva oppure conferma di volerle scartare."
+        return SheetNavigationResult.UNSAVED_CHANGES
+    }
+
+    private fun notFoundResult(): SheetNavigationResult {
+        status = "Scheda non trovata."
+        return SheetNavigationResult.NOT_FOUND
+    }
+
+    private fun guard(successMessage: String, block: () -> Unit): Boolean {
         status = try {
             block()
             successMessage
@@ -174,5 +319,6 @@ class SheetViewModel(private val store: SheetStore) {
         } catch (failure: IllegalArgumentException) {
             "Scheda non valida: ${failure.message}"
         }
+        return status == successMessage
     }
 }

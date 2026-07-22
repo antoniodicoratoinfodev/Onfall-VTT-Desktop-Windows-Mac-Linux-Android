@@ -33,6 +33,8 @@ data class WeaponEntry(
     val damageType: DamageType = DamageType.SLASHING,
     val rangeFeet: Int = 5,
     val note: String = "",
+    /** Se vero l'arma/capacita' consuma l'azione bonus nel combattimento. */
+    val bonusAction: Boolean = false,
 ) {
     /** Colonna "Danno e tipo" nella forma stampata sulla scheda. */
     val damageText: String
@@ -199,7 +201,7 @@ data class CharacterSheet(
                     "content-user-private",
                     rulesetVersion,
                     weapon.name,
-                    ActivationCost.ACTION,
+                    if (weapon.bonusAction) ActivationCost.BONUS_ACTION else ActivationCost.ACTION,
                     ResolutionMethod.ATTACK_ROLL,
                     weapon.attackBonus,
                     weapon.rangeFeet,

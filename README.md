@@ -1,4 +1,4 @@
-# INSERIRE NOME
+# TurnForge
 
 Strumento di combattimento e gestione incontri **compatibile con 5.5e / SRD**, offline-first,
 con interfaccia da videogioco. Desktop e Android condividono motore, dati e schermate.
@@ -7,11 +7,11 @@ con interfaccia da videogioco. Desktop e Android condividono motore, dati e sche
 > progetto. L'applicazione si dichiara *compatibile con 5.5e*, non approvata
 > ufficialmente.
 
-## Cos'e'
+## Cos'è
 
 Tre prodotti che convivono sullo stesso motore:
 
-1. un **archivio** di personaggi, creature e capacita' (il Compendio);
+1. un **archivio** di personaggi, creature e capacità (il Compendio);
 2. un **motore di combattimento** indipendente dall'interfaccia, deterministico e annullabile;
 3. una **interfaccia di gioco** che presenta lo scontro come una battaglia a turni.
 
@@ -38,7 +38,7 @@ La schermata di battaglia tiene tre aree visibili insieme sul desktop:
 
 Su telefono la stessa schermata diventa una superficie alla volta (Palco / Squadra / Nemici /
 Registro) con i comandi sempre a portata di pollice. Il documento chiede esplicitamente di **non**
-fare del desktop una UI mobile ingrandita, ne' viceversa: cambia il layout, non il motore.
+fare del desktop una UI mobile ingrandita, né viceversa: cambia il layout, non il motore.
 
 Tutti i ritratti sono disegnati a vettori dal codice. Non esiste nessuna immagine importata,
 quindi ogni creatura inserita ha subito una rappresentazione visiva e non ci sono vincoli di
@@ -52,7 +52,7 @@ licenza sulla grafica.
 ## Avvio
 
 ```bash
-# desktop
+# Desktop (macOS, Linux o Windows)
 ./gradlew :desktop-app:run
 
 # tutti i test
@@ -61,6 +61,10 @@ licenza sulla grafica.
 # APK Android di debug
 ./gradlew :android-app:assembleDebug
 ```
+
+Su macOS, dopo aver creato il pacchetto con `./gradlew :desktop-app:packageDmg`, si può anche
+aprire **TurnForge.app** dal Finder come una normale applicazione. Durante lo sviluppo il comando
+`run` qui sopra è il modo più rapido e non richiede installazione.
 
 I dati risiedono in `~/.turnforge`. Si puo' cambiare percorso:
 
@@ -72,7 +76,7 @@ I dati risiedono in `~/.turnforge`. Si puo' cambiare percorso:
 
 | Modulo | Linguaggio | Ruolo |
 |---|---|---|
-| `engine/domain-model` | Java 17 | attori, capacita', condizioni, stato, campagne. Immutabile, zero dipendenze |
+| `engine/domain-model` | Java 17 | attori, capacità, condizioni, stato, campagne. Immutabile, zero dipendenze |
 | `engine/core-engine` | Java 17 | dadi con seed, macchina a stati, audit append-only, budget XP |
 | `engine/persistence-json` | Java 17 | salvataggi atomici, backup, import/export |
 | `engine/sheet-model` | Kotlin | scheda personaggio 2024 e stat block mostri 2025 |

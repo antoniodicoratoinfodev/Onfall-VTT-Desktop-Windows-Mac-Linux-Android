@@ -3,6 +3,7 @@ package app.d6d.ui.sheet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,11 +19,23 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,6 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.d6d.sheet.formatModifier
+import app.d6d.sheet.metresFromFeet
 import app.d6d.ui.theme.Palette
 
 /**
@@ -71,6 +85,7 @@ fun SheetField(
     value: String,
     modifier: Modifier = Modifier,
     numeric: Boolean = false,
+    onFocusLost: (() -> Unit)? = null,
     onChange: (String) -> Unit,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -92,7 +107,11 @@ fun SheetField(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Palette.Night, RoundedCornerShape(4.dp))
-                .padding(horizontal = 6.dp, vertical = 5.dp),
+                .padding(horizontal = 6.dp, vertical = 7.dp)
+                .semantics { contentDescription = label }
+                .onFocusChanged { state ->
+                    if (!state.isFocused) onFocusLost?.invoke()
+                },
         )
         Text(
             text = label.uppercase(),
@@ -110,20 +129,32 @@ fun SheetNumberField(
     modifier: Modifier = Modifier,
     onChange: (Int) -> Unit,
 ) {
+    var draft by remember(value) { mutableStateOf(value.toString()) }
     SheetField(
         label = label,
-        value = value.toString(),
+        value = draft,
         modifier = modifier,
         numeric = true,
+        onFocusLost = {
+            if (draft.toIntOrNull() == null) draft = value.toString()
+        },
     ) { text ->
         val cleaned = text.trim()
-        if (cleaned.isEmpty() || cleaned == "-") {
-            onChange(0)
-        } else {
+        if (cleaned.matches(Regex("-?\\d*"))) {
+            draft = cleaned
             cleaned.toIntOrNull()?.let(onChange)
         }
     }
 }
+
+/** Campo in piedi con il valore metrico aggiornato mentre si modifica la scheda. */
+@Composable
+fun SheetFeetField(
+    label: String,
+    value: Int,
+    modifier: Modifier = Modifier,
+    onChange: (Int) -> Unit,
+) = SheetNumberField("$label · ${metresFromFeet(value)} m", value, modifier, onChange)
 
 /**
  * Valore derivato e non modificabile, mostrato in risalto.
@@ -181,11 +212,27 @@ fun ProficiencyDot(
     }
     Box(
         modifier
-            .size(12.dp)
-            .background(if (filled || expertise) color else Color.Transparent, CircleShape)
-            .border(if (expertise) 2.dp else 1.dp, color, CircleShape)
-            .clickable { onClick() },
-    )
+            .minimumInteractiveComponentSize()
+            .size(44.dp)
+            .semantics {
+                role = Role.Checkbox
+                selected = filled || expertise
+                stateDescription = when {
+                    expertise -> "Maestria"
+                    filled -> "Competente"
+                    else -> "Non competente"
+                }
+            }
+            .clickable(role = Role.Checkbox) { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(14.dp)
+                .background(if (filled || expertise) color else Color.Transparent, CircleShape)
+                .border(if (expertise) 2.dp else 1.dp, color, CircleShape),
+        )
+    }
 }
 
 /** Casella spuntabile con etichetta, come i rombi delle competenze in armatura. */
@@ -197,7 +244,11 @@ fun SheetCheck(
     onChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier.clickable { onChange(!checked) },
+        modifier
+            .minimumInteractiveComponentSize()
+            .toggleable(value = checked, role = Role.Checkbox) { onChange(it) }
+            .semantics { stateDescription = if (checked) "Selezionato" else "Non selezionato" }
+            .padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -229,14 +280,28 @@ fun PipRow(
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         repeat(total) { index ->
             val on = index < filled
-            Text(
-                text = if (on) "◆" else "◇",
-                color = if (on) color else Palette.TextFaint,
-                style = MaterialTheme.typography.bodyMedium,
-                // Ricliccare la casella gia' accesa la spegne: cosi' si corregge
-                // un tocco sbagliato senza azzerare tutta la riga.
-                modifier = Modifier.clickable { onSet(if (filled == index + 1) index else index + 1) },
-            )
+            Box(
+                Modifier
+                    .minimumInteractiveComponentSize()
+                    .size(44.dp)
+                    .semantics {
+                        role = Role.Checkbox
+                        selected = on
+                        stateDescription = if (on) "Segnato" else "Non segnato"
+                    }
+                    // Ricliccare la casella gia' accesa la spegne: cosi' si corregge
+                    // un tocco sbagliato senza azzerare tutta la riga.
+                    .clickable(role = Role.Checkbox) {
+                        onSet(if (filled == index + 1) index else index + 1)
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (on) "◆" else "◇",
+                    color = if (on) color else Palette.TextFaint,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
     }
 }

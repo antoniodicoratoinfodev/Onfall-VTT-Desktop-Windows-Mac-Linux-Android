@@ -4,6 +4,7 @@
 build/
 .gradle/
 out/
+bin/
 .kotlin/
 
 # --- Percorso SDK specifico della macchina ---

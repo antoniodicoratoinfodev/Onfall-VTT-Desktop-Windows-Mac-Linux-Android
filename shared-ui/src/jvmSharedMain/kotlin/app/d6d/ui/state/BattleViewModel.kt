@@ -13,6 +13,9 @@ import app.d6d.domain.combat.CombatantState
 import app.d6d.domain.combat.ConditionDuration
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.D20Mode
+import app.d6d.domain.combat.D20RollInput
+import app.d6d.domain.combat.DamageComponent
+import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.TurnBudget
 import app.d6d.domain.space.BattleMap
 import app.d6d.domain.space.GridPosition
@@ -20,6 +23,7 @@ import app.d6d.domain.space.MapGrid
 import app.d6d.domain.space.TokenPlacement
 import app.d6d.engine.CombatRuleException
 import app.d6d.engine.CombatSession
+import app.d6d.sheet.feetWithMetres
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumber
 import app.d6d.ui.components.italianLabel
@@ -30,6 +34,14 @@ import app.d6d.ui.components.italianLabel
  */
 fun interface CombatantEditSink {
     fun onEdited(definitionId: String, snapshot: CombatantSnapshot)
+
+    /**
+     * Risincronizza la fonte autorevole dopo un Undo. Il comportamento predefinito
+     * riusa lo stesso upsert dell'edit, mantenendo compatibili i sink a lambda.
+     */
+    fun onResynced(definitionId: String, snapshot: CombatantSnapshot) {
+        onEdited(definitionId, snapshot)
+    }
 }
 
 /**
@@ -64,10 +76,26 @@ class BattleViewModel(
     var events by mutableStateOf(session.auditTrail())
         private set
 
+    /** Cambia ogni volta che [adopt] sostituisce l'istanza della sessione. */
+    var sessionGeneration by mutableStateOf(0L)
+        private set
+
     /** Messaggio dell'ultima regola violata; il livello Guided lo mostra senza bloccare il tavolo. */
     var message by mutableStateOf<String?>(null)
 
-    var selectedTargetId by mutableStateOf<String?>(null)
+    private var targetSelection by mutableStateOf<String?>(null)
+
+    /**
+     * Bersaglio scelto per le azioni ostili. Se non e' un avversario valido
+     * dell'attore selezionato, la scelta viene scartata immediatamente.
+     */
+    var selectedTargetId: String?
+        get() = targetSelection
+        set(value) {
+            targetSelection = sanitizeTarget(value)
+        }
+
+    private var activeActorSelection by mutableStateOf<String?>(null)
 
     var rollMode by mutableStateOf(D20Mode.NORMAL)
 
@@ -81,11 +109,19 @@ class BattleViewModel(
     val status: CombatStatus get() = state.status()
     val round: Int get() = state.round()
     val canUndo: Boolean get() = session.canUndo()
+    val encounterId: String get() = state.encounterId()
+    val displayName: String get() = encounterId
 
     /** Quando e' attiva, un doppio clic su un campo lo rende modificabile. */
     var editMode by mutableStateOf(false)
 
-    val activeCombatantId: String? get() = state.currentCombatantId().orElse(null)
+    /** Attore scelto nel gruppo simultaneo; altrimenti il primo del turno. */
+    val activeActorId: String?
+        get() = activeActorSelection?.takeIf { it in activeCombatantIds }
+            ?: state.currentCombatantId().orElse(null)
+
+    /** Alias storico usato dalle schermate esistenti. */
+    val activeCombatantId: String? get() = activeActorId
 
     /** Tutti i combattenti del turno corrente: piu' di uno se hanno pareggiato l'iniziativa. */
     val activeCombatantIds: List<String> get() = state.currentCombatantIds()
@@ -100,8 +136,22 @@ class BattleViewModel(
     var simultaneousTies: Boolean
         get() = state.simultaneousTies()
         set(value) {
-            command { session.setSimultaneousTies(value) }
+            if (status != CombatStatus.DRAFT && status != CombatStatus.READY) {
+                message = "La gestione delle parità non si può cambiare durante il combattimento."
+            } else {
+                command { session.setSimultaneousTies(value) }
+            }
         }
+
+    fun selectActiveActor(combatantId: String) {
+        if (combatantId !in activeCombatantIds) {
+            message = "Il combattente scelto non appartiene al turno corrente."
+            return
+        }
+        activeActorSelection = combatantId
+        targetSelection = sanitizeTarget(targetSelection)
+        message = null
+    }
 
     /** Vero se il combattente e' fra quelli che stanno giocando ora. */
     fun isActive(combatantId: String): Boolean = combatantId in activeCombatantIds
@@ -129,11 +179,11 @@ class BattleViewModel(
 
     /** Bersaglio corrente, ripiegando sul primo avversario ancora in piedi. */
     fun effectiveTargetId(): String? {
-        val chosen = selectedTargetId
-        if (chosen != null && combatant(chosen)?.defeated() == false) return chosen
-        val active = activeCombatantId ?: return null
+        val active = activeActorId ?: return null
+        val chosen = sanitizeTarget(targetSelection)
+        if (chosen != null) return chosen
         val hostile = if (isParty(active)) enemyIds else partyIds
-        return hostile.firstOrNull { combatant(it)?.defeated() == false }
+        return hostile.firstOrNull { it != active && combatant(it)?.defeated() == false }
     }
 
     // --- comandi ---------------------------------------------------------------------
@@ -175,9 +225,74 @@ class BattleViewModel(
 
     fun endTurn() = command { session.endTurn() }
 
-    fun undo() = command {
-        if (!session.undo()) message = "Niente da annullare."
+    fun undo() {
+        message = null
+        val effect = undoEffects.lastOrNull() ?: UndoEffect.None
+        try {
+            if (!session.undo()) {
+                message = "Niente da annullare."
+                return
+            }
+            if (undoEffects.isNotEmpty()) undoEffects.removeLast()
+            sync()
+            if (effect is UndoEffect.CombatantEdit) {
+                combatant(effect.combatantId)?.snapshot()?.let { restored ->
+                    editSink.onResynced(effect.definitionId, restored)
+                }
+            }
+        } catch (failure: CombatRuleException) {
+            message = failure.message
+        } catch (failure: IllegalArgumentException) {
+            message = failure.message
+        } catch (failure: IllegalStateException) {
+            message = failure.message
+        } finally {
+            sync()
+        }
     }
+
+    /** Danno inserito manualmente dal tavolo, comunque risolto dal motore. */
+    fun applyManualDamage(
+        targetId: String,
+        amount: Int,
+        damageType: DamageType = DamageType.FORCE,
+    ) = command {
+        val result = session.applyDamage(
+            activeActorId.orEmpty(),
+            targetId,
+            listOf(DamageComponent(damageType, amount)),
+            false,
+        )
+        if (result.totalAdjustedDamage() > 0) {
+            push(targetId, FloatingNumber(++floatSequence, "-${result.totalAdjustedDamage()}", FloatKind.DAMAGE))
+        }
+    }
+
+    fun rollDeathSave(targetId: String) = command {
+        val result = session.rollDeathSave(targetId, D20RollInput.digital())
+        val label = when {
+            result.dead() -> "Morto"
+            result.stable() -> "Stabile"
+            else -> "Morte ${result.successes()}/${result.failures()}"
+        }
+        push(targetId, floatInfo(label))
+    }
+
+    fun stabilize(targetId: String) = command {
+        session.stabilize(targetId, "manuale")
+        push(targetId, floatInfo("Stabile"))
+    }
+
+    fun setExhaustion(targetId: String, level: Int) = command {
+        session.setExhaustion(targetId, level)
+        push(targetId, floatInfo("Sfinimento $level"))
+    }
+
+    fun pause() = command { session.pause() }
+
+    fun resume() = command { session.resume() }
+
+    fun resolve(outcome: String = "Concluso dal tavolo") = command { session.resolve(outcome) }
 
     fun heal(targetId: String, amount: Int) = command {
         val healed = session.heal(targetId, amount)
@@ -244,9 +359,19 @@ class BattleViewModel(
             if (initiativeModifier != null) 10 + newInitiativeModifier else previous.initiativeScore(),
             constitutionSaveBonus ?: previous.constitutionSaveBonus(),
         )
-        command {
+        command(UndoEffect.CombatantEdit(combatantId, previous.definitionId())) {
             session.editCombatant(combatantId, updated)
-            editSink.onEdited(previous.definitionId(), updated)
+            try {
+                editSink.onEdited(previous.definitionId(), updated)
+            } catch (failure: Exception) {
+                // La scheda è autorevole: se la sua scrittura atomica fallisce,
+                // annulla anche la modifica appena registrata nel combattimento.
+                session.undo()
+                throw IllegalStateException(
+                    failure.message ?: "La correzione non è stata salvata nella scheda.",
+                    failure,
+                )
+            }
         }
     }
 
@@ -287,11 +412,17 @@ class BattleViewModel(
      */
     fun setFootprint(combatantId: String, squaresPerSide: Int) {
         val squares = squaresPerSide.coerceIn(1, 4)
-        footprints = footprints + (combatantId to squares)
         // Se e' gia' sulla mappa va ricollocato con il nuovo ingombro; il motore
         // rifiuta se il nuovo spazio non entra o e' occupato.
-        placementOf(combatantId)?.let { existing ->
+        val existing = placementOf(combatantId)
+        if (existing == null) {
+            footprints = footprints + (combatantId to squares)
+        } else {
+            val revisionBefore = state.revision()
             command { session.placeCombatant(combatantId, existing.origin(), squares) }
+            if (state.revision() != revisionBefore) {
+                footprints = footprints + (combatantId to squares)
+            }
         }
     }
 
@@ -311,7 +442,15 @@ class BattleViewModel(
 
     fun move(combatantId: String, column: Int, row: Int) = command {
         val feet = session.moveCombatant(combatantId, GridPosition(column, row))
-        push(combatantId, FloatingNumber(++floatSequence, "$feet ft", FloatKind.INFO))
+        push(combatantId, FloatingNumber(++floatSequence, feetWithMetres(feet, "ft"), FloatKind.INFO))
+    }
+
+    fun moveActive(column: Int, row: Int) {
+        val actor = activeActorId ?: run {
+            message = "Nessun attore attivo."
+            return
+        }
+        move(actor, column, row)
     }
 
     fun removeFromMap(combatantId: String) = command { session.removeFromMap(combatantId) }
@@ -355,6 +494,7 @@ class BattleViewModel(
      */
     fun presentationState(): Map<String, String> = buildMap {
         selectedTargetId?.let { put("selectedTargetId", it) }
+        activeActorSelection?.takeIf { it in activeCombatantIds }?.let { put("activeActorId", it) }
         put("rollMode", rollMode.name)
         if (footprints.isNotEmpty()) {
             put("footprints", footprints.entries.joinToString(",") { "${it.key}=${it.value}" })
@@ -364,8 +504,16 @@ class BattleViewModel(
     /** Sostituisce il combattimento con quello caricato dal disco. */
     fun adopt(loaded: CombatSession, presentation: Map<String, String>) {
         session = loaded
+        sessionGeneration++
+        undoEffects.clear()
         floating = emptyMap()
         message = null
+        activeActorSelection = null
+        targetSelection = null
+        sync(forceTurnReset = true)
+        presentation["activeActorId"]?.takeIf { it in activeCombatantIds }?.let {
+            activeActorSelection = it
+        }
         selectedTargetId = presentation["selectedTargetId"]
         rollMode = presentation["rollMode"]
             ?.let { name -> runCatching { D20Mode.valueOf(name) }.getOrNull() }
@@ -375,7 +523,11 @@ class BattleViewModel(
             ?.mapNotNull { entry ->
                 val parts = entry.split('=')
                 val squares = parts.getOrNull(1)?.toIntOrNull()
-                if (parts.size == 2 && squares != null) parts[0] to squares else null
+                if (parts.size == 2 && squares != null && squares in 1..4 && combatant(parts[0]) != null) {
+                    parts[0] to squares
+                } else {
+                    null
+                }
             }
             ?.toMap()
             .orEmpty()
@@ -391,6 +543,11 @@ class BattleViewModel(
 
     fun dismissMessage() {
         message = null
+    }
+
+    /** Mostra una nota guidata senza inviare alcun comando al motore. */
+    fun showMessage(text: String) {
+        message = text.takeIf { it.isNotBlank() }
     }
 
     // --- interni ---------------------------------------------------------------------
@@ -409,7 +566,11 @@ class BattleViewModel(
      * Una violazione delle regole diventa un messaggio, non un errore fatale: il
      * motore ha gia' annullato il proprio comando, quindi lo stato resta coerente.
      */
-    private fun command(block: () -> Unit) {
+    private fun command(
+        undoEffect: UndoEffect = UndoEffect.None,
+        block: () -> Unit,
+    ) {
+        val revisionBefore = state.revision()
         try {
             message = null
             block()
@@ -421,13 +582,44 @@ class BattleViewModel(
             message = failure.message
         } finally {
             sync()
+            if (state.revision() != revisionBefore) undoEffects.addLast(undoEffect)
         }
     }
 
-    private fun sync() {
-        state = session.currentState()
+    private fun sync(forceTurnReset: Boolean = false) {
+        val previousTurn = turnIdentity(state)
+        val updated = session.currentState()
+        state = updated
         events = session.auditTrail()
+        if (forceTurnReset || previousTurn != turnIdentity(updated)) {
+            activeActorSelection = null
+            targetSelection = null
+        } else {
+            activeActorSelection = activeActorSelection?.takeIf { it in activeCombatantIds }
+            targetSelection = sanitizeTarget(targetSelection)
+        }
     }
+
+    private fun sanitizeTarget(candidate: String?): String? {
+        val active = activeActorId ?: return null
+        return candidate?.takeIf {
+            it != active &&
+                combatant(it)?.defeated() == false &&
+                isParty(it) != isParty(active)
+        }
+    }
+
+    private fun turnIdentity(snapshot: CombatState): String? {
+        if (snapshot.status() != CombatStatus.ACTIVE && snapshot.status() != CombatStatus.PAUSED) return null
+        return "${snapshot.round()}:${snapshot.turnIndex()}:${snapshot.currentCombatantIds().joinToString(",")}"
+    }
+
+    private sealed interface UndoEffect {
+        data object None : UndoEffect
+        data class CombatantEdit(val combatantId: String, val definitionId: String) : UndoEffect
+    }
+
+    private val undoEffects = ArrayDeque<UndoEffect>()
 }
 
 /** Ultimi eventi in ordine cronologico inverso, per il registro a schermo. */

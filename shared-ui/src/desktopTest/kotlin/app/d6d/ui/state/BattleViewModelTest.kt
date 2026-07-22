@@ -2,6 +2,7 @@ package app.d6d.ui.state
 
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.ConditionType
+import app.d6d.engine.CombatSession
 import app.d6d.ui.content.SampleEncounter
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -40,6 +41,31 @@ class BattleViewModelTest {
         val target = model.effectiveTargetId()!!
 
         assertTrue(model.isParty(active) != model.isParty(target))
+    }
+
+    @Test
+    fun `un alleato o lo stesso attore non restano selezionati come bersaglio ostile`() {
+        val model = viewModel()
+        val active = model.activeCombatantId!!
+        val ally = model.partyIds.first { it != active }.takeIf { model.isParty(active) }
+            ?: model.enemyIds.first { it != active }
+
+        model.selectedTargetId = active
+        assertNull(model.selectedTargetId)
+        model.selectedTargetId = ally
+        assertNull(model.selectedTargetId)
+        assertTrue(model.isParty(active) != model.isParty(model.effectiveTargetId()!!))
+    }
+
+    @Test
+    fun `il bersaglio esplicito viene azzerato al cambio turno`() {
+        val model = viewModel()
+        model.selectedTargetId = model.effectiveTargetId()
+        assertNotNull(model.selectedTargetId)
+
+        model.endTurn()
+
+        assertNull(model.selectedTargetId)
     }
 
     @Test
@@ -166,6 +192,42 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `la modalita parita non cambia ne salta attore durante il combattimento`() {
+        val model = viewModel()
+        val actor = model.activeCombatantId
+        val groups = model.turnGroups
+
+        model.simultaneousTies = !model.simultaneousTies
+
+        assertEquals(actor, model.activeCombatantId)
+        assertEquals(groups, model.turnGroups)
+        assertNotNull(model.message)
+    }
+
+    @Test
+    fun `in un turno simultaneo si puo scegliere quale attore agisce`() {
+        val party = SampleEncounter.party().take(2)
+        val enemy = SampleEncounter.enemies().first()
+        val session = CombatSession.create("turno-simultaneo", 99L)
+        session.addCombatant("alleato-1", party[0])
+        session.addCombatant("alleato-2", party[1])
+        session.addCombatant("nemico", enemy)
+        session.setPartyCombatants(listOf("alleato-1", "alleato-2"))
+        listOf("alleato-1", "alleato-2", "nemico").forEach { session.setInitiative(it, 15) }
+        session.setInitiativeOrder(listOf("alleato-1", "alleato-2", "nemico"))
+        session.setSimultaneousTies(true)
+        session.markReady()
+        session.start()
+        val model = BattleViewModel(session)
+
+        model.selectActiveActor("alleato-2")
+
+        assertEquals("alleato-2", model.activeActorId)
+        assertEquals("nemico", model.effectiveTargetId())
+        assertNull(model.message)
+    }
+
+    @Test
     fun `modificare un combattente cambia la scheda e lo registra`() {
         val model = viewModel()
         val target = model.partyIds.first()
@@ -218,5 +280,20 @@ class BattleViewModelTest {
         model.undo()
 
         assertEquals(originalName, model.combatant(target)!!.snapshot().name())
+    }
+
+    @Test
+    fun `annullare una correzione risincronizza anche il sink persistente`() {
+        val snapshots = mutableListOf<String>()
+        val model = BattleViewModel(SampleEncounter.startedSession(seed = 4242L)) { _, snapshot ->
+            snapshots += snapshot.name()
+        }
+        val target = model.partyIds.first()
+        val originalName = model.combatant(target)!!.snapshot().name()
+
+        model.editCombatant(target, name = "Temporaneo")
+        model.undo()
+
+        assertEquals(listOf("Temporaneo", originalName), snapshots)
     }
 }

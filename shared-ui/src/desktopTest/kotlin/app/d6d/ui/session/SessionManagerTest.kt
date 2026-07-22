@@ -164,6 +164,54 @@ class SessionManagerTest {
     }
 
     @Test
+    fun `dirty state e flush autosave seguono lo stato realmente persistito`() {
+        val battle = battle()
+        val manager = manager(battle)
+        assertTrue(manager.hasUnsavedChanges)
+
+        assertEquals(SessionSaveResult.SAVED, manager.save("autosave"))
+        assertFalse(manager.hasUnsavedChanges)
+
+        battle.endTurn()
+        assertTrue(manager.currentDirty)
+        assertEquals(SessionSaveResult.SAVED, manager.flushAutosave())
+        assertFalse(manager.hasUnsavedChanges)
+        assertEquals(SessionSaveResult.NOT_NEEDED, manager.flushAutosave())
+    }
+
+    @Test
+    fun `una collisione di slug non sovrascrive una sessione estranea`() {
+        val first = manager(battle())
+        assertEquals(SessionSaveResult.SAVED, first.save("Cripta!"))
+
+        val otherBattle = battle()
+        otherBattle.endTurn()
+        val second = manager(otherBattle)
+
+        assertEquals(SessionSaveResult.NAME_COLLISION, second.save("Cripta?"))
+        val stored = SessionArchiveStore(directory.resolve("sessions")).load("cripta")
+        assertEquals("Cripta!", stored.summary().displayName)
+        assertEquals(0, stored.session.currentState().turnIndex())
+    }
+
+    @Test
+    fun `request load segnala prima le modifiche non salvate`() {
+        val battle = battle()
+        val manager = manager(battle)
+        manager.save("checkpoint")
+        val summary = manager.sessions.first()
+        battle.endTurn()
+
+        assertEquals(SessionLoadResult.UNSAVED_CHANGES, manager.requestLoad(summary))
+        assertTrue(manager.currentDirty)
+        assertEquals(
+            SessionLoadResult.LOADED,
+            manager.requestLoad(summary, discardUnsavedChanges = true),
+        )
+        assertFalse(manager.hasUnsavedChanges)
+    }
+
+    @Test
     fun `un errore su disco diventa un messaggio invece di un'eccezione`() {
         val battle = battle()
         // Cartella dentro un file: qualunque scrittura fallisce.

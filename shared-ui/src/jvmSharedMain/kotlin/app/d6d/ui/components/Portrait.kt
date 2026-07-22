@@ -61,15 +61,20 @@ fun CombatantPortrait(
 
     // Pulsazione solo sul turno attivo: segnala di chi e' il turno senza
     // aggiungere testo, che a colpo d'occhio sarebbe piu' lento da leggere.
-    val pulse by rememberInfiniteTransition(label = "activePulse").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1150, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "activePulseValue",
-    )
+    val pulse = if (active && !defeated) {
+        val animated by rememberInfiniteTransition(label = "activePulse").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1150, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "activePulseValue",
+        )
+        animated
+    } else {
+        0f
+    }
 
     val accent = if (defeated) Palette.TextFaint else faction.color
     val ringColor = if (defeated) Palette.TextFaint else healthColor(currentHitPoints, safeMax)

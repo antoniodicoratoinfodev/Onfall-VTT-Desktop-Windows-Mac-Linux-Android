@@ -1,7 +1,6 @@
 package app.d6d.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,9 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,13 +22,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.d6d.persistence.catalog.ActorCatalogStore
+import app.d6d.engine.CombatSession
 import app.d6d.ui.battle.BattleScreen
 import app.d6d.ui.components.initials
 import app.d6d.ui.content.SampleEncounter
+import app.d6d.ui.encounter.EncounterBuilderScreen
+import app.d6d.ui.encounter.EncounterBuilderViewModel
 import app.d6d.sheet.SheetStore
 import app.d6d.ui.roster.RosterScreen
 import app.d6d.ui.roster.RosterViewModel
@@ -36,14 +41,17 @@ import app.d6d.ui.images.FilePicker
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.ui.session.SessionManager
+import app.d6d.ui.session.UnsavedSessionDialog
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.AppTheme
 import java.nio.file.Path
+import kotlinx.coroutines.delay
 
 enum class Destination(val label: String, val glyph: String) {
-    BATTAGLIA("Battaglia", "⚔"),
-    COMPENDIO("Compendio", "📜"),
+    BATTAGLIA("Battaglia", "◆"),
+    INCONTRO("Incontro", "+"),
+    COMPENDIO("Compendio", "≡"),
 }
 
 /**
@@ -79,18 +87,65 @@ fun AppRoot(
                 SampleEncounter.startedSession(),
                 footprintProvider = { definitionId -> roster.footprintFor(definitionId) },
             ) { definitionId, snapshot ->
-                roster.applyCombatEdit(definitionId, snapshot)
+                check(roster.applyCombatEdit(definitionId, snapshot)) {
+                    roster.sheets.status ?: "Impossibile aggiornare la scheda collegata."
+                }
             }
         }
+        val encounterBuilder = remember { EncounterBuilderViewModel(roster) }
         val portraits = remember { PortraitRepository(ImageStore(dataDirectory), filePicker) }
         val sessions = remember {
-            SessionManager(SessionArchiveStore(dataDirectory.resolve("sessions")), battleViewModel)
+            SessionManager(SessionArchiveStore(dataDirectory.resolve("sessions")), battleViewModel).also {
+                it.beginUnsavedSession("Cripta dei predoni")
+            }
+        }
+
+        // Dopo il primo salvataggio con nome, ogni comando viene riversato nello
+        // stesso file con un breve debounce. Un incontro nuovo resta invece una
+        // bozza esplicita: nessun nome o file viene inventato silenziosamente.
+        LaunchedEffect(
+            battleViewModel.state,
+            battleViewModel.presentationState(),
+            sessions.currentSlug,
+        ) {
+            if (sessions.currentSlug != null && sessions.hasUnsavedChanges) {
+                delay(1_200)
+                sessions.flushAutosave()
+            }
+        }
+
+        var pendingEncounter by remember { mutableStateOf<Pair<CombatSession, String>?>(null) }
+        val adoptEncounter: (CombatSession, String) -> Unit = { session, name ->
+            battleViewModel.adopt(session, emptyMap())
+            sessions.beginUnsavedSession(name)
+            destination = Destination.BATTAGLIA
+        }
+        val requestEncounter: (CombatSession, String) -> Unit = { session, name ->
+            if (sessions.hasUnsavedChanges) {
+                pendingEncounter = session to name
+            } else {
+                adoptEncounter(session, name)
+            }
         }
 
         val content: @Composable (Modifier) -> Unit = { contentModifier ->
             when (destination) {
                 Destination.BATTAGLIA ->
                     BattleScreen(battleViewModel, portraits, sessions, compact = compact, modifier = contentModifier)
+
+                Destination.INCONTRO ->
+                    EncounterBuilderScreen(
+                        viewModel = encounterBuilder,
+                        compact = compact,
+                        onStarted = { session, name ->
+                            requestEncounter(session, name)
+                        },
+                        onUseDemo = {
+                            requestEncounter(SampleEncounter.startedSession(), "Cripta dei predoni")
+                        },
+                        onOpenCompendium = { destination = Destination.COMPENDIO },
+                        modifier = contentModifier,
+                    )
 
                 Destination.COMPENDIO ->
                     RosterScreen(roster, portraits, compact = compact, modifier = contentModifier)
@@ -108,6 +163,20 @@ fun AppRoot(
                 content(Modifier.weight(1f))
             }
         }
+
+        UnsavedSessionDialog(
+            open = pendingEncounter != null,
+            onDismiss = { pendingEncounter = null },
+            onSaveFirst = {
+                pendingEncounter = null
+                destination = Destination.BATTAGLIA
+                sessions.menuOpen = true
+            },
+            onDiscard = {
+                pendingEncounter?.let { (session, name) -> adoptEncounter(session, name) }
+                pendingEncounter = null
+            },
+        )
     }
 }
 
@@ -115,7 +184,7 @@ fun AppRoot(
 private fun NavRail(current: Destination, onSelect: (Destination) -> Unit) {
     Column(
         Modifier
-            .width(94.dp)
+            .width(108.dp)
             .fillMaxSize()
             .background(Palette.Abyss)
             .padding(vertical = 13.dp, horizontal = 8.dp),
@@ -171,7 +240,11 @@ private fun NavItem(
                 if (selected) Palette.Gold.copy(alpha = 0.12f) else Color.Transparent,
                 RoundedCornerShape(9.dp),
             )
-            .clickable { onClick() }
+            .selectable(
+                selected = selected,
+                role = Role.Tab,
+                onClick = onClick,
+            )
             .padding(vertical = 9.dp, horizontal = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),

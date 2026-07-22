@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -16,8 +17,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -59,14 +65,17 @@ fun MonsterStatBlockEditor(
 ) {
     val block = viewModel.monster
     val update: (MonsterStatBlock) -> Unit = { viewModel.monster = it }
+    var deleteId by remember(viewModel.selectedId) { mutableStateOf<String?>(null) }
 
-    Column(
-        modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(11.dp),
-    ) {
+    Column(modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp),
+        ) {
         // Anteprima come apparirebbe stampato, sopra i campi modificabili.
         Column(
             Modifier
@@ -97,17 +106,34 @@ fun MonsterStatBlockEditor(
         }
 
         SheetBox("Intestazione") {
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetField("Nome", block.name, Modifier.weight(2f)) { update(block.copy(name = it)) }
-                SheetField("Identificatore", block.id, Modifier.weight(1.4f)) { update(block.copy(id = it)) }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetField("Tipo", block.type, Modifier.weight(1f)) { update(block.copy(type = it)) }
-                SheetField("Tag", block.tags, Modifier.weight(1f)) { update(block.copy(tags = it)) }
-                SheetField("Allineamento", block.alignment, Modifier.weight(1.2f)) {
-                    update(block.copy(alignment = it))
-                }
-            }
+            AdaptiveFormRow(
+                compact = compact,
+                items = arrayOf(
+                    adaptiveFormItem(2f) { fieldModifier ->
+                        SheetField("Nome", block.name, fieldModifier) { update(block.copy(name = it)) }
+                    },
+                    adaptiveFormItem(1.4f) { fieldModifier ->
+                        SheetField("Identificatore", block.id, fieldModifier) { update(block.copy(id = it)) }
+                    },
+                ),
+            )
+            AdaptiveFormRow(
+                compact = compact,
+                compactColumns = if (compact) 2 else 3,
+                items = arrayOf(
+                    adaptiveFormItem { fieldModifier ->
+                        SheetField("Tipo", block.type, fieldModifier) { update(block.copy(type = it)) }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetField("Tag", block.tags, fieldModifier) { update(block.copy(tags = it)) }
+                    },
+                    adaptiveFormItem(1.2f) { fieldModifier ->
+                        SheetField("Allineamento", block.alignment, fieldModifier) {
+                            update(block.copy(alignment = it))
+                        }
+                    },
+                ),
+            )
             Text("Taglia", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 CreatureSize.entries.forEach { size ->
@@ -119,112 +145,156 @@ fun MonsterStatBlockEditor(
         }
 
         SheetBox("Difesa, iniziativa e punti ferita") {
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetNumberField("Classe Armatura", block.armorClass, Modifier.weight(1f)) {
-                    update(block.copy(armorClass = it))
-                }
-                SheetNumberField("Mod. iniziativa", block.initiativeModifier, Modifier.weight(1f)) {
-                    // Il punteggio statico segue il modificatore, ma resta un campo
-                    // distinto e modificabile a parte.
-                    update(block.copy(initiativeModifier = it, initiativeScore = 10 + it))
-                }
-                SheetNumberField("Punteggio statico", block.initiativeScore, Modifier.weight(1f)) {
-                    update(block.copy(initiativeScore = it))
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetNumberField("PF medi", block.averageHitPoints, Modifier.weight(1.2f)) {
-                    update(block.copy(averageHitPoints = it.coerceAtLeast(1)))
-                }
-                SheetNumberField("Numero dadi", block.hitDiceCount, Modifier.weight(1f)) {
-                    update(block.copy(hitDiceCount = it.coerceAtLeast(1)))
-                }
-                SheetNumberField("Facce", block.hitDiceSides, Modifier.weight(1f)) {
-                    update(block.copy(hitDiceSides = it.coerceAtLeast(2)))
-                }
-                SheetNumberField("Modificatore", block.hitDiceModifier, Modifier.weight(1f)) {
-                    update(block.copy(hitDiceModifier = it))
-                }
-            }
+            AdaptiveFormRow(
+                compact = compact,
+                compactColumns = 2,
+                items = arrayOf(
+                    adaptiveFormItem { fieldModifier ->
+                        SheetNumberField("Classe Armatura", block.armorClass, fieldModifier) {
+                            update(block.copy(armorClass = it))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetNumberField("Mod. iniziativa", block.initiativeModifier, fieldModifier) {
+                            // Il punteggio statico segue il modificatore, ma resta un campo
+                            // distinto e modificabile a parte.
+                            update(block.copy(initiativeModifier = it, initiativeScore = 10 + it))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetNumberField("Punteggio statico", block.initiativeScore, fieldModifier) {
+                            update(block.copy(initiativeScore = it))
+                        }
+                    },
+                ),
+            )
+            AdaptiveFormRow(
+                compact = compact,
+                compactColumns = 2,
+                items = arrayOf(
+                    adaptiveFormItem(1.2f) { fieldModifier ->
+                        SheetNumberField("PF medi", block.averageHitPoints, fieldModifier) {
+                            update(block.copy(averageHitPoints = it.coerceAtLeast(1)))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetNumberField("Numero dadi", block.hitDiceCount, fieldModifier) {
+                            update(block.copy(hitDiceCount = it.coerceAtLeast(1)))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetNumberField("Facce", block.hitDiceSides, fieldModifier) {
+                            update(block.copy(hitDiceSides = it.coerceAtLeast(2)))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetNumberField("Modificatore", block.hitDiceModifier, fieldModifier) {
+                            update(block.copy(hitDiceModifier = it))
+                        }
+                    },
+                ),
+            )
         }
 
         SheetBox("Velocita'") {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SheetNumberField("A piedi", block.speeds.walk, Modifier.weight(1f)) {
-                    update(block.copy(speeds = block.speeds.copy(walk = it.coerceAtLeast(0))))
-                }
-                SheetNumberField("Volo", block.speeds.fly, Modifier.weight(1f)) {
-                    update(block.copy(speeds = block.speeds.copy(fly = it.coerceAtLeast(0))))
-                }
-                SheetNumberField("Nuoto", block.speeds.swim, Modifier.weight(1f)) {
-                    update(block.copy(speeds = block.speeds.copy(swim = it.coerceAtLeast(0))))
-                }
-                SheetNumberField("Scalata", block.speeds.climb, Modifier.weight(1f)) {
-                    update(block.copy(speeds = block.speeds.copy(climb = it.coerceAtLeast(0))))
-                }
-                SheetNumberField("Scavo", block.speeds.burrow, Modifier.weight(1f)) {
-                    update(block.copy(speeds = block.speeds.copy(burrow = it.coerceAtLeast(0))))
-                }
-            }
+            AdaptiveFormRow(
+                compact = compact,
+                compactColumns = 2,
+                items = arrayOf(
+                    adaptiveFormItem { fieldModifier ->
+                        SheetFeetField("A piedi", block.speeds.walk, fieldModifier) {
+                            update(block.copy(speeds = block.speeds.copy(walk = it.coerceAtLeast(0))))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetFeetField("Volo", block.speeds.fly, fieldModifier) {
+                            update(block.copy(speeds = block.speeds.copy(fly = it.coerceAtLeast(0))))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetFeetField("Nuoto", block.speeds.swim, fieldModifier) {
+                            update(block.copy(speeds = block.speeds.copy(swim = it.coerceAtLeast(0))))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetFeetField("Scalata", block.speeds.climb, fieldModifier) {
+                            update(block.copy(speeds = block.speeds.copy(climb = it.coerceAtLeast(0))))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetFeetField("Scavo", block.speeds.burrow, fieldModifier) {
+                            update(block.copy(speeds = block.speeds.copy(burrow = it.coerceAtLeast(0))))
+                        }
+                    },
+                ),
+            )
             SheetCheck("Puo' fluttuare", block.speeds.hover) {
                 update(block.copy(speeds = block.speeds.copy(hover = it)))
             }
         }
 
         SheetBox("Caratteristiche") {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Ability.entries.forEach { ability ->
-                    Column(
-                        Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        Text(
-                            ability.abbreviation,
-                            color = Palette.Gold,
-                            fontWeight = FontWeight.Black,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        SheetNumberField("", block.score(ability)) { score ->
-                            update(
-                                block.copy(
-                                    abilityScores = block.abilityScores + (ability to score.coerceIn(1, 30)),
-                                ),
-                            )
-                        }
-                        Text(
-                            signed(abilityModifier(block.score(ability))),
-                            color = Palette.Text,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+            AdaptiveFormRow(
+                compact = compact,
+                compactColumns = 2,
+                items = Ability.entries.map { ability ->
+                    adaptiveFormItem { itemModifier ->
+                        Column(
+                            itemModifier,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
                         ) {
-                            ProficiencyDot(
-                                filled = block.saveProficiencies[ability] == Proficiency.PROFICIENT,
-                                expertise = false,
-                                onClick = {
-                                    val next = if (block.saveProficiencies[ability] == Proficiency.PROFICIENT) {
-                                        Proficiency.NONE
-                                    } else {
-                                        Proficiency.PROFICIENT
-                                    }
-                                    update(
-                                        block.copy(saveProficiencies = block.saveProficiencies + (ability to next)),
-                                    )
-                                },
-                            )
                             Text(
-                                signed(block.saveBonus(ability)),
-                                color = Palette.TextMuted,
+                                ability.abbreviation,
+                                color = Palette.Gold,
+                                fontWeight = FontWeight.Black,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            SheetNumberField("", block.score(ability)) { score ->
+                                update(
+                                    block.copy(
+                                        abilityScores = block.abilityScores + (ability to score.coerceIn(1, 30)),
+                                    ),
+                                )
+                            }
+                            Text(
+                                signed(abilityModifier(block.score(ability))),
+                                color = Palette.Text,
+                                fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodySmall,
                             )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ProficiencyDot(
+                                    filled = block.saveProficiencies[ability] == Proficiency.PROFICIENT,
+                                    expertise = false,
+                                    onClick = {
+                                        val next = if (
+                                            block.saveProficiencies[ability] == Proficiency.PROFICIENT
+                                        ) {
+                                            Proficiency.NONE
+                                        } else {
+                                            Proficiency.PROFICIENT
+                                        }
+                                        update(
+                                            block.copy(
+                                                saveProficiencies = block.saveProficiencies + (ability to next),
+                                            ),
+                                        )
+                                    },
+                                )
+                                Text(
+                                    signed(block.saveBonus(ability)),
+                                    color = Palette.TextMuted,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
                         }
                     }
-                }
-            }
+                }.toTypedArray(),
+            )
         }
 
         SheetBox("Abilita'") {
@@ -290,53 +360,123 @@ fun MonsterStatBlockEditor(
         }
 
         SheetBox("Sensi, lingue ed equipaggiamento") {
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetField("Sensi", block.senses, Modifier.weight(1.4f)) { update(block.copy(senses = it)) }
-                SheetField("Lingue", block.languages, Modifier.weight(1f)) { update(block.copy(languages = it)) }
-            }
+            AdaptiveFormRow(
+                compact = compact,
+                items = arrayOf(
+                    adaptiveFormItem(1.4f) { fieldModifier ->
+                        SheetField("Sensi", block.senses, fieldModifier) { update(block.copy(senses = it)) }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetField("Lingue", block.languages, fieldModifier) {
+                            update(block.copy(languages = it))
+                        }
+                    },
+                ),
+            )
             // Gear elenca solo gli oggetti recuperabili: non e' tutto cio' che indossa.
             SheetField("Gear (oggetti recuperabili)", block.gear) { update(block.copy(gear = it)) }
         }
 
         SheetBox("Sfida") {
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetField("Grado di Sfida", block.challengeRating, Modifier.weight(1f)) { rating ->
-                    val suggested = rating.trim().toDoubleOrNull()
-                        ?.let { suggestedProficiencyBonus(it) } ?: block.proficiencyBonus
-                    update(block.copy(challengeRating = rating, proficiencyBonus = suggested))
-                }
-                SheetNumberField("PE base", block.baseXp.toInt(), Modifier.weight(1f)) {
-                    update(block.copy(baseXp = it.toLong().coerceAtLeast(0)))
-                }
-                SheetNumberField("PE in tana", (block.lairXp ?: 0L).toInt(), Modifier.weight(1f)) {
-                    update(block.copy(lairXp = if (it <= 0) null else it.toLong()))
-                }
-                SheetNumberField("Bonus competenza", block.proficiencyBonus, Modifier.weight(1f)) {
-                    update(block.copy(proficiencyBonus = it))
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetField("Habitat", block.habitat, Modifier.weight(1f)) { update(block.copy(habitat = it)) }
-                SheetField("Tema del tesoro", block.treasureTheme, Modifier.weight(1f)) {
-                    update(block.copy(treasureTheme = it))
-                }
-            }
+            AdaptiveFormRow(
+                compact = compact,
+                compactColumns = 2,
+                items = arrayOf(
+                    adaptiveFormItem { fieldModifier ->
+                        SheetField("Grado di Sfida", block.challengeRating, fieldModifier) { rating ->
+                            val suggested = rating.trim().toDoubleOrNull()
+                                ?.let { suggestedProficiencyBonus(it) } ?: block.proficiencyBonus
+                            update(block.copy(challengeRating = rating, proficiencyBonus = suggested))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetNumberField("PE base", block.baseXp.toInt(), fieldModifier) {
+                            update(block.copy(baseXp = it.toLong().coerceAtLeast(0)))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetNumberField("PE in tana", (block.lairXp ?: 0L).toInt(), fieldModifier) {
+                            update(block.copy(lairXp = if (it <= 0) null else it.toLong()))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetNumberField("Bonus competenza", block.proficiencyBonus, fieldModifier) {
+                            update(block.copy(proficiencyBonus = it))
+                        }
+                    },
+                ),
+            )
+            AdaptiveFormRow(
+                compact = compact,
+                items = arrayOf(
+                    adaptiveFormItem { fieldModifier ->
+                        SheetField("Habitat", block.habitat, fieldModifier) {
+                            update(block.copy(habitat = it))
+                        }
+                    },
+                    adaptiveFormItem { fieldModifier ->
+                        SheetField("Tema del tesoro", block.treasureTheme, fieldModifier) {
+                            update(block.copy(treasureTheme = it))
+                        }
+                    },
+                ),
+            )
         }
 
-        EntrySection("Tratti", block.traits) { update(block.copy(traits = it)) }
-        EntrySection("Azioni", block.actions) { update(block.copy(actions = it)) }
-        EntrySection("Azioni Bonus", block.bonusActions) { update(block.copy(bonusActions = it)) }
-        EntrySection("Reazioni", block.reactions) { update(block.copy(reactions = it)) }
-        EntrySection("Azioni Leggendarie", block.legendaryActions) {
+        EntrySection("Tratti", block.traits, compact) { update(block.copy(traits = it)) }
+        EntrySection("Azioni", block.actions, compact) { update(block.copy(actions = it)) }
+        EntrySection("Azioni Bonus", block.bonusActions, compact) { update(block.copy(bonusActions = it)) }
+        EntrySection("Reazioni", block.reactions, compact) { update(block.copy(reactions = it)) }
+        EntrySection("Azioni Leggendarie", block.legendaryActions, compact) {
             update(block.copy(legendaryActions = it))
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+        }
+
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Palette.Surface)
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
             GameButton("Salva stat block", accent = Palette.Heal, onClick = { viewModel.save() })
             viewModel.selectedId?.let { id ->
-                GameButton("Elimina", accent = Palette.Enemy, onClick = { viewModel.delete(id) })
+                GameButton("Elimina", accent = Palette.Enemy, onClick = { deleteId = id })
+            }
+            if (viewModel.isDirty) {
+                Text(
+                    "Modifiche non salvate",
+                    color = Palette.Bloodied,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                )
             }
         }
+    }
+
+    deleteId?.let { id ->
+        AlertDialog(
+            onDismissRequest = { deleteId = null },
+            containerColor = Palette.Surface,
+            title = { Text("Eliminare lo stat block?", color = Palette.Text) },
+            text = {
+                Text(
+                    "«${block.name.ifBlank { "Creatura senza nome" }}» verrà eliminata definitivamente.",
+                    color = Palette.TextMuted,
+                )
+            },
+            confirmButton = {
+                GameButton("Elimina", accent = Palette.Enemy, onClick = {
+                    viewModel.delete(id)
+                    deleteId = null
+                })
+            },
+            dismissButton = {
+                GameButton("Annulla", accent = Palette.TextMuted, onClick = { deleteId = null })
+            },
+        )
     }
 }
 
@@ -370,6 +510,7 @@ private fun DamageToggleRow(
 private fun EntrySection(
     title: String,
     entries: List<StatBlockEntry>,
+    compact: Boolean,
     onChange: (List<StatBlockEntry>) -> Unit,
 ) {
     SheetBox("$title (${entries.size})") {
@@ -381,17 +522,29 @@ private fun EntrySection(
                     .padding(9.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    SheetField("Nome", entry.name, Modifier.weight(1f)) {
-                        onChange(entries.toMutableList().also { l -> l[index] = entry.copy(name = it) })
+                if (compact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        SheetField("Nome", entry.name) {
+                            onChange(entries.toMutableList().also { l -> l[index] = entry.copy(name = it) })
+                        }
+                        Chip(
+                            if (entry.automated) "Automatica" else "Manuale",
+                            if (entry.automated) Palette.Heal else Palette.Bloodied,
+                        )
                     }
-                    Chip(
-                        if (entry.automated) "Automatica" else "Manuale",
-                        if (entry.automated) Palette.Heal else Palette.Bloodied,
-                    )
+                } else {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SheetField("Nome", entry.name, Modifier.weight(1f)) {
+                            onChange(entries.toMutableList().also { l -> l[index] = entry.copy(name = it) })
+                        }
+                        Chip(
+                            if (entry.automated) "Automatica" else "Manuale",
+                            if (entry.automated) Palette.Heal else Palette.Bloodied,
+                        )
+                    }
                 }
                 SheetTextArea(entry.text, minLines = 2) {
                     onChange(entries.toMutableList().also { l -> l[index] = entry.copy(text = it) })
@@ -407,43 +560,61 @@ private fun EntrySection(
                         )
                     })
                 } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        SheetNumberField("Bonus att.", attack.attackBonus, Modifier.weight(1f)) {
-                            onChange(
-                                entries.toMutableList().also { l ->
-                                    l[index] = entry.copy(attack = attack.copy(attackBonus = it))
-                                },
-                            )
-                        }
-                        SheetNumberField("Portata", attack.rangeFeet, Modifier.weight(1f)) {
-                            onChange(
-                                entries.toMutableList().also { l ->
-                                    l[index] = entry.copy(attack = attack.copy(rangeFeet = it))
-                                },
-                            )
-                        }
-                        SheetNumberField("Dadi", attack.diceCount, Modifier.weight(1f)) {
-                            onChange(
-                                entries.toMutableList().also { l ->
-                                    l[index] = entry.copy(attack = attack.copy(diceCount = it.coerceAtLeast(1)))
-                                },
-                            )
-                        }
-                        SheetNumberField("Facce", attack.diceSides, Modifier.weight(1f)) {
-                            onChange(
-                                entries.toMutableList().also { l ->
-                                    l[index] = entry.copy(attack = attack.copy(diceSides = it.coerceAtLeast(2)))
-                                },
-                            )
-                        }
-                        SheetNumberField("Mod.", attack.damageModifier, Modifier.weight(1f)) {
-                            onChange(
-                                entries.toMutableList().also { l ->
-                                    l[index] = entry.copy(attack = attack.copy(damageModifier = it))
-                                },
-                            )
-                        }
-                    }
+                    AdaptiveFormRow(
+                        compact = compact,
+                        compactColumns = 2,
+                        items = arrayOf(
+                            adaptiveFormItem { fieldModifier ->
+                                SheetNumberField("Bonus att.", attack.attackBonus, fieldModifier) {
+                                    onChange(
+                                        entries.toMutableList().also { l ->
+                                            l[index] = entry.copy(attack = attack.copy(attackBonus = it))
+                                        },
+                                    )
+                                }
+                            },
+                            adaptiveFormItem { fieldModifier ->
+                                SheetFeetField("Portata", attack.rangeFeet, fieldModifier) {
+                                    onChange(
+                                        entries.toMutableList().also { l ->
+                                            l[index] = entry.copy(attack = attack.copy(rangeFeet = it))
+                                        },
+                                    )
+                                }
+                            },
+                            adaptiveFormItem { fieldModifier ->
+                                SheetNumberField("Dadi", attack.diceCount, fieldModifier) {
+                                    onChange(
+                                        entries.toMutableList().also { l ->
+                                            l[index] = entry.copy(
+                                                attack = attack.copy(diceCount = it.coerceAtLeast(1)),
+                                            )
+                                        },
+                                    )
+                                }
+                            },
+                            adaptiveFormItem { fieldModifier ->
+                                SheetNumberField("Facce", attack.diceSides, fieldModifier) {
+                                    onChange(
+                                        entries.toMutableList().also { l ->
+                                            l[index] = entry.copy(
+                                                attack = attack.copy(diceSides = it.coerceAtLeast(2)),
+                                            )
+                                        },
+                                    )
+                                }
+                            },
+                            adaptiveFormItem { fieldModifier ->
+                                SheetNumberField("Mod.", attack.damageModifier, fieldModifier) {
+                                    onChange(
+                                        entries.toMutableList().also { l ->
+                                            l[index] = entry.copy(attack = attack.copy(damageModifier = it))
+                                        },
+                                    )
+                                }
+                            },
+                        ),
+                    )
                 }
 
                 GameButton("Rimuovi", accent = Palette.Enemy, onClick = {

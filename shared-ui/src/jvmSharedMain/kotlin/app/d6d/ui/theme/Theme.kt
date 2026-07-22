@@ -33,7 +33,9 @@ object Palette {
 
     val Text = Color(0xFFE9EDF2)
     val TextMuted = Color(0xFF8A9BB4)
-    val TextFaint = Color(0xFF576782)
+    // Usato per informazioni secondarie, non soltanto per controlli disabilitati:
+    // resta discreto ma mantiene un contrasto leggibile sulle superfici scure.
+    val TextFaint = Color(0xFF7889A4)
 
     /** Fazione alleata. */
     val Party = Color(0xFF5B9BF3)
@@ -97,18 +99,18 @@ private val AppTypography = Typography(
     ),
     bodyMedium = TextStyle(
         fontFamily = FontFamily.Default,
-        fontSize = 13.sp,
+        fontSize = 14.sp,
     ),
     bodySmall = TextStyle(
         fontFamily = FontFamily.Default,
-        fontSize = 11.5.sp,
+        fontSize = 12.5.sp,
         color = Palette.TextMuted,
     ),
     labelSmall = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.ExtraBold,
-        fontSize = 9.5.sp,
-        letterSpacing = 1.2.sp,
+        fontSize = 10.5.sp,
+        letterSpacing = 1.0.sp,
     ),
 )
 

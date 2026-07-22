@@ -3,6 +3,7 @@ package app.d6d.ui.roster
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.CombatantSnapshot
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.SheetStore
@@ -77,6 +78,21 @@ class RosterViewModel(
 
     val selectedId: String? get() = sheets.selectedId
 
+    /**
+     * Proiezione da combattimento aggiornata di una voce del Compendio.
+     *
+     * Il configuratore degli incontri passa sempre da qui, anziche' rileggere il
+     * catalogo derivato su disco: in questo modo una scheda appena salvata e' la
+     * fonte effettiva dei PF, dell'iniziativa e delle capacita' del combattente.
+     */
+    fun definitionFor(id: String): ActorDefinition? {
+        sheets.library.characters.firstOrNull { it.id == id }
+            ?.let { return it.toActorDefinition() }
+        sheets.library.monsters.firstOrNull { it.id == id }
+            ?.let { return it.toActorDefinition() }
+        return null
+    }
+
     /** Quale editor e' aperto, dedotto dal tipo di scheda in modifica. */
     val editorKind: RosterKind
         get() = if (sheets.kind == SheetKind.PERSONAGGIO) RosterKind.PERSONAGGIO else RosterKind.CREATURA
@@ -127,31 +143,37 @@ class RosterViewModel(
      * o nello stat block della creatura, poi il catalogo si rigenera da li'. Se
      * l'attore non e' nel roster non succede nulla.
      */
-    fun applyCombatEdit(definitionId: String, snapshot: CombatantSnapshot) {
+    fun applyCombatEdit(definitionId: String, snapshot: CombatantSnapshot): Boolean {
         val character = sheets.library.characters.firstOrNull { it.id == definitionId }
         if (character != null) {
-            sheets.upsertCharacterSilently(
+            return sheets.upsertCharacterSilently(
                 character.copy(
-                    characterName = snapshot.name(),
+                    // Le copie numerate di un incontro hanno un nome di istanza
+                    // (per esempio "Guardia 2"): non deve rinominare la scheda.
+                    characterName = if (snapshot.instanceId() == definitionId) {
+                        snapshot.name()
+                    } else {
+                        character.characterName
+                    },
                     armorClass = snapshot.armorClass(),
                     maxHitPoints = snapshot.maxHitPoints(),
                     currentHitPoints = character.currentHitPoints.coerceAtMost(snapshot.maxHitPoints()),
                     speedFeet = snapshot.speedFeet(),
                 ),
             )
-            return
         }
         val monster = sheets.library.monsters.firstOrNull { it.id == definitionId }
         if (monster != null) {
-            sheets.upsertMonsterSilently(
+            return sheets.upsertMonsterSilently(
                 monster.copy(
-                    name = snapshot.name(),
+                    name = if (snapshot.instanceId() == definitionId) snapshot.name() else monster.name,
                     armorClass = snapshot.armorClass(),
                     averageHitPoints = snapshot.maxHitPoints(),
                     speeds = monster.speeds.copy(walk = snapshot.speedFeet()),
                 ),
             )
         }
+        return false
     }
 
     /**

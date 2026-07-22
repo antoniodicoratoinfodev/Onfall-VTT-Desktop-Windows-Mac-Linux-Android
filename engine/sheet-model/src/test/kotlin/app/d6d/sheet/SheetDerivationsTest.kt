@@ -1,5 +1,6 @@
 package app.d6d.sheet
 
+import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.DamageType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -164,5 +165,17 @@ class SheetDerivationsTest {
 
         // Una riga vuota della tabella non deve generare un attacco fantasma.
         assertEquals(1, sheet.toActorDefinition().abilities().size)
+    }
+
+    @Test
+    fun `un'arma configurata come azione bonus mantiene il costo nel combattimento`() {
+        val sheet = CharacterSheet(
+            weapons = listOf(WeaponEntry(name = "Pugnale rapido", bonusAction = true)),
+        )
+
+        assertEquals(
+            ActivationCost.BONUS_ACTION,
+            sheet.toActorDefinition().abilities().single().activationCost(),
+        )
     }
 }

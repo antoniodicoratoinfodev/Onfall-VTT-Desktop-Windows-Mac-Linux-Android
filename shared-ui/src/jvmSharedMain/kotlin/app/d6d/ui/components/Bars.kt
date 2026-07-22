@@ -19,6 +19,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.d6d.ui.theme.Palette
@@ -54,7 +59,17 @@ fun HealthBar(
     )
     val fill = healthColor(current, safeMax)
 
-    Canvas(modifier.fillMaxWidth().height(height)) {
+    Canvas(
+        modifier
+            .fillMaxWidth()
+            .height(height)
+            .semantics {
+                contentDescription = "Punti ferita"
+                stateDescription = "$current su $safeMax" +
+                    if (temporary > 0) ", più $temporary temporanei" else ""
+                progressBarRangeInfo = ProgressBarRangeInfo(ratio, 0f..1f)
+            },
+    ) {
         val radius = CornerRadius(size.height / 2f, size.height / 2f)
 
         drawRoundRect(color = Palette.Abyss, cornerRadius = radius)
@@ -102,7 +117,15 @@ fun ResourcePips(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier,
+        modifier = modifier.semantics {
+            stateDescription = buildString {
+                append(if (actionAvailable) "Azione disponibile" else "Azione spesa")
+                append(", ")
+                append(if (bonusAvailable) "azione bonus disponibile" else "azione bonus spesa")
+                append(", ")
+                append(if (reactionAvailable) "reazione disponibile" else "reazione spesa")
+            }
+        },
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

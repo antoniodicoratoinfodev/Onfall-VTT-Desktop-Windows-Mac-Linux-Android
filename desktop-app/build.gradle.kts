@@ -24,16 +24,30 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "app.d6d.desktop.MainKt"
+        // Skiko carica una libreria nativa; sui JDK recenti l'accesso va dichiarato
+        // esplicitamente per evitare l'avviso e il futuro blocco di System.load.
+        jvmArgs += listOf(
+            "--enable-native-access=ALL-UNNAMED",
+            "-Dapple.awt.application.name=TurnForge",
+        )
 
         nativeDistributions {
             // Il documento chiede pacchetti desktop con runtime incluso, cosi'
             // l'utente non deve installare Java per conto proprio.
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            // Nome tecnico del pacchetto: jpackage non accetta spazi. Va allineato
-            // ad AppIdentity.displayName quando il nome commerciale sara' scelto.
-            packageName = "InserireNome"
+            // Nome tecnico del pacchetto: jpackage non accetta spazi.
+            packageName = "TurnForge"
             packageVersion = "1.0.0"
             description = "Strumento di combattimento compatibile con 5.5e / SRD"
         }
+    }
+}
+
+// Le proprieta' -D passate a Gradle non vengono inoltrate automaticamente al
+// processo JavaExec creato dal plugin Compose. Questa configurazione rende
+// effettivo il comando documentato `-Dturnforge.dataDir=...`.
+tasks.withType<JavaExec>().configureEach {
+    providers.systemProperty("turnforge.dataDir").orNull?.let { directory ->
+        systemProperty("turnforge.dataDir", directory)
     }
 }

@@ -4,6 +4,7 @@ import app.d6d.domain.campaign.ActorKind
 import app.d6d.domain.campaign.ActorTemplate
 import app.d6d.domain.catalog.ActorCatalogEntry
 import app.d6d.domain.combat.AbilityDefinition
+import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.ActorDefinition
 import app.d6d.sheet.Ability
 import app.d6d.sheet.CharacterSheet
@@ -159,5 +160,6 @@ private fun AbilityDefinition.toWeaponEntry(): WeaponEntry {
         damageType = formula?.type() ?: app.d6d.domain.combat.DamageType.SLASHING,
         rangeFeet = rangeFeet(),
         note = rulesText(),
+        bonusAction = activationCost() == ActivationCost.BONUS_ACTION,
     )
 }

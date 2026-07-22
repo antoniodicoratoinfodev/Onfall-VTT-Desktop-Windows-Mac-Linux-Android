@@ -47,7 +47,7 @@ fun PortraitPicker(
     @Suppress("UNUSED_EXPRESSION")
     repository.revision
 
-    val portrait = repository.portraitOf(definitionId)
+    val portrait = repository.rememberPortrait(definitionId)
 
     Column(
         modifier,
@@ -82,7 +82,7 @@ fun PortraitPicker(
         GameButton(
             label = if (portrait == null) "Carica immagine" else "Cambia",
             accent = Palette.Party,
-            onClick = { repository.assignPortrait(definitionId) },
+            onClick = { repository.assignPortraitAsync(definitionId) },
         )
         if (portrait != null) {
             GameButton(

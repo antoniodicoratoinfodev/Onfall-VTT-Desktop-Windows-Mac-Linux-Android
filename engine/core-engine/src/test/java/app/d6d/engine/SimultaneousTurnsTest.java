@@ -140,12 +140,23 @@ class SimultaneousTurnsTest {
 
     @Test
     void annullareRipristinaAncheLaBandiera() {
-        CombatSession session = tied(false);
+        CombatSession session = CombatSession.create("parita-configurazione", 11L);
         session.setSimultaneousTies(true);
         assertTrue(session.currentState().simultaneousTies());
 
         session.undo();
 
         assertFalse(session.currentState().simultaneousTies());
+    }
+
+    @Test
+    void laBandieraNonCambiaDuranteIlCombattimento() {
+        CombatSession session = tied(false);
+        String actor = session.currentState().currentCombatantId().orElseThrow();
+
+        assertThrows(CombatRuleException.class, () -> session.setSimultaneousTies(true));
+
+        assertFalse(session.currentState().simultaneousTies());
+        assertEquals(actor, session.currentState().currentCombatantId().orElseThrow());
     }
 }

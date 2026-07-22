@@ -3,19 +3,17 @@ package app.d6d.ui
 /**
  * Identita' visibile dell'applicazione, raccolta in un punto solo.
  *
- * Il nome commerciale non e' ancora deciso. Una ricerca in rete non ha trovato
- * software o strumenti da tavolo chiamati "Turnforge", ma una ricerca non e' una
- * verifica di marchio: il paragrafo 17 del documento richiede un controllo legale
- * specifico su branding e attribuzione prima di pubblicare. Finche' quel controllo
- * non c'e', resta il segnaposto.
+ * Il nome di prodotto usato dal progetto e' TurnForge. Prima di una pubblicazione
+ * commerciale resta comunque necessario il controllo legale su marchio e
+ * attribuzioni richiesto dal documento di progetto.
  *
- * Per adottare un nome basta cambiare [displayName] qui: nessun'altra parte del
- * codice contiene il nome commerciale.
+ * La shell condivisa legge il nome da qui; etichetta Android e nome dei pacchetti
+ * nativi lo rispecchiano nelle rispettive configurazioni di piattaforma.
  */
 object AppIdentity {
 
-    /** Nome mostrato all'utente. Sostituire con il nome scelto. */
-    const val displayName: String = "INSERIRE NOME"
+    /** Nome mostrato all'utente. */
+    const val displayName: String = "TurnForge"
 
     /**
      * Dicitura di compatibilita'.

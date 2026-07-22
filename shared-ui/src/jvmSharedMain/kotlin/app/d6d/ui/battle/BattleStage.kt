@@ -21,9 +21,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.d6d.sheet.feetWithMetres
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.ConditionChip
 import app.d6d.ui.components.Faction
@@ -74,7 +78,7 @@ fun BattleStage(
                 StagePlate(
                     viewModel = viewModel,
                     combatantId = targetId,
-                    role = "Bersaglio",
+                    role = "Bersaglio selezionato",
                     modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
                 )
             }
@@ -83,7 +87,7 @@ fun BattleStage(
                 StagePlate(
                     viewModel = viewModel,
                     combatantId = activeId,
-                    role = if (viewModel.isSimultaneousTurn) "Turno condiviso" else "Turno di",
+                    role = if (viewModel.isSimultaneousTurn) "Turno condiviso" else "Turno attivo",
                     modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
                 )
             }
@@ -108,30 +112,39 @@ private fun MapLegend(viewModel: BattleViewModel, modifier: Modifier = Modifier)
     val target = viewModel.effectiveTargetId()
     val distance = if (active != null && target != null) viewModel.distanceFeet(active, target) else null
     val movement = active?.let { viewModel.budget(it)?.movementRemainingFeet() }
+    val description = buildString {
+        append("Scala della mappa: una casella equivale a ${feetWithMetres(grid.feetPerSquare())}.")
+        if (movement != null) append(" Movimento residuo: ${feetWithMetres(movement)}.")
+        append(
+            distance?.let { " Distanza dal bersaglio: ${feetWithMetres(it)}." }
+                ?: " Distanza dal bersaglio non determinata.",
+        )
+    }
 
     Column(
         modifier
             .background(Palette.Abyss.copy(alpha = 0.86f), RoundedCornerShape(8.dp))
-            .border(1.dp, Palette.Line, RoundedCornerShape(8.dp))
+            .semantics(mergeDescendants = true) { contentDescription = description }
             .padding(horizontal = 9.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
         horizontalAlignment = Alignment.End,
     ) {
         Text(
-            text = "1 casella = ${grid.feetPerSquare()} ft",
+            text = "1 casella = ${feetWithMetres(grid.feetPerSquare())}",
             color = Palette.Gold,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodySmall,
         )
         if (movement != null) {
             Text(
-                text = "movimento residuo $movement ft",
+                text = "Movimento residuo: ${feetWithMetres(movement)}",
                 color = Palette.Party,
                 style = MaterialTheme.typography.bodySmall,
             )
         }
         Text(
-            text = distance?.let { "distanza dal bersaglio $it ft" } ?: "distanza non determinata",
+            text = distance?.let { "Distanza dal bersaglio: ${feetWithMetres(it)}" }
+                ?: "Distanza non determinata",
             color = if (distance != null) Palette.Text else Palette.TextFaint,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -150,18 +163,38 @@ private fun StagePlate(
     val combatant = viewModel.combatant(combatantId) ?: return
     val snapshot = combatant.snapshot()
     val faction = if (viewModel.isParty(combatantId)) Faction.PARTY else Faction.ENEMY
+    val isTarget = viewModel.effectiveTargetId() == combatantId
+    val isActive = viewModel.isActive(combatantId)
+    val accent = if (isTarget) faction.color else Palette.Gold
+    val state = buildString {
+        append("${combatant.currentHitPoints()} punti ferita su ${snapshot.maxHitPoints()}.")
+        if (isTarget) append(" Bersaglio selezionato.")
+        if (isActive) append(" Turno attivo.")
+        if (combatant.defeated()) append(" Sconfitto.")
+    }
 
     Column(
         modifier
             .width(232.dp)
-            .background(Palette.Surface.copy(alpha = 0.93f), RoundedCornerShape(10.dp))
-            .border(1.dp, faction.color.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
+            .background(
+                if (isTarget) faction.color.copy(alpha = 0.13f) else Palette.Surface.copy(alpha = 0.93f),
+                RoundedCornerShape(10.dp),
+            )
+            .border(
+                if (isTarget) 2.dp else 1.dp,
+                accent.copy(alpha = if (isTarget) 0.9f else 0.58f),
+                RoundedCornerShape(10.dp),
+            )
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$role: ${snapshot.name()}"
+                stateDescription = state
+            }
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Text(
             text = role.uppercase(),
-            color = faction.color,
+            color = accent,
             style = MaterialTheme.typography.labelSmall,
         )
         Text(
@@ -193,7 +226,7 @@ private fun StagePlate(
 
         if (combatant.concentration() != null) {
             Text(
-                text = "◆ Concentrazione",
+                text = "Concentrazione",
                 color = Palette.Temporary,
                 style = MaterialTheme.typography.bodySmall,
             )

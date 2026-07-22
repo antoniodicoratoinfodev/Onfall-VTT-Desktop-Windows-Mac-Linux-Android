@@ -26,11 +26,11 @@ data class MonsterSpeeds(
     /** Riga "Velocita'" come appare nello stat block. */
     val text: String
         get() = buildString {
-            append("${walk} ft.")
-            if (fly > 0) append(", Volo $fly ft.").also { if (hover) append(" (fluttua)") }
-            if (swim > 0) append(", Nuoto $swim ft.")
-            if (climb > 0) append(", Scalata $climb ft.")
-            if (burrow > 0) append(", Scavo $burrow ft.")
+            append(feetWithMetres(walk, "ft."))
+            if (fly > 0) append(", Volo ${feetWithMetres(fly, "ft.")}").also { if (hover) append(" (fluttua)") }
+            if (swim > 0) append(", Nuoto ${feetWithMetres(swim, "ft.")}")
+            if (climb > 0) append(", Scalata ${feetWithMetres(climb, "ft.")}")
+            if (burrow > 0) append(", Scavo ${feetWithMetres(burrow, "ft.")}")
         }
 }
 

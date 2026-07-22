@@ -28,6 +28,10 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -37,10 +41,10 @@ import androidx.compose.ui.unit.sp
 import app.d6d.ui.theme.Palette
 
 /**
- * Valore che diventa modificabile con un doppio clic, ma solo quando la modalita'
- * di modifica e' attiva.
+ * Valore che diventa modificabile con un clic, ma solo quando la modalita' di
+ * modifica e' attiva.
  *
- * Fuori dalla modalita' modifica il doppio clic non fa nulla: evita di alterare
+ * Fuori dalla modalita' modifica il clic non fa nulla: evita di alterare
  * una scheda per sbaglio nel mezzo di un combattimento. Invio conferma, Esc
  * annulla, e anche perdere il fuoco conferma — cosi' non si perde una modifica
  * cliccando altrove.
@@ -109,6 +113,10 @@ fun EditableValue(
                             .background(Palette.Gold.copy(alpha = 0.07f), RoundedCornerShape(4.dp))
                             .border(1.dp, Palette.Gold.copy(alpha = 0.35f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 3.dp)
+                            .semantics {
+                                role = Role.Button
+                                stateDescription = "Campo modificabile"
+                            }
                     } else {
                         Modifier
                     },
@@ -121,7 +129,10 @@ fun EditableValue(
                         draft = value
                         editing = true
                     },
-                    onClick = { },
+                    onClick = {
+                        draft = value
+                        editing = true
+                    },
                 ),
         ) {
             display()

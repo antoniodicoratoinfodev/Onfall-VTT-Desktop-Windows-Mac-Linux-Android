@@ -7,9 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.MaterialTheme
@@ -20,10 +19,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.CombatEvent
+import app.d6d.domain.combat.ActivationCost
+import app.d6d.domain.combat.ConditionType
+import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.EventType
+import app.d6d.sheet.italianLabel
+import app.d6d.sheet.feetWithMetres
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.components.italianLabel
 import app.d6d.ui.state.BattleViewModel
-import app.d6d.ui.state.latest
 import app.d6d.ui.theme.Palette
 
 /**
@@ -33,14 +37,18 @@ import app.d6d.ui.theme.Palette
  * la fonte autorevole di cio' che e' successo, sopra qualsiasi effetto visivo.
  */
 @Composable
-fun BattleLog(viewModel: BattleViewModel, modifier: Modifier = Modifier, entries: Int = 40) {
-    val recent = viewModel.events.latest(entries)
+fun BattleLog(viewModel: BattleViewModel, modifier: Modifier = Modifier, entries: Int = Int.MAX_VALUE) {
+    val recent = viewModel.events.asReversed().let { events ->
+        if (entries == Int.MAX_VALUE) events else events.take(entries.coerceAtLeast(0))
+    }
     val listState = rememberLazyListState()
 
-    // Il registro deve mostrare sempre l'ultimo aggiornamento: a ogni nuovo evento
-    // torna in cima, anche se il tavolo stava scorrendo indietro nella cronologia.
+    // Segue gli eventi nuovi soltanto quando il tavolo era gia' in cima. Chi sta
+    // consultando la cronologia non viene riportato via dal punto che sta leggendo.
     LaunchedEffect(viewModel.events.size) {
-        if (recent.isNotEmpty()) listState.animateScrollToItem(0)
+        if (recent.isNotEmpty() && listState.firstVisibleItemIndex == 0) {
+            listState.animateScrollToItem(0)
+        }
     }
 
     Column(
@@ -63,50 +71,32 @@ fun BattleLog(viewModel: BattleViewModel, modifier: Modifier = Modifier, entries
             )
         }
 
-        // L'ultimo evento resta comunque in evidenza, staccato dallo scorrimento.
-        recent.firstOrNull()?.let { latest ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Palette.Gold.copy(alpha = 0.09f), RoundedCornerShape(5.dp))
-                    .padding(horizontal = 7.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "ORA",
-                    color = Palette.Gold,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                Text(
-                    text = latest.describeInItalian(viewModel),
-                    color = Palette.Text,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-
         LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            items(recent) { event ->
-                LogLine(event, viewModel)
+            itemsIndexed(recent, key = { _, event -> event.sequence() }) { index, event ->
+                LogLine(event, viewModel, latest = index == 0)
             }
         }
     }
 }
 
 @Composable
-private fun LogLine(event: CombatEvent, viewModel: BattleViewModel) {
-    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+private fun LogLine(event: CombatEvent, viewModel: BattleViewModel, latest: Boolean) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(if (latest) Palette.Gold.copy(alpha = 0.09f) else Color.Transparent)
+            .padding(horizontal = 5.dp, vertical = if (latest) 3.dp else 1.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
         Text(
-            text = "R${event.round()}",
-            color = Palette.TextFaint,
+            text = if (latest) "ORA" else "R${event.round()}",
+            color = if (latest) Palette.Gold else Palette.TextFaint,
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
             text = event.describeInItalian(viewModel),
             color = event.type().tint,
-            fontWeight = if (event.type() == EventType.CRITICAL_HIT) FontWeight.Bold else FontWeight.Normal,
+            fontWeight = if (latest || event.type() == EventType.CRITICAL_HIT) FontWeight.Bold else FontWeight.Normal,
             style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -158,8 +148,8 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
         EventType.ROUND_ENDED -> "Fine del round"
         EventType.TURN_STARTED -> "Turno di $actor"
         EventType.TURN_ENDED -> "$actor termina il turno"
-        EventType.ACTION_SPENT -> "$actor spende ${detail("cost")}"
-        EventType.MOVEMENT_SPENT -> "$actor si muove di ${detail("feet")} piedi"
+        EventType.ACTION_SPENT -> "$actor usa ${detail("cost").activationCostInItalian()}"
+        EventType.MOVEMENT_SPENT -> "$actor si muove di ${detail("feet").asFeet()}"
         EventType.SPELL_SLOT_SPENT -> "$actor consuma uno slot"
         EventType.ATTACK_ROLLED ->
             "$actor attacca $target — tiro ${detail("total")} contro CA ${detail("armorClass")}"
@@ -167,15 +157,27 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
         EventType.ATTACK_HIT -> "$actor colpisce $target"
         EventType.CRITICAL_HIT -> "COLPO CRITICO di $actor su $target"
         EventType.DAMAGE_ROLLED -> "Danno tirato: ${detail("total")}"
-        EventType.DAMAGE_APPLIED ->
-            "$target subisce ${detail("adjusted")} danni (PF ${detail("hitPointsAfter")})"
+        EventType.DAMAGE_APPLIED -> if (detail("hitPointsAfter").isNotBlank()) {
+            val total = detail("totalAdjusted").ifBlank { detail("adjusted") }
+            "$target subisce $total danni (PF ${detail("hitPointsAfter")})"
+        } else {
+            val type = detail("type").damageTypeInItalian()
+            val adjustment = when {
+                detail("immune") == "true" -> " · immune"
+                detail("resistant") == "true" -> " · resistente"
+                detail("vulnerable") == "true" -> " · vulnerabile"
+                else -> ""
+            }
+            "Danno $type: ${detail("raw")} → ${detail("adjusted")}$adjustment"
+        }
         EventType.ZERO_HIT_POINTS -> "$target cade a 0 PF"
-        EventType.HEALED -> "$target recupera ${detail("amount")} PF"
-        EventType.TEMPORARY_HIT_POINTS_GRANTED -> "$target riceve ${detail("amount")} PF temporanei"
-        EventType.CONDITION_APPLIED -> "$target ora e' ${detail("type")}"
-        EventType.CONDITION_REMOVED -> "$target non e' piu' ${detail("type")}"
-        EventType.CONDITION_EXPIRED -> "Su $target scade ${detail("type")}"
-        EventType.CONDITION_IMMUNE -> "$target e' immune a ${detail("type")}"
+        EventType.HEALED -> "$target recupera ${detail("restored")} PF"
+        EventType.TEMPORARY_HIT_POINTS_GRANTED ->
+            "$target ha ${detail("retained")} PF temporanei (offerti ${detail("offered")})"
+        EventType.CONDITION_APPLIED -> "$target ora è ${detail("type").conditionInItalian()}"
+        EventType.CONDITION_REMOVED -> "$target non è più ${detail("type").conditionInItalian()}"
+        EventType.CONDITION_EXPIRED -> "Su $target scade: ${detail("type").conditionInItalian()}"
+        EventType.CONDITION_IMMUNE -> "$target è immune a: ${detail("type").conditionInItalian()}"
         EventType.CONCENTRATION_STARTED -> "$actor inizia a concentrarsi"
         EventType.CONCENTRATION_CHECKED ->
             "Concentrazione di $target: CD ${detail("dc")}, " +
@@ -186,7 +188,7 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
         EventType.ENCOUNTER_RESOLVED -> "Incontro risolto: ${detail("outcome")}"
         // L'annullamento resta scritto nel registro invece di sparire: il log e'
         // append-only, quindi la cronologia mostra anche i ripensamenti del tavolo.
-        EventType.UNDO_PERFORMED -> "↶ Comando annullato"
+        EventType.UNDO_PERFORMED -> "Comando annullato"
 
         EventType.DEATH_SAVE_ROLLED -> when (detail("outcome")) {
             "natural20" -> "$actor: 20 naturale, recupera 1 PF"
@@ -197,12 +199,12 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
             }
         }
 
-        EventType.STABILIZED -> "${actor.ifBlank { target }} e' stabilizzato"
+        EventType.STABILIZED -> "${actor.ifBlank { target }} è stabilizzato"
         EventType.KNOCKED_OUT -> "$target messo fuori combattimento a 1 PF"
-        EventType.DIED -> "${actor.ifBlank { target }} muore (${detail("cause")})"
+        EventType.DIED -> "${target.ifBlank { actor }} muore (${detail("cause").causeInItalian()})"
         EventType.EXHAUSTION_CHANGED ->
-            "$actor Exhaustion ${detail("before")} → ${detail("after")} " +
-                "(${detail("d20Penalty")} ai D20, ${detail("speedPenaltyFeet")} piedi)"
+            "$actor: sfinimento ${detail("before")} → ${detail("after")} " +
+                "(${detail("d20Penalty")} ai D20, ${detail("speedPenaltyFeet").asFeet()})"
 
         EventType.COMBATANT_EDITED -> {
             val previousName = detail("previousName")
@@ -217,35 +219,66 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
             val changes = listOf(
                 Triple("CA", detail("previousArmorClass"), detail("armorClass")),
                 Triple("PF max", detail("previousMaxHitPoints"), detail("maxHitPoints")),
-                Triple("Velocita'", detail("previousSpeedFeet"), detail("speedFeet")),
+                Triple("Velocità", detail("previousSpeedFeet"), detail("speedFeet")),
                 Triple("Iniziativa", detail("previousInitiativeModifier"), detail("initiativeModifier")),
                 Triple("TS Cos", detail("previousConstitutionSaveBonus"), detail("constitutionSaveBonus")),
             ).filter { (_, before, after) -> before != after && after.isNotBlank() }
-                .joinToString(", ") { (label, before, after) -> "$label $before→$after" }
+                .joinToString(", ") { (label, before, after) ->
+                    if (label == "Velocità") "$label ${before.asFeet()}→${after.asFeet()}" else "$label $before→$after"
+                }
 
             buildString {
-                append("✎ Scheda corretta: ").append(rename)
+                append("Scheda corretta: ").append(rename)
                 if (changes.isNotEmpty()) append(" — ").append(changes)
                 append(" [rev. ").append(detail("version")).append(']')
             }
         }
 
         EventType.MAP_CONFIGURED -> buildString {
-            append("▦ Mappa ").append(detail("columns")).append('×').append(detail("rows"))
-            append(", ").append(detail("feetPerSquare")).append(" piedi per casella")
+            append("Mappa ").append(detail("columns")).append('×').append(detail("rows"))
+            append(", ").append(detail("feetPerSquare").asFeet()).append(" per casella")
             val dropped = detail("droppedPlacements").toIntOrNull() ?: 0
             if (dropped > 0) append(" — $dropped segnaposti fuori bordo rimossi")
         }
 
         EventType.MAP_BACKGROUND_SET ->
-            if (detail("image").isBlank()) "▦ Sfondo rimosso" else "▦ Sfondo: ${detail("image")}"
+            if (detail("image").isBlank()) "Sfondo rimosso" else "Sfondo: ${detail("image")}"
 
         EventType.COMBATANT_PLACED -> "$actor collocato in ${detail("position")}"
 
         EventType.COMBATANT_MOVED ->
             "$actor si sposta ${detail("from")} → ${detail("to")} " +
-                "(${detail("feet")} piedi, ne restano ${detail("remainingFeet")})"
+                "(${detail("feet").asFeet()}, ne restano ${detail("remainingFeet").asFeet()})"
 
         EventType.COMBATANT_REMOVED_FROM_MAP -> "$actor tolto dalla mappa"
     }
+}
+
+private fun String.asFeet(): String = toIntOrNull()?.let(::feetWithMetres) ?: "$this piedi"
+
+private fun String.activationCostInItalian(): String = runCatching {
+    when (ActivationCost.valueOf(this)) {
+        ActivationCost.ACTION -> "l'azione"
+        ActivationCost.BONUS_ACTION -> "l'azione bonus"
+        ActivationCost.REACTION -> "la reazione"
+        ActivationCost.LEGENDARY_ACTION -> "un'azione leggendaria"
+        ActivationCost.NONE -> "un'azione gratuita"
+    }
+}.getOrDefault(lowercase())
+
+private fun String.conditionInItalian(): String = runCatching {
+    ConditionType.valueOf(this).italianLabel.lowercase()
+}.getOrDefault(lowercase())
+
+private fun String.damageTypeInItalian(): String = runCatching {
+    DamageType.valueOf(this).italianLabel.lowercase()
+}.getOrDefault(lowercase())
+
+private fun String.causeInItalian(): String = when (this) {
+    "three successes" -> "tre successi"
+    "three failures", "death saves" -> "tiri contro morte"
+    "massive damage" -> "danno massiccio"
+    "exhaustion" -> "sfinimento"
+    "manual" -> "stabilizzazione manuale"
+    else -> ifBlank { "causa non specificata" }
 }

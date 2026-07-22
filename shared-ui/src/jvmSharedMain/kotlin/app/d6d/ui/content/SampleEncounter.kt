@@ -9,6 +9,7 @@ import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
+import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
 
 /**
@@ -54,6 +55,7 @@ object SampleEncounter {
         name: String,
         armorClass: Int,
         maxHitPoints: Int,
+        currentHitPoints: Int = maxHitPoints,
         speedFeet: Int,
         initiativeModifier: Int,
         constitutionSaveBonus: Int,
@@ -69,7 +71,7 @@ object SampleEncounter {
         name,
         armorClass,
         maxHitPoints,
-        maxHitPoints,
+        currentHitPoints.coerceIn(0, maxHitPoints),
         0,
         speedFeet,
         initiativeModifier,
@@ -90,6 +92,7 @@ object SampleEncounter {
             name = "Kaelen del Vallo",
             armorClass = 18,
             maxHitPoints = 34,
+            currentHitPoints = 28,
             speedFeet = 30,
             initiativeModifier = 1,
             constitutionSaveBonus = 5,
@@ -250,9 +253,11 @@ object SampleEncounter {
      */
     fun startedSession(encounterId: String = "cripta-dei-predoni", seed: Long = 20260721L): CombatSession {
         val party = party()
-        val all = party + enemies()
+        val enemies = enemies()
+        val all = party + enemies
         val session = CombatSession.fromActors(encounterId, seed, all)
         session.setPartyCombatants(party.map { it.id() })
+        session.configureMap(MapGrid(20, 15, 5))
         session.markReady()
         all.forEach { session.useStaticInitiative(it.id(), D20Mode.NORMAL) }
         session.start()

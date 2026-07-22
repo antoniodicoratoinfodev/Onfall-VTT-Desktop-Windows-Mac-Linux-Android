@@ -12,10 +12,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,25 +56,56 @@ fun CombatantRailCard(
     val defeated = combatant.defeated()
     val budget = viewModel.budget(combatantId)
 
-    val borderColor = when {
-        active -> Palette.Gold
-        targeted -> faction.color
-        else -> Palette.Line
+    val shape = RoundedCornerShape(10.dp)
+    val outline = when {
+        targeted -> Modifier.border(2.dp, faction.color, shape)
+        active -> Modifier.border(1.5.dp, Palette.Gold.copy(alpha = 0.82f), shape)
+        else -> Modifier
+    }
+    val cardState = buildString {
+        append("${combatant.currentHitPoints()} punti ferita su ${snapshot.maxHitPoints()}.")
+        if (targeted) append(" Bersaglio selezionato.")
+        if (active) append(" Turno attivo.")
+        if (defeated) append(" Sconfitto.")
     }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .minimumInteractiveComponentSize()
             .background(
-                if (active) Palette.SurfaceHigh else Palette.Surface,
-                RoundedCornerShape(10.dp),
+                when {
+                    targeted -> faction.color.copy(alpha = 0.12f)
+                    active -> Palette.SurfaceHigh
+                    else -> Palette.Surface
+                },
+                shape,
             )
-            .border(if (active || targeted) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(10.dp))
-            .clickable { viewModel.selectedTargetId = combatantId }
+            .then(outline)
+            .semantics {
+                contentDescription = "Combattente ${snapshot.name()}"
+                stateDescription = cardState
+                selected = targeted
+            }
+            .clickable(
+                role = Role.Button,
+                onClickLabel = "Seleziona ${snapshot.name()} come bersaglio",
+            ) { viewModel.selectedTargetId = combatantId }
             .padding(9.dp)
             .alpha(if (defeated) 0.5f else 1f),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        if (active || targeted) {
+            Text(
+                text = buildList {
+                    if (active) add("IN TURNO")
+                    if (targeted) add("BERSAGLIO")
+                }.joinToString(" · "),
+                color = if (targeted) faction.color else Palette.Gold,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(9.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -135,7 +172,7 @@ fun CombatantRailCard(
                     }
                     viewModel.initiativeScore(combatantId)?.let {
                         Text(
-                            text = "IN $it",
+                            text = "Iniz. $it",
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                         )

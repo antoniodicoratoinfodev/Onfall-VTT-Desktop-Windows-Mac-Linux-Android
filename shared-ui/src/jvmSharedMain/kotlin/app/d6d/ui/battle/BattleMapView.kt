@@ -44,6 +44,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -55,6 +60,8 @@ import app.d6d.ui.components.FloatingNumberView
 import app.d6d.ui.components.color
 import app.d6d.ui.components.initials
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.images.rememberBitmap
+import app.d6d.ui.images.rememberPortrait
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.healthColor
@@ -83,7 +90,7 @@ fun BattleMapView(
     val map = viewModel.battleMap
     val grid = map.grid()
     val density = LocalDensity.current
-    val background = portraits.bitmap(map.backgroundImage())
+    val background = portraits.rememberBitmap(map.backgroundImage())
 
     Box(
         modifier
@@ -232,22 +239,37 @@ private fun MapToken(
         animationSpec = tween(400, easing = FastOutSlowInEasing),
         label = "tokenHitPoints",
     )
-    val pulse by rememberInfiniteTransition(label = "tokenPulse").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1150, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "tokenPulseValue",
-    )
+    val pulse = if (active && !defeated) {
+        val animated by rememberInfiniteTransition(label = "tokenPulse").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(1150, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "tokenPulseValue",
+        )
+        animated
+    } else {
+        0f
+    }
 
     val accent = if (defeated) Palette.TextFaint else faction.color
     val ring = if (defeated) Palette.TextFaint else healthColor(combatant.currentHitPoints(), snapshot.maxHitPoints())
-    val portrait = portraits.portraitOf(snapshot.definitionId())
+    val portrait = portraits.rememberPortrait(snapshot.definitionId())
 
     Box(
         Modifier
             .offset(x = x, y = y)
             .size(side)
-            .clickable { viewModel.selectedTargetId = id }
+            .semantics {
+                role = Role.Button
+                contentDescription = snapshot.name()
+                stateDescription = buildString {
+                    append("${combatant.currentHitPoints()} su ${snapshot.maxHitPoints()} punti ferita")
+                    if (active) append(", turno attivo")
+                    if (targeted) append(", bersaglio selezionato")
+                    if (defeated) append(", fuori combattimento")
+                }
+            }
+            .clickable(role = Role.Button) { viewModel.selectedTargetId = id }
             .alpha(if (defeated) 0.5f else 1f),
         contentAlignment = Alignment.Center,
     ) {
