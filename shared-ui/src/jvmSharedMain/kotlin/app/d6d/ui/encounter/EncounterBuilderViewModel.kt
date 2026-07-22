@@ -6,6 +6,8 @@ import androidx.compose.runtime.setValue
 import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.CombatantSetup
 import app.d6d.domain.combat.D20Mode
+import app.d6d.domain.space.GridPosition
+import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
 import app.d6d.ui.roster.RosterItem
 import app.d6d.ui.roster.RosterKind
@@ -15,6 +17,32 @@ import app.d6d.ui.roster.RosterViewModel
 enum class EncounterFaction(val label: String) {
     ALLEATI("Alleati"),
     AVVERSARI("Avversari"),
+}
+
+/** Passaggi espliciti della procedura Nuova partita. */
+enum class NewGameStep {
+    TEMPLATE,
+    PARTECIPANTI,
+    GRIGLIA,
+    MODALITA,
+}
+
+/** Da dove arrivano personaggi e creature della nuova partita. */
+enum class TemplateSource(val label: String) {
+    ESISTENTI("Template già creati"),
+    DA_ZERO("Crea da zero"),
+}
+
+/** Esperienza scelta per la nuova partita. */
+enum class EncounterMode(val label: String, val description: String) {
+    FIGHT(
+        "Modalità Fight",
+        "Apre la mappa tattica e dispone automaticamente alleati e nemici vicini, pronti allo scontro.",
+    ),
+    ROLEPLAY_FIGHT_EXPLORATION(
+        "Roleplay & Fight & Exploration",
+        "Apre la schermata normale con la griglia pronta, lasciando libero il posizionamento dei token.",
+    ),
 }
 
 /** Una voce del Compendio con le scelte specifiche del prossimo incontro. */
@@ -48,7 +76,27 @@ class EncounterBuilderViewModel(
     private val seedProvider: () -> Long = { System.currentTimeMillis() },
 ) {
 
-    var encounterName by mutableStateOf("Nuovo incontro")
+    var step by mutableStateOf(NewGameStep.TEMPLATE)
+        private set
+
+    var templateSource by mutableStateOf<TemplateSource?>(null)
+        private set
+
+    var mode by mutableStateOf(EncounterMode.ROLEPLAY_FIGHT_EXPLORATION)
+
+    var gridColumns by mutableStateOf(DEFAULT_COLUMNS)
+        private set
+
+    var gridRows by mutableStateOf(DEFAULT_ROWS)
+        private set
+
+    /** Il motore conserva i piedi; la procedura li presenta sempre anche in metri. */
+    var feetPerSquare by mutableStateOf(DEFAULT_FEET_PER_SQUARE)
+        private set
+
+    private var scratchBaselineIds: Set<String> = emptySet()
+
+    var encounterName by mutableStateOf("Nuova partita")
 
     var status by mutableStateOf<String?>(null)
         private set
@@ -56,7 +104,9 @@ class EncounterBuilderViewModel(
     private var choices by mutableStateOf<Map<String, ParticipantChoice>>(emptyMap())
 
     val participants: List<EncounterParticipant>
-        get() = roster.items.map { item ->
+        get() = roster.items
+            .filter { templateSource != TemplateSource.DA_ZERO || it.id !in scratchBaselineIds }
+            .map { item ->
             val choice = choices[item.id] ?: defaultChoice(item)
             EncounterParticipant(item, choice.selected, choice.quantity, choice.faction)
         }
@@ -74,6 +124,80 @@ class EncounterBuilderViewModel(
 
     val canStart: Boolean
         get() = encounterName.isNotBlank() && selectedCount > 0
+
+    /** Riparte dal primo passaggio dopo che una nuova sessione è stata adottata davvero. */
+    fun restartWizard() {
+        step = NewGameStep.TEMPLATE
+        templateSource = null
+        scratchBaselineIds = emptySet()
+        choices = emptyMap()
+        encounterName = "Nuova partita"
+        gridColumns = DEFAULT_COLUMNS
+        gridRows = DEFAULT_ROWS
+        feetPerSquare = DEFAULT_FEET_PER_SQUARE
+        mode = EncounterMode.ROLEPLAY_FIGHT_EXPLORATION
+        status = null
+    }
+
+    fun useExistingTemplates() {
+        templateSource = TemplateSource.ESISTENTI
+        scratchBaselineIds = emptySet()
+        resetRecommended()
+        step = NewGameStep.PARTECIPANTI
+    }
+
+    /** Conserva l'archivio esistente, ma per questa partita mostra solo le nuove schede. */
+    fun createFromScratch() {
+        templateSource = TemplateSource.DA_ZERO
+        scratchBaselineIds = roster.items.mapTo(mutableSetOf()) { it.id }
+        choices = emptyMap()
+        status = null
+        step = NewGameStep.PARTECIPANTI
+    }
+
+    fun back() {
+        status = null
+        step = when (step) {
+            NewGameStep.TEMPLATE -> NewGameStep.TEMPLATE
+            NewGameStep.PARTECIPANTI -> NewGameStep.TEMPLATE
+            NewGameStep.GRIGLIA -> NewGameStep.PARTECIPANTI
+            NewGameStep.MODALITA -> NewGameStep.GRIGLIA
+        }
+    }
+
+    fun continueFromParticipants() {
+        status = when {
+            encounterName.isBlank() -> "Dai un nome alla nuova partita."
+            selectedCount == 0 -> "Seleziona almeno un partecipante."
+            else -> null
+        }
+        if (status == null) step = NewGameStep.GRIGLIA
+    }
+
+    fun continueFromGrid() {
+        status = null
+        step = NewGameStep.MODALITA
+    }
+
+    fun updateGridColumns(value: Int) {
+        gridColumns = value.coerceIn(MIN_GRID_SIDE, MAX_GRID_SIDE)
+        status = null
+    }
+
+    fun updateGridRows(value: Int) {
+        gridRows = value.coerceIn(MIN_GRID_SIDE, MAX_GRID_SIDE)
+        status = null
+    }
+
+    fun updateFeetPerSquare(value: Int) {
+        feetPerSquare = value.coerceIn(MIN_FEET_PER_SQUARE, MAX_FEET_PER_SQUARE)
+        status = null
+    }
+
+    fun useGridPreset(columns: Int, rows: Int) {
+        updateGridColumns(columns)
+        updateGridRows(rows)
+    }
 
     fun setSelected(id: String, selected: Boolean) = update(id) { copy(selected = selected) }
 
@@ -122,6 +246,7 @@ class EncounterBuilderViewModel(
 
         val usedInstanceIds = mutableSetOf<String>()
         val setups = mutableListOf<CombatantSetup>()
+        val prepared = mutableListOf<PreparedCombatant>()
         val allies = mutableListOf<String>()
 
         selected.forEach { participant ->
@@ -142,11 +267,19 @@ class EncounterBuilderViewModel(
                 }
                 setups += CombatantSetup(instanceId, actor)
                 if (participant.faction == EncounterFaction.ALLEATI) allies += instanceId
+                prepared += PreparedCombatant(
+                    instanceId = instanceId,
+                    faction = participant.faction,
+                    squaresPerSide = roster.footprintFor(source.id()).coerceIn(1, 4),
+                )
             }
         }
 
         val session = CombatSession.fromCombatants(name, seedProvider(), setups)
         session.setPartyCombatants(allies)
+        val grid = MapGrid(gridColumns, gridRows, feetPerSquare)
+        session.configureMap(grid)
+        if (mode == EncounterMode.FIGHT) autoPlaceForFight(session, grid, prepared)
         session.markReady()
         setups.forEach { session.useStaticInitiative(it.instanceId(), D20Mode.NORMAL) }
         session.start()
@@ -221,8 +354,67 @@ class EncounterBuilderViewModel(
         abilities(),
     )
 
+    /** Posiziona i due schieramenti attorno al centro, rispettando ingombri e collisioni. */
+    private fun autoPlaceForFight(
+        session: CombatSession,
+        grid: MapGrid,
+        combatants: List<PreparedCombatant>,
+    ) {
+        val occupied = mutableSetOf<Pair<Int, Int>>()
+        val middle = grid.columns() / 2
+        val centerRow = grid.rows() / 2
+
+        combatants.sortedBy { it.faction.ordinal }.forEach { combatant ->
+            val side = combatant.squaresPerSide
+            val candidates = buildList {
+                for (row in 0..grid.rows() - side) {
+                    for (column in 0..grid.columns() - side) {
+                        add(GridPosition(column, row))
+                    }
+                }
+            }.sortedBy { position ->
+                val wrongHalf = when (combatant.faction) {
+                    EncounterFaction.ALLEATI -> if (position.column() + side <= middle) 0 else 1_000
+                    EncounterFaction.AVVERSARI -> if (position.column() >= middle) 0 else 1_000
+                }
+                val anchorColumn = when (combatant.faction) {
+                    EncounterFaction.ALLEATI -> (middle - side - 1).coerceAtLeast(0)
+                    EncounterFaction.AVVERSARI -> (middle + 1).coerceAtMost(grid.columns() - side)
+                }
+                wrongHalf + kotlin.math.abs(position.column() - anchorColumn) * 4 +
+                    kotlin.math.abs(position.row() - centerRow)
+            }
+
+            val origin = candidates.firstOrNull { position ->
+                (position.column() until position.column() + side).all { column ->
+                    (position.row() until position.row() + side).all { row -> column to row !in occupied }
+                }
+            } ?: throw IllegalStateException(
+                "La griglia ${grid.columns()}×${grid.rows()} è troppo piccola per tutti i token selezionati.",
+            )
+
+            session.placeCombatant(combatant.instanceId, origin, side)
+            for (column in origin.column() until origin.column() + side) {
+                for (row in origin.row() until origin.row() + side) occupied += column to row
+            }
+        }
+    }
+
+    private data class PreparedCombatant(
+        val instanceId: String,
+        val faction: EncounterFaction,
+        val squaresPerSide: Int,
+    )
+
     private companion object {
         const val MIN_QUANTITY = 1
         const val MAX_QUANTITY = 99
+        const val MIN_GRID_SIDE = 5
+        const val MAX_GRID_SIDE = 100
+        const val DEFAULT_COLUMNS = 20
+        const val DEFAULT_ROWS = 15
+        const val DEFAULT_FEET_PER_SQUARE = 5
+        const val MIN_FEET_PER_SQUARE = 1
+        const val MAX_FEET_PER_SQUARE = 500
     }
 }

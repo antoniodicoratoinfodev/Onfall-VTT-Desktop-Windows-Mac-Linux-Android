@@ -1,7 +1,9 @@
 package app.d6d.ui.battle
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,30 +89,112 @@ private fun WideBattleBody(
     portraits: PortraitRepository,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier) {
-        Row(Modifier.weight(1f)) {
-            Rail(
-                viewModel = viewModel,
-                title = "Squadra",
-                ids = viewModel.partyIds,
-                faction = Faction.PARTY,
-                modifier = Modifier.width(252.dp),
-            )
+    Row(modifier) {
+        Rail(
+            viewModel = viewModel,
+            title = "Squadra",
+            ids = viewModel.partyIds,
+            faction = Faction.PARTY,
+            modifier = Modifier.width(230.dp),
+        )
 
-            Column(Modifier.weight(1f)) {
-                BattleStage(viewModel, portraits, Modifier.weight(1f))
-                CommandBar(viewModel, compact = false)
-            }
+        Column(Modifier.weight(1f)) {
+            BattleStage(viewModel, portraits, Modifier.weight(1f))
+            CommandBar(viewModel, compact = false)
+        }
 
+        Column(Modifier.width(310.dp)) {
             Rail(
                 viewModel = viewModel,
                 title = "Nemici",
                 ids = viewModel.enemyIds,
                 faction = Faction.ENEMY,
-                modifier = Modifier.width(252.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
+            CollapsibleBattleLog(viewModel)
+        }
+    }
+}
+
+/** Registro desktop sotto i nemici: il bordo superiore si trascina per ridimensionare o collassare. */
+@Composable
+private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
+    val density = LocalDensity.current
+    val minHeightPx = with(density) { 130.dp.toPx() }
+    val maxHeightPx = with(density) { 360.dp.toPx() }
+    val defaultHeightPx = with(density) { 230.dp.toPx() }
+    var expandedHeightPx by remember { mutableStateOf(defaultHeightPx) }
+    var collapsed by remember { mutableStateOf(false) }
+    val panelHeight = if (collapsed) 42.dp else with(density) { expandedHeightPx.toDp() }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .height(panelHeight)
+            .background(Palette.Abyss)
+            .border(1.dp, Palette.Line),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(Palette.Surface)
+                .pointerInput(collapsed) {
+                    detectVerticalDragGestures(
+                        onVerticalDrag = { change, dragAmount ->
+                            change.consume()
+                            if (collapsed && dragAmount < 0f) {
+                                expandedHeightPx = defaultHeightPx
+                                collapsed = false
+                            } else if (!collapsed) {
+                                expandedHeightPx = (expandedHeightPx - dragAmount)
+                                    .coerceIn(with(density) { 72.dp.toPx() }, maxHeightPx)
+                            }
+                        },
+                        onDragEnd = {
+                            if (!collapsed && expandedHeightPx < minHeightPx) {
+                                expandedHeightPx = defaultHeightPx
+                                collapsed = true
+                            }
+                        },
+                    )
+                }
+                .padding(horizontal = 9.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "↕ REGISTRO EVENTI",
+                    color = Palette.Gold,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                if (!collapsed) {
+                    Text(
+                        text = "Trascina verso il basso per collassare",
+                        color = Palette.TextFaint,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+            Text(
+                text = if (collapsed) "Apri ↑" else "Collassa ↓",
+                color = Palette.TextMuted,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.clickable {
+                    if (collapsed) expandedHeightPx = defaultHeightPx
+                    collapsed = !collapsed
+                }.padding(5.dp),
             )
         }
-        BattleLog(viewModel, Modifier.height(158.dp))
+        if (!collapsed) {
+            BattleLog(
+                viewModel = viewModel,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                showHeader = false,
+            )
+        }
     }
 }
 
@@ -326,6 +412,7 @@ private fun BattleTitle(sessions: SessionManager, modifier: Modifier = Modifier)
 private fun EditModeButton(viewModel: BattleViewModel) {
     GameButton(
         label = if (viewModel.editMode) "Modifica attiva" else "Modifica",
+        subtitle = if (viewModel.editMode) "Tieni premuto e trascina i token" else null,
         accent = if (viewModel.editMode) Palette.Heal else Palette.TextMuted,
         selected = viewModel.editMode,
         onClick = { viewModel.editMode = !viewModel.editMode },

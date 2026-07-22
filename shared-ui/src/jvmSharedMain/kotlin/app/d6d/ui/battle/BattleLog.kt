@@ -37,7 +37,12 @@ import app.d6d.ui.theme.Palette
  * la fonte autorevole di cio' che e' successo, sopra qualsiasi effetto visivo.
  */
 @Composable
-fun BattleLog(viewModel: BattleViewModel, modifier: Modifier = Modifier, entries: Int = Int.MAX_VALUE) {
+fun BattleLog(
+    viewModel: BattleViewModel,
+    modifier: Modifier = Modifier,
+    entries: Int = Int.MAX_VALUE,
+    showHeader: Boolean = true,
+) {
     val recent = viewModel.events.asReversed().let { events ->
         if (entries == Int.MAX_VALUE) events else events.take(entries.coerceAtLeast(0))
     }
@@ -58,20 +63,26 @@ fun BattleLog(viewModel: BattleViewModel, modifier: Modifier = Modifier, entries
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Eyebrow("Registro eventi")
-            Text(
-                text = "${viewModel.events.size} eventi",
-                color = Palette.TextFaint,
-                style = MaterialTheme.typography.labelSmall,
-            )
+        if (showHeader) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Eyebrow("Registro eventi")
+                Text(
+                    text = "${viewModel.events.size} eventi",
+                    color = Palette.TextFaint,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
         }
 
-        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
             itemsIndexed(recent, key = { _, event -> event.sequence() }) { index, event ->
                 LogLine(event, viewModel, latest = index == 0)
             }
@@ -98,6 +109,7 @@ private fun LogLine(event: CombatEvent, viewModel: BattleViewModel, latest: Bool
             color = event.type().tint,
             fontWeight = if (latest || event.type() == EventType.CRITICAL_HIT) FontWeight.Bold else FontWeight.Normal,
             style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
         )
     }
 }

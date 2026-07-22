@@ -296,4 +296,19 @@ class BattleViewModelTest {
 
         assertEquals(listOf("Temporaneo", originalName), snapshots)
     }
+
+    @Test
+    fun `riposizionare un token in modifica non consuma movimento`() {
+        val model = viewModel()
+        val actor = model.partyIds.first()
+        model.place(actor, 2, 2, model.squaresPerSideFor(actor))
+        val movementBefore = model.budget(actor)!!.movementRemainingFeet()
+
+        model.editMode = true
+        model.reposition(actor, 6, 5)
+
+        assertEquals(6, model.placementOf(actor)!!.origin().column())
+        assertEquals(5, model.placementOf(actor)!!.origin().row())
+        assertEquals(movementBefore, model.budget(actor)!!.movementRemainingFeet())
+    }
 }

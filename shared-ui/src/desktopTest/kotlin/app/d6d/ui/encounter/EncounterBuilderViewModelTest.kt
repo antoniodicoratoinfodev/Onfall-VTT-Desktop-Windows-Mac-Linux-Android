@@ -110,4 +110,83 @@ class EncounterBuilderViewModelTest {
         assertNull(builder.tryStart())
         assertEquals("Seleziona almeno un partecipante.", builder.status)
     }
+
+    @Test
+    fun `nuova partita guida da template a partecipanti griglia e modalita`() {
+        val builder = EncounterBuilderViewModel(roster(), seedProvider = { 1L })
+
+        assertEquals(NewGameStep.TEMPLATE, builder.step)
+        builder.useExistingTemplates()
+        assertEquals(TemplateSource.ESISTENTI, builder.templateSource)
+        assertEquals(NewGameStep.PARTECIPANTI, builder.step)
+
+        builder.continueFromParticipants()
+        assertEquals(NewGameStep.GRIGLIA, builder.step)
+        builder.updateGridColumns(30)
+        builder.updateGridRows(20)
+        builder.updateFeetPerSquare(10)
+        builder.continueFromGrid()
+
+        assertEquals(NewGameStep.MODALITA, builder.step)
+        assertEquals(30, builder.gridColumns)
+        assertEquals(20, builder.gridRows)
+        assertEquals(10, builder.feetPerSquare)
+
+        builder.restartWizard()
+        assertEquals(NewGameStep.TEMPLATE, builder.step)
+        assertNull(builder.templateSource)
+        assertEquals(20, builder.gridColumns)
+        assertEquals(15, builder.gridRows)
+        assertEquals(5, builder.feetPerSquare)
+    }
+
+    @Test
+    fun `creare da zero non cancella i template e mostra solo le nuove schede`() {
+        val roster = roster()
+        val originalIds = roster.items.map { it.id }.toSet()
+        val builder = EncounterBuilderViewModel(roster, seedProvider = { 1L })
+
+        builder.createFromScratch()
+        assertTrue(builder.participants.isEmpty())
+        assertTrue(originalIds.all { id -> roster.items.any { it.id == id } })
+
+        roster.newCharacter()
+        roster.sheets.character = roster.sheets.character.copy(characterName = "Eroe nuovo")
+        assertTrue(roster.sheets.save())
+        roster.newCreature()
+        roster.sheets.monster = roster.sheets.monster.copy(name = "Mob nuovo")
+        assertTrue(roster.sheets.save())
+
+        assertEquals(setOf("Eroe nuovo", "Mob nuovo"), builder.participants.map { it.name }.toSet())
+        assertTrue(originalIds.all { id -> roster.items.any { it.id == id } })
+    }
+
+    @Test
+    fun `fight configura la griglia e mette i due schieramenti vicini`() {
+        val builder = EncounterBuilderViewModel(roster(), seedProvider = { 9L })
+        val hero = builder.participants.first { it.kind == RosterKind.PERSONAGGIO }
+        val creature = builder.participants.first { it.kind == RosterKind.CREATURA }
+        builder.clearSelection()
+        builder.setSelected(hero.id, true)
+        builder.setSelected(creature.id, true)
+        builder.mode = EncounterMode.FIGHT
+
+        val state = builder.startedSession().currentState()
+
+        assertTrue(state.battleMap().configured())
+        assertTrue(state.battleMap().isPlaced(hero.id))
+        assertTrue(state.battleMap().isPlaced(creature.id))
+        assertTrue(state.distanceFeet(hero.id, creature.id).orElseThrow() <= 20)
+    }
+
+    @Test
+    fun `roleplay fight exploration prepara la griglia senza imporre i token`() {
+        val builder = EncounterBuilderViewModel(roster(), seedProvider = { 11L })
+        builder.mode = EncounterMode.ROLEPLAY_FIGHT_EXPLORATION
+
+        val state = builder.startedSession().currentState()
+
+        assertTrue(state.battleMap().configured())
+        assertTrue(state.battleMap().orderedPlacements().isEmpty())
+    }
 }

@@ -27,6 +27,7 @@ import app.d6d.sheet.feetWithMetres
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumber
 import app.d6d.ui.components.italianLabel
+import app.d6d.ui.encounter.EncounterMode
 
 /**
  * Riceve le correzioni fatte durante lo scontro perche' aggiornino anche il
@@ -114,6 +115,10 @@ class BattleViewModel(
 
     /** Quando e' attiva, un doppio clic su un campo lo rende modificabile. */
     var editMode by mutableStateOf(false)
+
+    /** Modalità scelta nella procedura Nuova partita, salvata con la presentazione. */
+    var encounterMode by mutableStateOf(EncounterMode.ROLEPLAY_FIGHT_EXPLORATION)
+        private set
 
     /** Attore scelto nel gruppo simultaneo; altrimenti il primo del turno. */
     val activeActorId: String?
@@ -440,6 +445,11 @@ class BattleViewModel(
         session.placeCombatant(combatantId, GridPosition(column, row), squaresPerSide)
     }
 
+    /** Riposizionamento di preparazione: non consuma il movimento del turno. */
+    fun reposition(combatantId: String, column: Int, row: Int) {
+        place(combatantId, column, row, squaresPerSideFor(combatantId))
+    }
+
     fun move(combatantId: String, column: Int, row: Int) = command {
         val feet = session.moveCombatant(combatantId, GridPosition(column, row))
         push(combatantId, FloatingNumber(++floatSequence, feetWithMetres(feet, "ft"), FloatKind.INFO))
@@ -496,6 +506,7 @@ class BattleViewModel(
         selectedTargetId?.let { put("selectedTargetId", it) }
         activeActorSelection?.takeIf { it in activeCombatantIds }?.let { put("activeActorId", it) }
         put("rollMode", rollMode.name)
+        put("encounterMode", encounterMode.name)
         if (footprints.isNotEmpty()) {
             put("footprints", footprints.entries.joinToString(",") { "${it.key}=${it.value}" })
         }
@@ -518,6 +529,9 @@ class BattleViewModel(
         rollMode = presentation["rollMode"]
             ?.let { name -> runCatching { D20Mode.valueOf(name) }.getOrNull() }
             ?: D20Mode.NORMAL
+        encounterMode = presentation["encounterMode"]
+            ?.let { name -> runCatching { EncounterMode.valueOf(name) }.getOrNull() }
+            ?: EncounterMode.ROLEPLAY_FIGHT_EXPLORATION
         footprints = presentation["footprints"]
             ?.split(',')
             ?.mapNotNull { entry ->

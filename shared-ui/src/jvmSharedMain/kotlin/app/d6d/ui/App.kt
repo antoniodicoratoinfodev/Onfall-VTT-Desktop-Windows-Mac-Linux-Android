@@ -33,6 +33,7 @@ import app.d6d.ui.components.initials
 import app.d6d.ui.content.SampleEncounter
 import app.d6d.ui.encounter.EncounterBuilderScreen
 import app.d6d.ui.encounter.EncounterBuilderViewModel
+import app.d6d.ui.encounter.EncounterMode
 import app.d6d.sheet.SheetStore
 import app.d6d.ui.roster.RosterScreen
 import app.d6d.ui.roster.RosterViewModel
@@ -50,7 +51,7 @@ import kotlinx.coroutines.delay
 
 enum class Destination(val label: String, val glyph: String) {
     BATTAGLIA("Battaglia", "◆"),
-    INCONTRO("Incontro", "+"),
+    INCONTRO("Nuova partita", "+"),
     COMPENDIO("Compendio", "≡"),
 }
 
@@ -114,17 +115,18 @@ fun AppRoot(
             }
         }
 
-        var pendingEncounter by remember { mutableStateOf<Pair<CombatSession, String>?>(null) }
-        val adoptEncounter: (CombatSession, String) -> Unit = { session, name ->
-            battleViewModel.adopt(session, emptyMap())
+        var pendingEncounter by remember { mutableStateOf<Triple<CombatSession, String, EncounterMode>?>(null) }
+        val adoptEncounter: (CombatSession, String, EncounterMode) -> Unit = { session, name, mode ->
+            battleViewModel.adopt(session, mapOf("encounterMode" to mode.name))
             sessions.beginUnsavedSession(name)
+            encounterBuilder.restartWizard()
             destination = Destination.BATTAGLIA
         }
-        val requestEncounter: (CombatSession, String) -> Unit = { session, name ->
+        val requestEncounter: (CombatSession, String, EncounterMode) -> Unit = { session, name, mode ->
             if (sessions.hasUnsavedChanges) {
-                pendingEncounter = session to name
+                pendingEncounter = Triple(session, name, mode)
             } else {
-                adoptEncounter(session, name)
+                adoptEncounter(session, name, mode)
             }
         }
 
@@ -137,11 +139,8 @@ fun AppRoot(
                     EncounterBuilderScreen(
                         viewModel = encounterBuilder,
                         compact = compact,
-                        onStarted = { session, name ->
-                            requestEncounter(session, name)
-                        },
-                        onUseDemo = {
-                            requestEncounter(SampleEncounter.startedSession(), "Cripta dei predoni")
+                        onStarted = { session, name, mode ->
+                            requestEncounter(session, name, mode)
                         },
                         onOpenCompendium = { destination = Destination.COMPENDIO },
                         modifier = contentModifier,
@@ -173,7 +172,7 @@ fun AppRoot(
                 sessions.menuOpen = true
             },
             onDiscard = {
-                pendingEncounter?.let { (session, name) -> adoptEncounter(session, name) }
+                pendingEncounter?.let { (session, name, mode) -> adoptEncounter(session, name, mode) }
                 pendingEncounter = null
             },
         )
