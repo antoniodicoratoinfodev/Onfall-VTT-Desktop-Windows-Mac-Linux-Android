@@ -4,8 +4,7 @@ Strumento di combattimento e gestione incontri **compatibile con 5.5e / SRD**, o
 con interfaccia da videogioco. Desktop e Android condividono motore, dati e schermate.
 
 > Il nome evita volutamente il marchio "D&D", come raccomanda il paragrafo 1 del documento di
-> progetto. L'applicazione si dichiara *compatibile con 5.5e*, non approvata
-> ufficialmente.
+> progetto. L'applicazione si dichiara *compatibile con 5.5e*, non approvata ufficialmente.
 
 ## Cos'è
 
@@ -17,28 +16,23 @@ Tre prodotti che convivono sullo stesso motore:
 
 ## Interfaccia
 
-La schermata di battaglia tiene tre aree visibili insieme sul desktop:
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│ ⚔ Campagna · Sessione · ROUND 3            [ROUND] [stato]   │
-├───────────┬──────────────────────────────────┬───────────────┤
-│  SQUADRA  │      SCENA DI BATTAGLIA          │    NEMICI     │
-│           │   (impianto a turni da gioco,    │               │
-│ ◈ Kaelen  │    con la densita' di 5.5)       │ ◈ Predone A   │
-│ ▰▰▰▰▰▰▱ 28│                                  │ ▰▰▰▰▱▱ 12/20  │
-│ A B R CA18│    bersaglio in alto             │ ☠ Avvelenato  │
-│           │    attore di turno in basso      │               │
-│ ◈ Mirethe │                                  │ ◈ Mastino     │
-│ ▰▰▰▱▱▱ 11 │  ▶ATTACCA  Normale/Vant./Svant.  │ ▰▰▰▰▰▰ 16/16  │
-├───────────┴──────────────────────────────────┴───────────────┤
-│ REGISTRO ▸ Kaelen colpisce Predone A — 7 taglienti           │
-└──────────────────────────────────────────────────────────────┘
-```
+Sul desktop la schermata di battaglia tiene tre aree visibili insieme: la **squadra** a
+sinistra, la **scena di battaglia** al centro, i **nemici** a destra; in alto scorre l'ordine
+dei turni, sotto i nemici resta il registro degli eventi. Le colonne laterali si
+**ridimensionano trascinandone il bordo**, e quando si stringono le informazioni di ogni
+combattente si ripiegano in verticale invece di essere troncate.
 
 Su telefono la stessa schermata diventa una superficie alla volta (Palco / Squadra / Nemici /
-Registro) con i comandi sempre a portata di pollice. Il documento chiede esplicitamente di **non**
-fare del desktop una UI mobile ingrandita, né viceversa: cambia il layout, non il motore.
+Registro) con i comandi sempre a portata di pollice. Il documento chiede esplicitamente di
+**non** fare del desktop una UI mobile ingrandita, né viceversa: cambia il layout, non il
+motore.
+
+La mappa tattica è a griglia: si **zooma con la rotellina**, si trascinano i segnaposti per
+spostarli, e scala (piedi per casella) e dimensioni si cambiano a schermo. Con la **modalità
+Modifica** attiva il tavolo compone la scena liberamente — corregge nome, CA, PF e iniziativa
+direttamente sulle carte, riordina i turni e sceglie quello corrente, trascina i personaggi
+dalle barre laterali sulla mappa e sposta i token ignorando i limiti di movimento. Fuori dalla
+modifica quelle scorciatoie spariscono, così non si altera una partita per sbaglio.
 
 Tutti i ritratti sono disegnati a vettori dal codice. Non esiste nessuna immagine importata,
 quindi ogni creatura inserita ha subito una rappresentazione visiva e non ci sono vincoli di
@@ -66,7 +60,7 @@ Su macOS, dopo aver creato il pacchetto con `./gradlew :desktop-app:packageDmg`,
 aprire **TurnForge.app** dal Finder come una normale applicazione. Durante lo sviluppo il comando
 `run` qui sopra è il modo più rapido e non richiede installazione.
 
-I dati risiedono in `~/.turnforge`. Si puo' cambiare percorso:
+I dati risiedono in `~/.turnforge`. Si può cambiare percorso:
 
 ```bash
 ./gradlew :desktop-app:run -Dturnforge.dataDir=/percorso/scelto
@@ -84,8 +78,8 @@ I dati risiedono in `~/.turnforge`. Si puo' cambiare percorso:
 | `desktop-app` | Kotlin | finestra JVM, shell densa |
 | `android-app` | Kotlin | Activity, shell touch |
 
-Il motore e' Java e resta consumabile da entrambe le piattaforme perche' Android e desktop girano
-entrambi su bytecode JVM. La UI condivisa vive in `jvmSharedMain` anziche' in `commonMain`, il che
+Il motore è Java e resta consumabile da entrambe le piattaforme perché Android e desktop girano
+entrambi su bytecode JVM. La UI condivisa vive in `jvmSharedMain` anziché in `commonMain`, il che
 le permette di usare direttamente le classi Java del motore.
 
 `core-engine` non conosce testi, classi o mostri: le regole stanno nel motore, i contenuti nei
@@ -93,7 +87,7 @@ pacchetti separati.
 
 ## Contenuti e licenza
 
-Il materiale dimostrativo incluso (`SampleEncounter`) e' **interamente originale**: nessuno stat
+Il materiale dimostrativo incluso (`SampleEncounter`) è **interamente originale**: nessuno stat
 block, testo, nome o illustrazione proviene dai manuali commerciali. Vedi `NOTICE-SRD.md`.
 
 Le schede create nel Compendio sono per impostazione predefinita contenuto privato dell'utente e
@@ -101,4 +95,4 @@ non vengono condivise da sole.
 
 ## Stato
 
-Vedi `docs/STATO.md` per la mappa onesta fra il documento di progetto e cio' che gira davvero.
+Vedi `docs/STATO.md` per la mappa onesta fra il documento di progetto e ciò che gira davvero.
