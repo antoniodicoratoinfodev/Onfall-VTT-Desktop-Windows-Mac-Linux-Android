@@ -3,8 +3,13 @@
 Strumento di combattimento e gestione incontri **compatibile con 5.5e / SRD**, offline-first,
 con interfaccia da videogioco. Desktop e Android condividono motore, dati e schermate.
 
+> **Repository di sola consultazione.** Questo codice è pubblicato **unicamente per la revisione
+> e la valutazione tecnica** (analisi del codice e delle capacità dell'autore). Non è destinato
+> all'uso, all'esecuzione per gioco, al fork né al riutilizzo, nemmeno parziale. Termini completi
+> in [`LICENSE.md`](LICENSE.md).
+
 > Il nome evita volutamente il marchio "D&D", come raccomanda il paragrafo 1 del documento di
-> progetto. L'applicazione si dichiara *compatibile con 5.5e*, non approvata ufficialmente.
+> progetto: l'applicazione si dichiara *compatibile con 5.5e*, non approvata ufficialmente.
 
 ## Cos'è
 
@@ -38,35 +43,7 @@ Tutti i ritratti sono disegnati a vettori dal codice. Non esiste nessuna immagin
 quindi ogni creatura inserita ha subito una rappresentazione visiva e non ci sono vincoli di
 licenza sulla grafica.
 
-## Requisiti
-
-- JDK 17 o superiore (qui verificato con JDK 26)
-- Android SDK, solo per costruire l'APK — il percorso va in `local.properties`
-
-## Avvio
-
-```bash
-# Desktop (macOS, Linux o Windows)
-./gradlew :desktop-app:run
-
-# tutti i test
-./gradlew test :shared-ui:desktopTest
-
-# APK Android di debug
-./gradlew :android-app:assembleDebug
-```
-
-Su macOS, dopo aver creato il pacchetto con `./gradlew :desktop-app:packageDmg`, si può anche
-aprire **Onfall.app** dal Finder come una normale applicazione. Durante lo sviluppo il comando
-`run` qui sopra è il modo più rapido e non richiede installazione.
-
-I dati risiedono in `~/.onfall`. Si può cambiare percorso:
-
-```bash
-./gradlew :desktop-app:run -Donfall.dataDir=/percorso/scelto
-```
-
-## Moduli
+## Architettura
 
 | Modulo | Linguaggio | Ruolo |
 |---|---|---|
@@ -85,13 +62,31 @@ le permette di usare direttamente le classi Java del motore.
 `core-engine` non conosce testi, classi o mostri: le regole stanno nel motore, i contenuti nei
 pacchetti separati.
 
-## Contenuti e licenza
+## Build e verifica
+
+Per chi revisiona il codice e vuole controllare che compili e che i test passino. Serve un
+JDK 17 o superiore (verificato con JDK 26); l'Android SDK occorre solo per l'APK e il suo percorso
+va in `local.properties`.
+
+```bash
+# compila ed esegue l'intera suite di test
+./gradlew test :shared-ui:desktopTest
+
+# verifica che l'APK Android si costruisca
+./gradlew :android-app:assembleDebug
+```
+
+L'esecuzione dell'applicazione per l'uso o per gioco non è consentita: vedi la licenza.
+
+## Licenza
+
+**Tutti i diritti riservati.** Il codice è consultabile **solo a fini di analisi e valutazione
+tecnica**: non è consentito eseguirlo per l'uso, forkarlo, ridistribuirlo o riutilizzarne parti —
+neppure singoli frammenti — in altri progetti. I termini completi sono in
+[`LICENSE.md`](LICENSE.md).
 
 Il materiale dimostrativo incluso (`SampleEncounter`) è **interamente originale**: nessuno stat
 block, testo, nome o illustrazione proviene dai manuali commerciali. Vedi `NOTICE-SRD.md`.
-
-Le schede create nel Compendio sono per impostazione predefinita contenuto privato dell'utente e
-non vengono condivise da sole.
 
 ## Stato
 
