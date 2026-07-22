@@ -230,6 +230,27 @@ class BattleViewModel(
 
     fun endTurn() = command { session.endTurn() }
 
+    /** Sposta a mano il turno corrente su un combattente scelto (correzione da tavolo). */
+    fun setCurrentTurn(combatantId: String) = command { session.setCurrentTurn(combatantId) }
+
+    /** Riordina i turni a scontro gia' avviato, tenendo corrente chi sta agendo. */
+    fun reorderTurns(order: List<String>) = command { session.reorderTurns(order) }
+
+    /**
+     * Sposta un combattente di [delta] posizioni nell'ordine dei turni: negativo
+     * lo anticipa, positivo lo posticipa. Comodo per i comandi ◀ ▶ della striscia.
+     */
+    fun moveTurn(combatantId: String, delta: Int) {
+        val order = state.initiativeOrder().toMutableList()
+        val index = order.indexOf(combatantId)
+        if (index < 0) return
+        val target = (index + delta).coerceIn(0, order.size - 1)
+        if (target == index) return
+        order.removeAt(index)
+        order.add(target, combatantId)
+        reorderTurns(order)
+    }
+
     fun undo() {
         message = null
         val effect = undoEffects.lastOrNull() ?: UndoEffect.None

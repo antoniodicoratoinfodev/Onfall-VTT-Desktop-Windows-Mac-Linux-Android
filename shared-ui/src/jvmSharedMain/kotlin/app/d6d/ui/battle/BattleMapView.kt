@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -87,6 +88,7 @@ fun BattleMapView(
     cellSize: Dp,
     showGrid: Boolean,
     modifier: Modifier = Modifier,
+    dropTarget: TokenPlacementDrag? = null,
 ) {
     if (!viewModel.mapConfigured) {
         MapNotConfigured(viewModel, modifier)
@@ -97,6 +99,14 @@ fun BattleMapView(
     val grid = map.grid()
     val density = LocalDensity.current
     val background = portraits.rememberBitmap(map.backgroundImage())
+
+    // La mappa pubblica la propria griglia cosi' che il trascinamento dalle barre
+    // laterali sappia tradurre il punto di rilascio in una casella.
+    if (dropTarget != null) {
+        dropTarget.cellPx = with(density) { cellSize.toPx() }
+        dropTarget.columns = grid.columns()
+        dropTarget.rows = grid.rows()
+    }
 
     Box(
         modifier
@@ -109,6 +119,7 @@ fun BattleMapView(
             Modifier
                 .width(cellSize * grid.columns())
                 .height(cellSize * grid.rows())
+                .onGloballyPositioned { dropTarget?.gridCoordinates = it }
                 .pointerInput(grid, cellSize, viewModel.activeCombatantIds) {
                     detectTapGestures { offset ->
                         val cellPx = with(density) { cellSize.toPx() }
@@ -155,8 +166,29 @@ fun BattleMapView(
             map.orderedPlacements().forEach { placement ->
                 MapToken(viewModel, portraits, placement, cellSize)
             }
+
+            if (dropTarget != null) {
+                DropHighlight(dropTarget, cellSize)
+            }
         }
     }
+}
+
+/**
+ * Riquadro sotto il puntatore mentre si trascina un personaggio dalle barre: mostra
+ * la casella in cui il segnaposto verra' collocato al rilascio.
+ */
+@Composable
+private fun DropHighlight(dropTarget: TokenPlacementDrag, cellSize: Dp) {
+    if (dropTarget.activeId == null) return
+    val cell = dropTarget.overCell ?: return
+    Box(
+        Modifier
+            .offset(x = cellSize * cell.x, y = cellSize * cell.y)
+            .size(cellSize)
+            .background(Palette.Gold.copy(alpha = 0.22f), RoundedCornerShape(4.dp))
+            .border(2.dp, Palette.GoldBright, RoundedCornerShape(4.dp)),
+    )
 }
 
 /**

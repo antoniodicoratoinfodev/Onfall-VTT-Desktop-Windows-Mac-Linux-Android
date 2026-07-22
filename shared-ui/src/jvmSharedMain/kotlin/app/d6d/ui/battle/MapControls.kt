@@ -56,51 +56,55 @@ fun MapControls(
             .background(Palette.Surface.copy(alpha = 0.82f)),
     ) {
         FlowRow(
-            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("MAPPA", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
                 Chip("${grid.columns()} × ${grid.rows()} · ${feetWithMetres(grid.feetPerSquare())}/casella", Palette.TextMuted)
             }
-            GameButton("−", accent = Palette.TextMuted, onClick = {
+            GameButton("−", accent = Palette.TextMuted, dense = true, onClick = {
                 onCellSizeChange((cellSize - 6.dp).coerceIn(MIN_CELL, MAX_CELL))
             })
             Chip("Zoom ${cellSize.value.toInt()}", Palette.TextMuted)
-            GameButton("+", accent = Palette.TextMuted, onClick = {
+            GameButton("+", accent = Palette.TextMuted, dense = true, onClick = {
                 onCellSizeChange((cellSize + 6.dp).coerceIn(MIN_CELL, MAX_CELL))
             })
             GameButton(
                 label = if (showGrid) "Griglia visibile" else "Griglia nascosta",
                 accent = if (showGrid) Palette.Gold else Palette.TextFaint,
                 selected = showGrid,
+                dense = true,
                 onClick = { onShowGridChange(!showGrid) },
             )
             GameButton(
                 label = if (expanded) "Nascondi opzioni" else "Opzioni mappa",
                 accent = if (expanded) Palette.Gold else Palette.TextMuted,
                 selected = expanded,
+                dense = true,
                 onClick = { expanded = !expanded },
             )
         }
 
         if (expanded) {
             FlowRow(
-                Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp),
+                Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                GameButton("− colonne", accent = Palette.TextMuted, onClick = {
+                GameButton("− colonne", accent = Palette.TextMuted, dense = true, onClick = {
                     viewModel.configureMap(grid.columns() - 5, grid.rows(), grid.feetPerSquare())
                 })
-                GameButton("+ colonne", accent = Palette.TextMuted, onClick = {
+                GameButton("+ colonne", accent = Palette.TextMuted, dense = true, onClick = {
                     viewModel.configureMap(grid.columns() + 5, grid.rows(), grid.feetPerSquare())
                 })
-                GameButton("− righe", accent = Palette.TextMuted, onClick = {
+                GameButton("− righe", accent = Palette.TextMuted, dense = true, onClick = {
                     viewModel.configureMap(grid.columns(), grid.rows() - 5, grid.feetPerSquare())
                 })
-                GameButton("+ righe", accent = Palette.TextMuted, onClick = {
+                GameButton("+ righe", accent = Palette.TextMuted, dense = true, onClick = {
                     viewModel.configureMap(grid.columns(), grid.rows() + 5, grid.feetPerSquare())
                 })
 
@@ -109,6 +113,7 @@ fun MapControls(
                         label = "${feetWithMetres(feet)}/casella",
                         accent = if (grid.feetPerSquare() == feet) Palette.GoldBright else Palette.TextFaint,
                         selected = grid.feetPerSquare() == feet,
+                        dense = true,
                         onClick = { viewModel.configureMap(grid.columns(), grid.rows(), feet) },
                     )
                 }
@@ -122,19 +127,19 @@ fun MapControls(
                         activeTrackColor = Palette.Gold,
                         inactiveTrackColor = Palette.Line,
                     ),
-                    modifier = Modifier.width(180.dp),
+                    modifier = Modifier.width(150.dp),
                 )
-                GameButton("Scegli sfondo", accent = Palette.Party, onClick = {
+                GameButton("Scegli sfondo", accent = Palette.Party, dense = true, onClick = {
                     portraits.pickBackgroundAsync { stored ->
                         stored?.let { viewModel.setMapBackground(it) }
                     }
                 })
                 if (viewModel.battleMap.backgroundImage().isNotBlank()) {
-                    GameButton("Togli sfondo", accent = Palette.TextFaint, onClick = {
+                    GameButton("Togli sfondo", accent = Palette.TextFaint, dense = true, onClick = {
                         viewModel.setMapBackground("")
                     })
                 }
-                GameButton("Disponi tutti", accent = Palette.Heal, onClick = {
+                GameButton("Disponi tutti", accent = Palette.Heal, dense = true, onClick = {
                     viewModel.autoPlaceMissing { id -> viewModel.squaresPerSideFor(id) }
                 })
             }

@@ -883,6 +883,73 @@ public final class CombatSession {
     }
 
     /**
+     * Riordina i turni a scontro gia' avviato.
+     *
+     * <p>E' una correzione dichiarata del tavolo: chi sta agendo ora resta il
+     * combattente corrente, cambia solo la sua posizione nella coda. Passa dal
+     * registro ed e' annullabile come ogni altro comando.</p>
+     */
+    public synchronized void reorderTurns(List<String> orderedCombatantIds) {
+        if (state.status != CombatStatus.ACTIVE && state.status != CombatStatus.PAUSED) {
+            throw rule("Turns can only be reordered during active play");
+        }
+        Objects.requireNonNull(orderedCombatantIds, "orderedCombatantIds");
+        List<String> order = List.copyOf(orderedCombatantIds);
+        Set<String> expected = state.combatants.keySet();
+        if (order.size() != expected.size() || new HashSet<>(order).size() != order.size()
+                || !new HashSet<>(order).equals(expected)) {
+            throw rule("Turn order must contain every combatant exactly once");
+        }
+        String anchor = currentCombatantIds().get(0);
+        beginCommand();
+        state.initiativeOrder.clear();
+        state.initiativeOrder.addAll(order);
+        List<List<String>> groups = turnGroups();
+        for (int i = 0; i < groups.size(); i++) {
+            if (groups.get(i).contains(anchor)) {
+                state.turnIndex = i;
+                break;
+            }
+        }
+        state.turnIndex = Math.max(0, Math.min(state.turnIndex, groups.size() - 1));
+        append(EventType.INITIATIVE_ORDER_SET, "", "", details("order", String.join(",", order)));
+    }
+
+    /**
+     * Sposta a mano il turno corrente su un combattente scelto.
+     *
+     * <p>Il gruppo scelto riceve un budget fresco cosi' puo' agire; gli effetti
+     * d'inizio turno delle condizioni non vengono riattivati, perche' e' una
+     * correzione del tavolo e non un turno giocato per intero.</p>
+     */
+    public synchronized void setCurrentTurn(String combatantId) {
+        if (state.status != CombatStatus.ACTIVE && state.status != CombatStatus.PAUSED) {
+            throw rule("The current turn can only be changed during active play");
+        }
+        combatant(combatantId);
+        List<List<String>> groups = turnGroups();
+        int target = -1;
+        for (int i = 0; i < groups.size(); i++) {
+            if (groups.get(i).contains(combatantId)) {
+                target = i;
+                break;
+            }
+        }
+        if (target < 0) throw rule("Combatant is not in the current initiative order");
+        if (target == state.turnIndex) {
+            return;
+        }
+        beginCommand();
+        state.turnIndex = target;
+        for (String id : groups.get(target)) {
+            MutableCombatant occupant = combatant(id);
+            int speed = Math.max(0, occupant.snapshot.speedFeet() - 5 * occupant.exhaustionLevel);
+            state.turnBudgets.put(id, TurnBudget.fresh(speed));
+            append(EventType.TURN_STARTED, id, "", details("round", state.round));
+        }
+    }
+
+    /**
      * Dichiara se i pareggi d'iniziativa vengono giocati insieme.
      *
      * <p>Il regolamento fa risolvere le parita' al DM: renderle simultanee resta

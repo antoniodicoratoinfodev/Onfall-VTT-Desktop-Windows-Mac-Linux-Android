@@ -37,9 +37,16 @@ import app.d6d.ui.theme.Palette
  * Ogni riquadro e' un turno, non un combattente: quando due creature hanno
  * pareggiato l'iniziativa e il tavolo ha scelto di farle giocare insieme, il
  * riquadro le contiene entrambe e mostra l'indicatore di simultaneita'.
+ *
+ * Con la modalita' modifica attiva la striscia diventa modificabile: si tocca un
+ * riquadro per renderlo il turno corrente e si usano ◀ ▶ per riordinarlo.
  */
 @Composable
-fun TurnOrderStrip(viewModel: BattleViewModel, modifier: Modifier = Modifier) {
+fun TurnOrderStrip(
+    viewModel: BattleViewModel,
+    modifier: Modifier = Modifier,
+    editing: Boolean = false,
+) {
     val groups = viewModel.turnGroups
     if (groups.isEmpty()) return
 
@@ -53,6 +60,9 @@ fun TurnOrderStrip(viewModel: BattleViewModel, modifier: Modifier = Modifier) {
                 viewModel = viewModel,
                 group = group,
                 current = index == viewModel.turnIndex,
+                editing = editing,
+                canMoveEarlier = index > 0,
+                canMoveLater = index < groups.lastIndex,
             )
         }
     }
@@ -63,6 +73,9 @@ private fun TurnChip(
     viewModel: BattleViewModel,
     group: List<String>,
     current: Boolean,
+    editing: Boolean,
+    canMoveEarlier: Boolean,
+    canMoveLater: Boolean,
 ) {
     val simultaneous = group.size > 1
     val allDown = group.all { viewModel.combatant(it)?.defeated() == true }
@@ -81,6 +94,7 @@ private fun TurnChip(
     val shape = RoundedCornerShape(7.dp)
     val outline = when {
         current -> Modifier.border(1.5.dp, Palette.GoldBright, shape)
+        editing -> Modifier.border(1.dp, Palette.Gold.copy(alpha = 0.4f), shape)
         targeted -> Modifier.border(1.5.dp, accent.copy(alpha = 0.9f), shape)
         else -> Modifier
     }
@@ -90,6 +104,13 @@ private fun TurnChip(
         if (simultaneous) add("Turno simultaneo")
         if (allDown) add("Tutti sconfitti")
     }.ifEmpty { listOf("Turno successivo") }.joinToString(". ")
+
+    // In modifica il tocco imposta il turno corrente; altrimenti seleziona il bersaglio.
+    val onChipClick: () -> Unit = if (editing) {
+        { viewModel.setCurrentTurn(group.first()) }
+    } else {
+        { viewModel.selectedTargetId = group.first() }
+    }
 
     Column(
         Modifier
@@ -111,8 +132,13 @@ private fun TurnChip(
             }
             .clickable(
                 role = Role.Button,
-                onClickLabel = "Seleziona ${viewModel.name(group.first())} come bersaglio",
-            ) { viewModel.selectedTargetId = group.first() }
+                onClickLabel = if (editing) {
+                    "Rendi corrente il turno di ${viewModel.name(group.first())}"
+                } else {
+                    "Seleziona ${viewModel.name(group.first())} come bersaglio"
+                },
+                onClick = onChipClick,
+            )
             .padding(horizontal = 9.dp, vertical = 5.dp)
             .alpha(if (allDown) 0.45f else 1f),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -147,5 +173,39 @@ private fun TurnChip(
             },
             style = MaterialTheme.typography.labelSmall,
         )
+
+        if (editing) {
+            Row(
+                Modifier.padding(top = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MoveButton("◀", enabled = canMoveEarlier) { viewModel.moveTurn(group.first(), -1) }
+                Text(
+                    text = if (current) "corrente" else "rendi corrente",
+                    color = if (current) Palette.GoldBright else Palette.TextMuted,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.clickable(onClick = onChipClick).padding(horizontal = 4.dp, vertical = 1.dp),
+                )
+                MoveButton("▶", enabled = canMoveLater) { viewModel.moveTurn(group.first(), +1) }
+            }
+        }
     }
+}
+
+/** Comando minuto per spostare un turno nella coda. */
+@Composable
+private fun MoveButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
+    val tint = if (enabled) Palette.Gold else Palette.TextFaint
+    Text(
+        text = glyph,
+        color = tint,
+        fontWeight = FontWeight.Black,
+        style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier
+            .background(tint.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+            .border(1.dp, tint.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }

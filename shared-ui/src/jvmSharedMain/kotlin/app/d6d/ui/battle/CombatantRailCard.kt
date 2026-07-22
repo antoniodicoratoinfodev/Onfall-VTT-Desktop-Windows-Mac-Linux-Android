@@ -3,7 +3,9 @@ package app.d6d.ui.battle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -15,9 +17,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -52,6 +61,7 @@ fun CombatantRailCard(
     combatantId: String,
     faction: Faction,
     modifier: Modifier = Modifier,
+    dropTarget: TokenPlacementDrag? = null,
 ) {
     val combatant = viewModel.combatant(combatantId) ?: return
     val snapshot = combatant.snapshot()
@@ -125,6 +135,7 @@ fun CombatantRailCard(
                 currentHitPoints = combatant.currentHitPoints(),
                 defeated = defeated,
                 narrow = narrow,
+                dropTarget = dropTarget,
             )
 
             HealthBar(
@@ -186,6 +197,7 @@ private fun CombatantHeader(
     currentHitPoints: Int,
     defeated: Boolean,
     narrow: Boolean,
+    dropTarget: TokenPlacementDrag? = null,
 ) {
     val name = @Composable {
         EditableValue(
@@ -208,15 +220,44 @@ private fun CombatantHeader(
     }
     val stats = @Composable { CombatantStats(viewModel, combatantId, snapshot, narrow) }
 
+    // In modifica il ritratto diventa la maniglia per trascinare il personaggio
+    // sulla mappa: al rilascio il motore lo colloca nella casella scelta (e
+    // rifiuta quelle occupate, evitando i doppioni).
     val portrait = @Composable {
-        CombatantPortrait(
-            name = snapshot.name(),
-            currentHitPoints = currentHitPoints,
-            maxHitPoints = snapshot.maxHitPoints(),
-            faction = faction,
-            active = active,
-            diameter = if (narrow) 34.dp else 42.dp,
-        )
+        var portraitCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+        val dragModifier = if (dropTarget != null && viewModel.editMode) {
+            Modifier
+                .onGloballyPositioned { portraitCoords = it }
+                .pointerInput(combatantId, viewModel.editMode) {
+                    detectDragGestures(
+                        onDragStart = { local ->
+                            portraitCoords?.let {
+                                dropTarget.start(combatantId, faction == Faction.PARTY, it.localToWindow(local))
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            portraitCoords?.let { dropTarget.update(it.localToWindow(change.position)) }
+                        },
+                        onDragEnd = {
+                            dropTarget.drop()?.let { viewModel.reposition(combatantId, it.x, it.y) }
+                        },
+                        onDragCancel = { dropTarget.cancel() },
+                    )
+                }
+        } else {
+            Modifier
+        }
+        Box(dragModifier) {
+            CombatantPortrait(
+                name = snapshot.name(),
+                currentHitPoints = currentHitPoints,
+                maxHitPoints = snapshot.maxHitPoints(),
+                faction = faction,
+                active = active,
+                diameter = if (narrow) 34.dp else 42.dp,
+            )
+        }
     }
 
     if (narrow) {

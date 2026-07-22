@@ -70,6 +70,12 @@ fun EditableValue(
     }
 
     if (editing && editMode) {
+        // Il campo non deve confermarsi e chiudersi alla prima callback di fuoco,
+        // che all'apertura arriva come "non focalizzato" prima che `requestFocus`
+        // faccia effetto: senza questa guardia il campo si richiudeva subito e
+        // sembrava impossibile modificare. Si conferma solo dopo aver davvero
+        // preso il fuoco e poi averlo perso (clic altrove).
+        var acquiredFocus by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
         val commit = {
@@ -94,7 +100,13 @@ fun EditableValue(
                 .border(1.dp, Palette.Gold, RoundedCornerShape(4.dp))
                 .padding(horizontal = 5.dp, vertical = 3.dp)
                 .focusRequester(focusRequester)
-                .onFocusChanged { if (!it.isFocused && editing) commit() }
+                .onFocusChanged { state ->
+                    if (state.isFocused) {
+                        acquiredFocus = true
+                    } else if (acquiredFocus && editing) {
+                        commit()
+                    }
+                }
                 .onPreviewKeyEvent { event ->
                     when {
                         event.type != KeyEventType.KeyDown -> false

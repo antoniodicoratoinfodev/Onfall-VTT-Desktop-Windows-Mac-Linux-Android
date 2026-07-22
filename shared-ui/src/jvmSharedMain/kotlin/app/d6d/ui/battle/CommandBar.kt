@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -39,7 +40,13 @@ import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
 
-/** Pulsante in stile gioco: bordo acceso, riempimento scuro, etichetta marcata. */
+/**
+ * Pulsante in stile gioco: bordo acceso, riempimento scuro, etichetta marcata.
+ *
+ * `dense` ne offre una versione compatta — testo e spazi ridotti, nessuna soglia
+ * di 48 dp — per le barre di controllo fitte come quella della mappa, mantenendo
+ * lo stesso linguaggio visivo dei comandi grandi.
+ */
 @Composable
 fun GameButton(
     label: String,
@@ -49,29 +56,34 @@ fun GameButton(
     enabled: Boolean = true,
     subtitle: String? = null,
     selected: Boolean = false,
+    dense: Boolean = false,
 ) {
     val tint = if (enabled) accent else Palette.TextFaint
+    val shape = RoundedCornerShape(if (dense) 6.dp else 8.dp)
     Column(
         modifier = modifier
-            .minimumInteractiveComponentSize()
+            .then(if (dense) Modifier else Modifier.minimumInteractiveComponentSize())
             .semantics { this.selected = selected }
-            .background(tint.copy(alpha = if (enabled) 0.11f else 0.05f), RoundedCornerShape(8.dp))
-            .border(1.dp, tint.copy(alpha = if (enabled) 0.65f else 0.28f), RoundedCornerShape(8.dp))
+            .background(tint.copy(alpha = if (enabled) 0.11f else 0.05f), shape)
+            .border(1.dp, tint.copy(alpha = if (enabled) 0.65f else 0.28f), shape)
             .clickable(enabled = enabled, role = Role.Button) { onClick() }
-            .padding(horizontal = 13.dp, vertical = 8.dp),
+            .padding(
+                horizontal = if (dense) 8.dp else 13.dp,
+                vertical = if (dense) 4.dp else 8.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         Text(
             text = label,
             color = tint,
             fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium,
+            style = if (dense) MaterialTheme.typography.bodySmall else MaterialTheme.typography.titleMedium,
         )
         if (subtitle != null) {
             Text(
                 text = subtitle,
                 color = Palette.TextMuted,
-                style = MaterialTheme.typography.bodySmall,
+                style = if (dense) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
             )
         }
     }
@@ -106,12 +118,14 @@ fun CommandBar(
     compact: Boolean = false,
 ) {
     var toolsOpen by remember { mutableStateOf(false) }
+    var itemsOpen by remember { mutableStateOf(false) }
     val activeId = viewModel.activeActorId
     val abilities = activeId?.let { viewModel.abilities(it) }.orEmpty()
     val budget = activeId?.let { viewModel.budget(it) }
     val combatActive = viewModel.status == CombatStatus.ACTIVE
 
     BattleToolsDialog(viewModel, open = toolsOpen, onDismiss = { toolsOpen = false })
+    BattleItemsDialog(items = sampleBattleItems, open = itemsOpen, onDismiss = { itemsOpen = false })
 
     Column(
         modifier
@@ -208,19 +222,21 @@ fun CommandBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                Modifier.weight(1f).let {
-                    if (compact) it.horizontalScroll(rememberScrollState()) else it
-                },
+            // FlowRow invece di una riga rigida: con la barra ristretta i comandi
+            // vanno a capo invece di uscire dai bordi.
+            FlowRow(
+                Modifier.weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // Vantaggio e Svantaggio non si sommano: sono tre stati esclusivi.
+                // Il modo attivo resta grigio chiaro, gli altri piu' scuri: la
+                // scelta si legge senza colori accesi.
                 D20Mode.entries.forEach { mode ->
                     val selected = viewModel.rollMode == mode
                     GameButton(
                         label = mode.italianLabel,
-                        accent = if (selected) Palette.Party else Palette.TextMuted,
+                        accent = if (selected) Palette.TextMuted else Palette.TextFaint,
                         selected = selected,
                         enabled = combatActive,
                         onClick = { viewModel.rollMode = mode },
@@ -229,12 +245,18 @@ fun CommandBar(
                 GameButton(
                     label = "Strumenti",
                     subtitle = "Danni, cure e condizioni",
-                    accent = Palette.Party,
+                    accent = Palette.TextMuted,
                     onClick = { toolsOpen = true },
                 )
                 GameButton(
-                    label = "Annulla",
+                    label = "Oggetti",
+                    subtitle = "Pozioni, armi ed equipaggiamento",
                     accent = Palette.TextMuted,
+                    onClick = { itemsOpen = true },
+                )
+                GameButton(
+                    label = "Annulla",
+                    accent = Palette.TextFaint,
                     enabled = viewModel.canUndo,
                     onClick = { viewModel.undo() },
                 )

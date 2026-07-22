@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,16 +26,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.CombatantPortrait
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.Faction
 import app.d6d.ui.components.VerticalResizeHandle
+import kotlin.math.roundToInt
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.SessionMenuButton
@@ -93,47 +101,92 @@ private fun WideBattleBody(
     val density = LocalDensity.current
     var squadWidth by remember { mutableStateOf(230.dp) }
     var enemyWidth by remember { mutableStateOf(310.dp) }
+    // Trascinamento di un personaggio dalle barre laterali fino alla mappa.
+    val dropTarget = remember { TokenPlacementDrag() }
+    var overlayCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    Row(modifier) {
-        Rail(
-            viewModel = viewModel,
-            title = "Squadra",
-            ids = viewModel.partyIds,
-            faction = Faction.PARTY,
-            modifier = Modifier.width(squadWidth),
-        )
-
-        // Trascinando verso destra la squadra si allarga a scapito del palco.
-        VerticalResizeHandle(
-            onDrag = { dragPx ->
-                squadWidth = (squadWidth + with(density) { dragPx.toDp() })
-                    .coerceIn(150.dp, 420.dp)
-            },
-        )
-
-        Column(Modifier.weight(1f)) {
-            BattleStage(viewModel, portraits, Modifier.weight(1f))
-            CommandBar(viewModel, compact = false)
-        }
-
-        // Il bordo sinistro dei nemici: trascinandolo verso sinistra la colonna cresce.
-        VerticalResizeHandle(
-            onDrag = { dragPx ->
-                enemyWidth = (enemyWidth - with(density) { dragPx.toDp() })
-                    .coerceIn(200.dp, 480.dp)
-            },
-        )
-
-        Column(Modifier.width(enemyWidth)) {
+    Box(modifier.onGloballyPositioned { overlayCoords = it }) {
+        Row(Modifier.fillMaxSize()) {
             Rail(
                 viewModel = viewModel,
-                title = "Nemici",
-                ids = viewModel.enemyIds,
-                faction = Faction.ENEMY,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                title = "Squadra",
+                ids = viewModel.partyIds,
+                faction = Faction.PARTY,
+                modifier = Modifier.width(squadWidth),
+                dropTarget = dropTarget,
             )
-            CollapsibleBattleLog(viewModel)
+
+            // Trascinando verso destra la squadra si allarga a scapito del palco.
+            VerticalResizeHandle(
+                onDrag = { dragPx ->
+                    squadWidth = (squadWidth + with(density) { dragPx.toDp() })
+                        .coerceIn(150.dp, 420.dp)
+                },
+            )
+
+            Column(Modifier.weight(1f)) {
+                BattleStage(viewModel, portraits, Modifier.weight(1f), dropTarget = dropTarget)
+                CommandBar(viewModel, compact = false)
+            }
+
+            // Il bordo sinistro dei nemici: trascinandolo verso sinistra la colonna cresce.
+            VerticalResizeHandle(
+                onDrag = { dragPx ->
+                    enemyWidth = (enemyWidth - with(density) { dragPx.toDp() })
+                        .coerceIn(200.dp, 480.dp)
+                },
+            )
+
+            Column(Modifier.width(enemyWidth)) {
+                Rail(
+                    viewModel = viewModel,
+                    title = "Nemici",
+                    ids = viewModel.enemyIds,
+                    faction = Faction.ENEMY,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    dropTarget = dropTarget,
+                )
+                CollapsibleBattleLog(viewModel)
+            }
         }
+
+        TokenDragGhost(viewModel, dropTarget, overlayCoords)
+    }
+}
+
+/** Segnaposto fantasma che segue il puntatore durante il trascinamento dalle barre. */
+@Composable
+private fun TokenDragGhost(
+    viewModel: BattleViewModel,
+    dropTarget: TokenPlacementDrag,
+    overlayCoords: LayoutCoordinates?,
+) {
+    val id = dropTarget.activeId ?: return
+    val combatant = viewModel.combatant(id) ?: return
+    val snapshot = combatant.snapshot()
+    val coords = overlayCoords ?: return
+    val density = LocalDensity.current
+    val diameterPx = with(density) { 46.dp.toPx() }
+
+    Box(
+        Modifier
+            .offset {
+                val local = coords.windowToLocal(dropTarget.windowPosition)
+                IntOffset(
+                    (local.x - diameterPx / 2f).roundToInt(),
+                    (local.y - diameterPx / 2f).roundToInt(),
+                )
+            }
+            .alpha(0.9f),
+    ) {
+        CombatantPortrait(
+            name = snapshot.name(),
+            currentHitPoints = combatant.currentHitPoints(),
+            maxHitPoints = snapshot.maxHitPoints(),
+            faction = if (dropTarget.isParty) Faction.PARTY else Faction.ENEMY,
+            active = false,
+            diameter = 46.dp,
+        )
     }
 }
 
@@ -285,6 +338,7 @@ private fun Rail(
     ids: List<String>,
     faction: Faction,
     modifier: Modifier = Modifier,
+    dropTarget: TokenPlacementDrag? = null,
 ) {
     val standing = ids.count { viewModel.combatant(it)?.defeated() == false }
     Column(
@@ -308,7 +362,12 @@ private fun Rail(
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp)) {
             items(ids) { id ->
-                CombatantRailCard(viewModel = viewModel, combatantId = id, faction = faction)
+                CombatantRailCard(
+                    viewModel = viewModel,
+                    combatantId = id,
+                    faction = faction,
+                    dropTarget = dropTarget,
+                )
             }
         }
     }
@@ -340,7 +399,7 @@ private fun BattleTopBar(
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TurnOrderStrip(viewModel, Modifier.weight(1f))
+                TurnOrderStrip(viewModel, Modifier.weight(1f), editing = viewModel.editMode)
                 EditModeButton(viewModel)
                 SessionMenuButton(sessions)
             }
@@ -352,8 +411,8 @@ private fun BattleTopBar(
         Modifier
             .fillMaxWidth()
             .background(Palette.Surface)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-        horizontalArrangement = Arrangement.spacedBy(11.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BattleTitle(sessions)
@@ -361,7 +420,7 @@ private fun BattleTopBar(
         Column(
             Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -370,11 +429,11 @@ private fun BattleTopBar(
                 Eyebrow("Ordine dei turni")
                 if (viewModel.isSimultaneousTurn) Chip("Turno simultaneo", Palette.GoldBright)
             }
-            TurnOrderStrip(viewModel)
+            TurnOrderStrip(viewModel, editing = viewModel.editMode)
         }
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (viewModel.status == CombatStatus.DRAFT || viewModel.status == CombatStatus.READY) {
@@ -382,11 +441,12 @@ private fun BattleTopBar(
                     label = if (viewModel.simultaneousTies) "Parità insieme" else "Parità separate",
                     accent = if (viewModel.simultaneousTies) Palette.GoldBright else Palette.TextMuted,
                     selected = viewModel.simultaneousTies,
+                    dense = true,
                     onClick = { viewModel.simultaneousTies = !viewModel.simultaneousTies },
                 )
             }
             EditModeButton(viewModel)
-            SessionMenuButton(sessions)
+            SessionMenuButton(sessions, dense = true)
             Chip(text = "Round ${viewModel.round}", color = Palette.Gold)
             Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
         }
@@ -433,9 +493,10 @@ private fun BattleTitle(sessions: SessionManager, modifier: Modifier = Modifier)
 private fun EditModeButton(viewModel: BattleViewModel) {
     GameButton(
         label = if (viewModel.editMode) "Modifica attiva" else "Modifica",
-        subtitle = if (viewModel.editMode) "Trascina i token per riposizionarli liberamente" else null,
+        subtitle = if (viewModel.editMode) "Riordina i turni · trascina i personaggi sulla mappa" else null,
         accent = if (viewModel.editMode) Palette.Heal else Palette.TextMuted,
         selected = viewModel.editMode,
+        dense = true,
         onClick = { viewModel.editMode = !viewModel.editMode },
     )
 }

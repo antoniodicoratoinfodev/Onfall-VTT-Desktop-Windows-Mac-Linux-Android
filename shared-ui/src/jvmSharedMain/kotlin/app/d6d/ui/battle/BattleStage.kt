@@ -49,6 +49,7 @@ fun BattleStage(
     viewModel: BattleViewModel,
     portraits: PortraitRepository,
     modifier: Modifier = Modifier,
+    dropTarget: TokenPlacementDrag? = null,
 ) {
     var cellSize by remember { mutableStateOf(46.dp) }
     var showGrid by remember { mutableStateOf(true) }
@@ -72,6 +73,7 @@ fun BattleStage(
                 cellSize = cellSize,
                 showGrid = showGrid,
                 modifier = Modifier.fillMaxSize(),
+                dropTarget = dropTarget,
             )
 
             viewModel.effectiveTargetId()?.let { targetId ->

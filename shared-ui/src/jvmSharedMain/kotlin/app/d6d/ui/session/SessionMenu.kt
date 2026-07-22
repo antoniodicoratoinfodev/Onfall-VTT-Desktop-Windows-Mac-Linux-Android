@@ -45,11 +45,12 @@ import app.d6d.ui.theme.Palette
 
 /** Pulsante che apre il menù delle sessioni, da mettere nell'intestazione. */
 @Composable
-fun SessionMenuButton(manager: SessionManager, modifier: Modifier = Modifier) {
+fun SessionMenuButton(manager: SessionManager, modifier: Modifier = Modifier, dense: Boolean = false) {
     GameButton(
         label = "Sessione",
         subtitle = if (manager.hasUnsavedChanges) "Da salvare" else null,
         accent = Palette.Gold,
+        dense = dense,
         onClick = {
             manager.refresh()
             manager.menuOpen = true

@@ -67,7 +67,6 @@ fun BattleToolsDialog(
     var durationText by remember { mutableStateOf("0") }
     var damageType by remember { mutableStateOf(DamageType.SLASHING) }
     var conditionType by remember { mutableStateOf(ConditionType.PRONE) }
-    var confirmResolve by remember { mutableStateOf(false) }
 
     val target = targetId?.let(viewModel::combatant)
     val amount = amountText.toIntOrNull()?.coerceAtLeast(0) ?: 0
@@ -106,7 +105,7 @@ fun BattleToolsDialog(
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            "Danni, cure, condizioni e stato dell'incontro.",
+                            "Danni, cure e condizioni del combattente scelto.",
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -272,40 +271,6 @@ fun BattleToolsDialog(
                             enabled = commandsEnabled,
                             onClick = { targetId?.let { viewModel.setExhaustion(it, level) } },
                         )
-                    }
-                }
-
-                Eyebrow("Stato dell'incontro")
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    when (viewModel.status) {
-                        CombatStatus.READY -> GameButton("Avvia", accent = Palette.Heal, onClick = viewModel::start)
-                        CombatStatus.ACTIVE -> GameButton("Metti in pausa", accent = Palette.Bloodied, onClick = viewModel::pause)
-                        CombatStatus.PAUSED -> GameButton("Riprendi", accent = Palette.Heal, onClick = viewModel::resume)
-                        else -> Unit
-                    }
-                    if (viewModel.status == CombatStatus.ACTIVE || viewModel.status == CombatStatus.PAUSED) {
-                        if (confirmResolve) {
-                            Text(
-                                "Concludere l'incontro?",
-                                color = Palette.Bloodied,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.align(Alignment.CenterVertically),
-                            )
-                            GameButton(
-                                "Sì, concludi",
-                                accent = Palette.Critical,
-                                onClick = {
-                                    viewModel.resolve()
-                                    confirmResolve = false
-                                },
-                            )
-                            GameButton("Annulla", accent = Palette.TextMuted, onClick = { confirmResolve = false })
-                        } else {
-                            GameButton("Concludi incontro", accent = Palette.Critical, onClick = { confirmResolve = true })
-                        }
                     }
                 }
             }
