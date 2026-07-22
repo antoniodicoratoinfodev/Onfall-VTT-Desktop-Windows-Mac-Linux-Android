@@ -125,7 +125,15 @@ private fun WideBattleBody(
             )
 
             Column(Modifier.weight(1f)) {
-                BattleStage(viewModel, portraits, Modifier.weight(1f), dropTarget = dropTarget)
+                // Le targhe flottanti non vivono nel palco ma nell'overlay a tutta
+                // area (sotto), cosi' si possono trascinare anche sopra le barre.
+                BattleStage(
+                    viewModel,
+                    portraits,
+                    Modifier.weight(1f),
+                    dropTarget = dropTarget,
+                    floatingPlates = false,
+                )
                 CommandBar(viewModel, compact = false)
             }
 
@@ -149,6 +157,10 @@ private fun WideBattleBody(
                 CollapsibleBattleLog(viewModel)
             }
         }
+
+        // Targhe flottanti: ospitate qui coprono l'intera area di battaglia, quindi
+        // si spostano liberamente sopra barre, palco e registro.
+        FloatingCombatantPlates(viewModel)
 
         TokenDragGhost(viewModel, dropTarget, overlayCoords)
     }

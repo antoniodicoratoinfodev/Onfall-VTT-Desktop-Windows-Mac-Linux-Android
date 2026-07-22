@@ -2,13 +2,16 @@ package app.d6d.ui.battle
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,15 +21,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import app.d6d.sheet.feetWithMetres
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.ConditionChip
@@ -50,6 +61,10 @@ fun BattleStage(
     portraits: PortraitRepository,
     modifier: Modifier = Modifier,
     dropTarget: TokenPlacementDrag? = null,
+    // Sul desktop le targhe flottanti sono ospitate a tutta schermata dal chiamante,
+    // cosi' si possono spostare anche sopra le barre laterali; qui restano nel palco
+    // solo nella shell compatta, dove il palco occupa da solo la superficie.
+    floatingPlates: Boolean = true,
 ) {
     var cellSize by remember { mutableStateOf(46.dp) }
     var showGrid by remember { mutableStateOf(true) }
@@ -77,28 +92,105 @@ fun BattleStage(
                 onCellSizeChange = { cellSize = it },
             )
 
-            viewModel.effectiveTargetId()?.let { targetId ->
-                StagePlate(
-                    viewModel = viewModel,
-                    combatantId = targetId,
-                    role = "Bersaglio selezionato",
-                    modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
-                )
-            }
-
-            viewModel.activeCombatantId?.let { activeId ->
-                StagePlate(
-                    viewModel = viewModel,
-                    combatantId = activeId,
-                    role = if (viewModel.isSimultaneousTurn) "Turno condiviso" else "Turno attivo",
-                    modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
-                )
+            if (floatingPlates) {
+                FloatingCombatantPlates(viewModel)
             }
 
             if (viewModel.mapConfigured) {
                 MapLegend(viewModel, Modifier.align(Alignment.BottomEnd).padding(10.dp))
             }
         }
+    }
+}
+
+/**
+ * Le due targhe — turno attivo e bersaglio selezionato — come pannelli flottanti.
+ *
+ * Non sono finestre del sistema: sono riquadri dell'app, quindi niente cornice
+ * dell'OS. Si afferrano in qualunque punto e si trascinano dove serve, restando
+ * dentro il contenitore che le ospita. La posizione e' ricordata qui, sopra i
+ * `let`, cosi' resta la stessa anche quando cambia il combattente attivo o il
+ * bersaglio: la targa non torna nell'angolo a ogni turno.
+ */
+@Composable
+internal fun BoxScope.FloatingCombatantPlates(viewModel: BattleViewModel) {
+    var targetOffset by remember { mutableStateOf<IntOffset?>(null) }
+    var activeOffset by remember { mutableStateOf<IntOffset?>(null) }
+
+    viewModel.effectiveTargetId()?.let { targetId ->
+        FloatingPanel(Alignment.TopEnd, targetOffset, { targetOffset = it }) {
+            StagePlate(viewModel, targetId, "Bersaglio selezionato")
+        }
+    }
+
+    viewModel.activeCombatantId?.let { activeId ->
+        FloatingPanel(Alignment.BottomStart, activeOffset, { activeOffset = it }) {
+            StagePlate(
+                viewModel,
+                activeId,
+                if (viewModel.isSimultaneousTurn) "Turno condiviso" else "Turno attivo",
+            )
+        }
+    }
+}
+
+/**
+ * Rende trascinabile il contenuto dentro il Box che lo ospita.
+ *
+ * Finche' non viene spostato parte dall'angolo indicato da `initialAlignment`,
+ * con un piccolo margine; poi segue il trascinamento e non esce mai dai bordi,
+ * cosi' non puo' sparire fuori schermo.
+ */
+@Composable
+internal fun FloatingPanel(
+    initialAlignment: Alignment,
+    offset: IntOffset?,
+    onOffsetChange: (IntOffset) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val layoutDirection = LocalLayoutDirection.current
+    val inset = with(LocalDensity.current) { 10.dp.roundToPx() }
+    var panelSize by remember { mutableStateOf(IntSize.Zero) }
+    var parentSize by remember { mutableStateOf(IntSize.Zero) }
+
+    // Posizione di partenza: l'angolo richiesto, rientrato del margine.
+    fun start(): IntOffset {
+        if (parentSize == IntSize.Zero) return IntOffset.Zero
+        val space = IntSize(
+            (parentSize.width - inset * 2).coerceAtLeast(0),
+            (parentSize.height - inset * 2).coerceAtLeast(0),
+        )
+        val aligned = initialAlignment.align(panelSize, space, layoutDirection)
+        return IntOffset(aligned.x + inset, aligned.y + inset)
+    }
+
+    // Il gestore del trascinamento non va riavviato a ogni spostamento, ma deve
+    // leggere sempre l'offset piu' recente: `rememberUpdatedState` lo tiene fresco.
+    val currentOffset by rememberUpdatedState(offset)
+
+    Box(
+        Modifier
+            .onGloballyPositioned {
+                panelSize = it.size
+                parentSize = it.parentLayoutCoordinates?.size ?: parentSize
+            }
+            .offset { offset ?: start() }
+            .pointerInput(Unit) {
+                detectDragGestures { change, amount ->
+                    change.consume()
+                    val base = currentOffset ?: start()
+                    val maxX = (parentSize.width - panelSize.width).coerceAtLeast(0)
+                    val maxY = (parentSize.height - panelSize.height).coerceAtLeast(0)
+                    onOffsetChange(
+                        IntOffset(
+                            (base.x + amount.x.roundToInt()).coerceIn(0, maxX),
+                            (base.y + amount.y.roundToInt()).coerceIn(0, maxY),
+                        ),
+                    )
+                }
+            },
+    ) {
+        content()
     }
 }
 
