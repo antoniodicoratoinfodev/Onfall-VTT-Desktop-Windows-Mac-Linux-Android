@@ -13,9 +13,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,13 +26,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +45,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -61,6 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.d6d.domain.space.TokenPlacement
@@ -74,6 +75,7 @@ import app.d6d.ui.images.rememberPortrait
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.healthColor
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
@@ -112,49 +114,126 @@ fun BattleMapView(
         dropTarget.rows = grid.rows()
     }
 
-    // La rotellina ingrandisce e riduce la mappa. I valori correnti passano da
-    // `rememberUpdatedState` cosi' il gestore non va riavviato a ogni zoom.
+    // Rotellina = zoom, trascinamento = spostamento. I valori correnti passano da
+    // `rememberUpdatedState` cosi' i gestori non vanno riavviati a ogni frame.
     val currentCellSize by rememberUpdatedState(cellSize)
     val onZoom by rememberUpdatedState(onCellSizeChange)
+
+    // La mappa non scorre piu' con le barre: vive dentro un riquadro e si sposta
+    // trascinandola. `viewport` e' la dimensione visibile, `pan` la traslazione
+    // corrente in pixel. Lo zoom resta ancorato al punto sotto il puntatore.
+    var viewport by remember { mutableStateOf(IntSize.Zero) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
+    val cellPx = with(density) { cellSize.toPx() }
+
+    // Tiene la mappa dentro il riquadro: le mappe piu' piccole del riquadro restano
+    // centrate, quelle piu' grandi scorrono senza mai staccarsi del tutto dai bordi.
+    fun clampPan(raw: Offset, cell: Float): Offset {
+        val contentWidth = cell * grid.columns()
+        val contentHeight = cell * grid.rows()
+        val viewWidth = viewport.width.toFloat()
+        val viewHeight = viewport.height.toFloat()
+        val x = if (contentWidth <= viewWidth) (viewWidth - contentWidth) / 2f
+        else raw.x.coerceIn(viewWidth - contentWidth, 0f)
+        val y = if (contentHeight <= viewHeight) (viewHeight - contentHeight) / 2f
+        else raw.y.coerceIn(viewHeight - contentHeight, 0f)
+        return Offset(x, y)
+    }
+
+    // Un ingrandimento fatto coi pulsanti o un cambio di dimensioni del riquadro
+    // possono lasciare la mappa fuori posto: la traslazione va ricontrollata.
+    LaunchedEffect(cellPx, viewport) { pan = clampPan(pan, cellPx) }
 
     Box(
         modifier
             .fillMaxSize()
             .background(Palette.Abyss)
-            // Intercetta lo scorrimento nella fase iniziale e lo consuma: cosi'
-            // zooma invece di far scorrere la mappa. Il trascinamento resta libero.
+            .onGloballyPositioned { viewport = it.size }
+            // Lo scorrimento viene intercettato nella fase iniziale e consumato: la
+            // casella sotto il puntatore resta ferma mentre la scala cambia, cosi' si
+            // ingrandisce il punto che si sta guardando e non l'angolo della mappa.
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
-                        if (event.type == PointerEventType.Scroll) {
-                            val dy = event.changes.fold(0f) { acc, change -> acc + change.scrollDelta.y }
-                            if (dy != 0f) {
-                                val factor = if (dy < 0f) 1.12f else 1f / 1.12f
-                                val next = (currentCellSize * factor).coerceIn(MIN_CELL, MAX_CELL)
-                                if (next != currentCellSize) onZoom(next)
-                                event.changes.forEach { it.consume() }
-                            }
+                        if (event.type != PointerEventType.Scroll) continue
+                        val dy = event.changes.fold(0f) { acc, change -> acc + change.scrollDelta.y }
+                        if (dy == 0f) continue
+                        val anchor = event.changes.firstOrNull()?.position
+                            ?: Offset(viewport.width / 2f, viewport.height / 2f)
+                        // Un colpo di rotellina cambia la scala del dieci percento; una
+                        // spinta piu' decisa (trackpad) zooma di piu', ma entro un limite
+                        // cosi' un gesto ampio non fa saltare la mappa da un estremo all'altro.
+                        val steps = (-dy).coerceIn(-4f, 4f)
+                        val next = (currentCellSize * 1.10f.pow(steps)).coerceIn(MIN_CELL, MAX_CELL)
+                        if (next != currentCellSize) {
+                            val factor = next.value / currentCellSize.value
+                            val nextPx = with(density) { next.toPx() }
+                            pan = clampPan(
+                                Offset(
+                                    anchor.x * (1f - factor) + pan.x * factor,
+                                    anchor.y * (1f - factor) + pan.y * factor,
+                                ),
+                                nextPx,
+                            )
+                            onZoom(next)
                         }
+                        event.changes.forEach { it.consume() }
                     }
                 }
             }
-            .horizontalScroll(rememberScrollState())
-            .verticalScroll(rememberScrollState()),
+            // Trascinando su una zona libera si sposta la mappa; un tocco secco senza
+            // trascinamento resta un comando sulla casella. I segnaposti gestiscono da
+            // soli la pressione e hanno la precedenza, quindi il trascinamento di un
+            // segnaposto non viene mai scambiato per uno spostamento della mappa.
+            .pointerInput(grid, viewModel.activeCombatantIds) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = true)
+                    val start = down.position
+                    var lastPos = start
+                    var dragging = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.isConsumed) break
+                        if (!change.pressed) {
+                            // Rilascio senza trascinamento: e' un comando sulla casella.
+                            // Il punto va riportato in coordinate della griglia togliendo
+                            // la traslazione, perche' la mappa puo' essere spostata.
+                            if (!dragging) {
+                                val cell = with(density) { cellSize.toPx() }
+                                onCellTapped(
+                                    viewModel,
+                                    ((start.x - pan.x) / cell).toInt(),
+                                    ((start.y - pan.y) / cell).toInt(),
+                                )
+                                change.consume()
+                            }
+                            break
+                        }
+                        val delta = change.position - lastPos
+                        lastPos = change.position
+                        if (!dragging && (change.position - start).getDistance() > viewConfiguration.touchSlop) {
+                            dragging = true
+                        }
+                        if (dragging) {
+                            pan = clampPan(pan + delta, with(density) { cellSize.toPx() })
+                            change.consume()
+                        }
+                    }
+                }
+            },
     ) {
         Box(
             Modifier
                 .width(cellSize * grid.columns())
                 .height(cellSize * grid.rows())
-                .onGloballyPositioned { dropTarget?.gridCoordinates = it }
-                .pointerInput(grid, cellSize, viewModel.activeCombatantIds) {
-                    detectTapGestures { offset ->
-                        val cellPx = with(density) { cellSize.toPx() }
-                        val column = (offset.x / cellPx).toInt()
-                        val row = (offset.y / cellPx).toInt()
-                        onCellTapped(viewModel, column, row)
-                    }
-                },
+                .graphicsLayer {
+                    val clamped = clampPan(pan, cellPx)
+                    translationX = clamped.x
+                    translationY = clamped.y
+                }
+                .onGloballyPositioned { dropTarget?.gridCoordinates = it },
         ) {
             // Lo sfondo si adatta alla griglia: e' la griglia a definire la scala,
             // non l'immagine, altrimenti le distanze non corrisponderebbero.
