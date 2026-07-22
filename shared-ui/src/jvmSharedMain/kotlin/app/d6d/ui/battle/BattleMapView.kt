@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -124,25 +125,43 @@ fun BattleMapView(
     // corrente in pixel. Lo zoom resta ancorato al punto sotto il puntatore.
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     var pan by remember { mutableStateOf(Offset.Zero) }
+    var centered by remember { mutableStateOf(false) }
     val cellPx = with(density) { cellSize.toPx() }
 
-    // Tiene la mappa dentro il riquadro: le mappe piu' piccole del riquadro restano
-    // centrate, quelle piu' grandi scorrono senza mai staccarsi del tutto dai bordi.
+    // Limiti dello spostamento. Il trascinamento non viene mai bloccato: una mappa
+    // piu' grande del riquadro scorre fino a mostrarne i bordi; una piu' piccola si
+    // sposta comunque dentro il riquadro. In nessun caso puo' uscirne del tutto.
+    // `slack` e' lo spazio di manovra su un asse: se positivo (mappa piu' piccola)
+    // la si muove fra 0 e slack, se negativo (mappa piu' grande) fra slack e 0.
     fun clampPan(raw: Offset, cell: Float): Offset {
-        val contentWidth = cell * grid.columns()
-        val contentHeight = cell * grid.rows()
-        val viewWidth = viewport.width.toFloat()
-        val viewHeight = viewport.height.toFloat()
-        val x = if (contentWidth <= viewWidth) (viewWidth - contentWidth) / 2f
-        else raw.x.coerceIn(viewWidth - contentWidth, 0f)
-        val y = if (contentHeight <= viewHeight) (viewHeight - contentHeight) / 2f
-        else raw.y.coerceIn(viewHeight - contentHeight, 0f)
-        return Offset(x, y)
+        val gridNow = viewModel.battleMap.grid()
+        val slackX = viewport.width - cell * gridNow.columns()
+        val slackY = viewport.height - cell * gridNow.rows()
+        return Offset(
+            raw.x.coerceIn(minOf(0f, slackX), maxOf(0f, slackX)),
+            raw.y.coerceIn(minOf(0f, slackY), maxOf(0f, slackY)),
+        )
     }
 
-    // Un ingrandimento fatto coi pulsanti o un cambio di dimensioni del riquadro
-    // possono lasciare la mappa fuori posto: la traslazione va ricontrollata.
-    LaunchedEffect(cellPx, viewport) { pan = clampPan(pan, cellPx) }
+    // La mappa parte centrata; poi ogni zoom o ridimensionamento del riquadro
+    // ricontrolla la traslazione perche' resti nei limiti, senza ricentrarla,
+    // cosi' non annulla lo spostamento scelto dall'utente.
+    LaunchedEffect(viewport, cellPx) {
+        if (viewport == IntSize.Zero) return@LaunchedEffect
+        pan = if (!centered) {
+            centered = true
+            val gridNow = viewModel.battleMap.grid()
+            clampPan(
+                Offset(
+                    (viewport.width - cellPx * gridNow.columns()) / 2f,
+                    (viewport.height - cellPx * gridNow.rows()) / 2f,
+                ),
+                cellPx,
+            )
+        } else {
+            clampPan(pan, cellPx)
+        }
+    }
 
     Box(
         modifier
@@ -182,42 +201,43 @@ fun BattleMapView(
                     }
                 }
             }
-            // Trascinando su una zona libera si sposta la mappa; un tocco secco senza
-            // trascinamento resta un comando sulla casella. I segnaposti gestiscono da
-            // soli la pressione e hanno la precedenza, quindi il trascinamento di un
-            // segnaposto non viene mai scambiato per uno spostamento della mappa.
-            .pointerInput(grid, viewModel.activeCombatantIds) {
+            // Premi e trascina su una zona libera per spostare la mappa, come afferrare
+            // un foglio e farlo scorrere sotto il riquadro; un tocco secco senza
+            // trascinamento resta un comando sulla casella. Il gestore e' legato a
+            // `Unit`, quindi NON si riavvia quando `pan` cambia: senza questo, ogni
+            // spostamento ricomponeva e interrompeva il trascinamento a meta'. I
+            // segnaposti consumano da soli la pressione e hanno la precedenza, percio'
+            // trascinarli non viene mai scambiato per uno spostamento della mappa.
+            .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = true)
-                    val start = down.position
-                    var lastPos = start
-                    var dragging = false
+                    var panning = false
+                    var travelled = Offset.Zero
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (change.isConsumed) break
                         if (!change.pressed) {
-                            // Rilascio senza trascinamento: e' un comando sulla casella.
-                            // Il punto va riportato in coordinate della griglia togliendo
-                            // la traslazione, perche' la mappa puo' essere spostata.
-                            if (!dragging) {
-                                val cell = with(density) { cellSize.toPx() }
+                            // Rilascio senza trascinamento: comando sulla casella. Il
+                            // punto torna in coordinate della griglia togliendo la
+                            // traslazione, perche' la mappa puo' essere stata spostata.
+                            if (!panning) {
+                                val cell = with(density) { currentCellSize.toPx() }
                                 onCellTapped(
                                     viewModel,
-                                    ((start.x - pan.x) / cell).toInt(),
-                                    ((start.y - pan.y) / cell).toInt(),
+                                    ((down.position.x - pan.x) / cell).toInt(),
+                                    ((down.position.y - pan.y) / cell).toInt(),
                                 )
-                                change.consume()
                             }
+                            change.consume()
                             break
                         }
-                        val delta = change.position - lastPos
-                        lastPos = change.position
-                        if (!dragging && (change.position - start).getDistance() > viewConfiguration.touchSlop) {
-                            dragging = true
+                        val movement = change.positionChange()
+                        if (!panning) {
+                            travelled += movement
+                            if (travelled.getDistance() > viewConfiguration.touchSlop) panning = true
                         }
-                        if (dragging) {
-                            pan = clampPan(pan + delta, with(density) { cellSize.toPx() })
+                        if (panning) {
+                            pan = clampPan(pan + movement, with(density) { currentCellSize.toPx() })
                             change.consume()
                         }
                     }
