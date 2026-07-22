@@ -45,6 +45,7 @@ import app.d6d.ui.components.Faction
 import app.d6d.ui.components.VerticalResizeHandle
 import kotlin.math.roundToInt
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.SessionMenuButton
 import app.d6d.ui.session.SessionMenuDialog
@@ -100,8 +101,7 @@ private fun WideBattleBody(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    var squadWidth by remember { mutableStateOf(230.dp) }
-    var enemyWidth by remember { mutableStateOf(310.dp) }
+    val layout = LocalUiLayout.current
     // Trascinamento di un personaggio dalle barre laterali fino alla mappa.
     val dropTarget = remember { TokenPlacementDrag() }
     var overlayCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -113,14 +113,14 @@ private fun WideBattleBody(
                 title = "Squadra",
                 ids = viewModel.partyIds,
                 faction = Faction.PARTY,
-                modifier = Modifier.width(squadWidth),
+                modifier = Modifier.width(layout.squadWidth),
                 dropTarget = dropTarget,
             )
 
             // Trascinando verso destra la squadra si allarga a scapito del palco.
             VerticalResizeHandle(
                 onDrag = { dragPx ->
-                    squadWidth = (squadWidth + with(density) { dragPx.toDp() })
+                    layout.squadWidth = (layout.squadWidth + with(density) { dragPx.toDp() })
                         .coerceIn(150.dp, 420.dp)
                 },
             )

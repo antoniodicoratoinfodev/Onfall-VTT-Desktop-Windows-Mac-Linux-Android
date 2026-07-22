@@ -18,11 +18,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,6 +49,9 @@ import app.d6d.ui.roster.RosterViewModel
 import app.d6d.sheet.ImageStore
 import app.d6d.ui.images.FilePicker
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.layout.LayoutStore
+import app.d6d.ui.layout.LocalUiLayout
+import app.d6d.ui.layout.UiLayoutState
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.UnsavedSessionDialog
@@ -55,6 +60,7 @@ import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.AppTheme
 import java.nio.file.Path
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 enum class Destination(val label: String, val glyph: String) {
     BATTAGLIA("Battaglia", "◆"),
@@ -115,6 +121,23 @@ fun AppRoot(
             }
         }
 
+        // Disposizione dei pannelli: larghezze, collassi, zoom e posizione delle
+        // targhe. Si carica all'avvio dallo stesso file trasportabile e vi torna a
+        // ogni modifica, cosi' l'interfaccia riapre com'era stata lasciata.
+        val layout = remember {
+            val store = LayoutStore(dataDirectory.resolve("layout.json"))
+            UiLayoutState(store.load(), store)
+        }
+        // `snapshotFlow` osserva i valori senza ricomporre la radice a ogni frame
+        // di trascinamento; `collectLatest` annulla l'attesa precedente, quindi si
+        // scrive su disco solo quando i pannelli si fermano.
+        LaunchedEffect(layout) {
+            snapshotFlow { layout.snapshot() }.collectLatest {
+                delay(600)
+                layout.persist()
+            }
+        }
+
         // Dopo il primo salvataggio con nome, ogni comando viene riversato nello
         // stesso file con un breve debounce. Un incontro nuovo resta invece una
         // bozza esplicita: nessun nome o file viene inventato silenziosamente.
@@ -165,52 +188,52 @@ fun AppRoot(
             }
         }
 
-        if (compact) {
-            Column(modifier.fillMaxSize().background(Palette.Night)) {
-                Box(Modifier.weight(1f)) { content(Modifier.fillMaxSize()) }
-                BottomNav(destination) { destination = it }
-            }
-        } else {
-            val density = LocalDensity.current
-            // Parte gia' aperta ma al minimo; il bordo si trascina per allargarla.
-            var railWidth by remember { mutableStateOf(RAIL_MIN) }
-            var railOpen by remember { mutableStateOf(true) }
-            Row(modifier.fillMaxSize().background(Palette.Night)) {
-                if (railOpen) {
-                    NavRail(
-                        current = destination,
-                        width = railWidth,
-                        onSelect = { destination = it },
-                        onCollapse = { railOpen = false },
-                    )
-                    VerticalResizeHandle(
-                        onDrag = { dragPx ->
-                            railWidth = (railWidth + with(density) { dragPx.toDp() })
-                                .coerceIn(RAIL_MIN, RAIL_MAX)
-                        },
-                    )
-                } else {
-                    // Chiusa: resta una striscia sottile col solo tasto per riaprirla,
-                    // cosi' non copre i contenuti e resta sempre raggiungibile.
-                    CollapsedRail(onExpand = { railOpen = true })
+        CompositionLocalProvider(LocalUiLayout provides layout) {
+            if (compact) {
+                Column(modifier.fillMaxSize().background(Palette.Night)) {
+                    Box(Modifier.weight(1f)) { content(Modifier.fillMaxSize()) }
+                    BottomNav(destination) { destination = it }
                 }
-                content(Modifier.weight(1f))
+            } else {
+                val density = LocalDensity.current
+                // Parte gia' aperta ma al minimo; il bordo si trascina per allargarla.
+                Row(modifier.fillMaxSize().background(Palette.Night)) {
+                    if (layout.railOpen) {
+                        NavRail(
+                            current = destination,
+                            width = layout.railWidth,
+                            onSelect = { destination = it },
+                            onCollapse = { layout.railOpen = false },
+                        )
+                        VerticalResizeHandle(
+                            onDrag = { dragPx ->
+                                layout.railWidth = (layout.railWidth + with(density) { dragPx.toDp() })
+                                    .coerceIn(RAIL_MIN, RAIL_MAX)
+                            },
+                        )
+                    } else {
+                        // Chiusa: resta una striscia sottile col solo tasto per riaprirla,
+                        // cosi' non copre i contenuti e resta sempre raggiungibile.
+                        CollapsedRail(onExpand = { layout.railOpen = true })
+                    }
+                    content(Modifier.weight(1f))
+                }
             }
-        }
 
-        UnsavedSessionDialog(
-            open = pendingEncounter != null,
-            onDismiss = { pendingEncounter = null },
-            onSaveFirst = {
-                pendingEncounter = null
-                destination = Destination.BATTAGLIA
-                sessions.menuOpen = true
-            },
-            onDiscard = {
-                pendingEncounter?.let { (session, name, mode) -> adoptEncounter(session, name, mode) }
-                pendingEncounter = null
-            },
-        )
+            UnsavedSessionDialog(
+                open = pendingEncounter != null,
+                onDismiss = { pendingEncounter = null },
+                onSaveFirst = {
+                    pendingEncounter = null
+                    destination = Destination.BATTAGLIA
+                    sessions.menuOpen = true
+                },
+                onDiscard = {
+                    pendingEncounter?.let { (session, name, mode) -> adoptEncounter(session, name, mode) }
+                    pendingEncounter = null
+                },
+            )
+        }
     }
 }
 
