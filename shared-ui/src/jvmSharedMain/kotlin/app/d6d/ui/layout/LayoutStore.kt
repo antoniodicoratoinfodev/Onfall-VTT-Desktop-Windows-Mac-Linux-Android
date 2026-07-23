@@ -48,6 +48,10 @@ data class UiLayout(
     val mapShowGrid: Boolean = true,
     val targetPlate: PlateFraction? = null,
     val activePlate: PlateFraction? = null,
+    // Scala delle due targhe flottanti: la maniglia d'angolo le ingrandisce o
+    // rimpicciolisce, e con loro tutto il contenuto (nome, barra, chip, cornice).
+    val targetPlateScale: Float = 1f,
+    val activePlateScale: Float = 1f,
 ) {
     /**
      * Riporta ogni valore entro limiti ragionevoli.
@@ -66,6 +70,8 @@ data class UiLayout(
         mapCellSizeDp = mapCellSizeDp.clampOr(14f, 140f, 46f),
         targetPlate = targetPlate?.sanitized(),
         activePlate = activePlate?.sanitized(),
+        targetPlateScale = targetPlateScale.clampOr(0.6f, 2f, 1f),
+        activePlateScale = activePlateScale.clampOr(0.6f, 2f, 1f),
     )
 
     private fun Float.clampOr(min: Float, max: Float, fallback: Float): Float =

@@ -30,12 +30,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -482,10 +484,16 @@ private fun BattleTopBar(
         return
     }
 
+    // In modifica ogni riquadro turno guadagna i comandi ◀ ▶ e "rendi corrente":
+    // la fascia cresce quel tanto che basta a ospitarli, senza rimpicciolire i
+    // turni. La scala dei riquadri resta quella scelta dall'altezza a riposo.
+    val turnScale = (layout.topBarHeight / TOP_BAR_BASE).coerceIn(0.6f, 3.5f)
+    val barHeight = if (viewModel.editMode) layout.topBarHeight + 28.dp * turnScale else layout.topBarHeight
+
     Row(
         Modifier
             .fillMaxWidth()
-            .then(if (layout.turnsCollapsed) Modifier else Modifier.height(layout.topBarHeight))
+            .then(if (layout.turnsCollapsed) Modifier else Modifier.height(barHeight))
             .background(Palette.Surface)
             .padding(horizontal = 12.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(9.dp),
@@ -493,10 +501,12 @@ private fun BattleTopBar(
     ) {
         BattleTitle(sessions)
 
-        // Contratto: la striscia sparisce e resta solo lo spazio elastico. Da
-        // espansa la colonna riempie l'altezza scelta e il contenuto viene scalato
-        // di conseguenza: piu' la fascia e' alta, piu' grandi sono i riquadri turno.
+        // La fascia si apre e si chiude cliccando l'etichetta "Ordine dei turni"
+        // (non c'e' piu' un tasto separato). Da collassata resta solo l'etichetta,
+        // per riaprirla, poi lo spazio elastico; da espansa la colonna riempie
+        // l'altezza scelta e i riquadri vi si scalano di conseguenza.
         if (layout.turnsCollapsed) {
+            TurnsLabel(collapsed = true) { layout.turnsCollapsed = false }
             Spacer(Modifier.weight(1f))
         } else {
             Column(
@@ -504,7 +514,7 @@ private fun BattleTopBar(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                ScaledDensity((layout.topBarHeight / TOP_BAR_BASE).coerceIn(0.6f, 3.5f)) {
+                ScaledDensity(turnScale) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -513,7 +523,7 @@ private fun BattleTopBar(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Eyebrow("Ordine dei turni")
+                            TurnsLabel(collapsed = false) { layout.turnsCollapsed = true }
                             if (viewModel.isSimultaneousTurn) Chip("Turno simultaneo", Palette.GoldBright)
                         }
                         TurnOrderStrip(viewModel, editing = viewModel.editMode)
@@ -521,13 +531,6 @@ private fun BattleTopBar(
                 }
             }
         }
-
-        CollapseToggle(
-            collapsed = layout.turnsCollapsed,
-            expandedLabel = "Turni ▾",
-            collapsedLabel = "Turni ▸",
-            onToggle = { layout.turnsCollapsed = !layout.turnsCollapsed },
-        )
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -547,6 +550,34 @@ private fun BattleTopBar(
             Chip(text = "Round ${viewModel.round}", color = Palette.Gold)
             Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
         }
+    }
+}
+
+/**
+ * Etichetta "Ordine dei turni", ora cliccabile: apre o chiude la fascia dei turni
+ * al posto del vecchio tasto "Turni". Il chevron indica lo stato, e resta
+ * raggiungibile anche a fascia chiusa per poterla riaprire.
+ */
+@Composable
+private fun TurnsLabel(collapsed: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(5.dp))
+            .clickable(
+                role = Role.Button,
+                onClickLabel = if (collapsed) "Mostra l'ordine dei turni" else "Nascondi l'ordine dei turni",
+                onClick = onToggle,
+            )
+            .padding(horizontal = 5.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Eyebrow("Ordine dei turni")
+        Text(
+            text = if (collapsed) "▸" else "▾",
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
 }
 
@@ -589,8 +620,10 @@ private fun BattleTitle(sessions: SessionManager, modifier: Modifier = Modifier)
 @Composable
 private fun EditModeButton(viewModel: BattleViewModel) {
     GameButton(
+        // Nessun sottotitolo: quel testo lungo allargava il pulsante e comprimeva
+        // la fascia turni. In modifica i comandi di riordino (◀ ▶ e "rendi
+        // corrente") compaiono direttamente sui riquadri, dove servono.
         label = if (viewModel.editMode) "Modifica attiva" else "Modifica",
-        subtitle = if (viewModel.editMode) "Riordina i turni · trascina i personaggi sulla mappa" else null,
         accent = if (viewModel.editMode) Palette.Heal else Palette.TextMuted,
         selected = viewModel.editMode,
         dense = true,

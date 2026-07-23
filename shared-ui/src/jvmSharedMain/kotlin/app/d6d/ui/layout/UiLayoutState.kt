@@ -37,6 +37,8 @@ class UiLayoutState(
     var mapShowGrid by mutableStateOf(initial.mapShowGrid)
     var targetPlate by mutableStateOf(initial.targetPlate?.toOffset())
     var activePlate by mutableStateOf(initial.activePlate?.toOffset())
+    var targetPlateScale by mutableStateOf(initial.targetPlateScale)
+    var activePlateScale by mutableStateOf(initial.activePlateScale)
 
     private var lastSaved = initial.sanitized()
 
@@ -56,6 +58,8 @@ class UiLayoutState(
         mapShowGrid = mapShowGrid,
         targetPlate = targetPlate?.toFraction(),
         activePlate = activePlate?.toFraction(),
+        targetPlateScale = targetPlateScale,
+        activePlateScale = activePlateScale,
     ).sanitized()
 
     /** Scrive su disco solo se qualcosa e' davvero cambiato dall'ultimo salvataggio. */
