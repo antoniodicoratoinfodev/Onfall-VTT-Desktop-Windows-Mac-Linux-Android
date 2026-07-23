@@ -97,7 +97,7 @@ fun AppRoot(
     filePicker: FilePicker = FilePicker { null },
 ) {
     AppTheme {
-        var destination by remember { mutableStateOf(Destination.INCONTRO) }
+        var destination by remember { mutableStateOf(Destination.BATTAGLIA) }
 
         // Il roster unifica schede e compendio: le schede sono la fonte, il catalogo
         // da combattimento ne discende.

@@ -85,7 +85,7 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
     drawRect(
         Brush.radialGradient(
             colorStops = arrayOf(
-                0f to Palette.Surface.copy(alpha = 0.28f),
+                0f to Palette.Surface.copy(alpha = 0.34f),
                 0.55f to Color.Transparent,
             ),
             center = Offset(w * 0.5f, h * 0.30f),
@@ -97,14 +97,14 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
     val random = Random(90_210)
 
     // Chiazze di pietra: cerchi morbidi, in maggioranza scuri, con rare venature di
-    // bronzo che fanno da minerale. Tenute a bassissima opacita', danno rilievo
-    // senza diventare rumore.
-    repeat(130) {
+    // bronzo che fanno da minerale. Tenute a bassa opacita', danno rilievo e
+    // nuvolosita' di roccia senza diventare rumore.
+    repeat(150) {
         val c = Offset(random.nextFloat() * w, random.nextFloat() * h)
-        val radius = (0.05f + 0.11f * random.nextFloat()) * minDim
-        val dark = random.nextFloat() > 0.30f
+        val radius = (0.05f + 0.12f * random.nextFloat()) * minDim
+        val dark = random.nextFloat() > 0.28f
         val color = if (dark) Color.Black else Palette.Bronze
-        val alpha = if (dark) 0.055f else 0.020f
+        val alpha = if (dark) 0.075f else 0.026f
         drawCircle(
             brush = Brush.radialGradient(
                 listOf(color.copy(alpha = alpha), Color.Transparent),
@@ -116,9 +116,10 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
         )
     }
 
-    // Graffi e crepe: linee sottili e spezzate che scendono, quasi invisibili. Una
-    // passata scura per l'incisione, una di bronzo appena accennata di fianco.
-    repeat(6) {
+    // Graffi e crepe: linee sottili e spezzate che scendono, come incisioni nella
+    // pietra. Una passata scura per l'incisione, una di bronzo appena accennata di
+    // fianco che simula il bordo scheggiato in luce.
+    repeat(9) {
         val path = Path()
         var x = random.nextFloat() * w
         var y = random.nextFloat() * h * 0.3f
@@ -129,8 +130,8 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
             y += (h / segments) * (0.5f + 0.7f * random.nextFloat())
             path.lineTo(x, y)
         }
-        drawPath(path, Color.Black.copy(alpha = 0.10f), style = Stroke(width = 1f, cap = StrokeCap.Round))
-        drawPath(path, Palette.Bronze.copy(alpha = 0.03f), style = Stroke(width = 2f, cap = StrokeCap.Round))
+        drawPath(path, Color.Black.copy(alpha = 0.14f), style = Stroke(width = 1f, cap = StrokeCap.Round))
+        drawPath(path, Palette.Bronze.copy(alpha = 0.05f), style = Stroke(width = 2f, cap = StrokeCap.Round))
     }
 
     // Vignettatura forte: i bordi cadono in ombra profonda, la luce resta al centro.
