@@ -35,11 +35,13 @@ import org.jetbrains.compose.resources.Font
 object Palette {
     // Fondali: dal nero fondo della sala alle superfici in rilievo. Tutti con la
     // stessa sottotinta bruna, cosi' l'insieme scalda senza mai diventare marrone.
-    val Abyss = Color(0xFF0B0908)
-    val Night = Color(0xFF14110D)
-    val Surface = Color(0xFF1C1813)
-    val SurfaceHigh = Color(0xFF282218)
-    val Line = Color(0xFF3B3325)
+    // Tarati piu' vicino al nero: la scena resta cupa e gli accenti caldi risaltano
+    // di piu', ma i gradini fra un livello e l'altro restano leggibili.
+    val Abyss = Color(0xFF080605)
+    val Night = Color(0xFF0F0C09)
+    val Surface = Color(0xFF17130D)
+    val SurfaceHigh = Color(0xFF221C13)
+    val Line = Color(0xFF342D20)
 
     // Bronzo per gli ornamenti: piu' luminoso della linea ma piu' spento
     // dell'oro, e' il metallo "a riposo" delle cornici e dei fregi.

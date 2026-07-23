@@ -12,52 +12,70 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PointMode
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.random.Random
+import androidx.compose.ui.graphics.Canvas as bitmapCanvas
 
 /**
  * Fondale atmosferico dell'applicazione: "dark fantasy cupo".
  *
  * Nessuna immagine importata — vale lo stesso vincolo di licenza dei ritratti e
  * degli ornamenti — quindi anche lo sfondo e' interamente disegnato da codice.
- * L'estetica e' cupa e tesa: pietra scura appena venata, ombre profonde ai bordi
- * e pochissime braci che salgono lente, come i tizzoni di un fuoco quasi spento.
+ * La scena e' una cripta quasi buia con un focolare: il fondo tende al nero, ma
+ * dove batte la luce la pietra emerge a rilievo, incisa di crepe; poche braci
+ * salgono lente e vive.
  *
  * E' pensato per stare dietro i menu e i pannelli, che vi si dissolvono sopra: la
  * mappa tattica dipinge invece il proprio fondo opaco e resta pulita.
  *
- * Il disegno e' diviso in due strati per non sprecare lavoro: la pietra e la
- * vignettatura non cambiano mai e vengono ridisegnate solo al ridimensionamento;
- * le braci hanno un Canvas separato, l'unico ridisegnato a ogni fotogramma.
+ * ## Perche' non c'e' foschia in movimento
+ * Sul nero i gradienti radiali a bassa opacita' si quantizzano in anelli visibili
+ * (banding): fermi si dominano col dithering, ma se il gradiente si muove gli
+ * anelli scorrono e sfarfallano. Percio' le uniche cose animate sono le braci, che
+ * sono punti netti e non creano banding; ogni sfumatura resta ferma e dithered.
+ *
+ * ## Dithering
+ * I gradienti scuri (bagliore, vignettatura) sono coperti da un rumore fine a
+ * copertura piena e ampiezza bassissima: spezza gli anelli restando invisibile.
+ * E' distinto dalla grana pellicolare piu' marcata usata sulla mappa.
  */
 @Composable
 fun AtmosphericBackground(
     modifier: Modifier = Modifier,
     embers: Boolean = true,
-    vignette: Float = 0.62f,
+    vignette: Float = 0.52f,
 ) {
-    // Strato fermo: legge solo la dimensione, quindi non si ridisegna coi fotogrammi.
+    // Strato fermo: base, focolare, pietra, crepe, vignettatura e dithering. Legge
+    // solo la dimensione, quindi si ridisegna soltanto al ridimensionamento.
     Canvas(modifier.fillMaxSize()) {
         drawStoneField(vignette)
     }
 
     if (embers) {
         val transition = rememberInfiniteTransition(label = "backdrop")
-        // Un unico tempo 0..1 in ciclo continuo. Ogni brace percorre un numero
-        // intero di altezze per ciclo, cosi' il salto di riavvio e' invisibile:
-        // a fine giro ognuna e' esattamente dove era partita.
+        // Un tempo 0..1 in ciclo continuo. Ogni brace percorre un numero intero di
+        // altezze per ciclo, cosi' il salto di riavvio e' invisibile.
         val time by transition.animateFloat(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 23_000, easing = LinearEasing),
+                animation = tween(durationMillis = 21_000, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart,
             ),
             label = "emberDrift",
@@ -68,46 +86,64 @@ fun AtmosphericBackground(
     }
 }
 
+/** Centro del focolare, in frazioni della superficie: la luce nasce da qui. */
+private const val GLOW_X = 0.5f
+private const val GLOW_Y = 0.36f
+
 /**
- * Superficie di pietra scura: base, chiazze morbide, qualche graffio, vignettatura
- * forte e grana anti-banding. Tutto a semi disegnato una volta sola per dimensione.
+ * La cripta illuminata dal focolare: base scura, alone caldo, pietra a rilievo,
+ * crepe incise, vignettatura forte e dithering. Disegnata una volta per dimensione.
  */
 private fun DrawScope.drawStoneField(vignetteStrength: Float) {
     val w = size.width
     val h = size.height
     val minDim = size.minDimension
     val maxDim = size.maxDimension
+    val glow = Offset(w * GLOW_X, h * GLOW_Y)
 
     // Base: notte in alto, abisso verso il basso e i bordi.
     drawRect(Brush.verticalGradient(listOf(Palette.Night, Palette.Abyss)))
-    // Un tepore lontano, quasi spento, verso l'alto: rompe il nero piatto senza
-    // schiarire davvero la scena.
+
+    // Alone del focolare: caldo e presente, ma a basso contrasto e con caduta lunga
+    // fino al bordo. Meno contrasto = meno gradini di quantizzazione da nascondere,
+    // cosi' il dithering forte sotto riesce a renderlo del tutto liscio.
     drawRect(
         Brush.radialGradient(
             colorStops = arrayOf(
-                0f to Palette.Surface.copy(alpha = 0.34f),
-                0.55f to Color.Transparent,
+                0f to Palette.Bronze.copy(alpha = 0.30f),
+                0.20f to Palette.Bronze.copy(alpha = 0.17f),
+                0.42f to Palette.Bronze.copy(alpha = 0.08f),
+                0.65f to Palette.Bronze.copy(alpha = 0.03f),
+                1f to Color.Transparent,
             ),
-            center = Offset(w * 0.5f, h * 0.30f),
-            radius = maxDim * 0.75f,
+            center = glow,
+            radius = maxDim * 1.0f,
+        ),
+    )
+    // Nucleo appena piu' dorato, anch'esso tenue e a caduta morbida.
+    drawRect(
+        Brush.radialGradient(
+            colorStops = arrayOf(
+                0f to Palette.GoldDim.copy(alpha = 0.10f),
+                0.4f to Palette.GoldDim.copy(alpha = 0.03f),
+                0.75f to Color.Transparent,
+            ),
+            center = glow,
+            radius = maxDim * 0.44f,
         ),
     )
 
     // Seme fisso: la pietra e' sempre la stessa, non danza fra un disegno e l'altro.
     val random = Random(90_210)
 
-    // Chiazze di pietra: cerchi morbidi, in maggioranza scuri, con rare venature di
-    // bronzo che fanno da minerale. Tenute a bassa opacita', danno rilievo e
-    // nuvolosita' di roccia senza diventare rumore.
-    repeat(150) {
+    // Chiazze di pietra: solo scure, tenui e uniformi, per la nuvolosita' della
+    // roccia. Niente facce "illuminate": sporcavano il bagliore con altri gradini.
+    repeat(160) {
         val c = Offset(random.nextFloat() * w, random.nextFloat() * h)
-        val radius = (0.05f + 0.12f * random.nextFloat()) * minDim
-        val dark = random.nextFloat() > 0.28f
-        val color = if (dark) Color.Black else Palette.Bronze
-        val alpha = if (dark) 0.075f else 0.026f
+        val radius = (0.05f + 0.13f * random.nextFloat()) * minDim
         drawCircle(
             brush = Brush.radialGradient(
-                listOf(color.copy(alpha = alpha), Color.Transparent),
+                listOf(Color.Black.copy(alpha = 0.07f), Color.Transparent),
                 center = c,
                 radius = radius,
             ),
@@ -116,38 +152,74 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
         )
     }
 
-    // Graffi e crepe: linee sottili e spezzate che scendono, come incisioni nella
-    // pietra. Una passata scura per l'incisione, una di bronzo appena accennata di
-    // fianco che simula il bordo scheggiato in luce.
-    repeat(9) {
+    // Crepe incise nella pietra: numerose e leggibili. Prima un bordo caldo in luce,
+    // poi l'incisione scura sopra, cosi' la fenditura sembra scavata.
+    repeat(13) {
         val path = Path()
         var x = random.nextFloat() * w
-        var y = random.nextFloat() * h * 0.3f
+        var y = random.nextFloat() * h * 0.25f
         path.moveTo(x, y)
-        val segments = 7 + random.nextInt(6)
+        val segments = 8 + random.nextInt(7)
         repeat(segments) {
-            x += (random.nextFloat() - 0.5f) * w * 0.05f
-            y += (h / segments) * (0.5f + 0.7f * random.nextFloat())
+            x += (random.nextFloat() - 0.5f) * w * 0.06f
+            y += (h / segments) * (0.5f + 0.8f * random.nextFloat())
             path.lineTo(x, y)
         }
-        drawPath(path, Color.Black.copy(alpha = 0.14f), style = Stroke(width = 1f, cap = StrokeCap.Round))
-        drawPath(path, Palette.Bronze.copy(alpha = 0.05f), style = Stroke(width = 2f, cap = StrokeCap.Round))
+        drawPath(path, Palette.Bronze.copy(alpha = 0.08f), style = Stroke(width = 2.6f, cap = StrokeCap.Round))
+        drawPath(path, Color.Black.copy(alpha = 0.24f), style = Stroke(width = 1.2f, cap = StrokeCap.Round))
     }
 
-    // Vignettatura forte: i bordi cadono in ombra profonda, la luce resta al centro.
+    // Vignettatura forte, ma a molti passaggi cosi' scende senza scalini.
     drawRect(
         Brush.radialGradient(
             colorStops = arrayOf(
-                0.42f to Color.Transparent,
-                0.78f to Color.Black.copy(alpha = vignetteStrength * 0.5f),
+                0.30f to Color.Transparent,
+                0.55f to Color.Black.copy(alpha = vignetteStrength * 0.18f),
+                0.75f to Color.Black.copy(alpha = vignetteStrength * 0.42f),
+                0.90f to Color.Black.copy(alpha = vignetteStrength * 0.64f),
                 1f to Color.Black.copy(alpha = vignetteStrength),
             ),
             center = center,
-            radius = maxDim * 0.78f,
+            radius = maxDim * 0.86f,
         ),
     )
-    // Grana condivisa: dithering che spezza gli anelli di quantizzazione sui neri.
-    drawRect(grainBrush)
+    // Dithering fine sopra ogni sfumatura scura: rompe gli anelli di banding
+    // restando quasi invisibile. Distinto dalla grana piu' marcata della mappa.
+    drawRect(backdropDither)
+}
+
+/**
+ * Rumore di dithering dedicato al fondale: copertura piena (ogni pixel ha un micro
+ * scarto in piu' o in meno) ma ampiezza bassissima. Rende lisce le sfumature scure
+ * senza leggersi come grana. Generato una sola volta e ripetuto come trama.
+ */
+private const val DITHER_SIDE = 140
+
+private fun ditherBitmap(): ImageBitmap {
+    val bitmap = ImageBitmap(DITHER_SIDE, DITHER_SIDE)
+    val random = Random(13_09)
+    val bright = ArrayList<Offset>(DITHER_SIDE * DITHER_SIDE / 2)
+    val dark = ArrayList<Offset>(DITHER_SIDE * DITHER_SIDE / 2)
+    for (y in 0 until DITHER_SIDE) {
+        for (x in 0 until DITHER_SIDE) {
+            val point = Offset(x + 0.5f, y + 0.5f)
+            if (random.nextBoolean()) bright += point else dark += point
+        }
+    }
+    CanvasDrawScope().draw(
+        Density(1f),
+        LayoutDirection.Ltr,
+        bitmapCanvas(bitmap),
+        Size(DITHER_SIDE.toFloat(), DITHER_SIDE.toFloat()),
+    ) {
+        drawPoints(bright, PointMode.Points, Color.White, strokeWidth = 1f, alpha = 0.020f)
+        drawPoints(dark, PointMode.Points, Color.Black, strokeWidth = 1f, alpha = 0.028f)
+    }
+    return bitmap
+}
+
+private val backdropDither: ShaderBrush by lazy {
+    ShaderBrush(ImageShader(ditherBitmap(), TileMode.Repeated, TileMode.Repeated))
 }
 
 /**
@@ -164,18 +236,18 @@ private class Ember(
     val drift: Float,
 )
 
-// Poche braci, come chiesto: rare scintille di un fuoco morente. Seme fisso.
+// Poche braci ma vive: scintille sparse di un fuoco che cova. Seme fisso.
 private val embers: List<Ember> by lazy {
     val random = Random(4_242)
-    List(9) {
+    List(15) {
         Ember(
             x = random.nextFloat(),
             startY = random.nextFloat(),
-            rise = if (random.nextFloat() > 0.7f) 2 else 1,
-            radius = 1.1f + random.nextFloat() * 1.5f,
+            rise = if (random.nextFloat() > 0.65f) 2 else 1,
+            radius = 1.2f + random.nextFloat() * 1.9f,
             phase = random.nextFloat(),
             flicker = 2 + random.nextInt(3),
-            drift = (random.nextFloat() - 0.5f) * 0.05f,
+            drift = (random.nextFloat() - 0.5f) * 0.06f,
         )
     }
 }
@@ -195,19 +267,19 @@ private fun DrawScope.drawEmbers(time: Float) {
         // percio' il momento del riavvolgimento (y ~ 0 o 1) e' gia' trasparente.
         val fade = sin(PI * y).toFloat()
         if (fade <= 0.01f) return@forEach
-        val flicker = 0.55f + 0.45f * sin(2.0 * PI * (time * ember.flicker + ember.phase)).toFloat()
-        val alpha = 0.30f * fade * flicker
+        val flicker = 0.5f + 0.5f * sin(2.0 * PI * (time * ember.flicker + ember.phase)).toFloat()
+        val alpha = 0.5f * fade * flicker
         val center = Offset(x * w, y * h)
-        val glow = ember.radius * density * 3.2f
+        val glow = ember.radius * density * 4f
         drawCircle(
             brush = Brush.radialGradient(
-                listOf(Palette.GoldBright.copy(alpha = alpha * 0.8f), Color.Transparent),
+                listOf(Palette.GoldBright.copy(alpha = alpha * 0.85f), Color.Transparent),
                 center = center,
                 radius = glow,
             ),
             radius = glow,
             center = center,
         )
-        drawCircle(Palette.Gold.copy(alpha = alpha), radius = ember.radius * density * 0.7f, center = center)
+        drawCircle(Palette.GoldBright.copy(alpha = alpha), radius = ember.radius * density * 0.8f, center = center)
     }
 }
