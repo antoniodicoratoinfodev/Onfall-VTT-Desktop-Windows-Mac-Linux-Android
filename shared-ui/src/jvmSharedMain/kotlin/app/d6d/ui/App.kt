@@ -61,6 +61,7 @@ import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.UnsavedSessionDialog
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.AppTheme
+import app.d6d.ui.theme.AtmosphericBackground
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
 import java.nio.file.Path
@@ -96,7 +97,7 @@ fun AppRoot(
     filePicker: FilePicker = FilePicker { null },
 ) {
     AppTheme {
-        var destination by remember { mutableStateOf(Destination.BATTAGLIA) }
+        var destination by remember { mutableStateOf(Destination.INCONTRO) }
 
         // Il roster unifica schede e compendio: le schede sono la fonte, il catalogo
         // da combattimento ne discende.
@@ -203,51 +204,58 @@ fun AppRoot(
         }
 
         CompositionLocalProvider(LocalUiLayout provides layout) {
-            if (compact) {
-                Column(modifier.fillMaxSize().background(Palette.Night)) {
-                    Box(Modifier.weight(1f)) { content(Modifier.fillMaxSize()) }
-                    GoldenRule()
-                    BottomNav(destination) { destination = it }
-                }
-            } else {
-                val density = LocalDensity.current
-                // Parte gia' aperta ma al minimo; il bordo si trascina per allargarla.
-                Row(modifier.fillMaxSize().background(Palette.Night)) {
-                    if (layout.railOpen) {
-                        NavRail(
-                            current = destination,
-                            width = layout.railWidth,
-                            onSelect = { destination = it },
-                            onCollapse = { layout.railOpen = false },
-                        )
-                        VerticalResizeHandle(
-                            onDrag = { dragPx ->
-                                layout.railWidth = (layout.railWidth + with(density) { dragPx.toDp() })
-                                    .coerceIn(RAIL_MIN, RAIL_MAX)
-                            },
-                        )
-                    } else {
-                        // Chiusa: resta una striscia sottile col solo tasto per riaprirla,
-                        // cosi' non copre i contenuti e resta sempre raggiungibile.
-                        CollapsedRail(onExpand = { layout.railOpen = true })
-                    }
-                    content(Modifier.weight(1f))
-                }
-            }
+            Box(modifier.fillMaxSize()) {
+                // Fondale atmosferico condiviso: resta fermo mentre le schermate si
+                // dissolvono sopra. La battaglia dipinge il proprio fondo opaco,
+                // quindi la mappa tattica non lo vede e resta pulita e leggibile.
+                AtmosphericBackground(Modifier.fillMaxSize())
 
-            UnsavedSessionDialog(
-                open = pendingEncounter != null,
-                onDismiss = { pendingEncounter = null },
-                onSaveFirst = {
-                    pendingEncounter = null
-                    destination = Destination.BATTAGLIA
-                    sessions.menuOpen = true
-                },
-                onDiscard = {
-                    pendingEncounter?.let { (session, name, mode) -> adoptEncounter(session, name, mode) }
-                    pendingEncounter = null
-                },
-            )
+                if (compact) {
+                    Column(Modifier.fillMaxSize()) {
+                        Box(Modifier.weight(1f)) { content(Modifier.fillMaxSize()) }
+                        GoldenRule()
+                        BottomNav(destination) { destination = it }
+                    }
+                } else {
+                    val density = LocalDensity.current
+                    // Parte gia' aperta ma al minimo; il bordo si trascina per allargarla.
+                    Row(Modifier.fillMaxSize()) {
+                        if (layout.railOpen) {
+                            NavRail(
+                                current = destination,
+                                width = layout.railWidth,
+                                onSelect = { destination = it },
+                                onCollapse = { layout.railOpen = false },
+                            )
+                            VerticalResizeHandle(
+                                onDrag = { dragPx ->
+                                    layout.railWidth = (layout.railWidth + with(density) { dragPx.toDp() })
+                                        .coerceIn(RAIL_MIN, RAIL_MAX)
+                                },
+                            )
+                        } else {
+                            // Chiusa: resta una striscia sottile col solo tasto per riaprirla,
+                            // cosi' non copre i contenuti e resta sempre raggiungibile.
+                            CollapsedRail(onExpand = { layout.railOpen = true })
+                        }
+                        content(Modifier.weight(1f))
+                    }
+                }
+
+                UnsavedSessionDialog(
+                    open = pendingEncounter != null,
+                    onDismiss = { pendingEncounter = null },
+                    onSaveFirst = {
+                        pendingEncounter = null
+                        destination = Destination.BATTAGLIA
+                        sessions.menuOpen = true
+                    },
+                    onDiscard = {
+                        pendingEncounter?.let { (session, name, mode) -> adoptEncounter(session, name, mode) }
+                        pendingEncounter = null
+                    },
+                )
+            }
         }
     }
 }

@@ -115,7 +115,9 @@ fun RosterScreen(
         }
     }
 
-    Column(modifier.fillMaxSize().background(Palette.Night)) {
+    // Fondo trasparente: lascia trasparire il fondale atmosferico condiviso di
+    // AppRoot. Intestazione, elenco ed editor hanno superfici proprie e restano leggibili.
+    Column(modifier.fillMaxSize()) {
         if (compact && compactPane == CompactRosterPane.DETAIL) {
             CompactEditorHeader(viewModel) { compactPane = CompactRosterPane.LIST }
             GoldenRule()

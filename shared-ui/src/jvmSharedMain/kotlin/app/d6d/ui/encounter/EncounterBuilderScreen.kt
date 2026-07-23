@@ -48,7 +48,9 @@ fun EncounterBuilderScreen(
     onOpenCompendium: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(Palette.Night)) {
+    // Fondo trasparente: lascia trasparire il fondale atmosferico condiviso di
+    // AppRoot. Intestazione e pannelli hanno superfici proprie e restano leggibili.
+    Column(modifier.fillMaxSize()) {
         EncounterHeader(viewModel.step, compact)
         GoldenRule()
 

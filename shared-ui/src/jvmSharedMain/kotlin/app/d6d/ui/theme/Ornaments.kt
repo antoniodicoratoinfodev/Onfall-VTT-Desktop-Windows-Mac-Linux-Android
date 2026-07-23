@@ -190,7 +190,7 @@ private fun grainBitmap(): ImageBitmap {
 }
 
 /** Pennello della grana, condiviso e pigro: la trama si ripete su ogni superficie. */
-private val grainBrush: ShaderBrush by lazy {
+internal val grainBrush: ShaderBrush by lazy {
     ShaderBrush(ImageShader(grainBitmap(), TileMode.Repeated, TileMode.Repeated))
 }
 
