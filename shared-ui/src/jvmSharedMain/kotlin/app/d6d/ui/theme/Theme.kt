@@ -19,39 +19,45 @@ import androidx.compose.ui.unit.sp
  * Nessun colore, logo o elemento grafico proviene dai manuali commerciali: il
  * paragrafo 17 del documento vieta di includere grafica protetta, quindi tutta
  * l'identita' visiva e' disegnata qui.
+ *
+ * Estetica: neri neutri da tavolo virtuale, avorio come accento principale
+ * (stati selezionati e azioni primarie), argento per gli alleati e salmone per
+ * gli avversari. Le tinte forti restano solo dove portano informazione.
  */
 object Palette {
-    val Abyss = Color(0xFF070A12)
-    val Night = Color(0xFF0C1120)
-    val Surface = Color(0xFF141C2E)
-    val SurfaceHigh = Color(0xFF1D2740)
-    val Line = Color(0xFF2B3A57)
+    val Abyss = Color(0xFF0A0A0C)
+    val Night = Color(0xFF131315)
+    val Surface = Color(0xFF1B1B1E)
+    val SurfaceHigh = Color(0xFF252529)
+    val Line = Color(0xFF2F2F34)
 
-    val Gold = Color(0xFFE3B862)
-    val GoldBright = Color(0xFFF7DC9A)
-    val GoldDim = Color(0xFF7E6531)
+    // "Gold" resta il nome storico dell'accento primario: oggi e' un avorio
+    // quasi bianco, usato per selezioni, turni attivi e azioni principali.
+    val Gold = Color(0xFFF0EDE6)
+    val GoldBright = Color(0xFFFFFFFF)
+    val GoldDim = Color(0xFF8E8B84)
 
-    val Text = Color(0xFFE9EDF2)
-    val TextMuted = Color(0xFF8A9BB4)
+    val Text = Color(0xFFF1F1F0)
+    val TextMuted = Color(0xFFA2A2A8)
     // Usato per informazioni secondarie, non soltanto per controlli disabilitati:
     // resta discreto ma mantiene un contrasto leggibile sulle superfici scure.
-    val TextFaint = Color(0xFF7889A4)
+    val TextFaint = Color(0xFF75757B)
 
-    /** Fazione alleata. */
-    val Party = Color(0xFF5B9BF3)
+    /** Fazione alleata: argento freddo, leggibile ma distinto dall'avorio. */
+    val Party = Color(0xFFD9DFE7)
 
-    /** Fazione avversaria. */
-    val Enemy = Color(0xFFE0555C)
+    /** Fazione avversaria: salmone acceso, l'unico colore caldo dominante. */
+    val Enemy = Color(0xFFE06E66)
 
-    val Healthy = Color(0xFF4ADE80)
-    val Bloodied = Color(0xFFFBBF24)
-    val Critical = Color(0xFFEF4444)
+    val Healthy = Color(0xFFECEAE3)
+    val Bloodied = Color(0xFFD8A55F)
+    val Critical = Color(0xFFE2564E)
 
     /** Punti ferita temporanei: assorbono per primi, quindi hanno colore proprio. */
-    val Temporary = Color(0xFF67E8F9)
+    val Temporary = Color(0xFFA3D5DC)
 
-    val Crit = Color(0xFFFFD166)
-    val Heal = Color(0xFF6EE7A8)
+    val Crit = Color(0xFFF2D68C)
+    val Heal = Color(0xFF8FD6A8)
 }
 
 /** Colore della barra dei PF in base alla soglia. `Bloodied` e' meta' dei PF massimi. */
@@ -80,22 +86,38 @@ private val DarkScheme = darkColorScheme(
     outline = Palette.Line,
 )
 
+// Titoli e intestazioni in graziato (serif), corpo e comandi in lineare: e' il
+// contrasto tipografico da manuale di gioco che definisce l'estetica.
 private val AppTypography = Typography(
     displaySmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Black,
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Bold,
         fontSize = 30.sp,
         letterSpacing = 0.5.sp,
     ),
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
+    headlineSmall = TextStyle(
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Bold,
-        fontSize = 19.sp,
+        fontSize = 22.sp,
+        letterSpacing = 0.3.sp,
+    ),
+    titleLarge = TextStyle(
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 20.sp,
+        letterSpacing = 0.3.sp,
     ),
     titleMedium = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Bold,
-        fontSize = 15.sp,
+        fontSize = 16.sp,
+        letterSpacing = 0.2.sp,
+    ),
+    titleSmall = TextStyle(
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        letterSpacing = 0.2.sp,
     ),
     bodyMedium = TextStyle(
         fontFamily = FontFamily.Default,
@@ -107,17 +129,17 @@ private val AppTypography = Typography(
         color = Palette.TextMuted,
     ),
     labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.ExtraBold,
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Bold,
         fontSize = 10.5.sp,
-        letterSpacing = 1.0.sp,
+        letterSpacing = 1.6.sp,
     ),
 )
 
 private val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(7.dp),
-    medium = RoundedCornerShape(11.dp),
+    extraSmall = RoundedCornerShape(5.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
     large = RoundedCornerShape(16.dp),
 )
 
