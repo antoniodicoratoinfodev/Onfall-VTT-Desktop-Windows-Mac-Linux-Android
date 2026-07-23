@@ -12,6 +12,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.d6d.ui.generated.resources.Res
+import app.d6d.ui.generated.resources.alegreya_bold
+import app.d6d.ui.generated.resources.alegreya_medium
+import app.d6d.ui.generated.resources.cinzel_bold
+import app.d6d.ui.generated.resources.cinzel_extrabold
+import org.jetbrains.compose.resources.Font
 
 /**
  * Palette originale dell'applicazione.
@@ -20,44 +26,55 @@ import androidx.compose.ui.unit.sp
  * paragrafo 17 del documento vieta di includere grafica protetta, quindi tutta
  * l'identita' visiva e' disegnata qui.
  *
- * Estetica: neri neutri da tavolo virtuale, avorio come accento principale
- * (stati selezionati e azioni primarie), argento per gli alleati e salmone per
- * gli avversari. Le tinte forti restano solo dove portano informazione.
+ * Estetica: dark fantasy da tavolo virtuale. I fondali sono neri caldi, come una
+ * sala illuminata a candela; l'accento primario e' un oro antico (selezioni,
+ * turni attivi, azioni principali); il testo e' avorio da pergamena. Le fazioni
+ * restano leggibili a colpo d'occhio: acciaio freddo per gli alleati, rosso
+ * brace per gli avversari. Le tinte forti portano informazione, non decorazione.
  */
 object Palette {
-    val Abyss = Color(0xFF0A0A0C)
-    val Night = Color(0xFF131315)
-    val Surface = Color(0xFF1B1B1E)
-    val SurfaceHigh = Color(0xFF252529)
-    val Line = Color(0xFF2F2F34)
+    // Fondali: dal nero fondo della sala alle superfici in rilievo. Tutti con la
+    // stessa sottotinta bruna, cosi' l'insieme scalda senza mai diventare marrone.
+    val Abyss = Color(0xFF0B0908)
+    val Night = Color(0xFF14110D)
+    val Surface = Color(0xFF1C1813)
+    val SurfaceHigh = Color(0xFF282218)
+    val Line = Color(0xFF3B3325)
 
-    // "Gold" resta il nome storico dell'accento primario: oggi e' un avorio
-    // quasi bianco, usato per selezioni, turni attivi e azioni principali.
-    val Gold = Color(0xFFF0EDE6)
-    val GoldBright = Color(0xFFFFFFFF)
-    val GoldDim = Color(0xFF8E8B84)
+    // Bronzo per gli ornamenti: piu' luminoso della linea ma piu' spento
+    // dell'oro, e' il metallo "a riposo" delle cornici e dei fregi.
+    val Bronze = Color(0xFF5C4E33)
 
-    val Text = Color(0xFFF1F1F0)
-    val TextMuted = Color(0xFFA2A2A8)
+    // L'accento primario e' oro antico vero e proprio: stati selezionati, turno
+    // attivo e azioni principali. `GoldBright` e' il bagliore per i risalti.
+    val Gold = Color(0xFFC9A45C)
+    val GoldBright = Color(0xFFEDD595)
+    val GoldDim = Color(0xFF8C7648)
+
+    // Testo color pergamena: caldo ma quasi neutro, resta riposante da leggere.
+    val Text = Color(0xFFEAE3D2)
+    val TextMuted = Color(0xFFA89E89)
     // Usato per informazioni secondarie, non soltanto per controlli disabilitati:
     // resta discreto ma mantiene un contrasto leggibile sulle superfici scure.
-    val TextFaint = Color(0xFF75757B)
+    val TextFaint = Color(0xFF6F6756)
 
-    /** Fazione alleata: argento freddo, leggibile ma distinto dall'avorio. */
-    val Party = Color(0xFFD9DFE7)
+    /** Fazione alleata: acciaio freddo, distinto dall'oro e dal rosso nemico. */
+    val Party = Color(0xFFA9C0D6)
 
-    /** Fazione avversaria: salmone acceso, l'unico colore caldo dominante. */
-    val Enemy = Color(0xFFE06E66)
+    /** Fazione avversaria: rosso brace, l'unico colore caldo acceso. */
+    val Enemy = Color(0xFFD25C4D)
 
-    val Healthy = Color(0xFFECEAE3)
-    val Bloodied = Color(0xFFD8A55F)
-    val Critical = Color(0xFFE2564E)
+    // Soglie dei punti ferita: pergamena finche' si sta bene, ambra da
+    // insanguinato, rosso sangue in condizioni critiche.
+    val Healthy = Color(0xFFDDD3B8)
+    val Bloodied = Color(0xFFCF8D45)
+    val Critical = Color(0xFFC23B2E)
 
     /** Punti ferita temporanei: assorbono per primi, quindi hanno colore proprio. */
-    val Temporary = Color(0xFFA3D5DC)
+    val Temporary = Color(0xFF8FB9C6)
 
-    val Crit = Color(0xFFF2D68C)
-    val Heal = Color(0xFF8FD6A8)
+    val Crit = Color(0xFFF0CE74)
+    val Heal = Color(0xFF86BA7C)
 }
 
 /** Colore della barra dei PF in base alla soglia. `Bloodied` e' meta' dei PF massimi. */
@@ -88,35 +105,40 @@ private val DarkScheme = darkColorScheme(
 
 // Titoli e intestazioni in graziato (serif), corpo e comandi in lineare: e' il
 // contrasto tipografico da manuale di gioco che definisce l'estetica.
-private val AppTypography = Typography(
+//
+// Le famiglie sono incorporate come risorse (vedi NOTICE-FONTS.md), cosi' il
+// carattere e' identico su desktop e Android: Cinzel — capitali da iscrizione,
+// le minuscole diventano maiuscoletto — per le etichette e il display; Alegreya
+// per i titoli correnti e i nomi. Il corpo resta nel lineare di sistema.
+private fun appTypography(display: FontFamily, title: FontFamily) = Typography(
     displaySmall = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = display,
         fontWeight = FontWeight.Bold,
-        fontSize = 30.sp,
-        letterSpacing = 0.5.sp,
+        fontSize = 28.sp,
+        letterSpacing = 1.sp,
     ),
     headlineSmall = TextStyle(
-        fontFamily = FontFamily.Serif,
-        fontWeight = FontWeight.Bold,
-        fontSize = 22.sp,
-        letterSpacing = 0.3.sp,
-    ),
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = display,
         fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
+        letterSpacing = 0.8.sp,
+    ),
+    titleLarge = TextStyle(
+        fontFamily = title,
+        fontWeight = FontWeight.Bold,
+        fontSize = 21.sp,
         letterSpacing = 0.3.sp,
     ),
     titleMedium = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = title,
         fontWeight = FontWeight.Bold,
-        fontSize = 16.sp,
+        fontSize = 16.5.sp,
         letterSpacing = 0.2.sp,
     ),
     titleSmall = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = title,
         fontWeight = FontWeight.Bold,
-        fontSize = 14.sp,
+        fontSize = 14.5.sp,
         letterSpacing = 0.2.sp,
     ),
     bodyMedium = TextStyle(
@@ -128,26 +150,44 @@ private val AppTypography = Typography(
         fontSize = 12.5.sp,
         color = Palette.TextMuted,
     ),
-    labelSmall = TextStyle(
-        fontFamily = FontFamily.Serif,
+    labelMedium = TextStyle(
+        fontFamily = display,
         fontWeight = FontWeight.Bold,
-        fontSize = 10.5.sp,
-        letterSpacing = 1.6.sp,
+        fontSize = 11.sp,
+        letterSpacing = 1.4.sp,
+    ),
+    labelSmall = TextStyle(
+        fontFamily = display,
+        fontWeight = FontWeight.Bold,
+        fontSize = 10.sp,
+        letterSpacing = 2.2.sp,
     ),
 )
 
+// Spigoli piu' netti dei predefiniti Material: il pannello deve sembrare
+// intagliato, non gonfiato. Gli arrotondamenti restano piccoli e costanti.
 private val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(5.dp),
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(12.dp),
-    large = RoundedCornerShape(16.dp),
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(10.dp),
+    large = RoundedCornerShape(14.dp),
 )
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
+    // `Font` di Compose Resources tiene una cache interna: costruire le famiglie
+    // qui non ricarica i file a ogni ricomposizione.
+    val display = FontFamily(
+        Font(Res.font.cinzel_bold, weight = FontWeight.Bold),
+        Font(Res.font.cinzel_extrabold, weight = FontWeight.Black),
+    )
+    val title = FontFamily(
+        Font(Res.font.alegreya_medium, weight = FontWeight.Medium),
+        Font(Res.font.alegreya_bold, weight = FontWeight.Bold),
+    )
     MaterialTheme(
         colorScheme = DarkScheme,
-        typography = AppTypography,
+        typography = appTypography(display, title),
         shapes = AppShapes,
         content = content,
     )

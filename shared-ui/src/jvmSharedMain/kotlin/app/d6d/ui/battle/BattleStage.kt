@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -49,6 +50,7 @@ import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.ornateFrame
 
 /**
  * Il centro della schermata: mappa tattica con le targhe sovrapposte agli angoli.
@@ -237,7 +239,8 @@ private fun MapLegend(viewModel: BattleViewModel, modifier: Modifier = Modifier)
 
     Column(
         modifier
-            .background(Palette.Abyss.copy(alpha = 0.86f), RoundedCornerShape(8.dp))
+            .background(Palette.Abyss.copy(alpha = 0.88f), RoundedCornerShape(8.dp))
+            .border(1.dp, Palette.Bronze.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
             .semantics(mergeDescendants = true) { contentDescription = description }
             .padding(horizontal = 9.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -287,18 +290,29 @@ private fun StagePlate(
         if (combatant.defeated()) append(" Sconfitto.")
     }
 
+    val plateShape = RoundedCornerShape(10.dp)
     Column(
         modifier
             .width(232.dp)
+            // Lastra scura sempre leggibile sopra la mappa; quando e' il bersaglio
+            // vi si sovrappone una velatura del colore di fazione.
             .background(
-                if (isTarget) faction.color.copy(alpha = 0.13f) else Palette.Surface.copy(alpha = 0.93f),
-                RoundedCornerShape(10.dp),
+                Brush.verticalGradient(
+                    listOf(Palette.Surface.copy(alpha = 0.96f), Palette.Night.copy(alpha = 0.96f)),
+                ),
+                plateShape,
+            )
+            .then(
+                if (isTarget) Modifier.background(faction.color.copy(alpha = 0.10f), plateShape)
+                else Modifier,
             )
             .border(
                 if (isTarget) 2.dp else 1.dp,
                 accent.copy(alpha = if (isTarget) 0.9f else 0.58f),
-                RoundedCornerShape(10.dp),
+                plateShape,
             )
+            // Angoli a squadra dorati: la targa diventa una placca incorniciata.
+            .ornateFrame(accent = accent, alpha = if (isTarget) 0.85f else 0.5f)
             .semantics(mergeDescendants = true) {
                 contentDescription = "$role: ${snapshot.name()}"
                 stateDescription = state

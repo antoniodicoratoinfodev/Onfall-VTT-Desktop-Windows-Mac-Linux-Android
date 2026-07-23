@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -44,6 +46,7 @@ import app.d6d.ui.components.CombatantPortrait
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.Faction
 import app.d6d.ui.components.HorizontalResizeHandle
+import app.d6d.ui.components.PanelScrollbar
 import app.d6d.ui.components.ScaledDensity
 import app.d6d.ui.components.VerticalResizeHandle
 import kotlin.math.roundToInt
@@ -53,6 +56,8 @@ import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.SessionMenuButton
 import app.d6d.ui.session.SessionMenuDialog
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.theme.GoldenRule
+import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
 
 // Altezza a cui i riquadri dell'ordine turni hanno la dimensione naturale (scala
@@ -80,6 +85,9 @@ fun BattleScreen(
     val density = LocalDensity.current
     Column(modifier.fillMaxSize().background(Palette.Night)) {
         BattleTopBar(viewModel, sessions, compact)
+        // Filo d'oro sotto l'intestazione: chiude la fascia dei turni come il
+        // bordo inciso di un pannello, senza il peso di un bordo pieno.
+        GoldenRule()
         // Il bordo inferiore della fascia turni: trascinandolo verso il basso la
         // fascia cresce. Solo sul desktop e solo quando l'ordine turni e' visibile.
         if (!compact && !layout.turnsCollapsed) {
@@ -284,7 +292,7 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = "↕ REGISTRO EVENTI",
+                    text = "REGISTRO EVENTI",
                     color = Palette.Gold,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelSmall,
@@ -293,12 +301,12 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
                     Text(
                         text = "Trascina verso il basso per collassare",
                         color = Palette.TextFaint,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
             Text(
-                text = if (collapsed) "Apri ↑" else "Collassa ↓",
+                text = if (collapsed) "Apri ▸" else "Collassa ▾",
                 color = Palette.TextMuted,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
@@ -387,10 +395,17 @@ private fun Rail(
     dropTarget: TokenPlacementDrag? = null,
 ) {
     val standing = ids.count { viewModel.combatant(it)?.defeated() == false }
+    val accent = if (faction == Faction.PARTY) Palette.Party else Palette.Enemy
     Column(
         modifier
             .fillMaxSize()
-            .background(Palette.Surface.copy(alpha = 0.45f))
+            // Gradiente verticale appena percettibile: la colonna emerge dal buio
+            // in alto e vi si dissolve in basso, invece di essere una lastra piatta.
+            .background(
+                Brush.verticalGradient(
+                    listOf(Palette.Surface.copy(alpha = 0.62f), Palette.Surface.copy(alpha = 0.22f)),
+                ),
+            )
             .padding(9.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
@@ -399,22 +414,33 @@ private fun Rail(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Eyebrow(title, color = if (faction == Faction.PARTY) Palette.Party else Palette.Enemy)
+            Eyebrow(title, color = accent)
             Text(
                 text = "$standing/${ids.size} in piedi",
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            items(ids) { id ->
-                CombatantRailCard(
-                    viewModel = viewModel,
-                    combatantId = id,
-                    faction = faction,
-                    dropTarget = dropTarget,
-                )
+        // Fregio di fazione sotto l'intestazione: il rombo al centro della riga
+        // riprende il colore della colonna, argento o brace.
+        OrnateDivider(color = accent.copy(alpha = 0.65f))
+        val listState = rememberLazyListState()
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                items(ids) { id ->
+                    CombatantRailCard(
+                        viewModel = viewModel,
+                        combatantId = id,
+                        faction = faction,
+                        dropTarget = dropTarget,
+                    )
+                }
             }
+            PanelScrollbar(listState, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
         }
     }
 }

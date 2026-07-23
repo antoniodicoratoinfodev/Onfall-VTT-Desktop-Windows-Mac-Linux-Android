@@ -1,9 +1,17 @@
 package app.d6d.ui.battle
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,7 +35,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -66,31 +76,68 @@ fun GameButton(
     subtitle: String? = null,
     selected: Boolean = false,
     dense: Boolean = false,
-    // Azione principale della schermata: pillola avorio piena, come lo stato
+    // Azione principale della schermata: pillola d'oro piena, come lo stato
     // selezionato, ma senza dichiararsi "selezionata" all'accessibilita'.
     primary: Boolean = false,
 ) {
     val tint = if (enabled) accent else Palette.TextFaint
-    val shape = RoundedCornerShape(if (dense) 6.dp else 8.dp)
-    // Linguaggio dei comandi: riempimento scuro neutro con bordo sottile; lo stato
-    // selezionato (o l'azione principale) diventa una pillola avorio con testo scuro.
+    val shape = RoundedCornerShape(if (dense) 5.dp else 7.dp)
+    // Linguaggio dei comandi: superficie scura con un gradiente appena in
+    // rilievo e bordo sottile; lo stato selezionato (o l'azione principale)
+    // diventa una pillola d'oro battuto — piu' luminosa in cima — con testo scuro.
     val solid = selected || (primary && enabled)
     val fill = when {
-        solid -> Palette.Gold
-        enabled -> Palette.SurfaceHigh
-        else -> Palette.Surface
+        solid -> Brush.verticalGradient(listOf(Palette.GoldBright, Palette.Gold))
+        enabled -> Brush.verticalGradient(listOf(Palette.SurfaceHigh, Palette.Surface))
+        else -> Brush.verticalGradient(listOf(Palette.Surface, Palette.Surface))
     }
+    // Le azioni dorate meritano un bordo di bronzo; le altre restano sulla linea.
+    val restingBorder = when {
+        solid -> Palette.GoldBright.copy(alpha = 0.85f)
+        accent == Palette.Gold || accent == Palette.GoldBright -> Palette.Bronze.copy(alpha = if (enabled) 0.9f else 0.5f)
+        else -> Palette.Line.copy(alpha = if (enabled) 1f else 0.55f)
+    }
+
+    // Sul desktop il pulsante risponde prima del clic: il bordo si accende d'oro
+    // al passaggio del mouse e la pressione lo comprime appena, come un tasto
+    // fisico. Sul touch resta solo la compressione.
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val pressed by interaction.collectIsPressedAsState()
+    val borderColor by animateColorAsState(
+        targetValue = when {
+            !enabled -> restingBorder
+            solid && hovered -> Palette.GoldBright
+            hovered -> Palette.Gold.copy(alpha = 0.75f)
+            else -> restingBorder
+        },
+        animationSpec = tween(140),
+        label = "gameButtonBorder",
+    )
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.96f else 1f,
+        animationSpec = tween(90),
+        label = "gameButtonPress",
+    )
+
     val labelColor = if (solid) Palette.Abyss else tint
     Column(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .then(if (dense) Modifier else Modifier.minimumInteractiveComponentSize())
             .semantics { this.selected = selected }
             .background(fill, shape)
-            .then(
-                if (solid) Modifier
-                else Modifier.border(1.dp, Palette.Line.copy(alpha = if (enabled) 1f else 0.55f), shape),
-            )
-            .clickable(enabled = enabled, role = Role.Button) { onClick() }
+            .border(1.dp, borderColor, shape)
+            .hoverable(interaction, enabled = enabled)
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                enabled = enabled,
+                role = Role.Button,
+            ) { onClick() }
             .padding(
                 horizontal = if (dense) 8.dp else 13.dp,
                 vertical = if (dense) 4.dp else 8.dp,

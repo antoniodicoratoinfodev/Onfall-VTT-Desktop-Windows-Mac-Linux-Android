@@ -27,6 +27,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -99,9 +101,15 @@ fun CombatantRailCard(
                 .clip(shape)
                 .background(
                     when {
-                        targeted -> faction.color.copy(alpha = 0.12f)
-                        active -> Palette.SurfaceHigh
-                        else -> Palette.Surface
+                        // Bersaglio: velatura di fazione che sfuma; turno attivo:
+                        // superficie in rilievo. Entrambe piu' vive di una lastra piatta.
+                        targeted -> Brush.verticalGradient(
+                            listOf(faction.color.copy(alpha = 0.16f), faction.color.copy(alpha = 0.06f)),
+                        )
+                        active -> Brush.verticalGradient(
+                            listOf(Palette.SurfaceHigh, Palette.Surface),
+                        )
+                        else -> SolidColor(Palette.Surface)
                     },
                     shape,
                 )

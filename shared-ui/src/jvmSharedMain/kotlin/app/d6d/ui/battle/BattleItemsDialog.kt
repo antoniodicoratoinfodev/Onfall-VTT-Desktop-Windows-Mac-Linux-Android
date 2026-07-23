@@ -36,7 +36,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.ornateFrame
+import app.d6d.ui.theme.panelBrush
 
 /** Categorie dell'inventario da combattimento. */
 enum class ItemCategory(val label: String, val tint: androidx.compose.ui.graphics.Color) {
@@ -146,13 +149,15 @@ fun BattleItemsDialog(
             contentAlignment = Alignment.Center,
         ) {
             val stacked = maxWidth < 560.dp
+            val dialogShape = RoundedCornerShape(14.dp)
             Column(
                 Modifier
                     .widthIn(max = 780.dp)
                     .fillMaxWidth()
                     .heightIn(max = maxHeight)
-                    .background(Palette.Surface, RoundedCornerShape(14.dp))
-                    .border(1.dp, Palette.Line, RoundedCornerShape(14.dp))
+                    .panelBrush(dialogShape)
+                    .border(1.dp, Palette.Bronze.copy(alpha = 0.6f), dialogShape)
+                    .ornateFrame(accent = Palette.Gold, alpha = 0.5f)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
@@ -176,6 +181,7 @@ fun BattleItemsDialog(
                     }
                     GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
                 }
+                OrnateDivider(color = Palette.GoldDim)
 
                 // Filtro per categoria: "Tutti" piu' una voce per tipo.
                 FlowRow(

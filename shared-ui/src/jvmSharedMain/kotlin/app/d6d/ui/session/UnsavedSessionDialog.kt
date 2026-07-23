@@ -23,6 +23,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.ornateFrame
+import app.d6d.ui.theme.panelBrush
 
 /** Conferma esplicita prima di sostituire una battaglia non ancora salvata. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -39,12 +41,15 @@ fun UnsavedSessionDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            val dialogShape = RoundedCornerShape(14.dp)
             Column(
                 Modifier
                     .widthIn(max = 480.dp)
                     .fillMaxWidth()
-                    .background(Palette.Surface, RoundedCornerShape(14.dp))
-                    .border(1.dp, Palette.Bloodied.copy(alpha = 0.65f), RoundedCornerShape(14.dp))
+                    .panelBrush(dialogShape)
+                    // Cornice ambrata: e' un avvertimento, non un pannello qualunque.
+                    .border(1.dp, Palette.Bloodied.copy(alpha = 0.65f), dialogShape)
+                    .ornateFrame(accent = Palette.Bloodied, alpha = 0.6f)
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {

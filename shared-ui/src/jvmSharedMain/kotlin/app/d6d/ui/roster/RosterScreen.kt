@@ -9,12 +9,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
@@ -33,11 +35,13 @@ import androidx.compose.ui.unit.dp
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.components.PanelScrollbar
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.sheet.CharacterSheetEditor
 import app.d6d.ui.sheet.MonsterStatBlockEditor
 import app.d6d.ui.sheet.SheetKind
 import app.d6d.ui.sheet.SheetNavigationResult
+import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
 
 /**
@@ -114,6 +118,7 @@ fun RosterScreen(
     Column(modifier.fillMaxSize().background(Palette.Night)) {
         if (compact && compactPane == CompactRosterPane.DETAIL) {
             CompactEditorHeader(viewModel) { compactPane = CompactRosterPane.LIST }
+            GoldenRule()
             RosterStatus(viewModel)
             Box(Modifier.weight(1f)) { editor(Modifier.fillMaxSize()) }
         } else {
@@ -122,6 +127,7 @@ fun RosterScreen(
                 onNewCharacter = { requestNavigation(RosterNavigation.NewCharacter) },
                 onNewCreature = { requestNavigation(RosterNavigation.NewCreature) },
             )
+            GoldenRule()
             RosterStatus(viewModel)
 
             if (compact) {
@@ -286,21 +292,29 @@ private fun RosterList(
             .padding(9.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            if (people.isNotEmpty()) {
-                item { Eyebrow("Personaggi (${people.size})", color = Palette.Party) }
-                items(people) { RosterRow(it, viewModel, onSelect) }
-            }
-            if (creatures.isNotEmpty()) {
-                item {
-                    Eyebrow(
-                        "Creature (${creatures.size})",
-                        color = Palette.Enemy,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
+        val listState = rememberLazyListState()
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                if (people.isNotEmpty()) {
+                    item { Eyebrow("Personaggi (${people.size})", color = Palette.Party) }
+                    items(people) { RosterRow(it, viewModel, onSelect) }
                 }
-                items(creatures) { RosterRow(it, viewModel, onSelect) }
+                if (creatures.isNotEmpty()) {
+                    item {
+                        Eyebrow(
+                            "Creature (${creatures.size})",
+                            color = Palette.Enemy,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+                    items(creatures) { RosterRow(it, viewModel, onSelect) }
+                }
             }
+            PanelScrollbar(listState, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
         }
     }
 }

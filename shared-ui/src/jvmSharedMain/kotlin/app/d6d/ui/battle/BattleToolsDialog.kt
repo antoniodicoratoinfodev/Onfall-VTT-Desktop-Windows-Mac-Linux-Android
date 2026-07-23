@@ -39,7 +39,10 @@ import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.italianLabel
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.ornateFrame
+import app.d6d.ui.theme.panelBrush
 
 /**
  * Strumenti da tavolo per tutto ciò che non è un normale tiro per colpire.
@@ -81,13 +84,15 @@ fun BattleToolsDialog(
             Modifier.fillMaxSize().padding(12.dp),
             contentAlignment = Alignment.Center,
         ) {
+            val dialogShape = RoundedCornerShape(14.dp)
             Column(
                 Modifier
                     .widthIn(max = 680.dp)
                     .fillMaxWidth()
                     .heightIn(max = maxHeight)
-                    .background(Palette.Surface, RoundedCornerShape(14.dp))
-                    .border(1.dp, Palette.Line, RoundedCornerShape(14.dp))
+                    .panelBrush(dialogShape)
+                    .border(1.dp, Palette.Bronze.copy(alpha = 0.6f), dialogShape)
+                    .ornateFrame(accent = Palette.Gold, alpha = 0.5f)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -112,6 +117,7 @@ fun BattleToolsDialog(
                     }
                     GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
                 }
+                OrnateDivider(color = Palette.GoldDim)
 
                 Eyebrow("Combattente interessato")
                 FlowRow(

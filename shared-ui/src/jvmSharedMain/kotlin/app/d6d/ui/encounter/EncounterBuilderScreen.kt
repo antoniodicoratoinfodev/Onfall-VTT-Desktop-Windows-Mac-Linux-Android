@@ -35,6 +35,7 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.roster.RosterKind
+import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
 
 /** Configuratore del prossimo combattimento, alimentato dal Compendio. */
@@ -49,6 +50,7 @@ fun EncounterBuilderScreen(
 ) {
     Column(modifier.fillMaxSize().background(Palette.Night)) {
         EncounterHeader(viewModel.step, compact)
+        GoldenRule()
 
         viewModel.status?.let { message ->
             Text(
@@ -84,6 +86,7 @@ fun EncounterBuilderScreen(
             NewGameStep.MODALITA -> ModeStep(viewModel, compact, Modifier.weight(1f))
         }
 
+        if (viewModel.step != NewGameStep.TEMPLATE) GoldenRule()
         NewGameFooter(viewModel, compact, onStarted, onOpenCompendium)
     }
 }

@@ -18,6 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -118,9 +120,13 @@ private fun TurnChip(
             .widthIn(max = 220.dp)
             .background(
                 when {
-                    current -> Palette.Gold.copy(alpha = 0.14f)
-                    targeted -> accent.copy(alpha = 0.1f)
-                    else -> Palette.Surface
+                    // Il turno corrente e' una velatura d'oro che sfuma verso il
+                    // basso: acceso in cima, quieto sotto, come una lama di luce.
+                    current -> Brush.verticalGradient(
+                        listOf(Palette.Gold.copy(alpha = 0.24f), Palette.Gold.copy(alpha = 0.08f)),
+                    )
+                    targeted -> SolidColor(accent.copy(alpha = 0.1f))
+                    else -> SolidColor(Palette.Surface)
                 },
                 shape,
             )

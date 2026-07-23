@@ -41,7 +41,10 @@ import app.d6d.persistence.session.SessionSummary
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.ornateFrame
+import app.d6d.ui.theme.panelBrush
 
 /** Pulsante che apre il menù delle sessioni, da mettere nell'intestazione. */
 @Composable
@@ -94,13 +97,15 @@ fun SessionMenuDialog(manager: SessionManager) {
             contentAlignment = Alignment.Center,
         ) {
             val compact = maxWidth < 460.dp
+            val dialogShape = RoundedCornerShape(12.dp)
             Column(
                 Modifier
                     .widthIn(max = 520.dp)
                     .fillMaxWidth()
                     .heightIn(max = maxHeight)
-                    .background(Palette.Surface, RoundedCornerShape(12.dp))
-                    .border(1.dp, Palette.Line, RoundedCornerShape(12.dp))
+                    .panelBrush(dialogShape)
+                    .border(1.dp, Palette.Bronze.copy(alpha = 0.6f), dialogShape)
+                    .ornateFrame(accent = Palette.Gold, alpha = 0.5f)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -111,6 +116,7 @@ fun SessionMenuDialog(manager: SessionManager) {
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
+            OrnateDivider(color = Palette.GoldDim)
             Text(
                 text = "Una sessione salvata conserva combattimento, mappa, segnaposti, " +
                     "registro completo e stato dei dadi: riaprendola i tiri futuri sono gli stessi.",

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -61,6 +63,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -69,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.d6d.domain.space.TokenPlacement
 import app.d6d.ui.components.Faction
+import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumberView
 import app.d6d.ui.components.color
 import app.d6d.ui.components.initials
@@ -76,8 +80,12 @@ import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.images.rememberBitmap
 import app.d6d.ui.images.rememberPortrait
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.Vignette
 import app.d6d.ui.theme.healthColor
+import app.d6d.ui.theme.ornateFrame
+import app.d6d.ui.theme.panelBrush
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -278,6 +286,9 @@ fun BattleMapView(
         // puo' essere compressa dai constraints di Compose, neppure a zoom alto o
         // con una griglia 400 x 400. Le linee fuori schermo non vengono iterate.
         Canvas(Modifier.fillMaxSize()) {
+            // Il fondale resta piatto: l'effetto lume lo da' la sola vignettatura
+            // (con la sua grana anti-banding). Un secondo gradiente radiale qui
+            // sotto raddoppierebbe gli anelli di quantizzazione sui neri.
             if (background != null) {
                 drawImage(
                     image = background,
@@ -291,7 +302,9 @@ fun BattleMapView(
             }
 
             if (showGrid) {
-                val line = Palette.Line.copy(alpha = if (background != null) 0.55f else 0.35f)
+                // Il fondale col lume e' piu' scuro dei vecchi grigi: la griglia
+                // deve emergere un po' di piu' per restare leggibile.
+                val line = Palette.Line.copy(alpha = if (background != null) 0.65f else 0.5f)
                 val mapRight = mapOffset.x + camera.contentSize.width
                 val mapBottom = mapOffset.y + camera.contentSize.height
                 for (column in camera.visibleColumns(mapOffset)) {
@@ -305,10 +318,19 @@ fun BattleMapView(
             }
         }
 
-        // Raggio di movimento residuo del combattente attivo.
+        // Raggio di movimento residuo. Per l'attore corrente il resto della mappa
+        // si vela d'ombra; per gli altri attivi di un turno simultaneo resta il
+        // riquadro leggero, cosi' i veli non si sommano.
         viewModel.activeCombatantIds.forEach { activeId ->
             viewModel.placementOf(activeId)?.let { placement ->
-                MovementReach(viewModel, placement, liveCell, mapOffset)
+                MovementReach(
+                    viewModel = viewModel,
+                    placement = placement,
+                    cellSize = liveCell,
+                    mapOffset = mapOffset,
+                    contentSize = camera.contentSize,
+                    veiled = activeId == viewModel.activeCombatantId,
+                )
             }
         }
 
@@ -321,6 +343,10 @@ fun BattleMapView(
         if (dropTarget != null) {
             DropHighlight(dropTarget, liveCell, mapOffset)
         }
+
+        // Vignettatura sopra tutto: angoli in ombra, luce dove si combatte. Non
+        // ha gestori di puntatore, quindi i tocchi la attraversano.
+        Vignette(strength = 0.26f)
     }
 }
 
@@ -377,9 +403,11 @@ private fun onCellTapped(viewModel: BattleViewModel, column: Int, row: Int) {
  * E' un quadrato perche' la griglia conta la diagonale come una casella: il raggio
  * di Chebyshev e' un anello quadrato, non un cerchio.
  *
- * Viene ritagliato ai bordi della griglia. Senza il ritaglio un combattente vicino
- * al bordo produrrebbe uno scostamento negativo e l'alone verrebbe disegnato fuori
- * dalla mappa, perche' Compose non ritaglia i figli di predefinito.
+ * Con `veiled` — l'attore corrente — non si evidenzia il raggio: si oscura tutto
+ * il resto della mappa, cosi' cio' che e' raggiungibile resta alla piena luce del
+ * lume e cio' che non lo e' cade in ombra. Per gli altri combattenti attivi di un
+ * turno simultaneo resta il riquadro leggero, che puo' sovrapporsi senza sommare
+ * oscurita'.
  */
 @Composable
 private fun MovementReach(
@@ -387,6 +415,8 @@ private fun MovementReach(
     placement: TokenPlacement,
     cellSize: Dp,
     mapOffset: Offset,
+    contentSize: Size,
+    veiled: Boolean,
 ) {
     val squares = viewModel.movementSquaresRemaining(placement.combatantId())
     if (squares <= 0) return
@@ -399,6 +429,42 @@ private fun MovementReach(
     val endRow = (origin.row() + placement.squaresPerSide() + squares).coerceAtMost(grid.rows())
     if (endColumn <= startColumn || endRow <= startRow) return
     val cellPx = with(LocalDensity.current) { cellSize.toPx() }
+
+    if (veiled) {
+        Canvas(Modifier.fillMaxSize()) {
+            val reachLeft = mapOffset.x + startColumn * cellPx
+            val reachTop = mapOffset.y + startRow * cellPx
+            val reachRight = mapOffset.x + endColumn * cellPx
+            val reachBottom = mapOffset.y + endRow * cellPx
+            val mapLeft = mapOffset.x
+            val mapTop = mapOffset.y
+            val mapRight = mapOffset.x + contentSize.width
+            val mapBottom = mapOffset.y + contentSize.height
+            val scrim = Palette.Abyss.copy(alpha = 0.45f)
+
+            // Quattro fasce attorno al raggio: sopra, sotto, sinistra, destra.
+            if (reachTop > mapTop) {
+                drawRect(scrim, Offset(mapLeft, mapTop), Size(mapRight - mapLeft, reachTop - mapTop))
+            }
+            if (mapBottom > reachBottom) {
+                drawRect(scrim, Offset(mapLeft, reachBottom), Size(mapRight - mapLeft, mapBottom - reachBottom))
+            }
+            if (reachLeft > mapLeft) {
+                drawRect(scrim, Offset(mapLeft, reachTop), Size(reachLeft - mapLeft, reachBottom - reachTop))
+            }
+            if (mapRight > reachRight) {
+                drawRect(scrim, Offset(reachRight, reachTop), Size(mapRight - reachRight, reachBottom - reachTop))
+            }
+
+            drawRect(
+                color = Palette.Party.copy(alpha = 0.5f),
+                topLeft = Offset(reachLeft, reachTop),
+                size = Size(reachRight - reachLeft, reachBottom - reachTop),
+                style = Stroke(width = 1.5.dp.toPx()),
+            )
+        }
+        return
+    }
 
     Box(
         Modifier
@@ -475,6 +541,9 @@ private fun MapToken(
 
     val accent = if (defeated) Palette.TextFaint else faction.color
     val ring = if (defeated) Palette.TextFaint else healthColor(combatant.currentHitPoints(), snapshot.maxHitPoints())
+    // Lampo del critico: finche' il numero dorato del colpo fluttua sul token,
+    // l'anello si accende. Sparisce da solo quando il numero scade.
+    val critFlash = viewModel.floating[id].orEmpty().any { it.kind == FloatKind.CRIT }
     val portrait = portraits.rememberPortrait(snapshot.definitionId())
     val density = LocalDensity.current
     val cellPx = with(density) { cellSize.toPx() }
@@ -595,7 +664,19 @@ private fun MapToken(
             val topLeft = Offset(inset, inset)
 
             if (active && !defeated) {
-                drawCircle(accent.copy(alpha = 0.13f + 0.18f * pulse), radius = size.minDimension / 2f)
+                // Alone caldo sotto il combattente di turno: un piccolo cerchio di
+                // luce da lume, piu' intenso al centro, che pulsa piano.
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Palette.Gold.copy(alpha = 0.26f + 0.16f * pulse),
+                            Palette.Gold.copy(alpha = 0f),
+                        ),
+                        center = center,
+                        radius = size.minDimension / 2f,
+                    ),
+                    radius = size.minDimension / 2f,
+                )
             }
             drawArc(
                 color = Palette.Abyss,
@@ -611,14 +692,25 @@ private fun MapToken(
                     style = Stroke(width = stroke, cap = StrokeCap.Round),
                 )
             }
+            if (critFlash) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Palette.Crit.copy(alpha = 0.5f), Palette.Crit.copy(alpha = 0f)),
+                        center = center,
+                        radius = size.minDimension * 0.62f,
+                    ),
+                    radius = size.minDimension * 0.62f,
+                )
+            }
             drawCircle(
                 color = when {
+                    critFlash -> Palette.Crit
                     active -> Palette.GoldBright
                     targeted -> accent
                     else -> accent.copy(alpha = 0.5f)
                 },
                 radius = size.minDimension / 2f - inset,
-                style = Stroke(width = if (active || targeted) 2.2f else 1.2f),
+                style = Stroke(width = if (active || targeted || critFlash) 2.2f else 1.2f),
             )
         }
 
@@ -631,37 +723,53 @@ private fun MapToken(
 /** Invito alla configurazione quando la mappa non esiste ancora. */
 @Composable
 private fun MapNotConfigured(viewModel: BattleViewModel, modifier: Modifier = Modifier) {
-    Column(
-        modifier.fillMaxSize().background(Palette.Abyss).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(11.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Box(
+        modifier.fillMaxSize().background(Palette.Abyss),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = "▦",
-            color = Palette.TextFaint,
-            fontSize = 46.sp,
-        )
-        Text(
-            text = "Nessuna mappa configurata",
-            color = Palette.Text,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleLarge,
-        )
-        Text(
-            text = "Senza griglia l'incontro resta una simulazione astratta: " +
-                "portate e distanze le dichiara il tavolo, non il motore.",
-            color = Palette.TextMuted,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            GameButton("Griglia 20 × 15", accent = Palette.Gold, onClick = {
-                viewModel.configureMap(20, 15, 5)
-            })
-            GameButton("Griglia 40 × 30", accent = Palette.TextMuted, onClick = {
-                viewModel.configureMap(40, 30, 5)
-            })
+        // Stesso lume della mappa vera, con la grana che evita gli anelli.
+        Vignette(strength = 0.24f)
+        val panelShape = RoundedCornerShape(12.dp)
+        Column(
+            Modifier
+                .widthIn(max = 440.dp)
+                .padding(24.dp)
+                .panelBrush(panelShape)
+                .border(1.dp, Palette.Bronze.copy(alpha = 0.6f), panelShape)
+                .ornateFrame(accent = Palette.Gold, alpha = 0.6f)
+                .padding(horizontal = 28.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "▦",
+                color = Palette.GoldDim,
+                fontSize = 46.sp,
+            )
+            Text(
+                text = "Nessuna mappa configurata",
+                color = Palette.Text,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
+            )
+            OrnateDivider(color = Palette.GoldDim)
+            Text(
+                text = "Senza griglia l'incontro resta una simulazione astratta: " +
+                    "portate e distanze le dichiara il tavolo, non il motore.",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GameButton("Griglia 20 × 15", accent = Palette.Gold, onClick = {
+                    viewModel.configureMap(20, 15, 5)
+                })
+                GameButton("Griglia 40 × 30", accent = Palette.TextMuted, onClick = {
+                    viewModel.configureMap(40, 30, 5)
+                })
+            }
         }
     }
 }

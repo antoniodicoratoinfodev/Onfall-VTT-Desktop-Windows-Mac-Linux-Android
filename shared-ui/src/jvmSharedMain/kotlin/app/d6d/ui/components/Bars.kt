@@ -1,5 +1,6 @@
 package app.d6d.ui.components
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -11,12 +12,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -28,6 +32,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.healthColor
+import app.d6d.ui.theme.shaded
+import kotlinx.coroutines.delay
 
 /**
  * Barra dei punti ferita.
@@ -51,6 +57,19 @@ fun HealthBar(
         animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
         label = "hitPoints",
     )
+    // Scia del danno: una barra fantasma che insegue quella vera con ritardo,
+    // cosi' il colpo appena subito resta visibile per un istante come segmento
+    // ambrato che si ritira. Quando si guarisce sale insieme alla barra vera e
+    // non si vede.
+    val ghost = remember { Animatable(target) }
+    LaunchedEffect(target) {
+        if (target < ghost.value) {
+            delay(280)
+            ghost.animateTo(target, tween(durationMillis = 700, easing = FastOutSlowInEasing))
+        } else {
+            ghost.animateTo(target, tween(durationMillis = 420, easing = FastOutSlowInEasing))
+        }
+    }
     val tempTarget = (temporary.toFloat() / safeMax).coerceIn(0f, 1f)
     val tempRatio by animateFloatAsState(
         targetValue = tempTarget,
@@ -72,12 +91,28 @@ fun HealthBar(
     ) {
         val radius = CornerRadius(size.height / 2f, size.height / 2f)
 
-        // Barra sottile senza contorno: traccia grigia visibile, riempimento pieno.
-        drawRoundRect(color = Palette.Line, cornerRadius = radius)
+        // Traccia incassata: quasi nera con un filo di bordo, come una scanalatura
+        // nel legno del tavolo. Il riempimento e' un liquido: piu' chiaro in cima.
+        drawRoundRect(color = Palette.Abyss, cornerRadius = radius)
+        drawRoundRect(
+            color = Palette.Line,
+            cornerRadius = radius,
+            style = Stroke(width = 1f),
+        )
+
+        // La scia del danno sta sotto il riempimento: spunta solo la parte che
+        // eccede la barra vera, cioe' i PF appena persi.
+        if (ghost.value > ratio) {
+            drawRoundRect(
+                color = Palette.Bloodied.copy(alpha = 0.55f),
+                size = Size(size.width * ghost.value, size.height),
+                cornerRadius = radius,
+            )
+        }
 
         if (ratio > 0f) {
             drawRoundRect(
-                color = fill,
+                brush = Brush.verticalGradient(listOf(fill, fill.shaded(0.28f))),
                 size = Size(size.width * ratio, size.height),
                 cornerRadius = radius,
             )
@@ -88,7 +123,9 @@ fun HealthBar(
             val width = (size.width * tempRatio).coerceAtMost(size.width - start)
             if (width > 0f) {
                 drawRoundRect(
-                    color = Palette.Temporary,
+                    brush = Brush.verticalGradient(
+                        listOf(Palette.Temporary, Palette.Temporary.shaded(0.28f)),
+                    ),
                     topLeft = Offset(start, 0f),
                     size = Size(width, size.height),
                     cornerRadius = radius,

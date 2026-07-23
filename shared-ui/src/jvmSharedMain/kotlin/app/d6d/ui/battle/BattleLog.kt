@@ -2,8 +2,11 @@ package app.d6d.ui.battle
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,8 +31,10 @@ import app.d6d.domain.combat.EventType
 import app.d6d.sheet.italianLabel
 import app.d6d.sheet.feetWithMetres
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.components.PanelScrollbar
 import app.d6d.ui.components.italianLabel
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
 
 /**
@@ -78,24 +85,60 @@ fun BattleLog(
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            state = listState,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            itemsIndexed(recent, key = { _, event -> event.sequence() }) { index, event ->
-                LogLine(event, viewModel, latest = index == 0)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                itemsIndexed(recent, key = { _, event -> event.sequence() }) { index, event ->
+                    LogLine(event, viewModel, latest = index == 0)
+                }
             }
+            PanelScrollbar(listState, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
         }
     }
 }
 
 @Composable
 private fun LogLine(event: CombatEvent, viewModel: BattleViewModel, latest: Boolean) {
+    // L'inizio di un round e' un capitolo della cronaca: riga ornamentale
+    // centrata invece di una voce qualsiasi dell'elenco.
+    if (event.type() == EventType.ROUND_STARTED) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            GoldenRule(Modifier.weight(1f), alpha = 0.3f)
+            Text(
+                text = "Round ${event.round()}",
+                color = Palette.Gold,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            GoldenRule(Modifier.weight(1f), alpha = 0.3f)
+        }
+        return
+    }
+
+    val critical = event.type() == EventType.CRITICAL_HIT
     Row(
         Modifier
             .fillMaxWidth()
-            .background(if (latest) Palette.Gold.copy(alpha = 0.09f) else Color.Transparent)
+            .background(
+                when {
+                    latest -> Palette.Gold.copy(alpha = 0.09f)
+                    critical -> Palette.Crit.copy(alpha = 0.07f)
+                    else -> Color.Transparent
+                },
+            )
+            // I critici portano una barretta dorata sul margine, come una nota
+            // segnata a lato del testo.
+            .drawBehind {
+                if (critical) {
+                    drawRect(color = Palette.Crit, size = Size(2.dp.toPx(), size.height))
+                }
+            }
             .padding(horizontal = 5.dp, vertical = if (latest) 3.dp else 1.dp),
         horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
@@ -107,7 +150,10 @@ private fun LogLine(event: CombatEvent, viewModel: BattleViewModel, latest: Bool
         Text(
             text = event.describeInItalian(viewModel),
             color = event.type().tint,
-            fontWeight = if (latest || event.type() == EventType.CRITICAL_HIT) FontWeight.Bold else FontWeight.Normal,
+            fontWeight = when {
+                latest || critical || event.type() == EventType.DIED -> FontWeight.Bold
+                else -> FontWeight.Normal
+            },
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(1f),
         )

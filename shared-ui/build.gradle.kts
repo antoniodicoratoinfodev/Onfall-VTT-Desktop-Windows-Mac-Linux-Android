@@ -38,6 +38,7 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.ui)
                 implementation(compose.materialIconsExtended)
+                implementation(compose.components.resources)
             }
         }
         named("androidMain") { dependsOn(jvmSharedMain) }
@@ -52,6 +53,16 @@ kotlin {
             }
         }
     }
+}
+
+// I font del tema (Cinzel e Alegreya, licenza SIL OFL — vedi NOTICE-FONTS.md)
+// sono risorse Compose incorporate: identita' tipografica identica su desktop e
+// Android, senza dipendere dai font del sistema.
+compose.resources {
+    packageOfResClass = "app.d6d.ui.generated.resources"
+    // La rilevazione automatica non scatta con il source set condiviso dichiarato
+    // a mano: la classe `Res` va generata sempre.
+    generateResClass = always
 }
 
 tasks.withType<Test>().configureEach {

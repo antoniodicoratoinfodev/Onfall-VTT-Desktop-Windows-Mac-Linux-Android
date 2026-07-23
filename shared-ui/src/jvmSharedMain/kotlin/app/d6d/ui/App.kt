@@ -1,5 +1,7 @@
 package app.d6d.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,7 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -37,6 +39,8 @@ import androidx.compose.ui.unit.dp
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.engine.CombatSession
 import app.d6d.ui.battle.BattleScreen
+import app.d6d.ui.components.AppGlyph
+import app.d6d.ui.components.GlyphIcon
 import app.d6d.ui.components.VerticalResizeHandle
 import app.d6d.ui.components.initials
 import app.d6d.ui.content.SampleEncounter
@@ -56,16 +60,17 @@ import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.UnsavedSessionDialog
 import app.d6d.ui.state.BattleViewModel
-import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.AppTheme
+import app.d6d.ui.theme.GoldenRule
+import app.d6d.ui.theme.Palette
 import java.nio.file.Path
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 
-enum class Destination(val label: String, val glyph: String) {
-    BATTAGLIA("Battaglia", "◆"),
-    INCONTRO("Nuova partita", "+"),
-    COMPENDIO("Compendio", "≡"),
+enum class Destination(val label: String, val icon: AppGlyph) {
+    BATTAGLIA("Battaglia", AppGlyph.SWORDS),
+    INCONTRO("Nuova partita", AppGlyph.D20),
+    COMPENDIO("Compendio", AppGlyph.TOME),
 }
 
 // Larghezze della barra di navigazione desktop. Parte al minimo — solo le icone —
@@ -167,24 +172,33 @@ fun AppRoot(
             }
         }
 
+        // Il passaggio fra le schermate e' una dissolvenza breve invece di uno
+        // scatto: i view model vivono sopra, quindi nulla viene perso o ricreato.
         val content: @Composable (Modifier) -> Unit = { contentModifier ->
-            when (destination) {
-                Destination.BATTAGLIA ->
-                    BattleScreen(battleViewModel, portraits, sessions, compact = compact, modifier = contentModifier)
+            Crossfade(
+                targetState = destination,
+                modifier = contentModifier,
+                animationSpec = tween(220),
+                label = "destinazione",
+            ) { shown ->
+                when (shown) {
+                    Destination.BATTAGLIA ->
+                        BattleScreen(battleViewModel, portraits, sessions, compact = compact, modifier = Modifier.fillMaxSize())
 
-                Destination.INCONTRO ->
-                    EncounterBuilderScreen(
-                        viewModel = encounterBuilder,
-                        compact = compact,
-                        onStarted = { session, name, mode ->
-                            requestEncounter(session, name, mode)
-                        },
-                        onOpenCompendium = { destination = Destination.COMPENDIO },
-                        modifier = contentModifier,
-                    )
+                    Destination.INCONTRO ->
+                        EncounterBuilderScreen(
+                            viewModel = encounterBuilder,
+                            compact = compact,
+                            onStarted = { session, name, mode ->
+                                requestEncounter(session, name, mode)
+                            },
+                            onOpenCompendium = { destination = Destination.COMPENDIO },
+                            modifier = Modifier.fillMaxSize(),
+                        )
 
-                Destination.COMPENDIO ->
-                    RosterScreen(roster, portraits, compact = compact, modifier = contentModifier)
+                    Destination.COMPENDIO ->
+                        RosterScreen(roster, portraits, compact = compact, modifier = Modifier.fillMaxSize())
+                }
             }
         }
 
@@ -192,6 +206,7 @@ fun AppRoot(
             if (compact) {
                 Column(modifier.fillMaxSize().background(Palette.Night)) {
                     Box(Modifier.weight(1f)) { content(Modifier.fillMaxSize()) }
+                    GoldenRule()
                     BottomNav(destination) { destination = it }
                 }
             } else {
@@ -273,7 +288,10 @@ private fun NavRail(
         }
         Box(
             Modifier
-                .background(Palette.Gold, RoundedCornerShape(8.dp))
+                .background(
+                    Brush.verticalGradient(listOf(Palette.GoldBright, Palette.Gold)),
+                    RoundedCornerShape(8.dp),
+                )
                 .padding(horizontal = 8.dp, vertical = 5.dp),
         ) {
             Text(
@@ -337,12 +355,25 @@ private fun NavItem(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val tint = if (selected) Palette.Gold else Palette.TextMuted
+    val tint = if (selected) Palette.GoldBright else Palette.TextMuted
+    val shape = RoundedCornerShape(8.dp)
     Column(
         modifier
-            .background(
-                if (selected) Palette.Gold.copy(alpha = 0.12f) else Color.Transparent,
-                RoundedCornerShape(8.dp),
+            // La voce attiva e' una velatura d'oro bordata, non un blocco pieno:
+            // si legge come "qui" senza gridare piu' del contenuto.
+            .then(
+                if (selected) {
+                    Modifier
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Palette.Gold.copy(alpha = 0.20f), Palette.Gold.copy(alpha = 0.06f)),
+                            ),
+                            shape,
+                        )
+                        .border(1.dp, Palette.Gold.copy(alpha = 0.35f), shape)
+                } else {
+                    Modifier
+                },
             )
             .selectable(
                 selected = selected,
@@ -353,7 +384,7 @@ private fun NavItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text(text = destination.glyph, color = tint, style = MaterialTheme.typography.titleMedium)
+        GlyphIcon(destination.icon, tint = tint, size = 20.dp)
         if (showLabel) {
             Text(
                 text = destination.label,
