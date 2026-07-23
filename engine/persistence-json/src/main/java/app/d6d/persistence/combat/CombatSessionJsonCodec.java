@@ -21,6 +21,7 @@ import app.d6d.domain.combat.EventType;
 import app.d6d.domain.combat.ResolutionMethod;
 import app.d6d.domain.combat.TurnBudget;
 import app.d6d.domain.space.BattleMap;
+import app.d6d.domain.space.MapBackground;
 import app.d6d.domain.space.GridPosition;
 import app.d6d.domain.space.MapGrid;
 import app.d6d.domain.space.TokenPlacement;
@@ -185,11 +186,17 @@ public final class CombatSessionJsonCodec {
         map.placements().forEach((id, placement) -> placements.put(id, object(
                 "position", placement.origin().toString(),
                 "squaresPerSide", placement.squaresPerSide())));
+        MapBackground background = map.background();
         return object(
                 "columns", map.grid().columns(),
                 "rows", map.grid().rows(),
                 "feetPerSquare", map.grid().feetPerSquare(),
                 "backgroundImage", map.backgroundImage(),
+                "background", object(
+                        "offsetX", background.offsetX(),
+                        "offsetY", background.offsetY(),
+                        "width", background.width(),
+                        "height", background.height()),
                 "placements", placements);
     }
 
@@ -210,7 +217,20 @@ public final class CombatSessionJsonCodec {
                     GridPosition.parse(string(placement, "position", placementPath)),
                     integer(placement, "squaresPerSide", placementPath)));
         }
-        return new BattleMap(grid, placements, string(value, "backgroundImage", path));
+
+        // La collocazione dello sfondo e' facoltativa: i salvataggi precedenti non
+        // la conoscono e ripartono da UNSET, cosi' l'interfaccia la ricalcola.
+        MapBackground background = MapBackground.UNSET;
+        if (value.containsKey("background")) {
+            Map<?, ?> bg = objectValue(value, "background", path);
+            String bgPath = member(path, "background");
+            background = new MapBackground(
+                    number(bg, "offsetX", bgPath),
+                    number(bg, "offsetY", bgPath),
+                    number(bg, "width", bgPath),
+                    number(bg, "height", bgPath));
+        }
+        return new BattleMap(grid, placements, string(value, "backgroundImage", path), background);
     }
 
     private Map<String, Object> encodeCombatant(CombatantState combatant) {
@@ -562,6 +582,18 @@ public final class CombatSessionJsonCodec {
 
     private static int integer(Map<?, ?> object, String key, String path) {
         return asInteger(required(object, key, path), member(path, key));
+    }
+
+    private static double number(Map<?, ?> object, String key, String path) {
+        Object value = required(object, key, path);
+        if (!(value instanceof Number decimal)) {
+            throw invalid(member(path, key), "expected a number");
+        }
+        double result = decimal.doubleValue();
+        if (!Double.isFinite(result)) {
+            throw invalid(member(path, key), "expected a finite number");
+        }
+        return result;
     }
 
     private static int asInteger(Object value, String path) {

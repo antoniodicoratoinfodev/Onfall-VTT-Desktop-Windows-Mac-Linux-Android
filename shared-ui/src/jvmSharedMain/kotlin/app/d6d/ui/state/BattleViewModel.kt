@@ -116,6 +116,14 @@ class BattleViewModel(
     /** Quando e' attiva, un doppio clic su un campo lo rende modificabile. */
     var editMode by mutableStateOf(false)
 
+    /**
+     * Sotto-modalità della modifica: sposta e stira lo sfondo della mappa.
+     *
+     * Vive solo dentro [editMode]: chi la spegne la porta con se'. In questo stato
+     * il trascinamento sulla mappa afferra l'immagine invece di scorrere la camera.
+     */
+    var mapEditMode by mutableStateOf(false)
+
     /** Modalità scelta nella procedura Nuova partita, salvata con la presentazione. */
     var encounterMode by mutableStateOf(EncounterMode.ROLEPLAY_FIGHT_EXPLORATION)
         private set
@@ -489,6 +497,11 @@ class BattleViewModel(
     }
 
     fun setMapBackground(imageName: String) = command { session.setMapBackground(imageName) }
+
+    /** Colloca lo sfondo sulla griglia (misure in caselle). Un passo annullabile. */
+    fun setMapBackgroundTransform(offsetX: Double, offsetY: Double, width: Double, height: Double) = command {
+        session.setMapBackgroundTransform(offsetX, offsetY, width, height)
+    }
 
     fun place(combatantId: String, column: Int, row: Int, squaresPerSide: Int) = command {
         session.placeCombatant(combatantId, GridPosition(column, row), squaresPerSide)

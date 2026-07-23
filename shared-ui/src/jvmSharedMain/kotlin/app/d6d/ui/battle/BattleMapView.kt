@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.d6d.domain.space.MapBackground
 import app.d6d.domain.space.TokenPlacement
 import app.d6d.ui.components.Faction
 import app.d6d.ui.components.FloatKind
@@ -86,6 +87,7 @@ import app.d6d.ui.theme.Vignette
 import app.d6d.ui.theme.healthColor
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -104,6 +106,8 @@ fun BattleMapView(
     cellSize: Dp,
     showGrid: Boolean,
     modifier: Modifier = Modifier,
+    gridBrightness: Float = 0.5f,
+    editingBackground: Boolean = false,
     dropTarget: TokenPlacementDrag? = null,
     onCellSizeChange: (Dp) -> Unit = {},
 ) {
@@ -116,6 +120,19 @@ fun BattleMapView(
     val grid = map.grid()
     val density = LocalDensity.current
     val background = portraits.rememberBitmap(map.backgroundImage())
+
+    // Collocazione dello sfondo, in caselle. Se l'utente non l'ha ancora toccata
+    // si calcola una posizione "contain": l'immagine intera, centrata, senza
+    // deformarne la forma per riempire la griglia. Durante la modifica un abbozzo
+    // locale guida il disegno e viene salvato una volta sola, al rilascio.
+    val storedBackground = map.background()
+    val defaultBackground = remember(background, grid.columns(), grid.rows()) {
+        background?.let { containBackground(it.width, it.height, grid.columns(), grid.rows()) }
+    }
+    var backgroundDraft by remember(map.backgroundImage()) { mutableStateOf<MapBackground?>(null) }
+    val shownBackground: MapBackground? =
+        backgroundDraft ?: storedBackground.takeIf { it.isSet() } ?: defaultBackground
+    LaunchedEffect(editingBackground) { if (!editingBackground) backgroundDraft = null }
 
     // Scala effettiva, aggiornata subito dal gestore della rotella. In questo modo
     // piu' eventi ricevuti prima della ricomposizione si compongono sul valore appena
@@ -289,13 +306,20 @@ fun BattleMapView(
             // Il fondale resta piatto: l'effetto lume lo da' la sola vignettatura
             // (con la sua grana anti-banding). Un secondo gradiente radiale qui
             // sotto raddoppierebbe gli anelli di quantizzazione sui neri.
-            if (background != null) {
+            if (background != null && shownBackground != null) {
+                // La collocazione e' in caselle: moltiplicata per il lato-casella in
+                // pixel segue zoom e pan senza schiacciare l'immagine, che mantiene le
+                // proporzioni decise (o quelle scelte stirandola in modifica).
+                val dstX = mapOffset.x + (shownBackground.offsetX * cellPx).toFloat()
+                val dstY = mapOffset.y + (shownBackground.offsetY * cellPx).toFloat()
+                val dstW = (shownBackground.width * cellPx).toFloat()
+                val dstH = (shownBackground.height * cellPx).toFloat()
                 drawImage(
                     image = background,
-                    dstOffset = IntOffset(mapOffset.x.roundToInt(), mapOffset.y.roundToInt()),
+                    dstOffset = IntOffset(dstX.roundToInt(), dstY.roundToInt()),
                     dstSize = IntSize(
-                        camera.contentSize.width.roundToInt().coerceAtLeast(1),
-                        camera.contentSize.height.roundToInt().coerceAtLeast(1),
+                        dstW.roundToInt().coerceAtLeast(1),
+                        dstH.roundToInt().coerceAtLeast(1),
                     ),
                     filterQuality = FilterQuality.Medium,
                 )
@@ -303,8 +327,11 @@ fun BattleMapView(
 
             if (showGrid) {
                 // Il fondale col lume e' piu' scuro dei vecchi grigi: la griglia
-                // deve emergere un po' di piu' per restare leggibile.
-                val line = Palette.Line.copy(alpha = if (background != null) 0.65f else 0.5f)
+                // deve emergere un po' di piu' per restare leggibile, quindi sopra
+                // uno sfondo la luminosita' scelta viene spinta un filo piu' su.
+                val alpha = (gridBrightness * if (background != null) 1.3f else 1f)
+                    .coerceIn(0f, 1f)
+                val line = Palette.Line.copy(alpha = alpha)
                 val mapRight = mapOffset.x + camera.contentSize.width
                 val mapBottom = mapOffset.y + camera.contentSize.height
                 for (column in camera.visibleColumns(mapOffset)) {
@@ -344,9 +371,140 @@ fun BattleMapView(
             DropHighlight(dropTarget, liveCell, mapOffset)
         }
 
+        // In modifica mappa, un velo sopra i segnaposti cattura il trascinamento per
+        // spostare o stirare lo sfondo. Sta davanti a tutto (tranne la vignettatura),
+        // cosi' i gesti non vengono rubati dai token e la camera non scorre.
+        if (editingBackground && background != null && shownBackground != null) {
+            BackgroundEditOverlay(
+                shown = shownBackground,
+                cellPx = cellPx,
+                mapOffset = mapOffset,
+                onDraft = { backgroundDraft = it },
+                onCommit = { transform ->
+                    viewModel.setMapBackgroundTransform(
+                        transform.offsetX, transform.offsetY, transform.width, transform.height,
+                    )
+                    backgroundDraft = null
+                },
+            )
+        }
+
         // Vignettatura sopra tutto: angoli in ombra, luce dove si combatte. Non
         // ha gestori di puntatore, quindi i tocchi la attraversano.
         Vignette(strength = 0.26f)
+    }
+}
+
+/**
+ * Velo di modifica dello sfondo: sposta trascinando il corpo dell'immagine, stira
+ * afferrando un angolo (l'angolo opposto resta fermo). Un solo gesto = un solo passo
+ * salvato, quindi annullabile in un colpo.
+ */
+@Composable
+private fun BackgroundEditOverlay(
+    shown: MapBackground,
+    cellPx: Float,
+    mapOffset: Offset,
+    onDraft: (MapBackground?) -> Unit,
+    onCommit: (MapBackground) -> Unit,
+) {
+    // Il gesto vive attraverso piu' fotogrammi: legge sempre i valori piu' recenti
+    // di camera e collocazione, cosi' uno zoom con la rotella durante la modifica
+    // non lo disallinea.
+    val shownState = rememberUpdatedState(shown)
+    val cellState = rememberUpdatedState(cellPx)
+    val offsetState = rememberUpdatedState(mapOffset)
+    val onDraftState = rememberUpdatedState(onDraft)
+    val onCommitState = rememberUpdatedState(onCommit)
+
+    Canvas(
+        Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                val hitRadius = 20.dp.toPx()
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val cell = cellState.value
+                    val origin = offsetState.value
+                    if (cell <= 0f) return@awaitEachGesture
+                    val start = shownState.value
+
+                    val left = origin.x + (start.offsetX * cell).toFloat()
+                    val top = origin.y + (start.offsetY * cell).toFloat()
+                    val right = left + (start.width * cell).toFloat()
+                    val bottom = top + (start.height * cell).toFloat()
+
+                    fun near(px: Float, py: Float) =
+                        (down.position - Offset(px, py)).getDistance() <= hitRadius
+
+                    val handle = when {
+                        near(left, top) -> BgHandle.TL
+                        near(right, top) -> BgHandle.TR
+                        near(left, bottom) -> BgHandle.BL
+                        near(right, bottom) -> BgHandle.BR
+                        else -> null
+                    }
+                    val insideBody = handle == null &&
+                        down.position.x in left..right && down.position.y in top..bottom
+                    // Fuori dall'immagine, in modifica, non si fa nulla: si evita di
+                    // muovere per sbaglio qualcosa che non si sta neanche toccando.
+                    if (handle == null && !insideBody) return@awaitEachGesture
+
+                    var working = start
+                    onDraftState.value(working)
+                    down.consume()
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            change.consume()
+                            break
+                        }
+                        val move = change.positionChange()
+                        val liveCellPx = cellState.value.takeIf { it > 0f } ?: cell
+                        val dx = (move.x / liveCellPx).toDouble()
+                        val dy = (move.y / liveCellPx).toDouble()
+                        working = if (handle != null) {
+                            working.resizedBy(handle, dx, dy)
+                        } else {
+                            MapBackground(working.offsetX + dx, working.offsetY + dy, working.width, working.height)
+                        }
+                        onDraftState.value(working)
+                        change.consume()
+                    }
+                    onCommitState.value(working)
+                }
+            },
+    ) {
+        val cell = cellPx
+        val left = mapOffset.x + (shown.offsetX * cell).toFloat()
+        val top = mapOffset.y + (shown.offsetY * cell).toFloat()
+        val w = (shown.width * cell).toFloat()
+        val h = (shown.height * cell).toFloat()
+        drawRect(
+            color = Palette.GoldBright.copy(alpha = 0.95f),
+            topLeft = Offset(left, top),
+            size = Size(w, h),
+            style = Stroke(width = 2f),
+        )
+        val r = 7.dp.toPx()
+        listOf(
+            Offset(left, top), Offset(left + w, top),
+            Offset(left, top + h), Offset(left + w, top + h),
+        ).forEach { corner ->
+            drawRect(
+                color = Palette.Abyss.copy(alpha = 0.85f),
+                topLeft = Offset(corner.x - r, corner.y - r),
+                size = Size(r * 2, r * 2),
+            )
+            drawRect(
+                color = Palette.GoldBright,
+                topLeft = Offset(corner.x - r, corner.y - r),
+                size = Size(r * 2, r * 2),
+                style = Stroke(width = 2f),
+            )
+        }
     }
 }
 
@@ -772,4 +930,63 @@ private fun MapNotConfigured(viewModel: BattleViewModel, modifier: Modifier = Mo
             }
         }
     }
+}
+
+/** I quattro angoli afferrabili dello sfondo in modifica. */
+private enum class BgHandle { TL, TR, BL, BR }
+
+/** Lato minimo dello sfondo, in caselle: non si puo' stirare fino a farlo sparire. */
+private const val MIN_BG_SQUARES = 0.5
+
+/**
+ * Collocazione "contain": l'immagine intera, centrata, senza deformazioni.
+ *
+ * Si sceglie il lato vincolante confrontando le proporzioni dell'immagine con
+ * quelle della griglia, cosi' l'altro lato resta piu' corto e nulla viene stirato.
+ */
+private fun containBackground(
+    imageWidth: Int,
+    imageHeight: Int,
+    columns: Int,
+    rows: Int,
+): MapBackground {
+    if (imageWidth <= 0 || imageHeight <= 0 || columns <= 0 || rows <= 0) {
+        return MapBackground(0.0, 0.0, columns.coerceAtLeast(1).toDouble(), rows.coerceAtLeast(1).toDouble())
+    }
+    val imageAspect = imageWidth.toDouble() / imageHeight
+    val gridAspect = columns.toDouble() / rows
+    val width: Double
+    val height: Double
+    if (imageAspect > gridAspect) {
+        width = columns.toDouble()
+        height = columns / imageAspect
+    } else {
+        height = rows.toDouble()
+        width = rows * imageAspect
+    }
+    return MapBackground((columns - width) / 2.0, (rows - height) / 2.0, width, height)
+}
+
+/**
+ * Nuovo rettangolo dopo aver trascinato un angolo, tenendo fermo l'angolo opposto.
+ *
+ * Lavora in caselle. L'angolo opposto e' l'ancora: resta dov'e' mentre quello
+ * afferrato segue il dito. Un lato minimo evita che l'immagine collassi, e l'ancora
+ * non si sposta neppure quando si supera quel minimo.
+ */
+private fun MapBackground.resizedBy(handle: BgHandle, dxSquares: Double, dySquares: Double): MapBackground {
+    val left = offsetX
+    val top = offsetY
+    val right = offsetX + width
+    val bottom = offsetY + height
+    val anchorX = if (handle == BgHandle.TL || handle == BgHandle.BL) right else left
+    val anchorY = if (handle == BgHandle.TL || handle == BgHandle.TR) bottom else top
+    val movingX = (if (handle == BgHandle.TL || handle == BgHandle.BL) left else right) + dxSquares
+    val movingY = (if (handle == BgHandle.TL || handle == BgHandle.TR) top else bottom) + dySquares
+
+    val newWidth = abs(movingX - anchorX).coerceAtLeast(MIN_BG_SQUARES)
+    val newHeight = abs(movingY - anchorY).coerceAtLeast(MIN_BG_SQUARES)
+    val newLeft = if (movingX <= anchorX) anchorX - newWidth else anchorX
+    val newTop = if (movingY <= anchorY) anchorY - newHeight else anchorY
+    return MapBackground(newLeft, newTop, newWidth, newHeight)
 }

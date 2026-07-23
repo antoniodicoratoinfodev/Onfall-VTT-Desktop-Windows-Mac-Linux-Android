@@ -8,6 +8,7 @@ import app.d6d.domain.combat.DamageComponent;
 import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.RollSource;
 import app.d6d.domain.space.GridPosition;
+import app.d6d.domain.space.MapBackground;
 import app.d6d.domain.space.MapGrid;
 import app.d6d.engine.CombatSession;
 import app.d6d.persistence.json.Json;
@@ -101,6 +102,22 @@ class NewStatePersistenceTest {
         assertEquals(new GridPosition(3, 4), after.battleMap().placementOf("hero").orElseThrow().origin());
         // L'ingombro della creatura Grande non deve appiattirsi a una casella.
         assertEquals(2, after.battleMap().placementOf("goblin").orElseThrow().squaresPerSide());
+    }
+
+    @Test
+    void laCollocazioneDelloSfondoSopravvive() {
+        CombatSession session = richSession();
+        // Sfondo spostato oltre il bordo e stirato: proprio il caso che il vecchio
+        // "riempi la griglia" non sapeva rappresentare.
+        session.setMapBackgroundTransform(-2.5, 1.0, 30.0, 22.5);
+
+        MapBackground background = roundTrip(session).currentState().battleMap().background();
+
+        assertTrue(background.isSet());
+        assertEquals(-2.5, background.offsetX());
+        assertEquals(1.0, background.offsetY());
+        assertEquals(30.0, background.width());
+        assertEquals(22.5, background.height());
     }
 
     @Test

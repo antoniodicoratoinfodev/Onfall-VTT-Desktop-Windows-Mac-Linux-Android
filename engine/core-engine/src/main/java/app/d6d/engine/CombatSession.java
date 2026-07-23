@@ -35,6 +35,7 @@ import app.d6d.domain.space.TokenPlacement;
 import app.d6d.domain.space.MapGrid;
 import app.d6d.domain.space.GridPosition;
 import app.d6d.domain.space.BattleMap;
+import app.d6d.domain.space.MapBackground;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -629,6 +630,25 @@ public final class CombatSession {
         beginCommand();
         state.battleMap = state.battleMap.withBackground(imageName == null ? "" : imageName);
         append(EventType.MAP_BACKGROUND_SET, "", "", details("image", state.battleMap.backgroundImage()));
+    }
+
+    /**
+     * Collocazione dello sfondo sulla griglia: dove sta e quanto e' grande.
+     *
+     * <p>Le misure sono in caselle. Un solo evento per gesto completo — non uno per
+     * ogni scatto del trascinamento — cosi' spostare o stirare l'immagine resta un
+     * passo solo da annullare, come muovere un segnaposto.</p>
+     */
+    public synchronized void setMapBackgroundTransform(
+            double offsetX, double offsetY, double width, double height) {
+        beginCommand();
+        MapBackground transform = new MapBackground(offsetX, offsetY, width, height);
+        state.battleMap = state.battleMap.withBackgroundTransform(transform);
+        append(EventType.MAP_BACKGROUND_SET, "", "", details(
+                "offsetX", transform.offsetX(),
+                "offsetY", transform.offsetY(),
+                "width", transform.width(),
+                "height", transform.height()));
     }
 
     /**

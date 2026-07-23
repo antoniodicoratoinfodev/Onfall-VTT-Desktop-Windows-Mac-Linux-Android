@@ -46,6 +46,9 @@ data class UiLayout(
     val commandsCollapsed: Boolean = false,
     val mapCellSizeDp: Float = 46f,
     val mapShowGrid: Boolean = true,
+    // Luminosita' delle linee della griglia, scelta dall'utente: 0 quasi
+    // invisibili, 1 ben marcate. Predefinito a meta' scala, come i vecchi grigi.
+    val mapGridBrightness: Float = 0.5f,
     val targetPlate: PlateFraction? = null,
     val activePlate: PlateFraction? = null,
     // Scala delle due targhe flottanti: la maniglia d'angolo le ingrandisce o
@@ -68,6 +71,7 @@ data class UiLayout(
         topBarHeightDp = topBarHeightDp.clampOr(48f, 320f, 64f),
         commandBarHeightDp = commandBarHeightDp.clampOr(48f, 640f, 176f),
         mapCellSizeDp = mapCellSizeDp.clampOr(14f, 140f, 46f),
+        mapGridBrightness = mapGridBrightness.clampOr(0.05f, 1f, 0.5f),
         targetPlate = targetPlate?.sanitized(),
         activePlate = activePlate?.sanitized(),
         targetPlateScale = targetPlateScale.clampOr(0.6f, 2f, 1f),

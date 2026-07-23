@@ -16,14 +16,21 @@ import java.util.Optional;
  *
  * <p>{@code backgroundImage} e' il nome di un file nell'archivio locale delle
  * immagini, mai un percorso assoluto: le immagini dell'utente restano locali e
- * fuori dagli export condivisibili.</p>
+ * fuori dagli export condivisibili. {@code background} ne descrive la collocazione
+ * sulla griglia — dove sta e quanto e' grande — cosi' l'immagine puo' essere spostata
+ * e stirata senza essere schiacciata per forza dentro il rettangolo della griglia.</p>
  */
-public record BattleMap(MapGrid grid, Map<String, TokenPlacement> placements, String backgroundImage) {
+public record BattleMap(
+        MapGrid grid,
+        Map<String, TokenPlacement> placements,
+        String backgroundImage,
+        MapBackground background) {
 
     public BattleMap {
         Objects.requireNonNull(grid, "grid");
         placements = Map.copyOf(Objects.requireNonNull(placements, "placements"));
         backgroundImage = backgroundImage == null ? "" : backgroundImage;
+        background = background == null ? MapBackground.UNSET : background;
         for (Map.Entry<String, TokenPlacement> entry : placements.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().combatantId())) {
                 throw new IllegalArgumentException("Placement key must match its combatant id");
@@ -37,7 +44,7 @@ public record BattleMap(MapGrid grid, Map<String, TokenPlacement> placements, St
 
     /** Nessuna mappa: l'incontro resta astratto. */
     public static BattleMap none() {
-        return new BattleMap(MapGrid.NONE, Map.of(), "");
+        return new BattleMap(MapGrid.NONE, Map.of(), "", MapBackground.UNSET);
     }
 
     public boolean configured() {
@@ -100,23 +107,36 @@ public record BattleMap(MapGrid grid, Map<String, TokenPlacement> placements, St
                 retained.put(id, placement);
             }
         });
-        return new BattleMap(updated, retained, backgroundImage);
+        return new BattleMap(updated, retained, backgroundImage, background);
     }
 
     public BattleMap withPlacement(TokenPlacement placement) {
         Map<String, TokenPlacement> updated = new LinkedHashMap<>(placements);
         updated.put(placement.combatantId(), placement);
-        return new BattleMap(grid, updated, backgroundImage);
+        return new BattleMap(grid, updated, backgroundImage, background);
     }
 
     public BattleMap without(String combatantId) {
         Map<String, TokenPlacement> updated = new LinkedHashMap<>(placements);
         updated.remove(combatantId);
-        return new BattleMap(grid, updated, backgroundImage);
+        return new BattleMap(grid, updated, backgroundImage, background);
     }
 
+    /**
+     * Cambia l'immagine di sfondo e azzera la collocazione.
+     *
+     * <p>Un'immagine nuova ha proporzioni sue: la vecchia collocazione non ha piu'
+     * senso, quindi si torna a {@link MapBackground#UNSET} e sara' l'interfaccia a
+     * ricalcolare una posizione iniziale che rispetti la forma della nuova immagine.</p>
+     */
     public BattleMap withBackground(String imageName) {
-        return new BattleMap(grid, placements, imageName);
+        return new BattleMap(grid, placements, imageName, MapBackground.UNSET);
+    }
+
+    /** Sposta o ridimensiona lo sfondo senza toccare l'immagine scelta. */
+    public BattleMap withBackgroundTransform(MapBackground transform) {
+        Objects.requireNonNull(transform, "transform");
+        return new BattleMap(grid, placements, backgroundImage, transform);
     }
 
     /** Segnaposti in ordine stabile, per disegnarli sempre nella stessa sequenza. */

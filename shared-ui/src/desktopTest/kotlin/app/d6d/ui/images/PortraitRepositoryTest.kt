@@ -17,7 +17,9 @@ class PortraitRepositoryTest {
     lateinit var directory: Path
 
     private fun sampleImage(): Path = directory.resolve("sorgente.png").also { source ->
-        Files.write(source, byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47))
+        // Firma PNG completa (8 byte): l'archivio verifica il contenuto, non la sola
+        // estensione, quindi una firma troncata verrebbe — giustamente — rifiutata.
+        Files.write(source, byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
     }
 
     @Test

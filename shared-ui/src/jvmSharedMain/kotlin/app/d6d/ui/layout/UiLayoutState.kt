@@ -35,6 +35,7 @@ class UiLayoutState(
     var commandsCollapsed by mutableStateOf(initial.commandsCollapsed)
     var mapCellSize by mutableStateOf(initial.mapCellSizeDp.dp)
     var mapShowGrid by mutableStateOf(initial.mapShowGrid)
+    var mapGridBrightness by mutableStateOf(initial.mapGridBrightness)
     var targetPlate by mutableStateOf(initial.targetPlate?.toOffset())
     var activePlate by mutableStateOf(initial.activePlate?.toOffset())
     var targetPlateScale by mutableStateOf(initial.targetPlateScale)
@@ -56,6 +57,7 @@ class UiLayoutState(
         commandsCollapsed = commandsCollapsed,
         mapCellSizeDp = mapCellSize.value,
         mapShowGrid = mapShowGrid,
+        mapGridBrightness = mapGridBrightness,
         targetPlate = targetPlate?.toFraction(),
         activePlate = activePlate?.toFraction(),
         targetPlateScale = targetPlateScale,

@@ -1,6 +1,7 @@
 package app.d6d.ui.battle
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.d6d.sheet.ImageStore
 import app.d6d.sheet.feetWithMetres
 import app.d6d.ui.components.Chip
 import app.d6d.ui.images.PortraitRepository
@@ -45,6 +47,8 @@ fun MapControls(
     onCellSizeChange: (Dp) -> Unit,
     showGrid: Boolean,
     onShowGridChange: (Boolean) -> Unit,
+    gridBrightness: Float,
+    onGridBrightnessChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val grid = viewModel.battleMap.grid()
@@ -85,6 +89,25 @@ fun MapControls(
                 selected = expanded,
                 dense = true,
                 onClick = { expanded = !expanded },
+            )
+            // Compare solo in modifica: da' accesso a spostare e stirare lo sfondo.
+            if (viewModel.editMode) {
+                GameButton(
+                    label = if (viewModel.mapEditMode) "Modifica mappa attiva" else "Modifica mappa",
+                    accent = if (viewModel.mapEditMode) Palette.Heal else Palette.Gold,
+                    selected = viewModel.mapEditMode,
+                    dense = true,
+                    onClick = { viewModel.mapEditMode = !viewModel.mapEditMode },
+                )
+            }
+        }
+
+        if (viewModel.editMode && viewModel.mapEditMode) {
+            Text(
+                text = "Trascina l'immagine per spostarla · afferra un angolo per ridimensionarla.",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             )
         }
 
@@ -129,11 +152,32 @@ fun MapControls(
                     ),
                     modifier = Modifier.width(150.dp),
                 )
-                GameButton("Scegli sfondo", accent = Palette.Party, dense = true, onClick = {
-                    portraits.pickBackgroundAsync { stored ->
-                        stored?.let { viewModel.setMapBackground(it) }
-                    }
-                })
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Griglia", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                    Slider(
+                        value = gridBrightness.coerceIn(MIN_GRID_BRIGHTNESS, MAX_GRID_BRIGHTNESS),
+                        onValueChange = { onGridBrightnessChange(it.coerceIn(MIN_GRID_BRIGHTNESS, MAX_GRID_BRIGHTNESS)) },
+                        valueRange = MIN_GRID_BRIGHTNESS..MAX_GRID_BRIGHTNESS,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Palette.Gold,
+                            activeTrackColor = Palette.Gold,
+                            inactiveTrackColor = Palette.Line,
+                        ),
+                        modifier = Modifier.width(120.dp),
+                    )
+                    Chip("${(gridBrightness * 100).toInt()}%", Palette.TextMuted)
+                }
+                GameButton(
+                    label = "Scegli sfondo",
+                    accent = Palette.Party,
+                    dense = true,
+                    subtitle = "${ImageStore.acceptedFormatsLabel} · max ${ImageStore.maxSizeLabel}",
+                    onClick = {
+                        portraits.pickBackgroundAsync { stored ->
+                            stored?.let { viewModel.setMapBackground(it) }
+                        }
+                    },
+                )
                 if (viewModel.battleMap.backgroundImage().isNotBlank()) {
                     GameButton("Togli sfondo", accent = Palette.TextFaint, dense = true, onClick = {
                         viewModel.setMapBackground("")
@@ -144,9 +188,27 @@ fun MapControls(
                 })
             }
         }
+
+        // Esito della scelta immagine: conferma di caricamento oppure il motivo del
+        // rifiuto (formato, dimensione, file non valido). Un tocco lo congeda.
+        portraits.message?.let { note ->
+            Text(
+                text = note,
+                color = Palette.Gold,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { portraits.dismissMessage() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
     }
 }
 
 /** Dimensione minima e massima di una casella, in dp. Condivise con lo zoom a rotellina. */
 internal val MIN_CELL = 14.dp
 internal val MAX_CELL = 140.dp
+
+/** Estremi della luminosita' della griglia: mai del tutto invisibile, mai piena. */
+internal const val MIN_GRID_BRIGHTNESS = 0.05f
+internal const val MAX_GRID_BRIGHTNESS = 1f

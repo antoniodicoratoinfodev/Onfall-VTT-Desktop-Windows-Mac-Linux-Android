@@ -67,6 +67,38 @@ class ImageStoreTest {
     }
 
     @Test
+    fun `un file oltre il limite di dimensione viene rifiutato`() {
+        // File sparso: la lunghezza logica supera il limite senza scrivere davvero
+        // 200 MB su disco, cosi' il test resta istantaneo.
+        val big = Files.createTempDirectory("grande").resolve("enorme.png")
+        java.io.RandomAccessFile(big.toFile(), "rw").use { it.setLength(ImageStore.MAX_IMAGE_BYTES + 1) }
+
+        val error = assertThrows(IllegalArgumentException::class.java) { store().importImage(big) }
+        assertTrue(error.message!!.contains(ImageStore.maxSizeLabel))
+    }
+
+    @Test
+    fun `un'estensione immagine ma contenuto non-immagine viene rifiutato`() {
+        // La difesa vera: un file rinominato .png ma pieno d'altro non deve entrare
+        // nell'archivio solo perche' l'estensione sembra giusta.
+        val travestito = Files.createTempDirectory("finto").resolve("malevolo.png")
+        Files.write(travestito, "MZ questo non e' un'immagine".toByteArray())
+
+        assertThrows(IllegalArgumentException::class.java) { store().importImage(travestito) }
+    }
+
+    @Test
+    fun `un jpeg reale viene accettato`() {
+        val jpeg = Files.createTempDirectory("foto").resolve("scatto.jpg")
+        // Firma JPEG (SOI + marker) seguita da qualche byte qualsiasi.
+        Files.write(jpeg, byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0x00, 0x10))
+
+        val stored = store().importImage(jpeg)
+
+        assertEquals("scatto.jpg", stored)
+    }
+
+    @Test
     fun `un file inesistente viene rifiutato`() {
         assertThrows(IllegalArgumentException::class.java) {
             store().importImage(dataDirectory.resolve("mai-esistito.png"))

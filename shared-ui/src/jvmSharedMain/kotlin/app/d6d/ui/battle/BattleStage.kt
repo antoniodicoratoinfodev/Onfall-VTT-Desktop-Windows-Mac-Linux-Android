@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,6 +78,12 @@ fun BattleStage(
 ) {
     val layout = LocalUiLayout.current
 
+    // La modifica dello sfondo e' una sotto-modalità della modifica: chi esce dalla
+    // modifica se la porta dietro, cosi' non resta acceso un velo invisibile.
+    LaunchedEffect(viewModel.editMode) {
+        if (!viewModel.editMode) viewModel.mapEditMode = false
+    }
+
     Column(modifier.fillMaxSize()) {
         if (viewModel.mapConfigured) {
             MapControls(
@@ -86,6 +93,8 @@ fun BattleStage(
                 onCellSizeChange = { layout.mapCellSize = it },
                 showGrid = layout.mapShowGrid,
                 onShowGridChange = { layout.mapShowGrid = it },
+                gridBrightness = layout.mapGridBrightness,
+                onGridBrightnessChange = { layout.mapGridBrightness = it },
             )
         }
 
@@ -95,6 +104,8 @@ fun BattleStage(
                 portraits = portraits,
                 cellSize = layout.mapCellSize,
                 showGrid = layout.mapShowGrid,
+                gridBrightness = layout.mapGridBrightness,
+                editingBackground = viewModel.editMode && viewModel.mapEditMode,
                 modifier = Modifier.fillMaxSize(),
                 dropTarget = dropTarget,
                 onCellSizeChange = { layout.mapCellSize = it },

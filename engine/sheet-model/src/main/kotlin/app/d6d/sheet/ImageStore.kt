@@ -40,21 +40,35 @@ class ImageStore(private val dataDirectory: Path) {
 
     val imagesDirectory: Path get() = dataDirectory.resolve("images")
 
-    /** Estensioni riconosciute; `decodeToImageBitmap` gestisce questi formati. */
-    private val supported = setOf("png", "jpg", "jpeg", "webp", "bmp", "gif")
-
     fun isSupported(source: Path): Boolean =
-        source.fileName?.toString()?.substringAfterLast('.', "")?.lowercase(Locale.ROOT) in supported
+        source.fileName?.toString()?.substringAfterLast('.', "")?.lowercase(Locale.ROOT) in SUPPORTED_FORMATS
 
     /**
      * Copia un'immagine nell'archivio e ne restituisce il nome interno.
      *
      * Il nome e' reso univoco con un contatore invece di sovrascrivere: due
      * personaggi diversi possono avere file di partenza omonimi.
+     *
+     * Prima di copiare, il file viene controllato tre volte: dimensione entro il
+     * limite, estensione riconosciuta e — soprattutto — contenuto realmente di un
+     * formato immagine supportato. Un file rinominato `.png` ma pieno d'altro (un
+     * eseguibile, un archivio) verrebbe accettato dal solo controllo d'estensione:
+     * la firma nei primi byte e' la difesa vera, perche' e' il contenuto a essere
+     * poi decodificato e mostrato.
      */
     fun importImage(source: Path): String {
         require(Files.isRegularFile(source)) { "Il file non esiste: $source" }
-        require(isSupported(source)) { "Formato immagine non supportato: ${source.fileName}" }
+
+        val size = Files.size(source)
+        require(size <= MAX_IMAGE_BYTES) {
+            "Immagine troppo grande (${humanBytes(size)}): il limite e' $maxSizeLabel."
+        }
+        require(isSupported(source)) {
+            "Formato immagine non supportato: ${source.fileName}. Formati accettati: $acceptedFormatsLabel."
+        }
+        require(sniffFormat(source) != null) {
+            "Il file non e' un'immagine valida o e' danneggiato. Formati accettati: $acceptedFormatsLabel."
+        }
 
         Files.createDirectories(imagesDirectory)
         val original = source.fileName.toString()
@@ -100,5 +114,74 @@ class ImageStore(private val dataDirectory: Path) {
     /** Elimina un'immagine dall'archivio; nessun effetto se non esiste. */
     fun deleteImage(name: String) {
         resolve(name)?.let { Files.deleteIfExists(it) }
+    }
+
+    /**
+     * Riconosce il formato dai primi byte del file, non dall'estensione.
+     *
+     * Restituisce il nome del formato quando la firma corrisponde a uno di quelli
+     * supportati, altrimenti null. Legge solo l'intestazione: non serve caricare in
+     * memoria un file da centinaia di megabyte per sapere se e' davvero un'immagine.
+     */
+    private fun sniffFormat(source: Path): String? {
+        val header = ByteArray(HEADER_BYTES)
+        val read = Files.newInputStream(source).use { input ->
+            var total = 0
+            while (total < header.size) {
+                val n = input.read(header, total, header.size - total)
+                if (n < 0) break
+                total += n
+            }
+            total
+        }
+        fun matches(signature: IntArray): Boolean {
+            if (read < signature.size) return false
+            return signature.withIndex().all { (i, b) -> b < 0 || header[i].toInt() and 0xFF == b }
+        }
+        return when {
+            matches(PNG) -> "png"
+            matches(JPEG) -> "jpg"
+            matches(GIF87) || matches(GIF89) -> "gif"
+            matches(BMP) -> "bmp"
+            // WEBP: "RIFF" .... "WEBP"; i quattro byte della dimensione sono liberi.
+            matches(RIFF) && read >= 12 &&
+                header[8].toInt() == 'W'.code && header[9].toInt() == 'E'.code &&
+                header[10].toInt() == 'B'.code && header[11].toInt() == 'P'.code -> "webp"
+            else -> null
+        }
+    }
+
+    companion object {
+        /** Limite di dimensione del file scelto: 200 MB. */
+        const val MAX_IMAGE_BYTES: Long = 200L * 1024 * 1024
+
+        /** Estensioni riconosciute; `decodeToImageBitmap` gestisce questi formati. */
+        val SUPPORTED_FORMATS: Set<String> = setOf("png", "jpg", "jpeg", "webp", "bmp", "gif")
+
+        /** Testo pronto da mostrare all'utente: formati accettati e limite. */
+        const val acceptedFormatsLabel: String = "PNG, JPG, WEBP, BMP, GIF"
+        const val maxSizeLabel: String = "200 MB"
+
+        private const val HEADER_BYTES = 16
+
+        // Firme dei formati supportati. -1 significa "byte qualsiasi".
+        private val PNG = intArrayOf(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        private val JPEG = intArrayOf(0xFF, 0xD8, 0xFF)
+        private val GIF87 = intArrayOf(0x47, 0x49, 0x46, 0x38, 0x37, 0x61)
+        private val GIF89 = intArrayOf(0x47, 0x49, 0x46, 0x38, 0x39, 0x61)
+        private val BMP = intArrayOf(0x42, 0x4D)
+        private val RIFF = intArrayOf(0x52, 0x49, 0x46, 0x46)
+
+        private fun humanBytes(bytes: Long): String {
+            if (bytes < 1024) return "$bytes B"
+            val units = listOf("KB", "MB", "GB")
+            var value = bytes.toDouble() / 1024
+            var unit = 0
+            while (value >= 1024 && unit < units.size - 1) {
+                value /= 1024
+                unit++
+            }
+            return "${(value * 10).toLong() / 10.0} ${units[unit]}"
+        }
     }
 }
