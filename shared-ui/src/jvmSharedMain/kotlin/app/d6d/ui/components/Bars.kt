@@ -42,7 +42,7 @@ fun HealthBar(
     max: Int,
     temporary: Int = 0,
     modifier: Modifier = Modifier,
-    height: Dp = 9.dp,
+    height: Dp = 5.dp,
 ) {
     val safeMax = max.coerceAtLeast(1)
     val target = (current.toFloat() / safeMax).coerceIn(0f, 1f)
@@ -72,7 +72,8 @@ fun HealthBar(
     ) {
         val radius = CornerRadius(size.height / 2f, size.height / 2f)
 
-        drawRoundRect(color = Palette.Abyss, cornerRadius = radius)
+        // Barra sottile senza contorno: traccia grigia visibile, riempimento pieno.
+        drawRoundRect(color = Palette.Line, cornerRadius = radius)
 
         if (ratio > 0f) {
             drawRoundRect(
@@ -94,12 +95,6 @@ fun HealthBar(
                 )
             }
         }
-
-        drawRoundRect(
-            color = Palette.Line,
-            cornerRadius = radius,
-            style = Stroke(width = 1f),
-        )
     }
 }
 

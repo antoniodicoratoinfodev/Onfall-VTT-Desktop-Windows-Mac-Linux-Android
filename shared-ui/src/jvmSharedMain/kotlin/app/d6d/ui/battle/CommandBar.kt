@@ -66,15 +66,30 @@ fun GameButton(
     subtitle: String? = null,
     selected: Boolean = false,
     dense: Boolean = false,
+    // Azione principale della schermata: pillola avorio piena, come lo stato
+    // selezionato, ma senza dichiararsi "selezionata" all'accessibilita'.
+    primary: Boolean = false,
 ) {
     val tint = if (enabled) accent else Palette.TextFaint
     val shape = RoundedCornerShape(if (dense) 6.dp else 8.dp)
+    // Linguaggio dei comandi: riempimento scuro neutro con bordo sottile; lo stato
+    // selezionato (o l'azione principale) diventa una pillola avorio con testo scuro.
+    val solid = selected || (primary && enabled)
+    val fill = when {
+        solid -> Palette.Gold
+        enabled -> Palette.SurfaceHigh
+        else -> Palette.Surface
+    }
+    val labelColor = if (solid) Palette.Abyss else tint
     Column(
         modifier = modifier
             .then(if (dense) Modifier else Modifier.minimumInteractiveComponentSize())
             .semantics { this.selected = selected }
-            .background(tint.copy(alpha = if (enabled) 0.11f else 0.05f), shape)
-            .border(1.dp, tint.copy(alpha = if (enabled) 0.65f else 0.28f), shape)
+            .background(fill, shape)
+            .then(
+                if (solid) Modifier
+                else Modifier.border(1.dp, Palette.Line.copy(alpha = if (enabled) 1f else 0.55f), shape),
+            )
             .clickable(enabled = enabled, role = Role.Button) { onClick() }
             .padding(
                 horizontal = if (dense) 8.dp else 13.dp,
@@ -84,14 +99,14 @@ fun GameButton(
     ) {
         Text(
             text = label,
-            color = tint,
+            color = labelColor,
             fontWeight = FontWeight.Bold,
             style = if (dense) MaterialTheme.typography.bodySmall else MaterialTheme.typography.titleMedium,
         )
         if (subtitle != null) {
             Text(
                 text = subtitle,
-                color = Palette.TextMuted,
+                color = if (solid) Palette.Abyss.copy(alpha = 0.62f) else Palette.TextMuted,
                 style = if (dense) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
             )
         }
@@ -319,6 +334,7 @@ fun CommandBar(
                 label = "Fine turno",
                 accent = Palette.Heal,
                 enabled = combatActive,
+                primary = true,
                 onClick = { viewModel.endTurn() },
             )
         }

@@ -96,7 +96,7 @@ private fun TurnChip(
         current -> Modifier.border(1.5.dp, Palette.GoldBright, shape)
         editing -> Modifier.border(1.dp, Palette.Gold.copy(alpha = 0.4f), shape)
         targeted -> Modifier.border(1.5.dp, accent.copy(alpha = 0.9f), shape)
-        else -> Modifier
+        else -> Modifier.border(1.dp, Palette.Line, shape)
     }
     val chipState = buildList {
         if (current) add("Turno corrente")
@@ -120,7 +120,7 @@ private fun TurnChip(
                 when {
                     current -> Palette.Gold.copy(alpha = 0.14f)
                     targeted -> accent.copy(alpha = 0.1f)
-                    else -> Palette.Night
+                    else -> Palette.Surface
                 },
                 shape,
             )
@@ -203,8 +203,8 @@ private fun MoveButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
         fontWeight = FontWeight.Black,
         style = MaterialTheme.typography.labelSmall,
         modifier = Modifier
-            .background(tint.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
-            .border(1.dp, tint.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+            .background(Palette.SurfaceHigh, RoundedCornerShape(4.dp))
+            .border(1.dp, Palette.Line, RoundedCornerShape(4.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )

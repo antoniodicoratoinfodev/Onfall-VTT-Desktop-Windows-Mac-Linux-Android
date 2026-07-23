@@ -24,6 +24,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -75,7 +78,7 @@ fun CombatantRailCard(
     val outline = when {
         targeted -> Modifier.border(2.dp, faction.color, shape)
         active -> Modifier.border(1.5.dp, Palette.Gold.copy(alpha = 0.82f), shape)
-        else -> Modifier
+        else -> Modifier.border(1.dp, Palette.Line, shape)
     }
     val cardState = buildString {
         append("${combatant.currentHitPoints()} punti ferita su ${snapshot.maxHitPoints()}.")
@@ -93,6 +96,7 @@ fun CombatantRailCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .minimumInteractiveComponentSize()
+                .clip(shape)
                 .background(
                     when {
                         targeted -> faction.color.copy(alpha = 0.12f)
@@ -101,6 +105,14 @@ fun CombatantRailCard(
                     },
                     shape,
                 )
+                // Strip di fazione sul bordo sinistro, come le carte di iniziativa
+                // del riferimento: argento per la squadra, salmone per i nemici.
+                .drawBehind {
+                    drawRect(
+                        color = faction.color.copy(alpha = 0.9f),
+                        size = Size(3.dp.toPx(), size.height),
+                    )
+                }
                 .then(outline)
                 .semantics {
                     contentDescription = "Combattente ${snapshot.name()}"

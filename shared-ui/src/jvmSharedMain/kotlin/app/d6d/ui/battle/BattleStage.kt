@@ -324,7 +324,7 @@ private fun StagePlate(
             current = combatant.currentHitPoints(),
             max = snapshot.maxHitPoints(),
             temporary = combatant.temporaryHitPoints(),
-            height = 9.dp,
+            height = 5.dp,
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

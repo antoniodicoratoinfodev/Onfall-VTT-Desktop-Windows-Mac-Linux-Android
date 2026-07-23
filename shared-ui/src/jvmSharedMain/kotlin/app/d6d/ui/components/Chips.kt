@@ -74,14 +74,16 @@ fun Chip(
     modifier: Modifier = Modifier,
     padding: PaddingValues = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
 ) {
+    // Pillola scura neutra con solo il testo tinto: il colore resta un'informazione,
+    // non una decorazione, come le etichette di stato del riferimento.
     Text(
         text = text,
         color = color,
         fontWeight = FontWeight.Bold,
         style = MaterialTheme.typography.bodySmall,
         modifier = modifier
-            .background(color.copy(alpha = 0.13f), RoundedCornerShape(5.dp))
-            .border(1.dp, color.copy(alpha = 0.34f), RoundedCornerShape(5.dp))
+            .background(Palette.SurfaceHigh, RoundedCornerShape(6.dp))
+            .border(1.dp, Palette.Line, RoundedCornerShape(6.dp))
             .padding(padding),
     )
 }
