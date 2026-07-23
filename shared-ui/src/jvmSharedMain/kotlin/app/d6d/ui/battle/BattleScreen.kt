@@ -468,8 +468,12 @@ private fun BattleTopBar(
             ) {
                 BattleMark()
                 BattleTitle(sessions, modifier = Modifier.weight(1f))
-                Chip(text = "Round ${viewModel.round}", color = Palette.Gold)
-                Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
+                // Il round vive ora nel registro, accanto a "Registro eventi". Lo
+                // stato si mostra solo quando dice qualcosa: durante il gioco "Attivo"
+                // e' scontato, quindi sparisce e lascia l'intestazione piu' pulita.
+                if (viewModel.status != CombatStatus.ACTIVE) {
+                    Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
+                }
             }
             Row(
                 Modifier.fillMaxWidth(),
@@ -547,8 +551,11 @@ private fun BattleTopBar(
             }
             EditModeButton(viewModel)
             SessionMenuButton(sessions, dense = true)
-            Chip(text = "Round ${viewModel.round}", color = Palette.Gold)
-            Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
+            // "Round" si e' spostato nel registro; "Attivo" non si mostra, resta solo
+            // uno stato quando c'e' davvero qualcosa da segnalare (bozza, pausa...).
+            if (viewModel.status != CombatStatus.ACTIVE) {
+                Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
+            }
         }
     }
 }

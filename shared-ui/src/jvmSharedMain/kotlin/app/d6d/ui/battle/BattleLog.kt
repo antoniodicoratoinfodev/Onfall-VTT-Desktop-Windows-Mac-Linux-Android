@@ -30,6 +30,7 @@ import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.EventType
 import app.d6d.sheet.italianLabel
 import app.d6d.sheet.feetWithMetres
+import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
 import app.d6d.ui.components.italianLabel
@@ -76,7 +77,15 @@ fun BattleLog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Eyebrow("Registro eventi")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Eyebrow("Registro eventi")
+                    // Il round corrente vive qui, accanto all'etichetta: il registro
+                    // e' il posto naturale per "a che punto siamo" della battaglia.
+                    Chip(text = "Round ${viewModel.round}", color = Palette.Gold)
+                }
                 Text(
                     text = "${viewModel.events.size} eventi",
                     color = Palette.TextFaint,

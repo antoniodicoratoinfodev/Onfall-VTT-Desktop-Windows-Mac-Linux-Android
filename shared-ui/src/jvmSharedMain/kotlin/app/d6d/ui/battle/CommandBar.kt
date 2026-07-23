@@ -18,9 +18,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
@@ -43,12 +45,15 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.d6d.domain.combat.AbilityDefinition
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.D20Mode
 import app.d6d.sheet.feetWithMetres
 import app.d6d.sheet.withMetricFeet
+import app.d6d.ui.compendium.italianLabel
+import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.ScaledDensity
 import app.d6d.ui.layout.LocalUiLayout
@@ -177,6 +182,145 @@ private val D20Mode.italianLabel: String
     }
 
 /**
+ * Riepilogo del danno leggibile: per ogni componente la formula (quanti dadi, che
+ * dado, il modificatore) e come colpisce (il tipo di danno). Piu' componenti si
+ * sommano — un colpo che fa taglio e fuoco insieme si legge "1d8+3 tagliente + 1d6
+ * fuoco". I danni fissi mostrano il numero secco.
+ */
+private fun AbilityDefinition.damageSummary(): String =
+    damage().joinToString("  +  ") { formula ->
+        val amount = if (formula.usesDice()) formula.dice().notation() else formula.fixedAmount().toString()
+        "$amount ${formula.type().italianLabel.lowercase()}"
+    }
+
+/**
+ * Scheda di una capacita': nome e costo in testa, poi le voci che contano — quanto
+ * si colpisce, a che gittata, e quanto danno fa e di che tipo — allineate come un
+ * piccolo blocco statistiche, cosi' si leggono a colpo d'occhio invece di stare
+ * ammucchiate in una riga sola. Tutta la scheda e' il tasto: cliccarla attacca (o,
+ * per le capacita' a risoluzione manuale, apre le regole).
+ */
+@Composable
+private fun AbilityCard(
+    ability: AbilityDefinition,
+    manual: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val accent = if (manual) Palette.Party else Palette.Gold
+    val shape = RoundedCornerShape(7.dp)
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.97f else 1f,
+        animationSpec = tween(90),
+        label = "abilityCardPress",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = when {
+            !enabled -> Palette.Line.copy(alpha = 0.5f)
+            hovered -> accent
+            else -> Palette.Bronze.copy(alpha = 0.75f)
+        },
+        animationSpec = tween(140),
+        label = "abilityCardBorder",
+    )
+    val fill = if (enabled) {
+        Brush.verticalGradient(listOf(Palette.SurfaceHigh, Palette.Surface))
+    } else {
+        Brush.verticalGradient(listOf(Palette.Surface, Palette.Surface))
+    }
+
+    Column(
+        Modifier
+            // Larghezza guidata dal contenuto: le voci restano su una riga sola invece
+            // di andare a capo e allungare la scheda; se sono tante, scorre la fila.
+            .widthIn(min = 150.dp)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clip(shape)
+            .background(fill, shape)
+            .border(1.dp, borderColor, shape)
+            .hoverable(interaction, enabled = enabled)
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                enabled = enabled,
+                role = Role.Button,
+            ) { onClick() }
+            .padding(horizontal = 9.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        // Niente fillMaxWidth/weight qui: la scheda vive in una fila che scorre in
+        // orizzontale (larghezza non vincolata), quindi si dimensiona sul contenuto.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = ability.name(),
+                color = if (enabled) Palette.Text else Palette.TextFaint,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Chip(
+                text = ability.activationCost().italianLabel,
+                color = if (enabled) accent else Palette.TextFaint,
+            )
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            if (!manual) {
+                val bonus = ability.attackBonus()
+                AbilityStat("Colpire", if (bonus >= 0) "+$bonus" else bonus.toString(), enabled)
+            }
+            if (ability.rangeFeet() > 0) {
+                AbilityStat("Gittata", feetWithMetres(ability.rangeFeet()), enabled)
+            }
+            val damage = ability.damageSummary()
+            if (damage.isNotBlank()) {
+                AbilityStat("Danno", damage, enabled)
+            }
+        }
+
+        if (manual) {
+            Text(
+                text = "Risoluzione manuale · tocca per le regole",
+                color = Palette.TextFaint,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
+/** Una voce del blocco, in linea: etichetta minuta e valore marcato accanto. */
+@Composable
+private fun AbilityStat(label: String, value: String, enabled: Boolean) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(
+            text = label.uppercase(),
+            color = Palette.TextFaint,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        Text(
+            text = value,
+            color = if (enabled) Palette.Text else Palette.TextFaint,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+/**
  * Comandi del turno.
  *
  * Le capacita' vengono lette dallo snapshot del combattente attivo: e' il motore
@@ -209,12 +353,14 @@ fun CommandBar(
     // oggetti e strumenti crescono, restringendola calano (e scorrono se non basta).
     val scaled = !compact && !collapsed
     val scale = if (scaled) (layout.commandBarHeight / COMMAND_BAR_BASE).coerceIn(0.6f, 2.4f) else 1f
+    // La fascia ha l'altezza scelta dall'utente, ma non scorre piu' tutta intera:
+    // scorrono solo le capacita' nel mezzo, cosi' intestazione e riga dei comandi
+    // restano ancorate e sempre visibili.
     val outerModifier = if (scaled) {
         modifier
             .fillMaxWidth()
             .height(layout.commandBarHeight)
             .background(Palette.Night)
-            .verticalScroll(scrollState)
     } else {
         modifier
             .fillMaxWidth()
@@ -224,7 +370,9 @@ fun CommandBar(
     Box(outerModifier) {
     ScaledDensity(scale) {
     Column(
-        Modifier.fillMaxWidth().padding(11.dp),
+        Modifier.fillMaxWidth()
+            .then(if (scaled) Modifier.fillMaxHeight() else Modifier)
+            .padding(11.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         // Intestazione sempre visibile: turno e bersaglio a capo se manca spazio
@@ -258,6 +406,14 @@ fun CommandBar(
         }
 
         if (!collapsed) {
+        // Zona centrale: chi agisce e le capacita'. Prende lo spazio che avanza fra
+        // intestazione e comandi, cosi' la riga dei comandi qui sotto resta ancorata
+        // e sempre visibile. Le capacita' scorrono in orizzontale, non in verticale:
+        // ogni scheda resta alta una riga sola e non viene mai tagliata a meta'.
+        Column(
+            Modifier.fillMaxWidth().then(if (scaled) Modifier.weight(1f) else Modifier),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
         if (viewModel.isSimultaneousTurn) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -284,12 +440,13 @@ fun CommandBar(
                 style = MaterialTheme.typography.bodySmall,
             )
         } else {
-            // Le capacita' vanno a capo per riempire l'altezza scelta per la fascia:
-            // allargandola si vedono tutte in griglia, restringendola scorrono.
-            FlowRow(
-                Modifier.fillMaxWidth(),
+            // Una riga sola di schede che scorre in orizzontale: cosi' l'altezza e'
+            // sempre quella di una scheda e i comandi sotto restano al loro posto,
+            // qualunque sia il numero di capacita'.
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(scrollState),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 abilities.forEach { ability ->
                     val affordable = combatActive && when (ability.activationCost()) {
@@ -299,22 +456,9 @@ fun CommandBar(
                         else -> true
                     }
                     val manual = ability.automationStatus() == AutomationStatus.MANUAL_REQUIRED
-                    val attackBonus = ability.attackBonus()
-                    val bonusText = if (attackBonus >= 0) "+$attackBonus" else attackBonus.toString()
-                    GameButton(
-                        label = if (manual) ability.name() else "Attacca · ${ability.name()}",
-                        subtitle = buildString {
-                            append(ability.activationCost().italianLabel)
-                            if (manual) {
-                                append(" · Risoluzione manuale")
-                            } else {
-                                append(" · ").append(bonusText)
-                                if (ability.rangeFeet() > 0) {
-                                    append(" · ").append(feetWithMetres(ability.rangeFeet()))
-                                }
-                            }
-                        },
-                        accent = if (manual) Palette.Party else Palette.Gold,
+                    AbilityCard(
+                        ability = ability,
+                        manual = manual,
                         enabled = if (manual) combatActive else affordable,
                         onClick = {
                             if (manual) {
@@ -331,30 +475,34 @@ fun CommandBar(
                 }
             }
         }
+        }
 
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // FlowRow invece di una riga rigida: con la barra ristretta i comandi
-            // vanno a capo invece di uscire dai bordi.
+            // Riga dei comandi ancorata: non scorre mai e va a capo quando la fascia
+            // si stringe, cosi' questi tasti restano sempre visibili e a portata.
             FlowRow(
                 Modifier.weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Vantaggio e Svantaggio non si sommano: sono tre stati esclusivi.
-                // Il modo attivo resta grigio chiaro, gli altri piu' scuri: la
-                // scelta si legge senza colori accesi.
-                D20Mode.entries.forEach { mode ->
+                // Vantaggio e Svantaggio sono due interruttori esclusivi: se nessuno
+                // e' acceso vale la regola normale. Ricliccare quello attivo lo spegne
+                // (torna a normale); cliccare l'altro sposta l'evidenza — non si
+                // sommano mai.
+                listOf(D20Mode.ADVANTAGE, D20Mode.DISADVANTAGE).forEach { mode ->
                     val selected = viewModel.rollMode == mode
                     GameButton(
                         label = mode.italianLabel,
                         accent = if (selected) Palette.TextMuted else Palette.TextFaint,
                         selected = selected,
                         enabled = combatActive,
-                        onClick = { viewModel.rollMode = mode },
+                        onClick = {
+                            viewModel.rollMode = if (selected) D20Mode.NORMAL else mode
+                        },
                     )
                 }
                 GameButton(
@@ -368,12 +516,6 @@ fun CommandBar(
                     subtitle = "Pozioni, armi ed equipaggiamento",
                     accent = Palette.TextMuted,
                     onClick = { itemsOpen = true },
-                )
-                GameButton(
-                    label = "Annulla",
-                    accent = Palette.TextFaint,
-                    enabled = viewModel.canUndo,
-                    onClick = { viewModel.undo() },
                 )
             }
 
