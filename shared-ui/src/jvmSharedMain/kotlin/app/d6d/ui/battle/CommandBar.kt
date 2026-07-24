@@ -357,11 +357,11 @@ fun CommandBar(
         modifier
             .fillMaxWidth()
             .height(layout.commandBarHeight)
-            .background(Palette.Night)
+            .background(Palette.Night.copy(alpha = 0.86f))
     } else {
         modifier
             .fillMaxWidth()
-            .background(Palette.Night)
+            .background(Palette.Night.copy(alpha = 0.86f))
     }
 
     Box(outerModifier) {

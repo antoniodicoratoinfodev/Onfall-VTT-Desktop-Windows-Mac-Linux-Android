@@ -85,7 +85,9 @@ fun BattleStage(
         if (!viewModel.editMode) viewModel.mapEditMode = false
     }
 
-    Column(modifier.fillMaxSize()) {
+    // Confine visivo netto: il fuoco atmosferico anima la shell della Battaglia,
+    // ma non deve mai filtrare nella mappa, nella griglia o nei suoi controlli.
+    Column(modifier.fillMaxSize().background(Palette.Abyss)) {
         if (viewModel.mapConfigured) {
             MapControls(
                 viewModel = viewModel,

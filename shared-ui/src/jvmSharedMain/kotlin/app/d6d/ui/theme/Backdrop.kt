@@ -37,23 +37,17 @@ import androidx.compose.ui.graphics.Canvas as bitmapCanvas
  *
  * Nessuna immagine importata — vale lo stesso vincolo di licenza dei ritratti e
  * degli ornamenti — quindi anche lo sfondo e' interamente disegnato da codice.
- * La scena e' una cripta quasi buia attraversata da una luce fredda: il fondo
- * tende al nero, ma dove batte la luce la pietra emerge a rilievo, incisa di
- * crepe; poche particelle salgono lente nell'aria.
+ * La scena e' una cripta quasi buia rischiarata da un fuoco fuori campo: il fondo
+ * tende al nero, ma una luce rossa, arancio e gialla pulsa sulla pietra incisa.
+ * Scintille di dimensione e velocita' diverse salgono dalla sorgente.
  *
  * E' pensato per stare dietro i menu e i pannelli, che vi si dissolvono sopra: la
  * mappa tattica dipinge invece il proprio fondo opaco e resta pulita.
  *
- * ## Perche' non c'e' foschia in movimento
- * Sul nero i gradienti radiali a bassa opacita' si quantizzano in anelli visibili
- * (banding): fermi si dominano col dithering, ma se il gradiente si muove gli
- * anelli scorrono e sfarfallano. Percio' le uniche cose animate sono le particelle,
- * che sono punti netti e non creano banding; ogni sfumatura resta ferma e dithered.
- *
  * ## Dithering
- * I gradienti scuri (bagliore, vignettatura) sono coperti da un rumore fine a
- * copertura piena e ampiezza bassissima: spezza gli anelli restando invisibile.
- * E' distinto dalla grana pellicolare piu' marcata usata sulla mappa.
+ * Anche i gradienti animati sono coperti a ogni fotogramma da un rumore fine a
+ * copertura piena e ampiezza bassissima: spezza gli anelli di banding senza
+ * leggersi come grana. E' distinto dalla trama piu' marcata usata sulla mappa.
  */
 @Composable
 fun AtmosphericBackground(
@@ -61,75 +55,71 @@ fun AtmosphericBackground(
     embers: Boolean = true,
     vignette: Float = 0.52f,
 ) {
-    // Strato fermo: base, luce radente, pietra, crepe, vignettatura e dithering. Legge
-    // solo la dimensione, quindi si ridisegna soltanto al ridimensionamento.
+    // Strato fermo: base, pietra, crepe e vignettatura. Legge solo la dimensione,
+    // quindi si ridisegna soltanto al ridimensionamento.
     Canvas(modifier.fillMaxSize()) {
         drawStoneField(vignette)
     }
 
     if (embers) {
         val transition = rememberInfiniteTransition(label = "backdrop")
-        // Un tempo 0..1 in ciclo continuo. Ogni particella percorre un numero intero di
-        // altezze per ciclo, cosi' il salto di riavvio e' invisibile.
+        // Un tempo 0..1 in ciclo continuo. Luce e particelle usano solo armoniche
+        // intere, quindi il passaggio fra fine e inizio del ciclo resta invisibile.
         val time by transition.animateFloat(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 21_000, easing = LinearEasing),
+                animation = tween(durationMillis = 18_000, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart,
             ),
-            label = "emberDrift",
+            label = "firelight",
         )
         Canvas(modifier.fillMaxSize()) {
-            drawEmbers(time)
+            drawFirelight(time)
+            // Il dithering deve stare sopra il bagliore animato, non soltanto sul
+            // fondale statico, altrimenti gli anelli del gradiente tornano visibili.
+            drawRect(backdropDither)
+            drawFlameParticles(time)
         }
+    } else {
+        Canvas(modifier.fillMaxSize()) { drawRect(backdropDither) }
     }
 }
 
-/** Centro della luce radente, in frazioni della superficie. */
-private const val GLOW_X = 0.5f
-private const val GLOW_Y = 0.36f
+private val FireYellow = Color(0xFFFFD36A)
+private val FireOrange = Color(0xFFFF7417)
+private val FireRed = Color(0xFFD62D16)
+private val FireDeepRed = Color(0xFF650B08)
+
+/** Centro medio del fuoco fuori campo, in frazioni della superficie. */
+private const val FIRE_X = 0.5f
+private const val FIRE_Y = 0.74f
 
 /**
- * La cripta illuminata da un alone d'acciaio: base scura, pietra a rilievo,
- * crepe incise, vignettatura forte e dithering. Disegnata una volta per dimensione.
+ * La cripta prima della luce: base scura, pietra a rilievo, crepe incise e
+ * vignettatura forte. Disegnata una volta per dimensione.
  */
 private fun DrawScope.drawStoneField(vignetteStrength: Float) {
     val w = size.width
     val h = size.height
     val minDim = size.minDimension
     val maxDim = size.maxDimension
-    val glow = Offset(w * GLOW_X, h * GLOW_Y)
+    val glow = Offset(w * FIRE_X, h * FIRE_Y)
 
     // Base: notte in alto, abisso verso il basso e i bordi.
     drawRect(Brush.verticalGradient(listOf(Palette.Night, Palette.Abyss)))
 
-    // Alone freddo a basso contrasto e con caduta lunga fino al bordo. Meno
-    // contrasto = meno gradini di quantizzazione da nascondere, cosi' il
-    // dithering sotto riesce a renderlo del tutto liscio.
+    // Una brace residua resta anche quando l'animazione e' disattivata.
     drawRect(
         Brush.radialGradient(
             colorStops = arrayOf(
-                0f to Palette.Bronze.copy(alpha = 0.30f),
-                0.20f to Palette.Bronze.copy(alpha = 0.17f),
-                0.42f to Palette.Bronze.copy(alpha = 0.08f),
-                0.65f to Palette.Bronze.copy(alpha = 0.03f),
+                0f to FireDeepRed.copy(alpha = 0.24f),
+                0.26f to FireDeepRed.copy(alpha = 0.11f),
+                0.58f to FireDeepRed.copy(alpha = 0.035f),
                 1f to Color.Transparent,
             ),
             center = glow,
-            radius = maxDim * 1.0f,
-        ),
-    )
-    // Nucleo appena piu' chiaro, anch'esso tenue e a caduta morbida.
-    drawRect(
-        Brush.radialGradient(
-            colorStops = arrayOf(
-                0f to Palette.GoldDim.copy(alpha = 0.10f),
-                0.4f to Palette.GoldDim.copy(alpha = 0.03f),
-                0.75f to Color.Transparent,
-            ),
-            center = glow,
-            radius = maxDim * 0.44f,
+            radius = maxDim * 0.82f,
         ),
     )
 
@@ -183,9 +173,91 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
             radius = maxDim * 0.86f,
         ),
     )
-    // Dithering fine sopra ogni sfumatura scura: rompe gli anelli di banding
-    // restando quasi invisibile. Distinto dalla grana piu' marcata della mappa.
-    drawRect(backdropDither)
+}
+
+/**
+ * Luce del fuoco fuori campo. Tre frequenze diverse evitano il respiro regolare
+ * di una semplice sinusoide; centro, raggio e intensita' variano insieme, ma
+ * tornano esattamente al punto iniziale alla chiusura del ciclo.
+ */
+private fun DrawScope.drawFirelight(time: Float) {
+    val w = size.width
+    val h = size.height
+    val maxDim = size.maxDimension
+    val minDim = size.minDimension
+    val turn = (2.0 * PI * time).toFloat()
+    val flicker = (
+        0.72f +
+            0.13f * sin(turn * 3f) +
+            0.08f * sin(turn * 7f + 1.1f) +
+            0.05f * sin(turn * 13f + 0.35f)
+        ).coerceIn(0.48f, 0.98f)
+    val sway = sin(turn * 2f + 0.4f)
+    val lift = sin(turn * 5f + 1.7f)
+    val source = Offset(
+        x = w * (FIRE_X + sway * 0.018f),
+        y = h * (FIRE_Y + lift * 0.012f),
+    )
+
+    // Alone rosso molto largo: colora la pietra senza trasformare il fondale in
+    // una superficie arancione uniforme.
+    val outerRadius = maxDim * (0.72f + flicker * 0.10f)
+    drawRect(
+        Brush.radialGradient(
+            colorStops = arrayOf(
+                0f to FireOrange.copy(alpha = 0.18f * flicker),
+                0.18f to FireRed.copy(alpha = 0.16f * flicker),
+                0.46f to FireDeepRed.copy(alpha = 0.11f * flicker),
+                0.76f to FireDeepRed.copy(alpha = 0.035f * flicker),
+                1f to Color.Transparent,
+            ),
+            center = source,
+            radius = outerRadius,
+        ),
+    )
+
+    // Nucleo caldo: piu' piccolo e rapido, e' quello che fa percepire la luce
+    // variabile sulle superfici semitrasparenti dei pannelli.
+    val coreRadius = maxDim * (0.24f + flicker * 0.10f)
+    drawRect(
+        Brush.radialGradient(
+            colorStops = arrayOf(
+                0f to FireYellow.copy(alpha = 0.27f * flicker),
+                0.20f to FireOrange.copy(alpha = 0.22f * flicker),
+                0.48f to FireRed.copy(alpha = 0.10f * flicker),
+                1f to Color.Transparent,
+            ),
+            center = Offset(source.x, source.y + h * 0.035f),
+            radius = coreRadius,
+        ),
+    )
+
+    // Lingue morbide, appena visibili: suggeriscono la sorgente senza disegnare
+    // una fiamma letterale dietro ai contenuti.
+    repeat(4) { index ->
+        val direction = if (index % 2 == 0) -1f else 1f
+        val local = sin(turn * (4f + index) + index * 1.37f)
+        val tongueWidth = minDim * (0.055f + index * 0.012f)
+        val tongueHeight = minDim * (0.22f + index * 0.035f + local * 0.025f)
+        val tongueCenterX = source.x +
+            direction * minDim * (0.025f + index * 0.018f) +
+            local * minDim * 0.018f
+        val tongueTop = source.y - tongueHeight * (0.76f + flicker * 0.10f)
+        drawOval(
+            brush = Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0f to Color.Transparent,
+                    0.38f to FireYellow.copy(alpha = 0.025f * flicker),
+                    0.70f to FireOrange.copy(alpha = 0.075f * flicker),
+                    1f to FireRed.copy(alpha = 0.015f * flicker),
+                ),
+                startY = tongueTop,
+                endY = tongueTop + tongueHeight,
+            ),
+            topLeft = Offset(tongueCenterX - tongueWidth / 2f, tongueTop),
+            size = Size(tongueWidth, tongueHeight),
+        )
+    }
 }
 
 /**
@@ -223,31 +295,37 @@ private val backdropDither: ShaderBrush by lazy {
 }
 
 /**
- * Una particella: colonna e altezza iniziale in frazioni (0..1), velocita' di salita in
- * numeri interi di altezze per ciclo — cosi' il giro si chiude senza scatti.
+ * Una particella: punto di partenza, quota percorsa e velocita' di salita.
+ * I cicli interi fanno chiudere il giro senza scatti.
  */
-private class Ember(
-    val x: Float,
-    val startY: Float,
-    val rise: Int,
-    val radius: Float,
+private class FlameParticle(
+    val startX: Float,
     val phase: Float,
+    val cycles: Int,
+    val travel: Float,
+    val radius: Float,
     val flicker: Int,
-    val drift: Float,
+    val sway: Float,
+    val heat: Int,
 )
 
-// Poche particelle fredde e discrete, con seme fisso.
-private val embers: List<Ember> by lazy {
+// Seme fisso: la traiettoria non cambia quando Compose ricrea il Canvas.
+private val flameParticles: List<FlameParticle> by lazy {
     val random = Random(4_242)
-    List(15) {
-        Ember(
-            x = random.nextFloat(),
-            startY = random.nextFloat(),
-            rise = if (random.nextFloat() > 0.65f) 2 else 1,
-            radius = 1.2f + random.nextFloat() * 1.9f,
+    List(42) {
+        // Due numeri mediati concentrano le scintille attorno al fuoco, lasciando
+        // comunque alcune traiettorie abbastanza larghe da animare tutto il fondo.
+        val centeredX = (random.nextFloat() + random.nextFloat()) * 0.5f
+        FlameParticle(
+            startX = 0.12f + centeredX * 0.76f,
             phase = random.nextFloat(),
-            flicker = 2 + random.nextInt(3),
-            drift = (random.nextFloat() - 0.5f) * 0.06f,
+            cycles = 1 + random.nextInt(3),
+            travel = 0.52f + random.nextFloat() * 0.58f,
+            radius = 0.65f + random.nextFloat() * 2.25f,
+            flicker = 5 + random.nextInt(8),
+            sway = (0.018f + random.nextFloat() * 0.055f) *
+                if (random.nextBoolean()) 1f else -1f,
+            heat = random.nextInt(3),
         )
     }
 }
@@ -255,31 +333,47 @@ private val embers: List<Ember> by lazy {
 /** Parte frazionaria sempre positiva: tiene la particella nell'intervallo 0..1. */
 private fun frac(value: Float): Float = ((value % 1f) + 1f) % 1f
 
-private fun DrawScope.drawEmbers(time: Float) {
+private fun DrawScope.drawFlameParticles(time: Float) {
     val w = size.width
     val h = size.height
-    embers.forEach { ember ->
-        // Sale: y cala nel tempo. Il moltiplicatore intero fa combaciare inizio e
-        // fine del ciclo. La deriva orizzontale oscilla con periodo unitario.
-        val y = frac(ember.startY - time * ember.rise)
-        val x = frac(ember.x + ember.drift * sin(2.0 * PI * (time + ember.phase)).toFloat())
-        // Dissolvenza ai bordi: la particella nasce fioca in basso e si spegne in alto,
-        // percio' il momento del riavvolgimento (y ~ 0 o 1) e' gia' trasparente.
-        val fade = sin(PI * y).toFloat()
+    flameParticles.forEach { particle ->
+        val life = frac(time * particle.cycles + particle.phase)
+        val y = 1.04f - life * particle.travel
+        val drift = particle.sway *
+            sin(2.0 * PI * (time * particle.cycles + particle.phase)).toFloat()
+        val x = particle.startX + drift * (0.45f + life)
+        // La scintilla nasce e muore gia' trasparente, quindi il riciclo non scatta.
+        val fade = sin(PI * life).toFloat()
         if (fade <= 0.01f) return@forEach
-        val flicker = 0.5f + 0.5f * sin(2.0 * PI * (time * ember.flicker + ember.phase)).toFloat()
-        val alpha = 0.5f * fade * flicker
+        val flicker = 0.68f + 0.32f *
+            sin(2.0 * PI * (time * particle.flicker + particle.phase)).toFloat()
+        val alpha = 0.72f * fade * flicker
+        val color = when (particle.heat) {
+            0 -> FireYellow
+            1 -> FireOrange
+            else -> FireRed
+        }
         val center = Offset(x * w, y * h)
-        val glow = ember.radius * density * 4f
+        val radius = particle.radius * density
+        val glow = radius * 5.5f
         drawCircle(
             brush = Brush.radialGradient(
-                listOf(Palette.GoldBright.copy(alpha = alpha * 0.85f), Color.Transparent),
+                listOf(color.copy(alpha = alpha * 0.72f), Color.Transparent),
                 center = center,
                 radius = glow,
             ),
             radius = glow,
             center = center,
         )
-        drawCircle(Palette.GoldBright.copy(alpha = alpha), radius = ember.radius * density * 0.8f, center = center)
+        // Una breve coda verticale rende le particelle veloci simili a scintille
+        // senza sfocare quelle piu' lente e piccole.
+        drawLine(
+            color = color.copy(alpha = alpha * 0.55f),
+            start = center,
+            end = Offset(center.x, center.y + radius * (1.6f + particle.cycles)),
+            strokeWidth = radius * 0.75f,
+            cap = StrokeCap.Round,
+        )
+        drawCircle(FireYellow.copy(alpha = alpha), radius = radius * 0.68f, center = center)
     }
 }

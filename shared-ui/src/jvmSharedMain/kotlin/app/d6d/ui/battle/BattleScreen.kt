@@ -86,7 +86,9 @@ fun BattleScreen(
 ) {
     val layout = LocalUiLayout.current
     val density = LocalDensity.current
-    Column(modifier.fillMaxSize().background(Palette.Night)) {
+    // Il fondale resta trasparente in tutta la cornice di battaglia. BattleStage
+    // isola invece mappa, griglia e relativi controlli con una superficie opaca.
+    Column(modifier.fillMaxSize()) {
         BattleTopBar(viewModel, sessions, compact)
         // Filo d'oro sotto l'intestazione: chiude la fascia dei turni come il
         // bordo inciso di un pannello, senza il peso di un bordo pieno.
@@ -264,13 +266,13 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
         Modifier
             .fillMaxWidth()
             .height(panelHeight)
-            .background(Palette.Abyss)
+            .background(Palette.Abyss.copy(alpha = 0.88f))
             .border(1.dp, Palette.Line),
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(Palette.Surface)
+                .background(Palette.Surface.copy(alpha = 0.91f))
                 .pointerInput(collapsed) {
                     detectVerticalDragGestures(
                         onVerticalDrag = { change, dragAmount ->
@@ -344,7 +346,7 @@ private fun CompactBattleBody(
 
     Column(modifier) {
         Row(
-            Modifier.fillMaxWidth().background(Palette.Surface).padding(6.dp),
+            Modifier.fillMaxWidth().background(Palette.Surface.copy(alpha = 0.91f)).padding(6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             CompactTab.entries.forEach { entry ->
@@ -467,7 +469,9 @@ private fun BattleTopBar(
 
     if (compact) {
         Column(
-            Modifier.fillMaxWidth().background(Palette.Surface).padding(horizontal = 10.dp, vertical = 7.dp),
+            Modifier.fillMaxWidth()
+                .background(Palette.Surface.copy(alpha = 0.92f))
+                .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Row(
@@ -507,7 +511,7 @@ private fun BattleTopBar(
         Modifier
             .fillMaxWidth()
             .then(if (layout.turnsCollapsed) Modifier else Modifier.height(barHeight))
-            .background(Palette.Surface)
+            .background(Palette.Surface.copy(alpha = 0.92f))
             .padding(horizontal = 12.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(9.dp),
         verticalAlignment = Alignment.CenterVertically,

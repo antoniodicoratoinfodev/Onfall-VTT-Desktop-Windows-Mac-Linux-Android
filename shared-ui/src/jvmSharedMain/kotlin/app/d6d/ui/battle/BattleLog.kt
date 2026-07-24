@@ -67,7 +67,7 @@ fun BattleLog(
     Column(
         modifier
             .fillMaxWidth()
-            .background(Palette.Abyss)
+            .background(Palette.Abyss.copy(alpha = 0.88f))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
