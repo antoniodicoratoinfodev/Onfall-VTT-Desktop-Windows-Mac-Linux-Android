@@ -55,14 +55,9 @@ import app.d6d.sheet.withMetricFeet
 import app.d6d.ui.compendium.italianLabel
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
-import app.d6d.ui.components.ScaledDensity
 import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
-
-// Altezza a cui i comandi hanno la dimensione naturale (scala 1). Oltre questa la
-// fascia ingrandisce abilita', oggetti e strumenti; sotto li rimpicciolisce.
-private val COMMAND_BAR_BASE = 176.dp
 
 /**
  * Pulsante in stile gioco: bordo acceso, riempimento scuro, etichetta marcata.
@@ -348,14 +343,11 @@ fun CommandBar(
     BattleToolsDialog(viewModel, open = toolsOpen, onDismiss = { toolsOpen = false })
     BattleItemsDialog(items = sampleBattleItems, open = itemsOpen, onDismiss = { itemsOpen = false })
 
-    // Sul desktop, da espansa, la fascia ha un'altezza fissa scelta dall'utente e il
-    // contenuto viene scalato per riempirla: allargandola i pulsanti di abilita',
-    // oggetti e strumenti crescono, restringendola calano (e scorrono se non basta).
+    // Sul desktop la fascia ha l'altezza scelta dall'utente. Intestazione e riga dei
+    // comandi restano di dimensione fissa e sempre visibili; sono solo le capacita'
+    // nel mezzo a prendersi lo spazio in piu' — allargando la fascia se ne vedono di
+    // piu' in griglia, non le si ingrandisce fino a far sparire tutto il resto.
     val scaled = !compact && !collapsed
-    val scale = if (scaled) (layout.commandBarHeight / COMMAND_BAR_BASE).coerceIn(0.6f, 2.4f) else 1f
-    // La fascia ha l'altezza scelta dall'utente, ma non scorre piu' tutta intera:
-    // scorrono solo le capacita' nel mezzo, cosi' intestazione e riga dei comandi
-    // restano ancorate e sempre visibili.
     val outerModifier = if (scaled) {
         modifier
             .fillMaxWidth()
@@ -368,7 +360,6 @@ fun CommandBar(
     }
 
     Box(outerModifier) {
-    ScaledDensity(scale) {
     Column(
         Modifier.fillMaxWidth()
             .then(if (scaled) Modifier.fillMaxHeight() else Modifier)
@@ -407,11 +398,13 @@ fun CommandBar(
 
         if (!collapsed) {
         // Zona centrale: chi agisce e le capacita'. Prende lo spazio che avanza fra
-        // intestazione e comandi, cosi' la riga dei comandi qui sotto resta ancorata
-        // e sempre visibile. Le capacita' scorrono in orizzontale, non in verticale:
-        // ogni scheda resta alta una riga sola e non viene mai tagliata a meta'.
+        // intestazione e comandi e, quando le schede non ci stanno tutte, scorre da
+        // sola in verticale — e' l'unica parte che scorre, cosi' la riga dei comandi
+        // qui sotto resta ancorata e sempre visibile, anche allargando la fascia.
         Column(
-            Modifier.fillMaxWidth().then(if (scaled) Modifier.weight(1f) else Modifier),
+            Modifier.fillMaxWidth().then(
+                if (scaled) Modifier.weight(1f).verticalScroll(scrollState) else Modifier,
+            ),
             verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
         if (viewModel.isSimultaneousTurn) {
@@ -440,13 +433,12 @@ fun CommandBar(
                 style = MaterialTheme.typography.bodySmall,
             )
         } else {
-            // Una riga sola di schede che scorre in orizzontale: cosi' l'altezza e'
-            // sempre quella di una scheda e i comandi sotto restano al loro posto,
-            // qualunque sia il numero di capacita'.
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(scrollState),
+            // Griglia di schede che va a capo: con la fascia stretta stanno su una
+            // riga e le altre scorrono; allargandola se ne vedono di piu' affiancate.
+            FlowRow(
+                Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 abilities.forEach { ability ->
                     val affordable = combatActive && when (ability.activationCost()) {
@@ -500,21 +492,24 @@ fun CommandBar(
                         accent = if (selected) Palette.TextMuted else Palette.TextFaint,
                         selected = selected,
                         enabled = combatActive,
+                        dense = true,
                         onClick = {
                             viewModel.rollMode = if (selected) D20Mode.NORMAL else mode
                         },
                     )
                 }
+                // Compatti e su una riga sola: la fascia comandi resta bassa e lascia
+                // spazio alle schede delle capacita' sopra.
                 GameButton(
                     label = "Strumenti",
-                    subtitle = "Danni, cure e condizioni",
                     accent = Palette.TextMuted,
+                    dense = true,
                     onClick = { toolsOpen = true },
                 )
                 GameButton(
                     label = "Oggetti",
-                    subtitle = "Pozioni, armi ed equipaggiamento",
                     accent = Palette.TextMuted,
+                    dense = true,
                     onClick = { itemsOpen = true },
                 )
             }
@@ -524,11 +519,11 @@ fun CommandBar(
                 accent = Palette.Heal,
                 enabled = combatActive,
                 primary = true,
+                dense = true,
                 onClick = { viewModel.endTurn() },
             )
         }
         } // fine del blocco nascondibile
-    }
     }
     }
 }

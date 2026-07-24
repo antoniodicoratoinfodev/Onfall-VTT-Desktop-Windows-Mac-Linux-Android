@@ -173,7 +173,7 @@ private fun WideBattleBody(
                     HorizontalResizeHandle(
                         onDrag = { dragPx ->
                             layout.commandBarHeight = (layout.commandBarHeight - with(density) { dragPx.toDp() })
-                                .coerceIn(76.dp, 480.dp)
+                                .coerceIn(160.dp, 520.dp)
                         },
                     )
                 }
