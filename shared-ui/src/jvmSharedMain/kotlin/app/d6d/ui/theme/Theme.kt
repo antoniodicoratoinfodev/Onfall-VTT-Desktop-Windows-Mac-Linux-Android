@@ -42,6 +42,10 @@ object Palette {
     val Surface = Color(0xFF17130D)
     val SurfaceHigh = Color(0xFF221C13)
     val Line = Color(0xFF342D20)
+    // Bagliore della griglia quando la luminosita' e' al massimo: piu' chiara e
+    // un filo piu' neutra della linea a riposo, cosi' al 100% la maglia stacca
+    // sul fondo senza perdere la sottotinta calda del reticolo.
+    val LineBright = Color(0xFFB6A886)
 
     // Bronzo per gli ornamenti: piu' luminoso della linea ma piu' spento
     // dell'oro, e' il metallo "a riposo" delle cornici e dei fregi.

@@ -68,7 +68,40 @@ goes in `local.properties`.
 ./gradlew :android-app:assembleDebug
 ```
 
-Running the application for use or for play is not allowed. See the license.
+Running the application for use or for play is reserved to the author. See the license.
+
+## Run
+
+For the author's own use.
+
+### Desktop
+
+```bash
+# standard run
+./gradlew :desktop-app:run
+
+# with Compose Hot Reload, useful during development
+# (the main class must be passed explicitly from the command line)
+./gradlew :desktop-app:hotRun --mainClass=app.d6d.desktop.MainKt
+
+# with a custom data directory
+./gradlew :desktop-app:run -Donfall.dataDir=/path/to/dir
+```
+
+On first run Gradle downloads the dependencies and compiles the engine and the
+shared UI, so the window can take a minute or two to appear. The `run` task
+stays attached to the running application: close the window (or press `Ctrl+C`)
+to stop it.
+
+### Android
+
+With a device or emulator connected:
+
+```bash
+./gradlew :android-app:installDebug
+```
+
+Then launch Onfall from the device's or emulator's app launcher.
 
 ## License
 

@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -331,7 +332,12 @@ fun BattleMapView(
                 // uno sfondo la luminosita' scelta viene spinta un filo piu' su.
                 val alpha = (gridBrightness * if (background != null) 1.3f else 1f)
                     .coerceIn(0f, 1f)
-                val line = Palette.Line.copy(alpha = alpha)
+                // Fino a circa due terzi della corsa la maglia resta il reticolo
+                // caldo di sempre; oltre, la tinta si schiarisce verso una griglia
+                // piu' luminosa e un filo piu' bianca, cosi' al 100% stacca bene
+                // sul fondo senza perdere il colore ai valori piu' bassi.
+                val whiten = ((alpha - 0.6f) / 0.4f).coerceIn(0f, 1f)
+                val line = lerp(Palette.Line, Palette.LineBright, whiten).copy(alpha = alpha)
                 val mapRight = mapOffset.x + camera.contentSize.width
                 val mapBottom = mapOffset.y + camera.contentSize.height
                 for (column in camera.visibleColumns(mapOffset)) {
