@@ -1,5 +1,6 @@
 package app.d6d.ui.sheet
 
+import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.SheetStore
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -92,5 +93,47 @@ class SheetViewModelTest {
 
         assertFalse(model.upsertCharacterSilently(sheet))
         assertEquals(libraryBefore, model.library)
+    }
+
+    @Test
+    fun `il catalogo iniziale contiene palla di fuoco e salva nuove abilita`() {
+        val model = model()
+
+        assertTrue(model.library.abilities.any { it.name == "Palla di Fuoco" })
+        assertTrue(model.library.abilities.any { it.name == "Arco Lungo" })
+        assertTrue(model.library.abilities.any { it.name == "Pugnale" })
+        assertTrue(model.library.abilities.any { it.name == "Dardo Runico" })
+        assertTrue(model.library.abilities.any { it.name == "Morso Gelido" })
+
+        val ability = CatalogAbility(id = "abilita-prova", name = "Colpo di prova")
+        assertTrue(model.upsertAbility(ability))
+
+        val reopened = model()
+        assertEquals(ability, reopened.library.abilities.first { it.id == ability.id })
+    }
+
+    @Test
+    fun `i personaggi di esempio usano le voci del catalogo`() {
+        val model = model()
+        val sylva = model.library.characters.first { it.id == "pg-sylva" }
+        val mirethe = model.library.characters.first { it.id == "pg-mirethe" }
+        val kaelen = model.library.characters.first { it.id == "pg-kaelen" }
+
+        assertTrue("arma-arco" in sylva.abilityIds)
+        assertTrue("arma-pugnale" in sylva.abilityIds)
+        assertTrue("inc-dardo-runico" in mirethe.abilityIds)
+        assertTrue("inc-palla-di-fuoco" in mirethe.abilityIds)
+        assertTrue("abilita-recuperare-energie" in kaelen.abilityIds)
+        assertTrue(kaelen.weapons.isEmpty())
+    }
+
+    @Test
+    fun `una abilita usata da una scheda non puo essere eliminata`() {
+        val model = model()
+        val ability = model.library.abilities.first()
+        model.character = model.character.copy(abilityIds = listOf(ability.id))
+
+        assertFalse(model.deleteAbility(ability.id))
+        assertTrue(model.library.abilities.any { it.id == ability.id })
     }
 }

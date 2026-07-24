@@ -3,7 +3,9 @@ package app.d6d.ui.sheet
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
+import app.d6d.sheet.defaultAbilityCatalog
 import app.d6d.sheet.MonsterStatBlock
 import app.d6d.sheet.SheetLibrary
 import app.d6d.sheet.SheetStore
@@ -93,6 +95,9 @@ class SheetViewModel(private val store: SheetStore) {
 
     /** Notificato dopo un'eliminazione riuscita. */
     var onDeleted: ((SheetKind, String) -> Unit)? = null
+
+    /** Notificato quando cambia il catalogo delle capacità riusabili. */
+    var onAbilitiesChanged: (() -> Unit)? = null
 
     init {
         load()
@@ -249,6 +254,51 @@ class SheetViewModel(private val store: SheetStore) {
         onSaved?.invoke(SheetKind.MOSTRO)
     }
 
+    /** Crea o aggiorna una capacità del Compendio senza toccare la scheda aperta. */
+    fun upsertAbility(ability: CatalogAbility): Boolean = guard("Abilità salvata.") {
+        // La conversione applica in un solo punto tutte le validazioni meccaniche.
+        ability.toDefinition()
+        val updatedLibrary = library.copy(
+            abilities = library.abilities.filterNot { it.id == ability.id } + ability,
+        )
+        store.save(updatedLibrary)
+        library = updatedLibrary
+        onAbilitiesChanged?.invoke()
+    }
+
+    /** Numero di schede persistite o in modifica che usano la capacità. */
+    fun abilityUsageCount(id: String): Int {
+        val persistedIds = library.characters
+            .filter { id in it.abilityIds }
+            .mapTo(mutableSetOf()) { it.id }
+        if (kind == SheetKind.PERSONAGGIO && id in character.abilityIds) {
+            persistedIds += character.id
+        }
+        return persistedIds.size
+    }
+
+    /**
+     * Elimina una capacità soltanto se nessuna scheda la usa.
+     *
+     * Un riferimento non viene mai spezzato silenziosamente: prima la capacità va
+     * rimossa dai personaggi interessati, che restano così esplicitamente sotto il
+     * controllo dell'utente.
+     */
+    fun deleteAbility(id: String): Boolean {
+        val usedBy = abilityUsageCount(id)
+        if (usedBy > 0) {
+            status = "Impossibile eliminare: l'abilità è usata da $usedBy " +
+                if (usedBy == 1) "scheda." else "schede."
+            return false
+        }
+        return guard("Abilità eliminata.") {
+            val updatedLibrary = library.copy(abilities = library.abilities.filterNot { it.id == id })
+            store.save(updatedLibrary)
+            library = updatedLibrary
+            onAbilitiesChanged?.invoke()
+        }
+    }
+
     /**
      * Roster iniziale.
      *
@@ -259,17 +309,27 @@ class SheetViewModel(private val store: SheetStore) {
      * combattimento e riproducono statistiche identiche.
      */
     private fun seeded(): SheetLibrary {
-        val handwritten = SheetSamples.character()
+        val abilities = defaultAbilityCatalog()
+        val handwritten = SheetSamples.character().copy(
+            weapons = emptyList(),
+            abilityIds = listOf(
+                "arma-spadone",
+                "arma-giavellotto",
+                "abilita-recuperare-energie",
+                "abilita-azione-impetuosa",
+            ),
+        )
         val handwrittenMonster = SheetSamples.monster()
         val party = SampleEncounter.party()
             .filterNot { it.id() == handwritten.id }
-            .map { characterSheetFrom(it) }
+            .map { characterSheetFrom(it, abilities) }
         val enemies = SampleEncounter.enemies()
             .filterNot { it.id() == handwrittenMonster.id }
             .map { monsterStatBlockFrom(it, challengeRating = "1", baseXp = 200) }
         return SheetLibrary(
             characters = listOf(handwritten) + party,
             monsters = listOf(handwrittenMonster) + enemies,
+            abilities = abilities,
         )
     }
 

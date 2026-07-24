@@ -1,6 +1,7 @@
 package app.d6d.ui.sheet
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -26,8 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.ActivationCost
 import app.d6d.sheet.Ability
+import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.CreatureSize
 import app.d6d.sheet.Proficiency
@@ -37,6 +40,7 @@ import app.d6d.sheet.Spellcasting
 import app.d6d.sheet.WeaponEntry
 import app.d6d.sheet.abilityModifier
 import app.d6d.ui.battle.GameButton
+import app.d6d.ui.components.Chip
 import app.d6d.ui.images.PortraitPicker
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.theme.Palette
@@ -74,11 +78,23 @@ fun CharacterSheetEditor(
 
             if (compact) {
                 AbilitiesColumn(sheet, update, Modifier.fillMaxWidth())
-                CombatColumn(sheet, update, compact = true, modifier = Modifier.fillMaxWidth())
+                CombatColumn(
+                    sheet,
+                    update,
+                    availableAbilities = viewModel.library.abilities,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                     AbilitiesColumn(sheet, update, Modifier.width(292.dp))
-                    CombatColumn(sheet, update, compact = false, modifier = Modifier.weight(1f))
+                    CombatColumn(
+                        sheet,
+                        update,
+                        availableAbilities = viewModel.library.abilities,
+                        compact = false,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
 
@@ -510,9 +526,12 @@ private fun ProficiencyLine(
 private fun CombatColumn(
     sheet: CharacterSheet,
     update: (CharacterSheet) -> Unit,
+    availableAbilities: List<CatalogAbility>,
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    var abilityPickerOpen by remember(sheet.id) { mutableStateOf(false) }
+
     Column(modifier, verticalArrangement = Arrangement.spacedBy(9.dp)) {
         AdaptiveFormRow(
             compact = compact,
@@ -545,7 +564,7 @@ private fun CombatColumn(
             ),
         )
 
-        SheetBox("Armi e trucchetti da combattimento") {
+        SheetBox("Armi e abilità da combattimento") {
             if (!compact) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ColumnHeader("Nome", Modifier.weight(2f))
@@ -563,13 +582,24 @@ private fun CombatColumn(
                     )
                 }
             }
+            sheet.abilityIds.distinct().forEach { abilityId ->
+                val ability = availableAbilities.firstOrNull { it.id == abilityId }
+                if (ability != null) {
+                    CharacterAbilityRow(ability) {
+                        update(sheet.copy(abilityIds = sheet.abilityIds.filterNot { it == abilityId }))
+                    }
+                } else {
+                    MissingAbilityRow(abilityId) {
+                        update(sheet.copy(abilityIds = sheet.abilityIds.filterNot { it == abilityId }))
+                    }
+                }
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 GameButton("+ Aggiungi arma", accent = Palette.Party, onClick = {
                     update(sheet.copy(weapons = sheet.weapons + WeaponEntry()))
                 })
-                // Preset pronto: una Palla di Fuoco completa (8d6 fuoco, area, TS Destrezza).
-                GameButton("+ Palla di Fuoco", accent = Palette.Enemy, onClick = {
-                    update(sheet.copy(weapons = sheet.weapons + fireballEntry()))
+                GameButton("+ Aggiungi abilità", accent = Palette.Gold, onClick = {
+                    abilityPickerOpen = true
                 })
             }
         }
@@ -592,6 +622,18 @@ private fun CombatColumn(
                     }
                 },
             ),
+        )
+    }
+
+    if (abilityPickerOpen) {
+        AbilityPickerDialog(
+            abilities = availableAbilities,
+            selectedIds = sheet.abilityIds.toSet(),
+            onSelect = { ability ->
+                update(sheet.copy(abilityIds = (sheet.abilityIds + ability.id).distinct()))
+                abilityPickerOpen = false
+            },
+            onDismiss = { abilityPickerOpen = false },
         )
     }
 }
@@ -725,20 +767,150 @@ private fun WeaponAreaSection(weapon: WeaponEntry, onChange: (WeaponEntry) -> Un
     }
 }
 
-/** Preset della Palla di Fuoco: pronta da inserire in una scheda con un tocco. */
-private fun fireballEntry() = WeaponEntry(
-    name = "Palla di Fuoco",
-    diceCount = 8,
-    diceSides = 6,
-    damageModifier = 0,
-    damageType = DamageType.FIRE,
-    rangeFeet = 150,
-    note = "Invocazione di 3° livello. Sfera di 6 m (20 piedi); tiro salvezza su Destrezza, " +
-        "metà danni se superato. Ai livelli superiori: +1d6 per ogni slot oltre il 3°.",
-    areaRadiusFeet = 20,
-    saveAbility = Ability.DEXTERITY,
-    halfOnSave = true,
-)
+@Composable
+private fun CharacterAbilityRow(ability: CatalogAbility, onRemove: () -> Unit) {
+    val shape = RoundedCornerShape(7.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.Night, shape)
+            .border(1.dp, Palette.Gold.copy(alpha = 0.45f), shape)
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = ability.name,
+                    color = Palette.Text,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (ability.rulesText.isNotBlank()) {
+                    Text(
+                        text = ability.rulesText,
+                        color = Palette.TextMuted,
+                        maxLines = 2,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            GameButton("Rimuovi", accent = Palette.Enemy, dense = true, onClick = onRemove)
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Chip(ability.activationCost.characterLabel, Palette.Gold)
+            if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
+            if (ability.isArea) Chip("Area ${ability.areaRadiusFeet} ft", Palette.Crit)
+            Chip("Dal catalogo Abilità", Palette.Party)
+        }
+    }
+}
+
+@Composable
+private fun MissingAbilityRow(abilityId: String, onRemove: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.Enemy.copy(alpha = 0.08f), RoundedCornerShape(7.dp))
+            .border(1.dp, Palette.Enemy.copy(alpha = 0.45f), RoundedCornerShape(7.dp))
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Abilità non più presente nel catalogo · $abilityId",
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+        )
+        GameButton("Rimuovi", accent = Palette.Enemy, dense = true, onClick = onRemove)
+    }
+}
+
+@Composable
+private fun AbilityPickerDialog(
+    abilities: List<CatalogAbility>,
+    selectedIds: Set<String>,
+    onSelect: (CatalogAbility) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Palette.Surface,
+        title = { Text("Aggiungi abilità", color = Palette.Text) },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 430.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                if (abilities.isEmpty()) {
+                    Text(
+                        "Il catalogo è vuoto. Crea prima un’abilità in Compendio → Abilità.",
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    abilities.sortedBy { it.name.lowercase() }.forEach { ability ->
+                        val alreadySelected = ability.id in selectedIds
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(Palette.Night, RoundedCornerShape(7.dp))
+                                .border(1.dp, Palette.Line, RoundedCornerShape(7.dp))
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    ability.name,
+                                    color = Palette.Text,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    buildString {
+                                        append(ability.activationCost.characterLabel)
+                                        if (ability.dealsDamage) append(" · ${ability.damageText}")
+                                        if (ability.isArea) append(" · area ${ability.areaRadiusFeet} ft")
+                                    },
+                                    color = Palette.TextMuted,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            GameButton(
+                                label = if (alreadySelected) "Aggiunta" else "Aggiungi",
+                                accent = if (alreadySelected) Palette.TextFaint else Palette.Party,
+                                dense = true,
+                                selected = alreadySelected,
+                                onClick = { if (!alreadySelected) onSelect(ability) },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
+        },
+    )
+}
+
+private val ActivationCost.characterLabel: String
+    get() = when (this) {
+        ActivationCost.ACTION -> "Azione"
+        ActivationCost.BONUS_ACTION -> "Azione bonus"
+        ActivationCost.REACTION -> "Reazione"
+        ActivationCost.LEGENDARY_ACTION -> "Azione leggendaria"
+        ActivationCost.NONE -> "Nessun costo"
+    }
 
 // --- incantesimi --------------------------------------------------------------------
 

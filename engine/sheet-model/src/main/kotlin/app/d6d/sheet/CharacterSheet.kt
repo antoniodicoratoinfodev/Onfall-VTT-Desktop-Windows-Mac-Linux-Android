@@ -147,6 +147,8 @@ data class CharacterSheet(
 
     // --- blocchi di testo ---
     val weapons: List<WeaponEntry> = emptyList(),
+    /** Identificatori delle capacità scelte dal catalogo del Compendio. */
+    val abilityIds: List<String> = emptyList(),
     val classFeatures: String = "",
     val speciesTraits: String = "",
     val feats: String = "",
@@ -204,7 +206,10 @@ data class CharacterSheet(
      * capacita' con tiro per colpire; i campi narrativi restano fuori perche' il
      * motore non deve conoscere testi.
      */
-    fun toActorDefinition(rulesetVersion: String = "5.2.1"): ActorDefinition {
+    fun toActorDefinition(
+        rulesetVersion: String = "5.2.1",
+        abilityCatalog: List<CatalogAbility> = emptyList(),
+    ): ActorDefinition {
         val combatAbilities = weapons
             .filter { it.name.isNotBlank() }
             .mapIndexed { index, weapon ->
@@ -252,6 +257,12 @@ data class CharacterSheet(
                     )
                 }
             }
+        val weaponIds = combatAbilities.mapTo(mutableSetOf()) { it.id() }
+        val catalogAbilities = abilityIds
+            .distinct()
+            .mapNotNull { selectedId -> abilityCatalog.firstOrNull { it.id == selectedId } }
+            .map { it.toDefinition(rulesetVersion) }
+            .filterNot { it.id() in weaponIds }
 
         return ActorDefinition(
             id,
@@ -270,7 +281,7 @@ data class CharacterSheet(
             emptySet<DamageType>(),
             emptySet<DamageType>(),
             emptySet<ConditionType>(),
-            combatAbilities,
+            combatAbilities + catalogAbilities,
             savingThrowBonusMap(::saveBonus),
             spellSaveDc ?: 0,
         )

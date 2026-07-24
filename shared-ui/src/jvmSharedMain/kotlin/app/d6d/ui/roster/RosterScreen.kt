@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.d6d.ui.abilities.AbilityArchive
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
@@ -132,6 +133,7 @@ fun RosterScreen(
 
         when (section) {
             RosterSection.MAPPE -> MapArchive(portraits, compact, Modifier.weight(1f))
+            RosterSection.ABILITA -> AbilityArchive(viewModel.sheets, compact, Modifier.weight(1f))
 
             RosterSection.SCHEDE ->
                 if (compact && compactPane == CompactRosterPane.DETAIL) {
@@ -196,13 +198,14 @@ fun RosterScreen(
 
 private enum class CompactRosterPane { LIST, DETAIL }
 
-/** Le due sezioni del Compendio: le schede degli attori e l'archivio delle mappe. */
+/** Sezioni del Compendio: attori, capacità riusabili e archivio delle mappe. */
 private enum class RosterSection(val label: String) {
     SCHEDE("Schede"),
+    ABILITA("Abilità"),
     MAPPE("Mappe"),
 }
 
-/** Barra in cima al Compendio per passare fra schede e archivio delle mappe. */
+/** Barra in cima al Compendio per passare fra i tre archivi. */
 @Composable
 private fun RosterSectionBar(current: RosterSection, onSelect: (RosterSection) -> Unit) {
     Row(

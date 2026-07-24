@@ -1,7 +1,10 @@
 package app.d6d.sheet
 
+import app.d6d.domain.combat.ActivationCost
+import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.ResolutionMethod
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
@@ -32,4 +35,31 @@ object ConditionTypeSerializer : KSerializer<ConditionType> {
     override fun serialize(encoder: Encoder, value: ConditionType) = encoder.encodeString(value.name)
 
     override fun deserialize(decoder: Decoder): ConditionType = ConditionType.valueOf(decoder.decodeString())
+}
+
+object ActivationCostSerializer : KSerializer<ActivationCost> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("app.d6d.domain.combat.ActivationCost", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: ActivationCost) = encoder.encodeString(value.name)
+
+    override fun deserialize(decoder: Decoder): ActivationCost = ActivationCost.valueOf(decoder.decodeString())
+}
+
+object ResolutionMethodSerializer : KSerializer<ResolutionMethod> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("app.d6d.domain.combat.ResolutionMethod", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: ResolutionMethod) = encoder.encodeString(value.name)
+
+    override fun deserialize(decoder: Decoder): ResolutionMethod = ResolutionMethod.valueOf(decoder.decodeString())
+}
+
+object AutomationStatusSerializer : KSerializer<AutomationStatus> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("app.d6d.domain.combat.AutomationStatus", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: AutomationStatus) = encoder.encodeString(value.name)
+
+    override fun deserialize(decoder: Decoder): AutomationStatus = AutomationStatus.valueOf(decoder.decodeString())
 }

@@ -7,6 +7,7 @@ import app.d6d.domain.combat.AbilityDefinition
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.ActorDefinition
 import app.d6d.sheet.Ability
+import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.CreatureSize
 import app.d6d.sheet.MonsterSpeeds
@@ -39,13 +40,13 @@ val CreatureSize.squaresPerSide: Int
  */
 
 /** Entrata di catalogo derivata da una scheda di personaggio. */
-fun CharacterSheet.toCatalogEntry(): ActorCatalogEntry {
+fun CharacterSheet.toCatalogEntry(abilityCatalog: List<CatalogAbility> = emptyList()): ActorCatalogEntry {
     // Nome e definizione devono coincidere: uso la stessa forma di ripiego che
     // usa toActorDefinition, altrimenti il costruttore di ActorCatalogEntry rifiuta.
     val safeName = characterName.ifBlank { "Senza nome" }
     return ActorCatalogEntry(
         ActorTemplate(id, safeName, ActorKind.PLAYER_CHARACTER, level.coerceIn(1, 20)),
-        toActorDefinition(),
+        toActorDefinition(abilityCatalog = abilityCatalog),
         // Un personaggio giocante appartiene per impostazione predefinita alla squadra.
         true,
         // I personaggi non usano un Grado di Sfida: il costruttore lo esige a zero.
@@ -80,9 +81,13 @@ fun MonsterStatBlock.toCatalogEntry(): ActorCatalogEntry {
  * volte il bonus al tiro salvezza. Cosi' la scheda derivata riproduce la stessa
  * iniziativa e lo stesso tiro salvezza di partenza.
  */
-fun characterSheetFrom(definition: ActorDefinition): CharacterSheet {
+fun characterSheetFrom(
+    definition: ActorDefinition,
+    abilityCatalog: List<CatalogAbility> = emptyList(),
+): CharacterSheet {
     val dexScore = (10 + 2 * definition.initiativeModifier()).coerceIn(1, 30)
     val conScore = (10 + 2 * definition.constitutionSaveBonus()).coerceIn(1, 30)
+    val catalogIds = abilityCatalog.mapTo(mutableSetOf()) { it.id }
     return CharacterSheet(
         id = definition.id(),
         characterName = definition.name(),
@@ -103,7 +108,8 @@ fun characterSheetFrom(definition: ActorDefinition): CharacterSheet {
         // Con punteggio scelto e nessuna competenza, il tiro salvezza su Costituzione
         // vale il solo modificatore, che e' il bonus originale.
         saveProficiencies = emptyMap(),
-        weapons = definition.abilities().map { it.toWeaponEntry() },
+        weapons = definition.abilities().filterNot { it.id() in catalogIds }.map { it.toWeaponEntry() },
+        abilityIds = definition.abilities().map { it.id() }.filter { it in catalogIds },
     )
 }
 

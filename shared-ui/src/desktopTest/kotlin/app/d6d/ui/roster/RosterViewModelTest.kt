@@ -5,6 +5,7 @@ import app.d6d.domain.catalog.ActorCatalogEntry
 import app.d6d.domain.combat.CombatantSnapshot
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.Ability
+import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.Proficiency
 import app.d6d.sheet.SheetStore
@@ -205,6 +206,35 @@ class RosterViewModelTest {
     @Test
     fun `un attore fuori dal roster ricade su una casella`() {
         assertEquals(1, roster().footprintFor("attore-sconosciuto"))
+    }
+
+    @Test
+    fun `le abilita del catalogo scelte nella scheda arrivano al combattimento e restano aggiornate`() {
+        val roster = roster()
+        val ability = CatalogAbility(
+            id = "abilita-saetta",
+            name = "Saetta del catalogo",
+            diceCount = 2,
+            diceSides = 6,
+        )
+        assertTrue(roster.sheets.upsertAbility(ability))
+
+        roster.sheets.kind = SheetKind.PERSONAGGIO
+        roster.sheets.selectCharacter("pg-kaelen")
+        roster.sheets.character = roster.sheets.character.copy(abilityIds = listOf(ability.id))
+        assertTrue(roster.sheets.save())
+
+        assertEquals(
+            2,
+            roster.definitionFor("pg-kaelen")!!.ability(ability.id).damage().single().dice().count(),
+        )
+
+        assertTrue(roster.sheets.upsertAbility(ability.copy(diceCount = 4)))
+        assertEquals(
+            4,
+            catalogEntry("pg-kaelen")!!.combatDefinition()
+                .ability(ability.id).damage().single().dice().count(),
+        )
     }
 
     private fun snapshotFor(id: String, name: String, armorClass: Int, maxHitPoints: Int): CombatantSnapshot =

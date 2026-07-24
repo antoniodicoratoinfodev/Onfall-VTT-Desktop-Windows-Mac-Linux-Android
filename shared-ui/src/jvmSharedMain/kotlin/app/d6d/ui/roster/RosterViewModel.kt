@@ -51,6 +51,7 @@ class RosterViewModel(
         // La scheda e' autorevole: ogni salvataggio o eliminazione rigenera il catalogo.
         sheets.onSaved = { reconcileCatalog() }
         sheets.onDeleted = { _, _ -> reconcileCatalog() }
+        sheets.onAbilitiesChanged = { reconcileCatalog() }
         reconcileCatalog()
     }
 
@@ -87,7 +88,7 @@ class RosterViewModel(
      */
     fun definitionFor(id: String): ActorDefinition? {
         sheets.library.characters.firstOrNull { it.id == id }
-            ?.let { return it.toActorDefinition() }
+            ?.let { return it.toActorDefinition(abilityCatalog = sheets.library.abilities) }
         sheets.library.monsters.firstOrNull { it.id == id }
             ?.let { return it.toActorDefinition() }
         return null
@@ -184,7 +185,7 @@ class RosterViewModel(
      */
     private fun reconcileCatalog() {
         status = try {
-            val entries = sheets.library.characters.map { it.toCatalogEntry() } +
+            val entries = sheets.library.characters.map { it.toCatalogEntry(sheets.library.abilities) } +
                 sheets.library.monsters.map { it.toCatalogEntry() }
             catalogStore.save(entries)
             null

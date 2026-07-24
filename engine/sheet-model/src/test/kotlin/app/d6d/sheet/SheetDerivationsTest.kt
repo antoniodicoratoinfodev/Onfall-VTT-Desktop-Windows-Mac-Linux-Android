@@ -216,4 +216,51 @@ class SheetDerivationsTest {
         // Il bonus al TS di Destrezza del mago (+2) è proiettato per i suoi tiri salvezza.
         assertEquals(2, actor.saveBonus(SaveAbility.DEXTERITY))
     }
+
+    @Test
+    fun `le abilita scelte dal catalogo entrano nel combattimento senza essere copiate nella scheda`() {
+        val fireball = defaultAbilityCatalog().first { it.id == "inc-palla-di-fuoco" }
+        val sheet = CharacterSheet(
+            id = "pg-catalogo",
+            characterName = "Incantatrice",
+            level = 5,
+            abilityScores = mapOf(Ability.INTELLIGENCE to 16),
+            spellcasting = Spellcasting(ability = Ability.INTELLIGENCE),
+            abilityIds = listOf(fireball.id),
+        )
+
+        val actor = sheet.toActorDefinition(abilityCatalog = listOf(fireball))
+        val selected = actor.abilities().single()
+
+        assertEquals(fireball.id, selected.id())
+        assertEquals("Palla di Fuoco", selected.name())
+        assertEquals(8, selected.damage().single().dice().count())
+        assertEquals(20, selected.areaRadiusFeet())
+        assertEquals(SaveAbility.DEXTERITY, selected.saveAbility())
+    }
+
+    @Test
+    fun `un riferimento assente dal catalogo non crea una capacita fantasma`() {
+        val sheet = CharacterSheet(abilityIds = listOf("abilita-rimossa"))
+
+        assertTrue(sheet.toActorDefinition(abilityCatalog = emptyList()).abilities().isEmpty())
+    }
+
+    @Test
+    fun `morso gelido conserva entrambe le componenti di danno`() {
+        val bite = defaultAbilityCatalog().first { it.id == "nem-morso" }.toDefinition()
+
+        assertEquals(2, bite.damage().size)
+        assertEquals(DamageType.PIERCING, bite.damage()[0].type())
+        assertEquals(DamageType.NECROTIC, bite.damage()[1].type())
+        assertEquals(4, bite.damage()[1].dice().sides())
+    }
+
+    @Test
+    fun `tutte le abilita iniziali hanno identificatori unici e producono definizioni valide`() {
+        val catalog = defaultAbilityCatalog()
+
+        assertEquals(catalog.size, catalog.map { it.id }.distinct().size)
+        catalog.forEach { it.toDefinition() }
+    }
 }

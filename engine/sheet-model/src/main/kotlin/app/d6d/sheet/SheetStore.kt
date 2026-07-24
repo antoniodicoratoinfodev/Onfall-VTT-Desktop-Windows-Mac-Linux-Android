@@ -6,15 +6,16 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
-/** Contenuto salvato: schede dei personaggi e stat block dei mostri. */
+/** Contenuto salvato: schede, stat block e catalogo delle capacità riusabili. */
 @Serializable
 data class SheetLibrary(
     val schemaVersion: Int = SCHEMA_VERSION,
     val characters: List<CharacterSheet> = emptyList(),
     val monsters: List<MonsterStatBlock> = emptyList(),
+    val abilities: List<CatalogAbility> = defaultAbilityCatalog(),
 ) {
     companion object {
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 3
     }
 }
 
@@ -40,7 +41,12 @@ class SheetStore(private val file: Path) {
         if (!Files.exists(file)) return SheetLibrary()
         val text = Files.readString(file)
         if (text.isBlank()) return SheetLibrary()
-        return json.decodeFromString(SheetLibrary.serializer(), text)
+        val decoded = json.decodeFromString(SheetLibrary.serializer(), text)
+        return if (decoded.schemaVersion < SheetLibrary.SCHEMA_VERSION) {
+            migrate(decoded)
+        } else {
+            decoded
+        }
     }
 
     fun save(library: SheetLibrary) {
@@ -55,4 +61,54 @@ class SheetStore(private val file: Path) {
         Files.writeString(temporary, json.encodeToString(SheetLibrary.serializer(), library))
         Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING)
     }
+
+    /**
+     * Il vecchio pulsante rapido inseriva Palla di Fuoco come una normale arma.
+     * La migrazione riconosce soltanto quel preset completo e lo sostituisce col
+     * riferimento alla nuova voce di catalogo, senza toccare capacità personalizzate
+     * che condividano solo il nome.
+     */
+    private fun migrate(library: SheetLibrary): SheetLibrary {
+        val defaults = defaultAbilityCatalog()
+        // Migrazione additiva: le voci con lo stesso ID restano quelle dell'utente;
+        // vengono inserite soltanto le nuove capacità iniziali che ancora mancano.
+        val abilities = library.abilities +
+            defaults.filter { builtIn -> library.abilities.none { it.id == builtIn.id } }
+
+        val characters = if (library.schemaVersion < 2) {
+            val fireball = abilities.first { it.id == "inc-palla-di-fuoco" }
+            library.characters.map { sheet ->
+                val presetRows = sheet.weapons.filter { it.matches(fireball) }
+                if (presetRows.isEmpty()) {
+                    sheet
+                } else {
+                    sheet.copy(
+                        weapons = sheet.weapons.filterNot { it.matches(fireball) },
+                        abilityIds = (sheet.abilityIds + fireball.id).distinct(),
+                    )
+                }
+            }
+        } else {
+            library.characters
+        }
+        return library.copy(
+            schemaVersion = SheetLibrary.SCHEMA_VERSION,
+            characters = characters,
+            abilities = abilities,
+        )
+    }
+
+    private fun WeaponEntry.matches(ability: CatalogAbility): Boolean =
+        name == ability.name &&
+            attackBonus == ability.attackBonus &&
+            diceCount == ability.diceCount &&
+            diceSides == ability.diceSides &&
+            damageModifier == ability.damageModifier &&
+            damageType == ability.damageType &&
+            rangeFeet == ability.rangeFeet &&
+            note == ability.rulesText &&
+            bonusAction == (ability.activationCost == app.d6d.domain.combat.ActivationCost.BONUS_ACTION) &&
+            areaRadiusFeet == ability.areaRadiusFeet &&
+            saveAbility == ability.saveAbility &&
+            halfOnSave == ability.halfOnSave
 }
