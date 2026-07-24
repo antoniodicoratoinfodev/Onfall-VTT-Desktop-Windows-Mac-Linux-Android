@@ -5,9 +5,9 @@
       AppTheme, cosi' desktop e Android restano identici nell'aspetto.
     -->
     <style name="Theme.App" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#FF070A12</item>
-        <item name="android:navigationBarColor">#FF070A12</item>
+        <item name="android:statusBarColor">#FF030405</item>
+        <item name="android:navigationBarColor">#FF030405</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowBackground">#FF0C1120</item>
+        <item name="android:windowBackground">#FF080A0D</item>
     </style>
 </resources>

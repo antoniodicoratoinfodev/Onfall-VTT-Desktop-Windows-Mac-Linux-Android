@@ -37,9 +37,9 @@ import androidx.compose.ui.graphics.Canvas as bitmapCanvas
  *
  * Nessuna immagine importata — vale lo stesso vincolo di licenza dei ritratti e
  * degli ornamenti — quindi anche lo sfondo e' interamente disegnato da codice.
- * La scena e' una cripta quasi buia con un focolare: il fondo tende al nero, ma
- * dove batte la luce la pietra emerge a rilievo, incisa di crepe; poche braci
- * salgono lente e vive.
+ * La scena e' una cripta quasi buia attraversata da una luce fredda: il fondo
+ * tende al nero, ma dove batte la luce la pietra emerge a rilievo, incisa di
+ * crepe; poche particelle salgono lente nell'aria.
  *
  * E' pensato per stare dietro i menu e i pannelli, che vi si dissolvono sopra: la
  * mappa tattica dipinge invece il proprio fondo opaco e resta pulita.
@@ -47,8 +47,8 @@ import androidx.compose.ui.graphics.Canvas as bitmapCanvas
  * ## Perche' non c'e' foschia in movimento
  * Sul nero i gradienti radiali a bassa opacita' si quantizzano in anelli visibili
  * (banding): fermi si dominano col dithering, ma se il gradiente si muove gli
- * anelli scorrono e sfarfallano. Percio' le uniche cose animate sono le braci, che
- * sono punti netti e non creano banding; ogni sfumatura resta ferma e dithered.
+ * anelli scorrono e sfarfallano. Percio' le uniche cose animate sono le particelle,
+ * che sono punti netti e non creano banding; ogni sfumatura resta ferma e dithered.
  *
  * ## Dithering
  * I gradienti scuri (bagliore, vignettatura) sono coperti da un rumore fine a
@@ -61,7 +61,7 @@ fun AtmosphericBackground(
     embers: Boolean = true,
     vignette: Float = 0.52f,
 ) {
-    // Strato fermo: base, focolare, pietra, crepe, vignettatura e dithering. Legge
+    // Strato fermo: base, luce radente, pietra, crepe, vignettatura e dithering. Legge
     // solo la dimensione, quindi si ridisegna soltanto al ridimensionamento.
     Canvas(modifier.fillMaxSize()) {
         drawStoneField(vignette)
@@ -69,7 +69,7 @@ fun AtmosphericBackground(
 
     if (embers) {
         val transition = rememberInfiniteTransition(label = "backdrop")
-        // Un tempo 0..1 in ciclo continuo. Ogni brace percorre un numero intero di
+        // Un tempo 0..1 in ciclo continuo. Ogni particella percorre un numero intero di
         // altezze per ciclo, cosi' il salto di riavvio e' invisibile.
         val time by transition.animateFloat(
             initialValue = 0f,
@@ -86,12 +86,12 @@ fun AtmosphericBackground(
     }
 }
 
-/** Centro del focolare, in frazioni della superficie: la luce nasce da qui. */
+/** Centro della luce radente, in frazioni della superficie. */
 private const val GLOW_X = 0.5f
 private const val GLOW_Y = 0.36f
 
 /**
- * La cripta illuminata dal focolare: base scura, alone caldo, pietra a rilievo,
+ * La cripta illuminata da un alone d'acciaio: base scura, pietra a rilievo,
  * crepe incise, vignettatura forte e dithering. Disegnata una volta per dimensione.
  */
 private fun DrawScope.drawStoneField(vignetteStrength: Float) {
@@ -104,9 +104,9 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
     // Base: notte in alto, abisso verso il basso e i bordi.
     drawRect(Brush.verticalGradient(listOf(Palette.Night, Palette.Abyss)))
 
-    // Alone del focolare: caldo e presente, ma a basso contrasto e con caduta lunga
-    // fino al bordo. Meno contrasto = meno gradini di quantizzazione da nascondere,
-    // cosi' il dithering forte sotto riesce a renderlo del tutto liscio.
+    // Alone freddo a basso contrasto e con caduta lunga fino al bordo. Meno
+    // contrasto = meno gradini di quantizzazione da nascondere, cosi' il
+    // dithering sotto riesce a renderlo del tutto liscio.
     drawRect(
         Brush.radialGradient(
             colorStops = arrayOf(
@@ -120,7 +120,7 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
             radius = maxDim * 1.0f,
         ),
     )
-    // Nucleo appena piu' dorato, anch'esso tenue e a caduta morbida.
+    // Nucleo appena piu' chiaro, anch'esso tenue e a caduta morbida.
     drawRect(
         Brush.radialGradient(
             colorStops = arrayOf(
@@ -152,7 +152,7 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
         )
     }
 
-    // Crepe incise nella pietra: numerose e leggibili. Prima un bordo caldo in luce,
+    // Crepe incise nella pietra: numerose e leggibili. Prima un bordo freddo in luce,
     // poi l'incisione scura sopra, cosi' la fenditura sembra scavata.
     repeat(13) {
         val path = Path()
@@ -223,7 +223,7 @@ private val backdropDither: ShaderBrush by lazy {
 }
 
 /**
- * Una brace: colonna e altezza iniziale in frazioni (0..1), velocita' di salita in
+ * Una particella: colonna e altezza iniziale in frazioni (0..1), velocita' di salita in
  * numeri interi di altezze per ciclo — cosi' il giro si chiude senza scatti.
  */
 private class Ember(
@@ -236,7 +236,7 @@ private class Ember(
     val drift: Float,
 )
 
-// Poche braci ma vive: scintille sparse di un fuoco che cova. Seme fisso.
+// Poche particelle fredde e discrete, con seme fisso.
 private val embers: List<Ember> by lazy {
     val random = Random(4_242)
     List(15) {
@@ -252,7 +252,7 @@ private val embers: List<Ember> by lazy {
     }
 }
 
-/** Parte frazionaria sempre positiva: tiene la brace nell'intervallo 0..1. */
+/** Parte frazionaria sempre positiva: tiene la particella nell'intervallo 0..1. */
 private fun frac(value: Float): Float = ((value % 1f) + 1f) % 1f
 
 private fun DrawScope.drawEmbers(time: Float) {
@@ -263,7 +263,7 @@ private fun DrawScope.drawEmbers(time: Float) {
         // fine del ciclo. La deriva orizzontale oscilla con periodo unitario.
         val y = frac(ember.startY - time * ember.rise)
         val x = frac(ember.x + ember.drift * sin(2.0 * PI * (time + ember.phase)).toFloat())
-        // Dissolvenza ai bordi: la brace nasce fioca in basso e si spegne in alto,
+        // Dissolvenza ai bordi: la particella nasce fioca in basso e si spegne in alto,
         // percio' il momento del riavvolgimento (y ~ 0 o 1) e' gia' trasparente.
         val fade = sin(PI * y).toFloat()
         if (fade <= 0.01f) return@forEach

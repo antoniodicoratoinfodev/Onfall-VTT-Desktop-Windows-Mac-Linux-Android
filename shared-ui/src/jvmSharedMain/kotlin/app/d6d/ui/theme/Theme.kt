@@ -26,61 +26,58 @@ import org.jetbrains.compose.resources.Font
  * paragrafo 17 del documento vieta di includere grafica protetta, quindi tutta
  * l'identita' visiva e' disegnata qui.
  *
- * Estetica: dark fantasy da tavolo virtuale. I fondali sono neri caldi, come una
- * sala illuminata a candela; l'accento primario e' un oro antico (selezioni,
- * turni attivi, azioni principali); il testo e' avorio da pergamena. Le fazioni
- * restano leggibili a colpo d'occhio: acciaio freddo per gli alleati, rosso
- * brace per gli avversari. Le tinte forti portano informazione, non decorazione.
+ * Estetica: dark fantasy essenziale, costruita su nero, grafite e acciaio. Le
+ * superfici sono neutre e l'accento primario e' un blu ardesia desaturato
+ * (selezioni, turni attivi, azioni principali). Le fazioni restano leggibili a
+ * colpo d'occhio: azzurro freddo per gli alleati, rosso per gli avversari. Le
+ * tinte forti portano informazione, non decorazione.
  */
 object Palette {
-    // Fondali: dal nero fondo della sala alle superfici in rilievo. Tutti con la
-    // stessa sottotinta bruna, cosi' l'insieme scalda senza mai diventare marrone.
-    // Tarati piu' vicino al nero: la scena resta cupa e gli accenti caldi risaltano
-    // di piu', ma i gradini fra un livello e l'altro restano leggibili.
-    val Abyss = Color(0xFF080605)
-    val Night = Color(0xFF0F0C09)
-    val Surface = Color(0xFF17130D)
-    val SurfaceHigh = Color(0xFF221C13)
-    val Line = Color(0xFF342D20)
-    // Bagliore della griglia quando la luminosita' e' al massimo: piu' chiara e
-    // un filo piu' neutra della linea a riposo, cosi' al 100% la maglia stacca
-    // sul fondo senza perdere la sottotinta calda del reticolo.
-    val LineBright = Color(0xFFB6A886)
+    // Fondali: nero vero e grafiti neutre, senza sottotinta gialla o marrone.
+    // I gradini restano abbastanza distinti da separare shell, pannelli e card.
+    val Abyss = Color(0xFF030405)
+    val Night = Color(0xFF080A0D)
+    val Surface = Color(0xFF0F1216)
+    val SurfaceHigh = Color(0xFF181C22)
+    val Line = Color(0xFF2B313A)
+    // Bagliore della griglia alla luminosita' massima: acciaio chiaro, leggibile
+    // sul fondo senza trasformare il reticolo in una fonte di luce colorata.
+    val LineBright = Color(0xFF8E98A6)
 
-    // Bronzo per gli ornamenti: piu' luminoso della linea ma piu' spento
-    // dell'oro, e' il metallo "a riposo" delle cornici e dei fregi.
-    val Bronze = Color(0xFF5C4E33)
+    // Mantiene il vecchio nome per non propagare un cambio puramente cosmetico
+    // nell'intera UI: ora e' acciaio scuro per cornici e fregi, non bronzo.
+    val Bronze = Color(0xFF485462)
 
-    // L'accento primario e' oro antico vero e proprio: stati selezionati, turno
-    // attivo e azioni principali. `GoldBright` e' il bagliore per i risalti.
-    val Gold = Color(0xFFC9A45C)
-    val GoldBright = Color(0xFFEDD595)
-    val GoldDim = Color(0xFF8C7648)
+    // Anche questi nomi restano stabili per compatibilita' interna: la famiglia
+    // cromatica e' ora ardesia fredda, usata soltanto per interazione e focus.
+    val Gold = Color(0xFF8FA7C4)
+    val GoldBright = Color(0xFFCBD7E6)
+    val GoldDim = Color(0xFF586B82)
 
-    // Testo color pergamena: caldo ma quasi neutro, resta riposante da leggere.
-    val Text = Color(0xFFEAE3D2)
-    val TextMuted = Color(0xFFA89E89)
+    // Testo quasi bianco e secondari freddi, per una lettura pulita sul nero.
+    val Text = Color(0xFFECEFF4)
+    val TextMuted = Color(0xFFA5ADB8)
     // Usato per informazioni secondarie, non soltanto per controlli disabilitati:
     // resta discreto ma mantiene un contrasto leggibile sulle superfici scure.
-    val TextFaint = Color(0xFF6F6756)
+    val TextFaint = Color(0xFF7D8793)
 
-    /** Fazione alleata: acciaio freddo, distinto dall'oro e dal rosso nemico. */
-    val Party = Color(0xFFA9C0D6)
+    /** Fazione alleata: azzurro freddo, distinto dall'accento e dal rosso nemico. */
+    val Party = Color(0xFF82B5D8)
 
-    /** Fazione avversaria: rosso brace, l'unico colore caldo acceso. */
-    val Enemy = Color(0xFFD25C4D)
+    /** Fazione avversaria: rosso netto, riservato a nemici ed errori. */
+    val Enemy = Color(0xFFDB6A6A)
 
-    // Soglie dei punti ferita: pergamena finche' si sta bene, ambra da
-    // insanguinato, rosso sangue in condizioni critiche.
-    val Healthy = Color(0xFFDDD3B8)
-    val Bloodied = Color(0xFFCF8D45)
-    val Critical = Color(0xFFC23B2E)
+    // I colori caldi sopravvivono solo come informazione semantica: arancio per
+    // l'avvertimento e rosso per una condizione critica.
+    val Healthy = Color(0xFFC7D1DC)
+    val Bloodied = Color(0xFFD18B57)
+    val Critical = Color(0xFFD95353)
 
     /** Punti ferita temporanei: assorbono per primi, quindi hanno colore proprio. */
-    val Temporary = Color(0xFF8FB9C6)
+    val Temporary = Color(0xFF72B3C8)
 
-    val Crit = Color(0xFFF0CE74)
-    val Heal = Color(0xFF86BA7C)
+    val Crit = Color(0xFFB99ADD)
+    val Heal = Color(0xFF75B98A)
 }
 
 /** Colore della barra dei PF in base alla soglia. `Bloodied` e' meta' dei PF massimi. */

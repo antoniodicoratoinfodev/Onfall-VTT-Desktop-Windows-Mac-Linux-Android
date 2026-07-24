@@ -34,7 +34,7 @@ import androidx.compose.ui.graphics.Canvas as bitmapCanvas
  *
  * Nessuna immagine importata — vale lo stesso vincolo di licenza dei ritratti —
  * quindi ogni decorazione e' un tracciato vettoriale. Sono tocchi piccoli e
- * riusabili: gradienti che danno rilievo ai pannelli, angoli dorati sulle targhe
+ * riusabili: gradienti che danno rilievo ai pannelli, angoli d'acciaio sulle targhe
  * e vignettature che concentrano la luce dove si gioca.
  */
 
@@ -134,7 +134,7 @@ fun OrnateDivider(
 }
 
 /**
- * Filo d'oro: una riga alta un pixel che sfuma ai lati. Separa le fasce
+ * Filo d'accento: una riga alta un pixel che sfuma ai lati. Separa le fasce
  * dell'interfaccia (intestazione, comandi) senza il peso di un bordo pieno.
  */
 @Composable
@@ -195,7 +195,7 @@ internal val grainBrush: ShaderBrush by lazy {
 }
 
 /**
- * Vignettatura: gli angoli scuriscono e la luce resta al centro, come un lume
+ * Vignettatura: gli angoli scuriscono e la luce resta al centro, come un fascio
  * sospeso sopra il tavolo. Va disegnata sopra il contenuto, quindi e' un
  * composable da mettere per ultimo nel Box della mappa; non intercetta i tocchi.
  *
