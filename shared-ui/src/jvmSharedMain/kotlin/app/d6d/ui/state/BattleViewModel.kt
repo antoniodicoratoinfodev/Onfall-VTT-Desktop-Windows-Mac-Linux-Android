@@ -695,6 +695,8 @@ class BattleViewModel(
         activeActorSelection?.takeIf { it in activeCombatantIds }?.let { put("activeActorId", it) }
         put("rollMode", rollMode.name)
         put("encounterMode", encounterMode.name)
+        put("editMode", editMode.toString())
+        put("mapEditMode", mapEditMode.toString())
         if (footprints.isNotEmpty()) {
             put("footprints", footprints.entries.joinToString(",") { "${it.key}=${it.value}" })
         }
@@ -706,7 +708,11 @@ class BattleViewModel(
         sessionGeneration++
         undoEffects.clear()
         floating = emptyMap()
+        areaTargeting = null
+        pendingArea = null
         message = null
+        editMode = presentation["editMode"] == "true"
+        mapEditMode = editMode && presentation["mapEditMode"] == "true"
         activeActorSelection = null
         targetSelection = null
         sync(forceTurnReset = true)

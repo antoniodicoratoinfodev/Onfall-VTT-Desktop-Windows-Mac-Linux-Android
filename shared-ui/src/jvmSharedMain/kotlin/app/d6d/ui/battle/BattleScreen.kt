@@ -81,6 +81,7 @@ fun BattleScreen(
     portraits: PortraitRepository,
     sessions: SessionManager,
     compact: Boolean,
+    onOpenCombatantSheet: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val layout = LocalUiLayout.current
@@ -117,9 +118,9 @@ fun BattleScreen(
         }
 
         if (compact) {
-            CompactBattleBody(viewModel, portraits, Modifier.weight(1f))
+            CompactBattleBody(viewModel, portraits, onOpenCombatantSheet, Modifier.weight(1f))
         } else {
-            WideBattleBody(viewModel, portraits, Modifier.weight(1f))
+            WideBattleBody(viewModel, portraits, onOpenCombatantSheet, Modifier.weight(1f))
         }
     }
 }
@@ -129,6 +130,7 @@ fun BattleScreen(
 private fun WideBattleBody(
     viewModel: BattleViewModel,
     portraits: PortraitRepository,
+    onOpenCombatantSheet: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -144,6 +146,7 @@ private fun WideBattleBody(
                 title = "Squadra",
                 ids = viewModel.partyIds,
                 faction = Faction.PARTY,
+                onOpenSheet = onOpenCombatantSheet,
                 modifier = Modifier.width(layout.squadWidth),
                 dropTarget = dropTarget,
             )
@@ -194,6 +197,7 @@ private fun WideBattleBody(
                     title = "Nemici",
                     ids = viewModel.enemyIds,
                     faction = Faction.ENEMY,
+                    onOpenSheet = onOpenCombatantSheet,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     dropTarget = dropTarget,
                 )
@@ -333,6 +337,7 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
 private fun CompactBattleBody(
     viewModel: BattleViewModel,
     portraits: PortraitRepository,
+    onOpenCombatantSheet: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var tab by remember { mutableStateOf(CompactTab.PALCO) }
@@ -361,6 +366,7 @@ private fun CompactBattleBody(
                     title = "Squadra",
                     ids = viewModel.partyIds,
                     faction = Faction.PARTY,
+                    onOpenSheet = onOpenCombatantSheet,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -369,6 +375,7 @@ private fun CompactBattleBody(
                     title = "Nemici",
                     ids = viewModel.enemyIds,
                     faction = Faction.ENEMY,
+                    onOpenSheet = onOpenCombatantSheet,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -393,6 +400,7 @@ private fun Rail(
     title: String,
     ids: List<String>,
     faction: Faction,
+    onOpenSheet: (String) -> Unit,
     modifier: Modifier = Modifier,
     dropTarget: TokenPlacementDrag? = null,
 ) {
@@ -438,6 +446,7 @@ private fun Rail(
                         viewModel = viewModel,
                         combatantId = id,
                         faction = faction,
+                        onOpenSheet = onOpenSheet,
                         dropTarget = dropTarget,
                     )
                 }

@@ -65,6 +65,7 @@ fun CombatantRailCard(
     viewModel: BattleViewModel,
     combatantId: String,
     faction: Faction,
+    onOpenSheet: (String) -> Unit,
     modifier: Modifier = Modifier,
     dropTarget: TokenPlacementDrag? = null,
 ) {
@@ -129,8 +130,8 @@ fun CombatantRailCard(
                 }
                 .clickable(
                     role = Role.Button,
-                    onClickLabel = "Seleziona ${snapshot.name()} come bersaglio",
-                ) { viewModel.selectedTargetId = combatantId }
+                    onClickLabel = "Apri la scheda di ${snapshot.name()}",
+                ) { onOpenSheet(snapshot.definitionId()) }
                 .padding(9.dp)
                 .alpha(if (defeated) 0.5f else 1f),
             verticalArrangement = Arrangement.spacedBy(6.dp),

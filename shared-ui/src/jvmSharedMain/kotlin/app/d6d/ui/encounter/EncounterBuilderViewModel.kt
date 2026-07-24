@@ -96,7 +96,7 @@ class EncounterBuilderViewModel(
 
     private var scratchBaselineIds: Set<String> = emptySet()
 
-    var encounterName by mutableStateOf("Nuova partita")
+    var encounterName by mutableStateOf("Partita")
 
     var status by mutableStateOf<String?>(null)
         private set
@@ -131,7 +131,7 @@ class EncounterBuilderViewModel(
         templateSource = null
         scratchBaselineIds = emptySet()
         choices = emptyMap()
-        encounterName = "Nuova partita"
+        encounterName = "Partita"
         gridColumns = DEFAULT_COLUMNS
         gridRows = DEFAULT_ROWS
         feetPerSquare = DEFAULT_FEET_PER_SQUARE
@@ -167,7 +167,7 @@ class EncounterBuilderViewModel(
 
     fun continueFromParticipants() {
         status = when {
-            encounterName.isBlank() -> "Dai un nome alla nuova partita."
+            encounterName.isBlank() -> "Dai un nome alla partita."
             selectedCount == 0 -> "Seleziona almeno un partecipante."
             else -> null
         }

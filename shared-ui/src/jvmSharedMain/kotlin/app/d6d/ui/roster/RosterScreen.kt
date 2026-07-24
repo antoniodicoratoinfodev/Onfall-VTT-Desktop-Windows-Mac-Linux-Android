@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +59,8 @@ fun RosterScreen(
     viewModel: RosterViewModel,
     portraits: PortraitRepository,
     compact: Boolean,
+    requestedItemId: String? = null,
+    onRequestedItemHandled: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var section by remember { mutableStateOf(RosterSection.SCHEDE) }
@@ -105,6 +108,16 @@ fun RosterScreen(
             SheetNavigationResult.NOT_FOUND,
             SheetNavigationResult.FAILED,
             -> Unit
+        }
+    }
+
+    LaunchedEffect(requestedItemId) {
+        requestedItemId?.let { id ->
+            section = RosterSection.SCHEDE
+            viewModel.items.firstOrNull { it.id == id }?.let { item ->
+                requestNavigation(RosterNavigation.Select(item))
+            }
+            onRequestedItemHandled()
         }
     }
 

@@ -69,7 +69,10 @@ fun SessionMenuButton(manager: SessionManager, modifier: Modifier = Modifier, de
  * partita giusta senza doverla aprire.
  */
 @Composable
-fun SessionMenuDialog(manager: SessionManager) {
+fun SessionMenuDialog(
+    manager: SessionManager,
+    onLoaded: () -> Unit = {},
+) {
     if (!manager.menuOpen) return
 
     var name by remember(manager.currentName) { mutableStateOf(manager.currentName) }
@@ -83,8 +86,10 @@ fun SessionMenuDialog(manager: SessionManager) {
         }
     }
     val openSession: (SessionSummary) -> Unit = { summary ->
-        if (manager.requestLoad(summary) == SessionLoadResult.UNSAVED_CHANGES) {
-            discardForSession = summary
+        when (manager.requestLoad(summary)) {
+            SessionLoadResult.LOADED -> onLoaded()
+            SessionLoadResult.UNSAVED_CHANGES -> discardForSession = summary
+            SessionLoadResult.FAILED -> Unit
         }
     }
 
@@ -238,7 +243,12 @@ fun SessionMenuDialog(manager: SessionManager) {
             },
             confirmButton = {
                 GameButton("Scarta e apri", accent = Palette.Enemy, onClick = {
-                    manager.requestLoad(summary, discardUnsavedChanges = true)
+                    if (
+                        manager.requestLoad(summary, discardUnsavedChanges = true) ==
+                        SessionLoadResult.LOADED
+                    ) {
+                        onLoaded()
+                    }
                     discardForSession = null
                 })
             },

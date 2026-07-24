@@ -70,7 +70,7 @@ import kotlinx.coroutines.flow.collectLatest
 
 enum class Destination(val label: String, val icon: AppGlyph) {
     BATTAGLIA("Battaglia", AppGlyph.SWORDS),
-    INCONTRO("Nuova partita", AppGlyph.D20),
+    INCONTRO("Partita", AppGlyph.D20),
     COMPENDIO("Compendio", AppGlyph.TOME),
 }
 
@@ -98,6 +98,7 @@ fun AppRoot(
 ) {
     AppTheme {
         var destination by remember { mutableStateOf(Destination.BATTAGLIA) }
+        var requestedCompendiumItemId by remember { mutableStateOf<String?>(null) }
 
         // Il roster unifica schede e compendio: le schede sono la fonte, il catalogo
         // da combattimento ne discende.
@@ -184,21 +185,52 @@ fun AppRoot(
             ) { shown ->
                 when (shown) {
                     Destination.BATTAGLIA ->
-                        BattleScreen(battleViewModel, portraits, sessions, compact = compact, modifier = Modifier.fillMaxSize())
+                        BattleScreen(
+                            viewModel = battleViewModel,
+                            portraits = portraits,
+                            sessions = sessions,
+                            compact = compact,
+                            onOpenCombatantSheet = { definitionId ->
+                                if (roster.items.any { it.id == definitionId }) {
+                                    requestedCompendiumItemId = definitionId
+                                    destination = Destination.COMPENDIO
+                                } else {
+                                    battleViewModel.showMessage(
+                                        "La scheda collegata a questo combattente non è presente nel Compendio.",
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
 
                     Destination.INCONTRO ->
                         EncounterBuilderScreen(
                             viewModel = encounterBuilder,
                             compact = compact,
+                            sessions = sessions,
                             onStarted = { session, name, mode ->
                                 requestEncounter(session, name, mode)
                             },
-                            onOpenCompendium = { destination = Destination.COMPENDIO },
+                            onSessionLoaded = {
+                                encounterBuilder.restartWizard()
+                                destination = Destination.BATTAGLIA
+                            },
+                            onOpenCompendium = {
+                                requestedCompendiumItemId = null
+                                destination = Destination.COMPENDIO
+                            },
                             modifier = Modifier.fillMaxSize(),
                         )
 
                     Destination.COMPENDIO ->
-                        RosterScreen(roster, portraits, compact = compact, modifier = Modifier.fillMaxSize())
+                        RosterScreen(
+                            viewModel = roster,
+                            portraits = portraits,
+                            compact = compact,
+                            requestedItemId = requestedCompendiumItemId,
+                            onRequestedItemHandled = { requestedCompendiumItemId = null },
+                            modifier = Modifier.fillMaxSize(),
+                        )
                 }
             }
         }

@@ -35,6 +35,8 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.roster.RosterKind
+import app.d6d.ui.session.SessionManager
+import app.d6d.ui.session.SessionMenuDialog
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
 
@@ -44,7 +46,9 @@ import app.d6d.ui.theme.Palette
 fun EncounterBuilderScreen(
     viewModel: EncounterBuilderViewModel,
     compact: Boolean,
+    sessions: SessionManager,
     onStarted: (CombatSession, String, EncounterMode) -> Unit,
+    onSessionLoaded: () -> Unit,
     onOpenCompendium: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -66,10 +70,13 @@ fun EncounterBuilderScreen(
             )
         }
 
+        SessionMenuDialog(sessions, onLoaded = onSessionLoaded)
+
         when (viewModel.step) {
             NewGameStep.TEMPLATE -> TemplateChoiceStep(
                 viewModel = viewModel,
                 compact = compact,
+                sessions = sessions,
                 onCreateFromScratch = {
                     viewModel.createFromScratch()
                     onOpenCompendium()
@@ -103,7 +110,7 @@ private fun EncounterHeader(step: NewGameStep, compact: Boolean) {
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
-            text = "Nuova partita",
+            text = "Partita",
             color = Palette.Text,
             fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
@@ -125,6 +132,7 @@ private fun EncounterHeader(step: NewGameStep, compact: Boolean) {
 private fun TemplateChoiceStep(
     viewModel: EncounterBuilderViewModel,
     compact: Boolean,
+    sessions: SessionManager,
     onCreateFromScratch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -163,6 +171,19 @@ private fun TemplateChoiceStep(
                     subtitle = "Apre il Compendio per creare nuove schede",
                     accent = Palette.Gold,
                     onClick = onCreateFromScratch,
+                )
+                GameButton(
+                    label = "Carica sessione",
+                    subtitle = when (sessions.sessions.size) {
+                        0 -> "Nessuna sessione salvata"
+                        1 -> "1 sessione salvata"
+                        else -> "${sessions.sessions.size} sessioni salvate"
+                    },
+                    accent = Palette.Heal,
+                    onClick = {
+                        sessions.refresh()
+                        sessions.menuOpen = true
+                    },
                 )
             }
         }
@@ -334,7 +355,7 @@ private fun EmptyCompendium(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = if (creatingFromScratch) "Crea i protagonisti della nuova partita." else "Il Compendio è vuoto.",
+                text = if (creatingFromScratch) "Crea i protagonisti della partita." else "Il Compendio è vuoto.",
                 color = Palette.Text,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium,
@@ -544,7 +565,7 @@ private fun NewGameFooter(
             NewGameStep.MODALITA -> {
                 GameButton("Indietro", accent = Palette.TextMuted, onClick = { viewModel.back() })
                 GameButton(
-                    label = "Avvia nuova partita",
+                    label = "Avvia partita",
                     subtitle = viewModel.mode.label,
                     accent = Palette.Heal,
                     enabled = viewModel.canStart,
