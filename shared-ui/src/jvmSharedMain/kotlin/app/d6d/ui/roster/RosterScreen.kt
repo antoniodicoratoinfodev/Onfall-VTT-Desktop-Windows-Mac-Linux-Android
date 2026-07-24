@@ -37,6 +37,7 @@ import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.maps.MapArchive
 import app.d6d.ui.sheet.CharacterSheetEditor
 import app.d6d.ui.sheet.MonsterStatBlockEditor
 import app.d6d.ui.sheet.SheetKind
@@ -58,6 +59,7 @@ fun RosterScreen(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    var section by remember { mutableStateOf(RosterSection.SCHEDE) }
     var compactPane by remember { mutableStateOf(CompactRosterPane.LIST) }
     var pendingNavigation by remember { mutableStateOf<RosterNavigation?>(null) }
 
@@ -118,36 +120,51 @@ fun RosterScreen(
     // Fondo trasparente: lascia trasparire il fondale atmosferico condiviso di
     // AppRoot. Intestazione, elenco ed editor hanno superfici proprie e restano leggibili.
     Column(modifier.fillMaxSize()) {
-        if (compact && compactPane == CompactRosterPane.DETAIL) {
-            CompactEditorHeader(viewModel) { compactPane = CompactRosterPane.LIST }
-            GoldenRule()
-            RosterStatus(viewModel)
-            Box(Modifier.weight(1f)) { editor(Modifier.fillMaxSize()) }
-        } else {
-            RosterHeader(
-                compact = compact,
-                onNewCharacter = { requestNavigation(RosterNavigation.NewCharacter) },
-                onNewCreature = { requestNavigation(RosterNavigation.NewCreature) },
-            )
-            GoldenRule()
-            RosterStatus(viewModel)
+        // In modalità compatta, mentre si modifica una scheda l'intestazione
+        // dell'editor gestisce già la navigazione: la barra di sezione si toglie
+        // per non impilare due comandi «indietro».
+        val editingCompactSheet = compact &&
+            section == RosterSection.SCHEDE &&
+            compactPane == CompactRosterPane.DETAIL
+        if (!editingCompactSheet) {
+            RosterSectionBar(section) { section = it }
+        }
 
-            if (compact) {
-                RosterList(
-                    viewModel = viewModel,
-                    modifier = Modifier.weight(1f).fillMaxWidth().padding(7.dp),
-                    onSelect = { item -> requestNavigation(RosterNavigation.Select(item)) },
-                )
-            } else {
-                Row(Modifier.weight(1f)) {
-                    RosterList(
-                        viewModel = viewModel,
-                        modifier = Modifier.width(258.dp),
-                        onSelect = { item -> requestNavigation(RosterNavigation.Select(item)) },
-                    )
+        when (section) {
+            RosterSection.MAPPE -> MapArchive(portraits, compact, Modifier.weight(1f))
+
+            RosterSection.SCHEDE ->
+                if (compact && compactPane == CompactRosterPane.DETAIL) {
+                    CompactEditorHeader(viewModel) { compactPane = CompactRosterPane.LIST }
+                    GoldenRule()
+                    RosterStatus(viewModel)
                     Box(Modifier.weight(1f)) { editor(Modifier.fillMaxSize()) }
+                } else {
+                    RosterHeader(
+                        compact = compact,
+                        onNewCharacter = { requestNavigation(RosterNavigation.NewCharacter) },
+                        onNewCreature = { requestNavigation(RosterNavigation.NewCreature) },
+                    )
+                    GoldenRule()
+                    RosterStatus(viewModel)
+
+                    if (compact) {
+                        RosterList(
+                            viewModel = viewModel,
+                            modifier = Modifier.weight(1f).fillMaxWidth().padding(7.dp),
+                            onSelect = { item -> requestNavigation(RosterNavigation.Select(item)) },
+                        )
+                    } else {
+                        Row(Modifier.weight(1f)) {
+                            RosterList(
+                                viewModel = viewModel,
+                                modifier = Modifier.width(258.dp),
+                                onSelect = { item -> requestNavigation(RosterNavigation.Select(item)) },
+                            )
+                            Box(Modifier.weight(1f)) { editor(Modifier.fillMaxSize()) }
+                        }
+                    }
                 }
-            }
         }
     }
 
@@ -178,6 +195,35 @@ fun RosterScreen(
 }
 
 private enum class CompactRosterPane { LIST, DETAIL }
+
+/** Le due sezioni del Compendio: le schede degli attori e l'archivio delle mappe. */
+private enum class RosterSection(val label: String) {
+    SCHEDE("Schede"),
+    MAPPE("Mappe"),
+}
+
+/** Barra in cima al Compendio per passare fra schede e archivio delle mappe. */
+@Composable
+private fun RosterSectionBar(current: RosterSection, onSelect: (RosterSection) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.Abyss)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RosterSection.entries.forEach { entry ->
+            GameButton(
+                label = entry.label,
+                accent = if (current == entry) Palette.Gold else Palette.TextMuted,
+                selected = current == entry,
+                dense = true,
+                onClick = { onSelect(entry) },
+            )
+        }
+    }
+}
 
 private sealed interface RosterNavigation {
     data class Select(val item: RosterItem) : RosterNavigation

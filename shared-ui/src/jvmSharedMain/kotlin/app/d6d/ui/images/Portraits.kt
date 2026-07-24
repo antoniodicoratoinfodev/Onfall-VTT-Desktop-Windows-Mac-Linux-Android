@@ -8,8 +8,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.decodeToImageBitmap
 import app.d6d.sheet.ImageStore
+import app.d6d.sheet.MapLibrary
 import app.d6d.sheet.PortraitLibrary
+import app.d6d.sheet.StoredMap
 import java.nio.file.Path
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -57,6 +60,10 @@ class PortraitRepository(
     var library by mutableStateOf(PortraitLibrary())
         private set
 
+    /** Archivio delle mappe caricate dall'utente, riusabili come sfondi. */
+    var mapLibrary by mutableStateOf(MapLibrary())
+        private set
+
     var message by mutableStateOf<String?>(null)
 
     private val decoded = mutableMapOf<String, ImageBitmap?>()
@@ -67,7 +74,11 @@ class PortraitRepository(
 
     init {
         runCatching { library = store.loadLibrary() }
+        runCatching { mapLibrary = store.loadMapLibrary() }
     }
+
+    /** Le mappe dell'archivio, nell'ordine in cui sono state aggiunte. */
+    val maps: List<StoredMap> get() = mapLibrary.maps
 
     /** Immagine associata a una definizione, se ce n'e' una. */
     fun portraitOf(definitionId: String): ImageBitmap? {
@@ -155,6 +166,85 @@ class PortraitRepository(
                 onPicked(null)
             },
         )
+    }
+
+    /**
+     * Chiede un file all'utente e lo aggiunge all'archivio delle mappe.
+     *
+     * A differenza di uno sfondo scelto al volo, una mappa dell'archivio si
+     * riusa fra le partite: la si carica una volta e la si ritrova per nome. Il
+     * nome iniziale viene dal file scelto e resta rinominabile.
+     */
+    fun importMapAsync(onComplete: (StoredMap?) -> Unit = {}) {
+        message = null
+        picker.pickAsync(
+            onPicked = { chosen ->
+                if (chosen == null) {
+                    message = "Selezione immagine annullata."
+                    onComplete(null)
+                } else {
+                    var created: StoredMap? = null
+                    guard {
+                        val stored = store.importImage(chosen)
+                        val entry = StoredMap("map-${UUID.randomUUID()}", mapDisplayName(chosen), stored)
+                        val updated = mapLibrary.copy(maps = mapLibrary.maps + entry)
+                        store.saveMapLibrary(updated)
+                        mapLibrary = updated
+                        revision++
+                        created = entry
+                        message = "Mappa «${entry.name}» aggiunta all'archivio."
+                        true
+                    }
+                    onComplete(created)
+                }
+            },
+            onError = { failure ->
+                message = pickerError(failure)
+                onComplete(null)
+            },
+        )
+    }
+
+    /** Rinomina una mappa dell'archivio; un nome vuoto viene ignorato. */
+    fun renameMap(id: String, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank()) return
+        guard {
+            val updated = mapLibrary.copy(
+                maps = mapLibrary.maps.map { if (it.id == id) it.copy(name = trimmed) else it },
+            )
+            store.saveMapLibrary(updated)
+            mapLibrary = updated
+            true
+        }
+    }
+
+    /**
+     * Elimina una mappa dall'archivio.
+     *
+     * Il file dell'immagine viene rimosso dal disco solo se nessun'altra voce lo
+     * condivide, cosi' non si cancella per sbaglio l'immagine ancora usata altrove.
+     */
+    fun deleteMap(id: String) {
+        guard {
+            val entry = mapLibrary.maps.firstOrNull { it.id == id } ?: return@guard false
+            val updated = mapLibrary.copy(maps = mapLibrary.maps - entry)
+            store.saveMapLibrary(updated)
+            mapLibrary = updated
+            if (mapLibrary.maps.none { it.image == entry.image }) {
+                store.deleteImage(entry.image)
+                synchronized(decoded) { decoded.remove(entry.image) }
+            }
+            revision++
+            message = "Mappa «${entry.name}» eliminata."
+            true
+        }
+    }
+
+    /** Nome iniziale di una mappa: il nome del file scelto, senza estensione. */
+    private fun mapDisplayName(source: Path): String {
+        val file = source.fileName?.toString().orEmpty()
+        return file.substringBeforeLast('.', file).ifBlank { "Mappa senza nome" }
     }
 
     fun clearPortrait(definitionId: String) {

@@ -23,10 +23,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import app.d6d.sheet.ImageStore
 import app.d6d.sheet.feetWithMetres
 import app.d6d.ui.components.Chip
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.maps.MapPickerDialog
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
 
@@ -53,6 +53,7 @@ fun MapControls(
 ) {
     val grid = viewModel.battleMap.grid()
     var expanded by remember { mutableStateOf(false) }
+    var showMapPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier
@@ -171,12 +172,8 @@ fun MapControls(
                     label = "Scegli sfondo",
                     accent = Palette.Party,
                     dense = true,
-                    subtitle = "${ImageStore.acceptedFormatsLabel} · max ${ImageStore.maxSizeLabel}",
-                    onClick = {
-                        portraits.pickBackgroundAsync { stored ->
-                            stored?.let { viewModel.setMapBackground(it) }
-                        }
-                    },
+                    subtitle = "Dall'archivio mappe",
+                    onClick = { showMapPicker = true },
                 )
                 if (viewModel.battleMap.backgroundImage().isNotBlank()) {
                     GameButton("Togli sfondo", accent = Palette.TextFaint, dense = true, onClick = {
@@ -202,6 +199,16 @@ fun MapControls(
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
+    }
+
+    if (showMapPicker) {
+        MapPickerDialog(
+            portraits = portraits,
+            currentImage = viewModel.battleMap.backgroundImage(),
+            onChoose = { viewModel.setMapBackground(it) },
+            onRemove = { viewModel.setMapBackground("") },
+            onDismiss = { showMapPicker = false },
+        )
     }
 }
 

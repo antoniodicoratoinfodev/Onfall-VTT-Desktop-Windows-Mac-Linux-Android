@@ -11,6 +11,7 @@ import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
+import app.d6d.domain.combat.SaveAbility
 import kotlinx.serialization.Serializable
 
 /** Competenza nelle armature, come i quattro rombi stampati sulla scheda. */
@@ -35,7 +36,19 @@ data class WeaponEntry(
     val note: String = "",
     /** Se vero l'arma/capacita' consuma l'azione bonus nel combattimento. */
     val bonusAction: Boolean = false,
+    /**
+     * Se maggiore di zero, la capacità è un incantesimo ad area: una sfera di questo
+     * raggio (in piedi) centrata su un punto scelto sulla mappa. La Palla di Fuoco ne
+     * è l'esempio: raggio 20 piedi.
+     */
+    val areaRadiusFeet: Int = 0,
+    /** Caratteristica del tiro salvezza dell'area; null quando non c'è un TS. */
+    val saveAbility: Ability? = null,
+    /** Con il tiro salvezza superato la creatura subisce metà danni invece di nessuno. */
+    val halfOnSave: Boolean = true,
 ) {
+    /** Vero quando questa voce descrive un incantesimo ad area anziché un attacco. */
+    val isArea: Boolean get() = areaRadiusFeet > 0
     /** Colonna "Danno e tipo" nella forma stampata sulla scheda. */
     val damageText: String
         get() = buildString {
@@ -195,28 +208,49 @@ data class CharacterSheet(
         val combatAbilities = weapons
             .filter { it.name.isNotBlank() }
             .mapIndexed { index, weapon ->
-                AbilityDefinition(
-                    "${id}-arma-$index",
-                    "1.0.0",
-                    "content-user-private",
-                    rulesetVersion,
-                    weapon.name,
-                    if (weapon.bonusAction) ActivationCost.BONUS_ACTION else ActivationCost.ACTION,
-                    ResolutionMethod.ATTACK_ROLL,
-                    weapon.attackBonus,
-                    weapon.rangeFeet,
-                    1,
-                    listOf(
-                        DamageFormula.dice(
-                            weapon.damageType,
-                            weapon.diceCount.coerceAtLeast(1),
-                            weapon.diceSides.coerceAtLeast(2),
-                            weapon.damageModifier,
-                        ),
+                val damage = listOf(
+                    DamageFormula.dice(
+                        weapon.damageType,
+                        weapon.diceCount.coerceAtLeast(1),
+                        weapon.diceSides.coerceAtLeast(2),
+                        weapon.damageModifier,
                     ),
-                    AutomationStatus.AUTOMATED,
-                    weapon.note,
                 )
+                val cost = if (weapon.bonusAction) ActivationCost.BONUS_ACTION else ActivationCost.ACTION
+                if (weapon.isArea) {
+                    // Incantesimo ad area: risoluzione con tiro salvezza, non con tiro
+                    // per colpire. Il motore lo riconosce dal raggio.
+                    AbilityDefinition.builder("${id}-arma-$index", weapon.name)
+                        .version("1.0.0")
+                        .source("content-user-private")
+                        .rulesetVersion(rulesetVersion)
+                        .activationCost(cost)
+                        .resolutionMethod(ResolutionMethod.SAVING_THROW)
+                        .rangeFeet(weapon.rangeFeet)
+                        .damage(damage)
+                        .areaRadiusFeet(weapon.areaRadiusFeet)
+                        .saveAbility(weapon.saveAbility?.let { SaveAbility.valueOf(it.name) })
+                        .halfOnSave(weapon.halfOnSave)
+                        .automationStatus(AutomationStatus.AUTOMATED)
+                        .rulesText(weapon.note)
+                        .build()
+                } else {
+                    AbilityDefinition(
+                        "${id}-arma-$index",
+                        "1.0.0",
+                        "content-user-private",
+                        rulesetVersion,
+                        weapon.name,
+                        cost,
+                        ResolutionMethod.ATTACK_ROLL,
+                        weapon.attackBonus,
+                        weapon.rangeFeet,
+                        1,
+                        damage,
+                        AutomationStatus.AUTOMATED,
+                        weapon.note,
+                    )
+                }
             }
 
         return ActorDefinition(
@@ -237,6 +271,8 @@ data class CharacterSheet(
             emptySet<DamageType>(),
             emptySet<ConditionType>(),
             combatAbilities,
+            savingThrowBonusMap(::saveBonus),
+            spellSaveDc ?: 0,
         )
     }
 }

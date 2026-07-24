@@ -1,6 +1,7 @@
 package app.d6d.domain.combat;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -22,7 +23,9 @@ public record ActorDefinition(
         Set<DamageType> vulnerabilities,
         Set<DamageType> damageImmunities,
         Set<ConditionType> conditionImmunities,
-        List<AbilityDefinition> abilities) {
+        List<AbilityDefinition> abilities,
+        Map<SaveAbility, Integer> savingThrowBonuses,
+        int spellSaveDc) {
 
     public ActorDefinition {
         id = requireText(id, "id");
@@ -33,15 +36,36 @@ public record ActorDefinition(
                 || temporaryHitPoints < 0 || speedFeet < 0) {
             throw new IllegalArgumentException("Invalid actor statistics");
         }
+        if (spellSaveDc < 0) {
+            throw new IllegalArgumentException("spellSaveDc cannot be negative");
+        }
         resistances = Set.copyOf(Objects.requireNonNull(resistances, "resistances"));
         vulnerabilities = Set.copyOf(Objects.requireNonNull(vulnerabilities, "vulnerabilities"));
         damageImmunities = Set.copyOf(Objects.requireNonNull(damageImmunities, "damageImmunities"));
         conditionImmunities = Set.copyOf(Objects.requireNonNull(conditionImmunities, "conditionImmunities"));
         abilities = List.copyOf(Objects.requireNonNull(abilities, "abilities"));
+        savingThrowBonuses = Map.copyOf(Objects.requireNonNull(savingThrowBonuses, "savingThrowBonuses"));
         long uniqueAbilityIds = abilities.stream().map(AbilityDefinition::id).distinct().count();
         if (uniqueAbilityIds != abilities.size()) {
             throw new IllegalArgumentException("Ability ids must be unique inside an actor definition");
         }
+    }
+
+    /** Backward-compatible constructor: no per-ability save bonuses and not a spellcaster. */
+    public ActorDefinition(
+            String id, String definitionVersion, String rulesetVersion, String name, int armorClass,
+            int maxHitPoints, int currentHitPoints, int temporaryHitPoints, int speedFeet, int initiativeModifier,
+            int initiativeScore, int constitutionSaveBonus, Set<DamageType> resistances,
+            Set<DamageType> vulnerabilities, Set<DamageType> damageImmunities, Set<ConditionType> conditionImmunities,
+            List<AbilityDefinition> abilities) {
+        this(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints, currentHitPoints,
+                temporaryHitPoints, speedFeet, initiativeModifier, initiativeScore, constitutionSaveBonus,
+                resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities, Map.of(), 0);
+    }
+
+    /** Saving-throw bonus for an ability, or 0 when the actor has no recorded save. */
+    public int saveBonus(SaveAbility ability) {
+        return savingThrowBonuses.getOrDefault(ability, 0);
     }
 
     public static Builder builder(String id, String name) {
@@ -78,6 +102,8 @@ public record ActorDefinition(
         private Set<DamageType> damageImmunities = Set.of();
         private Set<ConditionType> conditionImmunities = Set.of();
         private List<AbilityDefinition> abilities = List.of();
+        private Map<SaveAbility, Integer> savingThrowBonuses = Map.of();
+        private int spellSaveDc;
 
         private Builder(String id, String name) {
             this.id = id;
@@ -99,6 +125,8 @@ public record ActorDefinition(
         public Builder damageImmunities(Set<DamageType> value) { this.damageImmunities = value; return this; }
         public Builder conditionImmunities(Set<ConditionType> value) { this.conditionImmunities = value; return this; }
         public Builder abilities(List<AbilityDefinition> value) { this.abilities = value; return this; }
+        public Builder savingThrowBonuses(Map<SaveAbility, Integer> value) { this.savingThrowBonuses = value; return this; }
+        public Builder spellSaveDc(int value) { this.spellSaveDc = value; return this; }
 
         public ActorDefinition build() {
             int resolvedCurrentHitPoints = currentHitPoints == null ? maxHitPoints : currentHitPoints;
@@ -113,7 +141,7 @@ public record ActorDefinition(
             return new ActorDefinition(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints,
                     resolvedCurrentHitPoints, temporaryHitPoints, speedFeet, initiativeModifier,
                     resolvedInitiativeScore, constitutionSaveBonus, resistances, vulnerabilities,
-                    damageImmunities, conditionImmunities, abilities);
+                    damageImmunities, conditionImmunities, abilities, savingThrowBonuses, spellSaveDc);
         }
     }
 }

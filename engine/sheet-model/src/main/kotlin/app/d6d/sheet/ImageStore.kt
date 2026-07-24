@@ -38,6 +38,8 @@ class ImageStore(private val dataDirectory: Path) {
 
     private val libraryFile: Path get() = dataDirectory.resolve("ritratti.json")
 
+    private val mapLibraryFile: Path get() = dataDirectory.resolve("mappe.json")
+
     val imagesDirectory: Path get() = dataDirectory.resolve("images")
 
     fun isSupported(source: Path): Boolean =
@@ -114,6 +116,20 @@ class ImageStore(private val dataDirectory: Path) {
     /** Elimina un'immagine dall'archivio; nessun effetto se non esiste. */
     fun deleteImage(name: String) {
         resolve(name)?.let { Files.deleteIfExists(it) }
+    }
+
+    fun loadMapLibrary(): MapLibrary {
+        if (!Files.exists(mapLibraryFile)) return MapLibrary()
+        val text = Files.readString(mapLibraryFile)
+        if (text.isBlank()) return MapLibrary()
+        return json.decodeFromString(MapLibrary.serializer(), text)
+    }
+
+    fun saveMapLibrary(library: MapLibrary) {
+        Files.createDirectories(dataDirectory)
+        val temporary = mapLibraryFile.resolveSibling("${mapLibraryFile.fileName}.tmp")
+        Files.writeString(temporary, json.encodeToString(MapLibrary.serializer(), library))
+        Files.move(temporary, mapLibraryFile, StandardCopyOption.REPLACE_EXISTING)
     }
 
     /**

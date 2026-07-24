@@ -223,6 +223,15 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
         EventType.ATTACK_MISSED -> "$actor manca $target"
         EventType.ATTACK_HIT -> "$actor colpisce $target"
         EventType.CRITICAL_HIT -> "COLPO CRITICO di $actor su $target"
+        EventType.AREA_SPELL_CAST ->
+            "$actor scatena un'area — raggio ${detail("radiusFeet").asFeet()}, CD ${detail("saveDc")}, " +
+                "${detail("targets")} creature nel raggio"
+        EventType.SAVING_THROW_ROLLED -> {
+            val esito = if (detail("saved") == "true") "supera" else "fallisce"
+            val tiro = detail("total")
+            if (tiro.isNotBlank()) "$target $esito il tiro salvezza ($tiro contro CD ${detail("dc")})"
+            else "$target $esito il tiro salvezza (deciso al tavolo)"
+        }
         EventType.DAMAGE_ROLLED -> "Danno tirato: ${detail("total")}"
         EventType.DAMAGE_APPLIED -> if (detail("hitPointsAfter").isNotBlank()) {
             val total = detail("totalAdjusted").ifBlank { detail("adjusted") }

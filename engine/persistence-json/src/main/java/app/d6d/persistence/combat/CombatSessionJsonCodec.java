@@ -14,6 +14,7 @@ import app.d6d.domain.combat.ConditionExpiry;
 import app.d6d.domain.combat.ConditionInstance;
 import app.d6d.domain.combat.DeathSaveState;
 import app.d6d.domain.combat.ConditionType;
+import app.d6d.domain.combat.SaveAbility;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.DiceExpression;
@@ -306,6 +307,8 @@ public final class CombatSessionJsonCodec {
                 "initiativeModifier", snapshot.initiativeModifier(),
                 "initiativeScore", snapshot.initiativeScore(),
                 "constitutionSaveBonus", snapshot.constitutionSaveBonus(),
+                "savingThrowBonuses", encodeSaveBonuses(snapshot.savingThrowBonuses()),
+                "spellSaveDc", snapshot.spellSaveDc(),
                 "resistances", enumNames(snapshot.resistances()),
                 "vulnerabilities", enumNames(snapshot.vulnerabilities()),
                 "damageImmunities", enumNames(snapshot.damageImmunities()),
@@ -338,7 +341,28 @@ public final class CombatSessionJsonCodec {
                 enumSet(value, "vulnerabilities", path, DamageType::valueOf),
                 enumSet(value, "damageImmunities", path, DamageType::valueOf),
                 enumSet(value, "conditionImmunities", path, ConditionType::valueOf),
-                abilities);
+                abilities,
+                decodeSaveBonuses(value.get("savingThrowBonuses"), member(path, "savingThrowBonuses")),
+                value.get("spellSaveDc") == null ? 0 : asInteger(value.get("spellSaveDc"), member(path, "spellSaveDc")));
+    }
+
+    private static Map<String, Object> encodeSaveBonuses(Map<SaveAbility, Integer> bonuses) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        bonuses.forEach((ability, bonus) -> result.put(ability.name(), bonus));
+        return result;
+    }
+
+    /** Bonus ai tiri salvezza, per nome; vuoto se il campo manca (sessioni più vecchie). */
+    private static Map<SaveAbility, Integer> decodeSaveBonuses(Object value, String path) {
+        if (value == null) {
+            return Map.of();
+        }
+        Map<?, ?> raw = asObject(value, path);
+        Map<SaveAbility, Integer> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : raw.entrySet()) {
+            result.put(SaveAbility.valueOf((String) entry.getKey()), asInteger(entry.getValue(), path));
+        }
+        return result;
     }
 
     private Map<String, Object> encodeAbility(AbilityDefinition ability) {
@@ -353,6 +377,9 @@ public final class CombatSessionJsonCodec {
                 "attackBonus", ability.attackBonus(),
                 "rangeFeet", ability.rangeFeet(),
                 "maxTargets", ability.maxTargets(),
+                "areaRadiusFeet", ability.areaRadiusFeet(),
+                "saveAbility", ability.saveAbility() == null ? "" : ability.saveAbility().name(),
+                "halfOnSave", ability.halfOnSave(),
                 "damage", ability.damage().stream().map(this::encodeDamageFormula).toList(),
                 "automationStatus", ability.automationStatus().name(),
                 "rulesText", ability.rulesText());
@@ -378,7 +405,18 @@ public final class CombatSessionJsonCodec {
                 integer(value, "maxTargets", path),
                 damage,
                 enumeration(value, "automationStatus", path, AutomationStatus::valueOf),
-                string(value, "rulesText", path));
+                string(value, "rulesText", path),
+                value.get("areaRadiusFeet") == null ? 0 : asInteger(value.get("areaRadiusFeet"), member(path, "areaRadiusFeet")),
+                decodeSaveAbility(value.get("saveAbility")),
+                Boolean.TRUE.equals(value.get("halfOnSave")));
+    }
+
+    /** Nome della caratteristica del TS, o null se assente o vuoto (nessun tiro salvezza). */
+    private static SaveAbility decodeSaveAbility(Object value) {
+        if (value == null || "".equals(value)) {
+            return null;
+        }
+        return SaveAbility.valueOf((String) value);
     }
 
     private Map<String, Object> encodeDamageFormula(DamageFormula formula) {

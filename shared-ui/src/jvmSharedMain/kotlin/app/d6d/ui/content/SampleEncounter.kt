@@ -9,6 +9,7 @@ import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
+import app.d6d.domain.combat.SaveAbility
 import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
 
@@ -64,6 +65,10 @@ object SampleEncounter {
         vulnerabilities: Set<DamageType> = emptySet(),
         damageImmunities: Set<DamageType> = emptySet(),
         conditionImmunities: Set<ConditionType> = emptySet(),
+        dexteritySaveBonus: Int = 0,
+        // CD dei tiri salvezza per gli incantesimi che questo attore lancia. Zero
+        // per chi non e' un incantatore.
+        spellSaveDc: Int = 0,
     ) = ActorDefinition(
         id,
         VERSION,
@@ -84,7 +89,39 @@ object SampleEncounter {
         damageImmunities,
         conditionImmunities,
         abilities,
+        mapOf(
+            SaveAbility.CONSTITUTION to constitutionSaveBonus,
+            SaveAbility.DEXTERITY to dexteritySaveBonus,
+        ),
+        spellSaveDc,
     )
+
+    /**
+     * Capacita' ad area con tiro salvezza: una sfera centrata su un punto scelto,
+     * dove chi supera il TS subisce meta' danni. La Palla di Fuoco ne e' l'esempio.
+     */
+    private fun areaSpell(
+        id: String,
+        name: String,
+        rangeFeet: Int,
+        radiusFeet: Int,
+        save: SaveAbility,
+        damage: List<DamageFormula>,
+        rulesText: String = "",
+    ) = AbilityDefinition.builder(id, name)
+        .version(VERSION)
+        .source(SOURCE)
+        .rulesetVersion(RULESET)
+        .activationCost(ActivationCost.ACTION)
+        .resolutionMethod(ResolutionMethod.SAVING_THROW)
+        .rangeFeet(rangeFeet)
+        .damage(damage)
+        .areaRadiusFeet(radiusFeet)
+        .saveAbility(save)
+        .halfOnSave(true)
+        .automationStatus(AutomationStatus.AUTOMATED)
+        .rulesText(rulesText)
+        .build()
 
     fun party(): List<ActorDefinition> = listOf(
         actor(
@@ -117,11 +154,22 @@ object SampleEncounter {
             speedFeet = 30,
             initiativeModifier = 3,
             constitutionSaveBonus = 3,
+            // Incantatrice: CD 14 (8 + competenza 3 + Intelligenza +3).
+            spellSaveDc = 14,
             abilities = listOf(
                 attack(
                     "inc-dardo-runico", "Dardo Runico", 6, 60,
                     listOf(DamageFormula.dice(DamageType.FORCE, 2, 6, 0)),
                     rulesText = "Trucchetto d'attacco a distanza. Non consuma slot.",
+                ),
+                areaSpell(
+                    "inc-palla-di-fuoco", "Palla di Fuoco",
+                    rangeFeet = 150, radiusFeet = 20, save = SaveAbility.DEXTERITY,
+                    damage = listOf(DamageFormula.dice(DamageType.FIRE, 8, 6, 0)),
+                    rulesText = "Invocazione di 3° livello. Ogni creatura entro una sfera di raggio " +
+                        "6 metri (20 piedi) centrata sul punto scelto effettua un tiro salvezza su " +
+                        "Destrezza: 8d6 danni da fuoco, metà con TS superato. Ai livelli superiori: " +
+                        "+1d6 per ogni slot oltre il 3°.",
                 ),
                 attack(
                     "arma-bastone", "Bastone", 2, 5,

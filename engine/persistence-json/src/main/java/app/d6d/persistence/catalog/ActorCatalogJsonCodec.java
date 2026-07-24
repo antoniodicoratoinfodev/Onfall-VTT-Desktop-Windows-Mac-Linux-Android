@@ -8,6 +8,7 @@ import app.d6d.domain.combat.ActivationCost;
 import app.d6d.domain.combat.ActorDefinition;
 import app.d6d.domain.combat.AutomationStatus;
 import app.d6d.domain.combat.ConditionType;
+import app.d6d.domain.combat.SaveAbility;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.DiceExpression;
@@ -134,6 +135,10 @@ public final class ActorCatalogJsonCodec {
         result.put("initiativeModifier", definition.initiativeModifier());
         result.put("initiativeScore", definition.initiativeScore());
         result.put("constitutionSaveBonus", definition.constitutionSaveBonus());
+        Map<String, Object> savingThrowBonuses = new LinkedHashMap<>();
+        definition.savingThrowBonuses().forEach((ability, bonus) -> savingThrowBonuses.put(ability.name(), bonus));
+        result.put("savingThrowBonuses", savingThrowBonuses);
+        result.put("spellSaveDc", definition.spellSaveDc());
         result.put("resistances", enumNames(definition.resistances()));
         result.put("vulnerabilities", enumNames(definition.vulnerabilities()));
         result.put("damageImmunities", enumNames(definition.damageImmunities()));
@@ -159,6 +164,11 @@ public final class ActorCatalogJsonCodec {
         result.put("attackBonus", ability.attackBonus());
         result.put("rangeFeet", ability.rangeFeet());
         result.put("maxTargets", ability.maxTargets());
+        result.put("areaRadiusFeet", ability.areaRadiusFeet());
+        if (ability.saveAbility() != null) {
+            result.put("saveAbility", ability.saveAbility().name());
+        }
+        result.put("halfOnSave", ability.halfOnSave());
 
         List<Object> damage = new ArrayList<>(ability.damage().size());
         for (DamageFormula formula : ability.damage()) {
@@ -251,6 +261,12 @@ public final class ActorCatalogJsonCodec {
         int constitutionSaveBonus = integer(
                 required(value, "constitutionSaveBonus", path),
                 path + ".constitutionSaveBonus");
+        // Campi opzionali: i file salvati prima degli incantesimi ad area non li hanno.
+        Map<SaveAbility, Integer> savingThrowBonuses = savingThrowBonuses(
+                value.get("savingThrowBonuses"), path + ".savingThrowBonuses");
+        int spellSaveDc = value.get("spellSaveDc") == null
+                ? 0
+                : integer(value.get("spellSaveDc"), path + ".spellSaveDc");
         Set<DamageType> resistances = damageTypes(
                 required(value, "resistances", path),
                 path + ".resistances");
@@ -289,10 +305,25 @@ public final class ActorCatalogJsonCodec {
                     vulnerabilities,
                     damageImmunities,
                     conditionImmunities,
-                    abilities);
+                    abilities,
+                    savingThrowBonuses,
+                    spellSaveDc);
         } catch (IllegalArgumentException exception) {
             throw formatError(path, messageOf(exception));
         }
+    }
+
+    /** Bonus ai tiri salvezza, per nome di caratteristica; vuoto se il campo manca. */
+    private static Map<SaveAbility, Integer> savingThrowBonuses(Object value, String path) {
+        if (value == null) {
+            return Map.of();
+        }
+        Map<String, Object> raw = object(value, path);
+        Map<SaveAbility, Integer> result = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : raw.entrySet()) {
+            result.put(SaveAbility.valueOf(entry.getKey()), integer(entry.getValue(), path + '.' + entry.getKey()));
+        }
+        return result;
     }
 
     private static AbilityDefinition decodeAbility(Map<String, Object> value, String path) {
@@ -312,6 +343,13 @@ public final class ActorCatalogJsonCodec {
         int attackBonus = integer(required(value, "attackBonus", path), path + ".attackBonus");
         int rangeFeet = integer(required(value, "rangeFeet", path), path + ".rangeFeet");
         int maxTargets = integer(required(value, "maxTargets", path), path + ".maxTargets");
+        int areaRadiusFeet = value.get("areaRadiusFeet") == null
+                ? 0
+                : integer(value.get("areaRadiusFeet"), path + ".areaRadiusFeet");
+        SaveAbility saveAbility = value.get("saveAbility") == null
+                ? null
+                : SaveAbility.valueOf(text(value.get("saveAbility"), path + ".saveAbility"));
+        boolean halfOnSave = value.get("halfOnSave") != null && bool(value.get("halfOnSave"), path + ".halfOnSave");
 
         List<?> encodedDamage = array(required(value, "damage", path), path + ".damage");
         List<DamageFormula> damage = new ArrayList<>(encodedDamage.size());
@@ -339,7 +377,10 @@ public final class ActorCatalogJsonCodec {
                     maxTargets,
                     damage,
                     automationStatus,
-                    rulesText);
+                    rulesText,
+                    areaRadiusFeet,
+                    saveAbility,
+                    halfOnSave);
         } catch (IllegalArgumentException exception) {
             throw formatError(path, messageOf(exception));
         }

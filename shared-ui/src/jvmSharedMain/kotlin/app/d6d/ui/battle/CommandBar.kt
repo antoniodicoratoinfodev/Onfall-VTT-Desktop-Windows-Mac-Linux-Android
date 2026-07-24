@@ -52,6 +52,7 @@ import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.D20Mode
 import app.d6d.sheet.feetWithMetres
 import app.d6d.sheet.withMetricFeet
+import app.d6d.ui.compendium.italianAbbreviation
 import app.d6d.ui.compendium.italianLabel
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
@@ -271,9 +272,13 @@ private fun AbilityCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
-            if (!manual) {
+            if (!manual && !ability.isArea) {
                 val bonus = ability.attackBonus()
                 AbilityStat("Colpire", if (bonus >= 0) "+$bonus" else bonus.toString(), enabled)
+            }
+            if (ability.isArea) {
+                AbilityStat("Area", feetWithMetres(ability.areaRadiusFeet()), enabled)
+                ability.saveAbility()?.let { AbilityStat("TS", it.italianAbbreviation, enabled) }
             }
             if (ability.rangeFeet() > 0) {
                 AbilityStat("Gittata", feetWithMetres(ability.rangeFeet()), enabled)
@@ -459,6 +464,10 @@ fun CommandBar(
                                         "«${ability.name()}» richiede una risoluzione manuale al tavolo."
                                     },
                                 )
+                            } else if (ability.isArea) {
+                                // Non colpisce subito: entra in mira, l'area segue il
+                                // mouse e un clic sulla mappa la fa detonare.
+                                viewModel.beginAreaTargeting(ability.id())
                             } else {
                                 viewModel.attack(ability.id())
                             }

@@ -88,4 +88,54 @@ class PortraitRepositoryTest {
 
         assertEquals(source, result)
     }
+
+    @Test
+    fun `caricare una mappa la aggiunge all'archivio col nome del file`() {
+        val source = sampleImage()
+        val store = ImageStore(directory.resolve("dati"))
+        val repository = PortraitRepository(store, pickerReturning(source))
+        var created: app.d6d.sheet.StoredMap? = null
+
+        repository.importMapAsync { created = it }
+
+        assertNotNull(created)
+        assertEquals(1, repository.maps.size)
+        assertEquals("sorgente", repository.maps.single().name)
+        assertNotNull(store.resolve(repository.maps.single().image))
+        // L'archivio è persistito: una nuova istanza lo ritrova su disco.
+        assertEquals(1, PortraitRepository(store).maps.size)
+    }
+
+    @Test
+    fun `rinominare una mappa ne cambia il nome ma non il file`() {
+        val store = ImageStore(directory.resolve("dati"))
+        val repository = PortraitRepository(store, pickerReturning(sampleImage()))
+        repository.importMapAsync()
+        val map = repository.maps.single()
+
+        repository.renameMap(map.id, "Cripta dei predoni")
+
+        assertEquals("Cripta dei predoni", repository.maps.single().name)
+        assertEquals(map.image, repository.maps.single().image)
+    }
+
+    @Test
+    fun `eliminare una mappa la toglie dall'archivio e cancella il file`() {
+        val store = ImageStore(directory.resolve("dati"))
+        val repository = PortraitRepository(store, pickerReturning(sampleImage()))
+        repository.importMapAsync()
+        val map = repository.maps.single()
+
+        repository.deleteMap(map.id)
+
+        assertTrue(repository.maps.isEmpty())
+        assertEquals(null, store.resolve(map.image))
+    }
+
+    private fun pickerReturning(source: Path) = object : FilePicker {
+        override fun pick(): Path? = source
+        override fun pickAsync(onPicked: (Path?) -> Unit, onError: (Throwable) -> Unit) {
+            onPicked(source)
+        }
+    }
 }

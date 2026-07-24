@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -149,13 +150,18 @@ internal fun BoxScope.FloatingCombatantPlates(viewModel: BattleViewModel) {
 
     viewModel.activeCombatantId?.let { activeId ->
         FloatingPanel(Alignment.BottomStart, layout.activePlate, { layout.activePlate = it }) {
-            StagePlate(
-                viewModel,
-                activeId,
-                if (viewModel.isSimultaneousTurn) "Turno condiviso" else "Turno attivo",
-                scale = layout.activePlateScale,
-                onScaleChange = { layout.activePlateScale = it },
-            )
+            // Un nuovo attore non e' una variazione dei PF del precedente: separando
+            // lo stato visivo per identita', la barra nasce subito sul valore giusto
+            // e non mostra la scia/animazione di un danno al cambio turno.
+            key(activeId) {
+                StagePlate(
+                    viewModel,
+                    activeId,
+                    if (viewModel.isSimultaneousTurn) "Turno condiviso" else "Turno attivo",
+                    scale = layout.activePlateScale,
+                    onScaleChange = { layout.activePlateScale = it },
+                )
+            }
         }
     }
 }

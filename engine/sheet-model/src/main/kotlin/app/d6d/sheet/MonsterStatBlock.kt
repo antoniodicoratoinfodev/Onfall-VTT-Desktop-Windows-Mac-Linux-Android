@@ -11,6 +11,7 @@ import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
+import app.d6d.domain.combat.SaveAbility
 import kotlinx.serialization.Serializable
 
 /** Velocita' del mostro, con le cinque forme di movimento piu' la fluttuazione. */
@@ -217,9 +218,26 @@ data class MonsterStatBlock(
             damageImmunities,
             conditionImmunities,
             abilities,
+            savingThrowBonusMap(::saveBonus),
+            // CD incantesimi del mostro: la caratteristica da incantatore piu' alta
+            // fra le tre mentali, con competenza. Serve quando lancia un'area.
+            8 + proficiencyBonus + maxOf(
+                modifier(Ability.INTELLIGENCE),
+                modifier(Ability.WISDOM),
+                modifier(Ability.CHARISMA),
+            ).coerceAtLeast(0),
         )
     }
 }
+
+/**
+ * Proietta i bonus ai tiri salvezza nel vocabolario del motore.
+ *
+ * I due enum — quello di scheda e quello di combattimento — condividono i nomi,
+ * quindi la mappatura passa per il nome ed è a prova di riordino.
+ */
+internal fun savingThrowBonusMap(bonus: (Ability) -> Int): Map<SaveAbility, Int> =
+    Ability.entries.associate { SaveAbility.valueOf(it.name) to bonus(it) }
 
 /**
  * Bonus di competenza suggerito dal Grado di Sfida.

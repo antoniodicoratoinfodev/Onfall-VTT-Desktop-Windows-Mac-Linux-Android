@@ -2,6 +2,8 @@ package app.d6d.sheet
 
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.ResolutionMethod
+import app.d6d.domain.combat.SaveAbility
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -177,5 +179,41 @@ class SheetDerivationsTest {
             ActivationCost.BONUS_ACTION,
             sheet.toActorDefinition().abilities().single().activationCost(),
         )
+    }
+
+    @Test
+    fun `una capacita' ad area diventa un incantesimo con tiro salvezza e CD dell'incantatore`() {
+        val sheet = CharacterSheet(
+            id = "pg-mago",
+            characterName = "Mago",
+            level = 5,
+            abilityScores = mapOf(Ability.INTELLIGENCE to 16, Ability.DEXTERITY to 14),
+            spellcasting = Spellcasting(ability = Ability.INTELLIGENCE),
+            weapons = listOf(
+                WeaponEntry(
+                    name = "Palla di Fuoco",
+                    diceCount = 8,
+                    diceSides = 6,
+                    damageType = DamageType.FIRE,
+                    rangeFeet = 150,
+                    areaRadiusFeet = 20,
+                    saveAbility = Ability.DEXTERITY,
+                    halfOnSave = true,
+                ),
+            ),
+        )
+
+        val actor = sheet.toActorDefinition()
+        val ability = actor.abilities().single()
+
+        assertTrue(ability.isArea)
+        assertEquals(20, ability.areaRadiusFeet())
+        assertEquals(SaveAbility.DEXTERITY, ability.saveAbility())
+        assertTrue(ability.halfOnSave())
+        assertEquals(ResolutionMethod.SAVING_THROW, ability.resolutionMethod())
+        // CD incantesimi = 8 + competenza(3 al 5° livello) + Intelligenza(+3) = 14.
+        assertEquals(14, actor.spellSaveDc())
+        // Il bonus al TS di Destrezza del mago (+2) è proiettato per i suoi tiri salvezza.
+        assertEquals(2, actor.saveBonus(SaveAbility.DEXTERITY))
     }
 }

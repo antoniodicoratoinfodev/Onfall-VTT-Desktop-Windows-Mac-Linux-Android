@@ -3,7 +3,15 @@ package app.d6d.domain.combat;
 import java.util.List;
 import java.util.Objects;
 
-/** Immutable, versioned ability data interpreted by the engine. */
+/**
+ * Immutable, versioned ability data interpreted by the engine.
+ *
+ * <p>An ability with {@code areaRadiusFeet > 0} is an area effect (a sphere of that
+ * radius centred on a chosen point). When it also carries a {@code saveAbility} the
+ * engine resolves it as a saving throw: each creature in the area rolls that save
+ * against the caster's spell save DC and, if {@code halfOnSave}, takes half damage
+ * on a success instead of none.</p>
+ */
 public record AbilityDefinition(
         String id,
         String version,
@@ -17,7 +25,10 @@ public record AbilityDefinition(
         int maxTargets,
         List<DamageFormula> damage,
         AutomationStatus automationStatus,
-        String rulesText) {
+        String rulesText,
+        int areaRadiusFeet,
+        SaveAbility saveAbility,
+        boolean halfOnSave) {
 
     public AbilityDefinition {
         id = requireText(id, "id");
@@ -33,12 +44,34 @@ public record AbilityDefinition(
         if (maxTargets <= 0) {
             throw new IllegalArgumentException("maxTargets must be positive");
         }
+        if (areaRadiusFeet < 0) {
+            throw new IllegalArgumentException("areaRadiusFeet cannot be negative");
+        }
         damage = List.copyOf(Objects.requireNonNull(damage, "damage"));
         Objects.requireNonNull(automationStatus, "automationStatus");
         rulesText = rulesText == null ? "" : rulesText;
         if (resolutionMethod == ResolutionMethod.ATTACK_ROLL && damage.isEmpty()) {
             throw new IllegalArgumentException("An attack needs at least one damage component");
         }
+    }
+
+    /** Backward-compatible constructor: a plain single-target ability, no area or save. */
+    public AbilityDefinition(
+            String id, String version, String source, String rulesetVersion, String name,
+            ActivationCost activationCost, ResolutionMethod resolutionMethod, int attackBonus, int rangeFeet,
+            int maxTargets, List<DamageFormula> damage, AutomationStatus automationStatus, String rulesText) {
+        this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
+                maxTargets, damage, automationStatus, rulesText, 0, null, false);
+    }
+
+    /** True when the ability affects a spherical area rather than a single target. */
+    public boolean isArea() {
+        return areaRadiusFeet > 0;
+    }
+
+    /** True when the ability is resolved with a saving throw against the caster's DC. */
+    public boolean hasSavingThrow() {
+        return saveAbility != null;
     }
 
     public static Builder builder(String id, String name) {
@@ -76,6 +109,9 @@ public record AbilityDefinition(
         private List<DamageFormula> damage = List.of();
         private AutomationStatus automationStatus = AutomationStatus.AUTOMATED;
         private String rulesText = "";
+        private int areaRadiusFeet;
+        private SaveAbility saveAbility;
+        private boolean halfOnSave;
 
         private Builder(String id, String name) {
             this.id = id;
@@ -93,10 +129,14 @@ public record AbilityDefinition(
         public Builder damage(List<DamageFormula> value) { this.damage = value; return this; }
         public Builder automationStatus(AutomationStatus value) { this.automationStatus = value; return this; }
         public Builder rulesText(String value) { this.rulesText = value; return this; }
+        public Builder areaRadiusFeet(int value) { this.areaRadiusFeet = value; return this; }
+        public Builder saveAbility(SaveAbility value) { this.saveAbility = value; return this; }
+        public Builder halfOnSave(boolean value) { this.halfOnSave = value; return this; }
 
         public AbilityDefinition build() {
             return new AbilityDefinition(id, version, source, rulesetVersion, name, activationCost,
-                    resolutionMethod, attackBonus, rangeFeet, maxTargets, damage, automationStatus, rulesText);
+                    resolutionMethod, attackBonus, rangeFeet, maxTargets, damage, automationStatus, rulesText,
+                    areaRadiusFeet, saveAbility, halfOnSave);
         }
     }
 }

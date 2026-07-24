@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.d6d.domain.combat.AbilityDefinition
+import app.d6d.domain.combat.AreaSpellResult
 import app.d6d.domain.combat.AttackRequest
 import app.d6d.domain.combat.CombatEvent
 import app.d6d.domain.combat.CombatState
@@ -104,6 +105,25 @@ class BattleViewModel(
         private set
 
     private var floatSequence = 0L
+
+    /**
+     * Incantesimo ad area in fase di mira.
+     *
+     * Finche' non e' nullo l'interfaccia disegna un cerchio grande quanto il raggio
+     * che segue il mouse, e un clic sulla mappa lo fa detonare invece di spostare un
+     * segnaposto.
+     */
+    var areaTargeting by mutableStateOf<AreaTargeting?>(null)
+        private set
+
+    /**
+     * Risoluzione manuale di un'area, in attesa che il tavolo decida i tiri salvezza.
+     *
+     * Compare solo con la modalità modifica attiva: elenca i bersagli nell'area e
+     * lascia scegliere chi supera il tiro prima di applicare i danni.
+     */
+    var pendingArea by mutableStateOf<PendingArea?>(null)
+        private set
 
     // --- proiezioni di sola lettura -------------------------------------------------
 
@@ -232,6 +252,112 @@ class BattleViewModel(
                 }
 
                 else -> push(target, FloatingNumber(++floatSequence, "Mancato", FloatKind.MISS))
+            }
+        }
+    }
+
+    // --- incantesimi ad area ---------------------------------------------------------
+
+    /**
+     * Comincia a mirare un incantesimo ad area con l'attore di turno.
+     *
+     * Non infligge nulla: sara' un clic sulla mappa a far detonare l'area sul punto
+     * scelto.
+     */
+    fun beginAreaTargeting(abilityId: String) {
+        val caster = activeCombatantId ?: run {
+            message = "Nessun attore di turno."
+            return
+        }
+        val ability = abilities(caster).firstOrNull { it.id() == abilityId } ?: return
+        if (!ability.isArea) return
+        pendingArea = null
+        message = "Mira «${ability.name()}»: clicca sulla mappa per centrare l'area. Esc per annullare."
+        areaTargeting = AreaTargeting(abilityId, caster, ability.name(), ability.areaRadiusFeet(), ability.rangeFeet())
+    }
+
+    /** Abbandona la mira o la risoluzione manuale in corso. */
+    fun cancelAreaTargeting() {
+        areaTargeting = null
+        pendingArea = null
+    }
+
+    /**
+     * Fa detonare l'area in mira sulla casella scelta.
+     *
+     * In gioco normale il motore tira i tiri salvezza e applica subito i danni. Con
+     * la modalità modifica attiva prepara invece la risoluzione manuale: elenca chi
+     * e' nell'area e lascia decidere al tavolo chi supera il tiro.
+     */
+    fun resolveAreaAt(column: Int, row: Int) {
+        val targeting = areaTargeting ?: return
+        val center = GridPosition(column, row)
+        if (editMode) {
+            val dc = combatant(targeting.casterId)?.snapshot()?.spellSaveDc() ?: 0
+            val ids = try {
+                session.areaTargets(targeting.casterId, center, targeting.abilityId)
+            } catch (failure: RuntimeException) {
+                message = failure.message
+                return
+            }
+            pendingArea = PendingArea(
+                abilityId = targeting.abilityId,
+                casterId = targeting.casterId,
+                spellName = targeting.name,
+                center = center,
+                radiusFeet = targeting.radiusFeet,
+                saveDc = dc,
+                targets = ids.map { AreaSaveChoice(it, name(it), saved = false) },
+            )
+            areaTargeting = null
+            message = if (ids.isEmpty()) {
+                "Nessuna creatura nell'area."
+            } else {
+                "Segna chi supera il tiro salvezza, poi applica."
+            }
+        } else {
+            command {
+                pushAreaResult(session.castArea(targeting.casterId, center, targeting.abilityId))
+            }
+            areaTargeting = null
+        }
+    }
+
+    /** Cambia l'esito del tiro salvezza di un bersaglio nella risoluzione manuale. */
+    fun toggleAreaSave(combatantId: String) {
+        val current = pendingArea ?: return
+        pendingArea = current.copy(
+            targets = current.targets.map {
+                if (it.combatantId == combatantId) it.copy(saved = !it.saved) else it
+            },
+        )
+    }
+
+    /** Applica la risoluzione manuale con gli esiti dei tiri salvezza decisi al tavolo. */
+    fun applyPendingArea() {
+        val pending = pendingArea ?: return
+        command {
+            val saved = pending.targets.associate { it.combatantId to it.saved }
+            pushAreaResult(session.castAreaManual(pending.casterId, pending.center, pending.abilityId, saved))
+        }
+        pendingArea = null
+    }
+
+    private fun pushAreaResult(result: AreaSpellResult) {
+        result.targets().forEach { outcome ->
+            val damage = outcome.damage()
+            if (damage.isPresent) {
+                push(
+                    outcome.targetId(),
+                    FloatingNumber(
+                        id = ++floatSequence,
+                        text = "-${damage.get().totalAdjustedDamage()}",
+                        // Un TS superato dimezza: si distingue dal colpo pieno.
+                        kind = if (outcome.saved()) FloatKind.INFO else FloatKind.DAMAGE,
+                    ),
+                )
+            } else if (outcome.saved()) {
+                push(outcome.targetId(), floatInfo("Salvo"))
             }
         }
     }
@@ -697,6 +823,33 @@ class BattleViewModel(
 
     private val undoEffects = ArrayDeque<UndoEffect>()
 }
+
+/** Incantesimo ad area che l'attore di turno sta mirando sulla mappa. */
+data class AreaTargeting(
+    val abilityId: String,
+    val casterId: String,
+    val name: String,
+    val radiusFeet: Int,
+    val rangeFeet: Int,
+)
+
+/** Un bersaglio nell'area e l'esito, ancora modificabile, del suo tiro salvezza. */
+data class AreaSaveChoice(
+    val combatantId: String,
+    val name: String,
+    val saved: Boolean,
+)
+
+/** Risoluzione manuale di un'area in attesa che il tavolo decida i tiri salvezza. */
+data class PendingArea(
+    val abilityId: String,
+    val casterId: String,
+    val spellName: String,
+    val center: GridPosition,
+    val radiusFeet: Int,
+    val saveDc: Int,
+    val targets: List<AreaSaveChoice>,
+)
 
 /** Ultimi eventi in ordine cronologico inverso, per il registro a schermo. */
 fun List<CombatEvent>.latest(count: Int): List<CombatEvent> =

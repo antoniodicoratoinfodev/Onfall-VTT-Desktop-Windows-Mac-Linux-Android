@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.d6d.domain.combat.DamageType
 import app.d6d.sheet.Ability
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.CreatureSize
@@ -562,9 +563,15 @@ private fun CombatColumn(
                     )
                 }
             }
-            GameButton("+ Aggiungi arma", accent = Palette.Party, onClick = {
-                update(sheet.copy(weapons = sheet.weapons + WeaponEntry()))
-            })
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                GameButton("+ Aggiungi arma", accent = Palette.Party, onClick = {
+                    update(sheet.copy(weapons = sheet.weapons + WeaponEntry()))
+                })
+                // Preset pronto: una Palla di Fuoco completa (8d6 fuoco, area, TS Destrezza).
+                GameButton("+ Palla di Fuoco", accent = Palette.Enemy, onClick = {
+                    update(sheet.copy(weapons = sheet.weapons + fireballEntry()))
+                })
+            }
         }
 
         SheetBox("Privilegi di classe") {
@@ -640,6 +647,7 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
             SheetCheck("Azione bonus", weapon.bonusAction) {
                 onChange(weapon.copy(bonusAction = it))
             }
+            WeaponAreaSection(weapon, onChange)
         }
         return
     }
@@ -670,8 +678,67 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
         SheetCheck("Azione bonus", weapon.bonusAction) {
             onChange(weapon.copy(bonusAction = it))
         }
+        WeaponAreaSection(weapon, onChange)
     }
 }
+
+/**
+ * Sezione «danno ad area» di una capacità: la trasforma in incantesimo con tiro
+ * salvezza (raggio, gittata, caratteristica del TS, metà danni). Chiusa finché non
+ * si spunta la casella, così le armi ordinarie restano compatte.
+ */
+@Composable
+private fun WeaponAreaSection(weapon: WeaponEntry, onChange: (WeaponEntry) -> Unit) {
+    SheetCheck("Danno ad area (incantesimo con TS)", weapon.isArea) { on ->
+        onChange(
+            weapon.copy(
+                areaRadiusFeet = if (on) weapon.areaRadiusFeet.takeIf { it > 0 } ?: 20 else 0,
+                saveAbility = if (on) weapon.saveAbility ?: Ability.DEXTERITY else null,
+            ),
+        )
+    }
+    if (!weapon.isArea) return
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        SheetNumberField("Raggio (piedi)", weapon.areaRadiusFeet, Modifier.weight(1f)) {
+            onChange(weapon.copy(areaRadiusFeet = it.coerceAtLeast(1)))
+        }
+        SheetNumberField("Gittata (piedi)", weapon.rangeFeet, Modifier.weight(1f)) {
+            onChange(weapon.copy(rangeFeet = it.coerceAtLeast(0)))
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("TIRO SALVEZZA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Ability.entries.forEach { ability ->
+                GameButton(
+                    label = ability.abbreviation,
+                    accent = if (weapon.saveAbility == ability) Palette.Gold else Palette.TextMuted,
+                    selected = weapon.saveAbility == ability,
+                    dense = true,
+                    onClick = { onChange(weapon.copy(saveAbility = ability)) },
+                )
+            }
+        }
+    }
+    SheetCheck("Metà danni con TS superato", weapon.halfOnSave) {
+        onChange(weapon.copy(halfOnSave = it))
+    }
+}
+
+/** Preset della Palla di Fuoco: pronta da inserire in una scheda con un tocco. */
+private fun fireballEntry() = WeaponEntry(
+    name = "Palla di Fuoco",
+    diceCount = 8,
+    diceSides = 6,
+    damageModifier = 0,
+    damageType = DamageType.FIRE,
+    rangeFeet = 150,
+    note = "Invocazione di 3° livello. Sfera di 6 m (20 piedi); tiro salvezza su Destrezza, " +
+        "metà danni se superato. Ai livelli superiori: +1d6 per ogni slot oltre il 3°.",
+    areaRadiusFeet = 20,
+    saveAbility = Ability.DEXTERITY,
+    halfOnSave = true,
+)
 
 // --- incantesimi --------------------------------------------------------------------
 

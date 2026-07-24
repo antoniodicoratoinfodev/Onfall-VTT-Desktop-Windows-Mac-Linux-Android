@@ -3,10 +3,13 @@ package app.d6d.engine;
 import app.d6d.domain.combat.AbilityDefinition;
 import app.d6d.domain.combat.ActivationCost;
 import app.d6d.domain.combat.ActorDefinition;
+import app.d6d.domain.combat.AreaSpellResult;
+import app.d6d.domain.combat.AreaTargetResult;
 import app.d6d.domain.combat.AttackOutcome;
 import app.d6d.domain.combat.AttackRequest;
 import app.d6d.domain.combat.AttackResult;
 import app.d6d.domain.combat.AutomationStatus;
+import app.d6d.domain.combat.SaveAbility;
 import app.d6d.domain.combat.CombatEvent;
 import app.d6d.domain.combat.CombatState;
 import app.d6d.domain.combat.CombatStatus;
@@ -374,6 +377,170 @@ public final class CombatSession {
             rollbackFailedCommand();
             throw failure;
         }
+    }
+
+    /**
+     * Lancia un incantesimo ad area risolvendo i tiri salvezza automaticamente.
+     *
+     * <p>Il danno si tira una sola volta; poi ogni creatura entro la sfera di raggio
+     * indicato, centrata sulla casella scelta, tira il proprio tiro salvezza contro
+     * la CD incantesimi del lanciatore. Chi fallisce subisce il danno pieno, chi
+     * supera ne subisce meta' quando l'incantesimo lo prevede. Come una vera area,
+     * colpisce chiunque sia dentro il raggio, alleati compresi.</p>
+     */
+    public synchronized AreaSpellResult castArea(String casterId, GridPosition center, String abilityId) {
+        return castAreaInternal(casterId, center, abilityId, null);
+    }
+
+    /**
+     * Lancia un incantesimo ad area con i tiri salvezza decisi al tavolo.
+     *
+     * <p>{@code savedByTarget} dice, per ciascun bersaglio, se ha superato il tiro
+     * salvezza; chi non compare vale come fallito (danno pieno). Non si tira alcun
+     * d20: e' la risoluzione manuale, quella usata con la modalita' modifica attiva.</p>
+     */
+    public synchronized AreaSpellResult castAreaManual(
+            String casterId, GridPosition center, String abilityId, Map<String, Boolean> savedByTarget) {
+        Objects.requireNonNull(savedByTarget, "savedByTarget");
+        return castAreaInternal(casterId, center, abilityId, Map.copyOf(savedByTarget));
+    }
+
+    /**
+     * Bersagli che l'area coprirebbe, senza tirare nulla ne' toccare lo stato.
+     *
+     * <p>Serve all'interfaccia per elencare chi verrebbe colpito prima di confermare
+     * — in particolare per costruire i tiri salvezza da decidere a mano.</p>
+     */
+    public synchronized List<String> areaTargets(String casterId, GridPosition center, String abilityId) {
+        Objects.requireNonNull(center, "center");
+        if (!state.battleMap.configured()) return List.of();
+        AbilityDefinition ability = ability(combatant(casterId), abilityId);
+        if (!ability.isArea()) return List.of();
+        return combatantsInArea(center, ability.areaRadiusFeet());
+    }
+
+    private AreaSpellResult castAreaInternal(
+            String casterId, GridPosition center, String abilityId, Map<String, Boolean> savedByTarget) {
+        requireStatus(CombatStatus.ACTIVE);
+        Objects.requireNonNull(center, "center");
+        requireConfiguredMap();
+        MutableCombatant caster = combatant(casterId);
+        if (caster.currentHitPoints == 0) {
+            throw rule("A combatant at zero hit points cannot cast");
+        }
+        if (caster.conditions.stream().anyMatch(condition -> incapacitates(condition.type()))) {
+            throw rule("An incapacitated combatant cannot cast");
+        }
+        AbilityDefinition ability = ability(caster, abilityId);
+        if (!ability.isArea()) {
+            throw rule("Ability is not an area effect: " + ability.id());
+        }
+        if (!state.battleMap.grid().contains(center)) {
+            throw rule("The area centre is outside the map");
+        }
+        validateAreaRange(casterId, center, ability);
+        validateActivationCost(casterId, ability.activationCost());
+
+        beginCommand();
+        try {
+            consumeActivationCost(casterId, ability.activationCost());
+            // Un solo tiro di danno per tutta l'area; i critici non toccano i tiri
+            // salvezza, quindi i dadi non si raddoppiano mai qui.
+            List<DamageComponent> rolled = resolveAttackDamage(ability, List.of(), false, casterId, "");
+            int saveDc = caster.snapshot.spellSaveDc();
+            List<String> targets = combatantsInArea(center, ability.areaRadiusFeet());
+            append(EventType.AREA_SPELL_CAST, casterId, "", details(
+                    "abilityId", ability.id(),
+                    "center", center,
+                    "radiusFeet", ability.areaRadiusFeet(),
+                    "saveDc", saveDc,
+                    "targets", targets.size()));
+
+            List<AreaTargetResult> perTarget = new ArrayList<>();
+            for (String targetId : targets) {
+                perTarget.add(resolveAreaTarget(casterId, targetId, ability, saveDc, rolled, savedByTarget));
+            }
+            return new AreaSpellResult(
+                    casterId, ability.id(), center, ability.areaRadiusFeet(), saveDc, rolled, perTarget);
+        } catch (RuntimeException | Error failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    private AreaTargetResult resolveAreaTarget(
+            String casterId, String targetId, AbilityDefinition ability, int saveDc,
+            List<DamageComponent> rolled, Map<String, Boolean> savedByTarget) {
+        D20RollResult saveRoll = null;
+        boolean saved;
+        if (savedByTarget != null) {
+            // Risoluzione manuale: il tavolo ha gia' deciso, nessun d20.
+            saved = Boolean.TRUE.equals(savedByTarget.get(targetId));
+        } else if (ability.hasSavingThrow()) {
+            MutableCombatant target = combatant(targetId);
+            int bonus = target.snapshot.saveBonus(ability.saveAbility());
+            saveRoll = rollD20For(target, D20RollInput.digital(), bonus);
+            saved = saveRoll.total() >= saveDc;
+        } else {
+            saved = false;
+        }
+        if (ability.hasSavingThrow()) {
+            append(EventType.SAVING_THROW_ROLLED, casterId, targetId, saveRoll == null
+                    ? details("save", ability.saveAbility(), "dc", saveDc, "saved", saved, "source", "MANUAL")
+                    : merge(rollDetails(saveRoll),
+                            details("save", ability.saveAbility(), "dc", saveDc, "saved", saved)));
+        }
+        List<DamageComponent> applied = damageAfterSave(rolled, ability, saved);
+        DamageResult damage = applied.isEmpty()
+                ? null
+                : applyDamageInternal(casterId, targetId, applied, false, D20RollInput.digital());
+        return new AreaTargetResult(targetId, saved, Optional.ofNullable(saveRoll), Optional.ofNullable(damage));
+    }
+
+    /** Danno dopo il tiro salvezza: pieno se fallito, meta' (o nullo) se superato. */
+    private static List<DamageComponent> damageAfterSave(
+            List<DamageComponent> rolled, AbilityDefinition ability, boolean saved) {
+        if (!saved || !ability.hasSavingThrow()) return rolled;
+        if (!ability.halfOnSave()) return List.of();
+        List<DamageComponent> halved = new ArrayList<>(rolled.size());
+        for (DamageComponent component : rolled) {
+            int half = component.amount() / 2;
+            if (half > 0) halved.add(new DamageComponent(component.type(), half));
+        }
+        return halved;
+    }
+
+    private void validateAreaRange(String casterId, GridPosition center, AbilityDefinition ability) {
+        TokenPlacement caster = state.battleMap.placementOf(casterId).orElse(null);
+        if (caster == null) return; // lanciatore non sulla mappa: nessuna gittata da imporre
+        int nearest = Integer.MAX_VALUE;
+        for (GridPosition square : caster.occupiedSquares()) {
+            nearest = Math.min(nearest, square.squaresTo(center));
+        }
+        int distance = state.battleMap.grid().feetFor(nearest);
+        if (distance > ability.rangeFeet()) {
+            throw rule("The area centre is " + distance + " feet away, beyond the range of "
+                    + ability.rangeFeet() + " feet");
+        }
+    }
+
+    /** Combattenti la cui sagoma tocca la sfera di raggio [radiusFeet] centrata su [center]. */
+    private List<String> combatantsInArea(GridPosition center, int radiusFeet) {
+        BattleMap map = state.battleMap;
+        int feetPerSquare = map.grid().feetPerSquare();
+        double radiusSquares = (double) radiusFeet / feetPerSquare;
+        double centerX = center.column() + 0.5;
+        double centerY = center.row() + 0.5;
+        List<String> caught = new ArrayList<>();
+        for (TokenPlacement placement : map.orderedPlacements()) {
+            boolean within = placement.occupiedSquares().stream().anyMatch(square -> {
+                double dx = (square.column() + 0.5) - centerX;
+                double dy = (square.row() + 0.5) - centerY;
+                return Math.sqrt(dx * dx + dy * dy) <= radiusSquares + 1e-9;
+            });
+            if (within) caught.add(placement.combatantId());
+        }
+        return caught;
     }
 
     public synchronized DamageResult applyDamage(

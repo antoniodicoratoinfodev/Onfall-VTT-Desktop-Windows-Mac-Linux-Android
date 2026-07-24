@@ -12,6 +12,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import app.d6d.sheet.feetWithMetres
+import app.d6d.ui.components.Chip
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -45,6 +51,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.FilterQuality
@@ -56,6 +63,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -81,7 +89,9 @@ import app.d6d.ui.components.initials
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.images.rememberBitmap
 import app.d6d.ui.images.rememberPortrait
+import app.d6d.ui.state.AreaTargeting
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.state.PendingArea
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.Vignette
@@ -147,6 +157,42 @@ fun BattleMapView(
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     var pan by remember { mutableStateOf<Offset?>(null) }
     val cellPx = with(density) { liveCell.toPx() }
+
+    // Casella sotto il mouse: serve a far seguire al puntatore il cerchio dell'area
+    // di un incantesimo mentre lo si mira. Fuori dalla griglia resta nulla.
+    var hoverCell by remember { mutableStateOf<IntOffset?>(null) }
+    val areaTargeting = viewModel.areaTargeting
+    val pendingArea = viewModel.pendingArea
+    var manualCardBounds by remember { mutableStateOf<Rect?>(null) }
+    var manualCardSize by remember { mutableStateOf(IntSize.Zero) }
+    var manualCardOffset by remember(pendingArea?.spellName, pendingArea?.center) {
+        mutableStateOf(Offset.Zero)
+    }
+
+    /**
+     * Il pannello parte centrato in basso. La traslazione viene limitata al
+     * viewport, cosi' la maniglia resta sempre recuperabile anche dopo un resize.
+     */
+    fun constrainedManualCardOffset(requested: Offset): Offset {
+        if (viewport == IntSize.Zero || manualCardSize == IntSize.Zero) return requested
+        val baseLeft = (viewport.width - manualCardSize.width) / 2f
+        val baseTop = (viewport.height - manualCardSize.height).toFloat()
+        val minX = -baseLeft
+        val maxX = viewport.width - manualCardSize.width - baseLeft
+        val minY = -baseTop
+        val maxY = viewport.height - manualCardSize.height - baseTop
+        return Offset(
+            x = if (minX <= maxX) requested.x.coerceIn(minX, maxX) else 0f,
+            y = if (minY <= maxY) requested.y.coerceIn(minY, maxY) else 0f,
+        )
+    }
+
+    LaunchedEffect(pendingArea) {
+        if (pendingArea == null) manualCardBounds = null
+    }
+    LaunchedEffect(viewport, manualCardSize) {
+        manualCardOffset = constrainedManualCardOffset(manualCardOffset)
+    }
 
     fun geometry(cell: Float): MapViewportGeometry {
         val gridNow = viewModel.battleMap.grid()
@@ -223,9 +269,13 @@ fun BattleMapView(
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         if (event.type != PointerEventType.Scroll) continue
+                        // Il pannello manuale e' sopra la mappa: la rotellina al suo
+                        // interno appartiene alla lista dei bersagli, non allo zoom.
+                        val pointer = event.changes.firstOrNull()?.position
+                        if (pointer != null && manualCardBounds?.contains(pointer) == true) continue
                         val dy = event.changes.fold(0f) { acc, change -> acc + change.scrollDelta.y }
                         if (dy == 0f) continue
-                        val anchor = event.changes.firstOrNull()?.position
+                        val anchor = pointer
                             ?: Offset(viewport.width / 2f, viewport.height / 2f)
                         // Un colpo di rotellina cambia la scala del dieci percento; una
                         // spinta piu' decisa (trackpad) zooma di piu', ma entro un limite
@@ -264,6 +314,12 @@ fun BattleMapView(
             .pointerInput(viewModel, density.density, dropTarget) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = true)
+                    // I gesti iniziati sul pannello sovrapposto non devono mai
+                    // diventare pan o tap della mappa. I controlli del pannello
+                    // continuano invece a ricevere normalmente lo stesso gesto.
+                    if (manualCardBounds?.contains(down.position) == true) {
+                        return@awaitEachGesture
+                    }
                     var panning = false
                     var travelled = Offset.Zero
                     while (true) {
@@ -294,6 +350,24 @@ fun BattleMapView(
                             pan = nextPan
                             dropTarget?.gridOriginPx = nextPan
                             change.consume()
+                        }
+                    }
+                }
+            }
+            // Traccia la casella sotto il mouse senza consumare nulla: pan, tap e
+            // rotella continuano a funzionare. Serve al cerchio dell'area, che segue
+            // il puntatore mentre si mira un incantesimo.
+            .pointerInput(viewModel, density.density) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull()
+                        when (event.type) {
+                            PointerEventType.Exit -> hoverCell = null
+                            else -> if (change != null) {
+                                val cam = geometry(with(density) { liveCell.toPx() })
+                                hoverCell = cam.cellAt(change.position, effectiveOffset(cam))
+                            }
                         }
                     }
                 }
@@ -395,9 +469,72 @@ fun BattleMapView(
             )
         }
 
+        // Cerchio dell'area: segue il mouse mentre si mira, resta fisso sul centro
+        // scelto durante la risoluzione manuale. E' l'ampiezza reale dell'incantesimo.
+        if (areaTargeting != null || pendingArea != null) {
+            val radiusFeet = areaTargeting?.radiusFeet ?: pendingArea!!.radiusFeet
+            val centerCell: IntOffset? = pendingArea
+                ?.let { IntOffset(it.center.column(), it.center.row()) }
+                ?: hoverCell
+            Canvas(Modifier.fillMaxSize()) {
+                if (centerCell != null && grid.feetPerSquare() > 0) {
+                    val radiusPx = (radiusFeet.toFloat() / grid.feetPerSquare()) * cellPx
+                    val center = Offset(
+                        mapOffset.x + (centerCell.x + 0.5f) * cellPx,
+                        mapOffset.y + (centerCell.y + 0.5f) * cellPx,
+                    )
+                    drawCircle(Palette.Enemy.copy(alpha = 0.16f), radiusPx, center)
+                    drawCircle(Palette.Enemy.copy(alpha = 0.9f), radiusPx, center, style = Stroke(width = 2f))
+                    drawCircle(Palette.Enemy, 3f, center)
+                }
+                // In risoluzione manuale, un anello su ogni bersaglio: verde se
+                // superato, ambra se fallito (danno pieno).
+                pendingArea?.targets?.forEach { choice ->
+                    viewModel.placementOf(choice.combatantId)?.let { placement ->
+                        val side = placement.squaresPerSide()
+                        val cx = mapOffset.x + (placement.origin().column() + side / 2f) * cellPx
+                        val cy = mapOffset.y + (placement.origin().row() + side / 2f) * cellPx
+                        val ring = if (choice.saved) Palette.Heal else Palette.Crit
+                        drawCircle(ring.copy(alpha = 0.95f), side * cellPx * 0.58f, Offset(cx, cy),
+                            style = Stroke(width = 2.5f))
+                    }
+                }
+            }
+        }
+
         // Vignettatura sopra tutto: angoli in ombra, luce dove si combatte. Non
         // ha gestori di puntatore, quindi i tocchi la attraversano.
         Vignette(strength = 0.26f)
+
+        if (areaTargeting != null) {
+            AreaTargetingBanner(
+                targeting = areaTargeting,
+                onCancel = { viewModel.cancelAreaTargeting() },
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
+            )
+        }
+        if (pendingArea != null) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .absoluteOffset {
+                        IntOffset(manualCardOffset.x.roundToInt(), manualCardOffset.y.roundToInt())
+                    }
+                    .onGloballyPositioned {
+                        manualCardBounds = it.boundsInParent()
+                        manualCardSize = it.size
+                    }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+            ) {
+                AreaManualCard(
+                    viewModel = viewModel,
+                    pending = pendingArea,
+                    onDrag = { amount ->
+                        manualCardOffset = constrainedManualCardOffset(manualCardOffset + amount)
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -547,6 +684,13 @@ private fun onCellTapped(viewModel: BattleViewModel, column: Int, row: Int) {
     // va ignorato, non trasformato in un errore di regola mostrato al tavolo.
     val grid = viewModel.battleMap.grid()
     if (column < 0 || row < 0 || column >= grid.columns() || row >= grid.rows()) return
+
+    // Mentre si mira un'area, un clic la fa detonare qui invece di spostare o
+    // selezionare: e' la conferma del bersaglio.
+    if (viewModel.areaTargeting != null) {
+        viewModel.resolveAreaAt(column, row)
+        return
+    }
 
     val occupant = viewModel.occupantAt(column, row)
     if (occupant != null) {
@@ -995,4 +1139,159 @@ private fun MapBackground.resizedBy(handle: BgHandle, dxSquares: Double, dySquar
     val newLeft = if (movingX <= anchorX) anchorX - newWidth else anchorX
     val newTop = if (movingY <= anchorY) anchorY - newHeight else anchorY
     return MapBackground(newLeft, newTop, newWidth, newHeight)
+}
+
+/** Fascia in cima alla mappa mentre si mira un'area: cosa, quanto ampia e come annullare. */
+@Composable
+private fun AreaTargetingBanner(
+    targeting: AreaTargeting,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        modifier
+            .widthIn(max = 540.dp)
+            .clip(shape)
+            .panelBrush(shape)
+            .border(1.dp, Palette.Enemy.copy(alpha = 0.6f), shape)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f, fill = false)) {
+            Text(
+                text = "Mira · ${targeting.name}",
+                color = Palette.Text,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = "Area ${feetWithMetres(targeting.radiusFeet)} · gittata ${feetWithMetres(targeting.rangeFeet)}" +
+                    " · clicca sulla mappa per centrare",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        GameButton("Annulla", accent = Palette.TextMuted, dense = true, onClick = onCancel)
+    }
+}
+
+/** Risoluzione manuale dell'area: il tavolo segna chi supera il TS, poi applica i danni. */
+@Composable
+private fun AreaManualCard(
+    viewModel: BattleViewModel,
+    pending: PendingArea,
+    onDrag: (Offset) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier
+            .widthIn(max = 460.dp)
+            .fillMaxWidth()
+            .clip(shape)
+            .panelBrush(shape)
+            .border(1.dp, Palette.Bronze.copy(alpha = 0.7f), shape)
+            .ornateFrame(accent = Palette.Gold, alpha = 0.5f)
+            // Rende tutta la superficie un vero bersaglio di input: i token
+            // eventualmente coperti dal pannello non entrano nell'hit test.
+            // Il gestore della mappa esclude inoltre questi bounds da tap e zoom.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) awaitPointerEvent()
+                }
+            }
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    detectDragGestures { change, amount ->
+                        change.consume()
+                        onDrag(amount)
+                    }
+                },
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = pending.spellName,
+                    color = Palette.Text,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "Tiri salvezza · CD ${pending.saveDc} · tocca un nome per cambiarne l'esito",
+                    color = Palette.TextMuted,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Chip("${pending.targets.size} nell'area", Palette.Gold)
+            Text(
+                text = "⋮⋮",
+                color = Palette.TextMuted,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics {
+                    contentDescription = "Trascina per spostare il pannello"
+                },
+            )
+        }
+        OrnateDivider(color = Palette.GoldDim)
+        if (pending.targets.isEmpty()) {
+            Text(
+                text = "Nessuna creatura nell'area.",
+                color = Palette.TextFaint,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        } else {
+            Column(
+                Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                pending.targets.forEach { choice ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Palette.Night, RoundedCornerShape(7.dp))
+                            .border(1.dp, Palette.Line, RoundedCornerShape(7.dp))
+                            .clickable { viewModel.toggleAreaSave(choice.combatantId) }
+                            .padding(horizontal = 9.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = choice.name,
+                            color = Palette.Text,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Chip(
+                            if (choice.saved) "TS superato · metà" else "TS fallito · pieno",
+                            if (choice.saved) Palette.Heal else Palette.Crit,
+                        )
+                    }
+                }
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            GameButton("Annulla", accent = Palette.TextMuted, dense = true, onClick = { viewModel.cancelAreaTargeting() })
+            Box(Modifier.weight(1f))
+            if (pending.targets.isEmpty()) {
+                GameButton("Chiudi", accent = Palette.TextMuted, dense = true, onClick = { viewModel.cancelAreaTargeting() })
+            } else {
+                GameButton("Applica", accent = Palette.Enemy, dense = true, primary = true, onClick = { viewModel.applyPendingArea() })
+            }
+        }
+    }
 }

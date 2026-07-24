@@ -11,6 +11,7 @@ import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
+import app.d6d.domain.combat.SaveAbility
 import java.math.BigDecimal
 
 private const val RULESET = "5.2.1"
@@ -183,4 +184,24 @@ val ActorKind.italianLabel: String
         ActorKind.PLAYER_CHARACTER -> "Personaggio"
         ActorKind.NON_PLAYER_CHARACTER -> "PNG"
         ActorKind.CREATURE -> "Creatura"
+    }
+
+val SaveAbility.italianLabel: String
+    get() = when (this) {
+        SaveAbility.STRENGTH -> "Forza"
+        SaveAbility.DEXTERITY -> "Destrezza"
+        SaveAbility.CONSTITUTION -> "Costituzione"
+        SaveAbility.INTELLIGENCE -> "Intelligenza"
+        SaveAbility.WISDOM -> "Saggezza"
+        SaveAbility.CHARISMA -> "Carisma"
+    }
+
+val SaveAbility.italianAbbreviation: String
+    get() = when (this) {
+        SaveAbility.STRENGTH -> "FOR"
+        SaveAbility.DEXTERITY -> "DES"
+        SaveAbility.CONSTITUTION -> "COS"
+        SaveAbility.INTELLIGENCE -> "INT"
+        SaveAbility.WISDOM -> "SAG"
+        SaveAbility.CHARISMA -> "CAR"
     }

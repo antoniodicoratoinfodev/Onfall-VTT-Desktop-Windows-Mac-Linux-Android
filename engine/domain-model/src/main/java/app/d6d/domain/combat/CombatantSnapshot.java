@@ -1,6 +1,7 @@
 package app.d6d.domain.combat;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -23,7 +24,9 @@ public record CombatantSnapshot(
         Set<DamageType> vulnerabilities,
         Set<DamageType> damageImmunities,
         Set<ConditionType> conditionImmunities,
-        List<AbilityDefinition> abilities) {
+        List<AbilityDefinition> abilities,
+        Map<SaveAbility, Integer> savingThrowBonuses,
+        int spellSaveDc) {
 
     public CombatantSnapshot {
         if (instanceId == null || instanceId.isBlank()) {
@@ -45,6 +48,23 @@ public record CombatantSnapshot(
         damageImmunities = Set.copyOf(Objects.requireNonNull(damageImmunities, "damageImmunities"));
         conditionImmunities = Set.copyOf(Objects.requireNonNull(conditionImmunities, "conditionImmunities"));
         abilities = List.copyOf(Objects.requireNonNull(abilities, "abilities"));
+        savingThrowBonuses = Map.copyOf(Objects.requireNonNull(savingThrowBonuses, "savingThrowBonuses"));
+        if (spellSaveDc < 0) {
+            throw new IllegalArgumentException("spellSaveDc cannot be negative");
+        }
+    }
+
+    /** Backward-compatible constructor: no per-ability save bonuses and not a spellcaster. */
+    public CombatantSnapshot(
+            String instanceId, String definitionId, String definitionVersion, String rulesetVersion, String name,
+            int armorClass, int maxHitPoints, int initialHitPoints, int initialTemporaryHitPoints, int speedFeet,
+            int initiativeModifier, int initiativeScore, int constitutionSaveBonus, Set<DamageType> resistances,
+            Set<DamageType> vulnerabilities, Set<DamageType> damageImmunities, Set<ConditionType> conditionImmunities,
+            List<AbilityDefinition> abilities) {
+        this(instanceId, definitionId, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints,
+                initialHitPoints, initialTemporaryHitPoints, speedFeet, initiativeModifier, initiativeScore,
+                constitutionSaveBonus, resistances, vulnerabilities, damageImmunities, conditionImmunities,
+                abilities, Map.of(), 0);
     }
 
     public static CombatantSnapshot from(String instanceId, ActorDefinition actor) {
@@ -53,12 +73,17 @@ public record CombatantSnapshot(
                 actor.name(), actor.armorClass(), actor.maxHitPoints(), actor.currentHitPoints(),
                 actor.temporaryHitPoints(), actor.speedFeet(), actor.initiativeModifier(), actor.initiativeScore(),
                 actor.constitutionSaveBonus(), actor.resistances(), actor.vulnerabilities(), actor.damageImmunities(),
-                actor.conditionImmunities(), actor.abilities());
+                actor.conditionImmunities(), actor.abilities(), actor.savingThrowBonuses(), actor.spellSaveDc());
     }
 
     public AbilityDefinition ability(String abilityId) {
         return abilities.stream().filter(ability -> ability.id().equals(abilityId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown ability: " + abilityId));
+    }
+
+    /** Saving-throw bonus for an ability, or 0 when the snapshot has no recorded save. */
+    public int saveBonus(SaveAbility ability) {
+        return savingThrowBonuses.getOrDefault(ability, 0);
     }
 
     /** Marca le revisioni nate da una correzione decisa al tavolo. */
@@ -108,7 +133,9 @@ public record CombatantSnapshot(
                 vulnerabilities,
                 damageImmunities,
                 conditionImmunities,
-                abilities);
+                abilities,
+                savingThrowBonuses,
+                spellSaveDc);
     }
 
     /**
