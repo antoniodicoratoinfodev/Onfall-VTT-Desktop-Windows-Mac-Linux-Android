@@ -116,6 +116,16 @@ class BattleViewModel(
     var floating by mutableStateOf<Map<String, List<FloatingNumber>>>(emptyMap())
         private set
 
+    /**
+     * Esito persistente dell'ultima capacita' risolta.
+     *
+     * I numeri sulla mappa sono volutamente brevi; questa nota rende invece
+     * inequivocabile che il clic sul bersaglio ha gia' applicato l'attacco, anche
+     * quando il tiro manca e quindi i PF restano invariati.
+     */
+    var actionResolution by mutableStateOf<ActionResolution?>(null)
+        private set
+
     private var floatSequence = 0L
 
     /**
@@ -300,6 +310,12 @@ class BattleViewModel(
     /** Esegue un attacco sul bersaglio esplicito, senza alcun ripiego automatico. */
     private fun attack(attacker: String, target: String, abilityId: String) {
         command {
+            val abilityName = abilities(attacker)
+                .firstOrNull { it.id() == abilityId }
+                ?.name()
+                ?: abilityId
+            val targetName = name(target)
+            val targetArmorClass = combatant(target)?.snapshot()?.armorClass()
             val result = session.attack(AttackRequest.digital(attacker, target, abilityId, rollMode))
             val damage = result.damageResult()
             when {
@@ -314,6 +330,23 @@ class BattleViewModel(
                             kind = if (critical) FloatKind.CRIT else FloatKind.DAMAGE,
                         ),
                     )
+                    actionResolution = ActionResolution(
+                        text = buildString {
+                            append('«').append(abilityName).append("»: ")
+                            if (critical) append("colpo critico, ")
+                            append(targetName)
+                                .append(" subisce ")
+                                .append(applied.totalAdjustedDamage())
+                                .append(" danni; ")
+                                .append(applied.targetHitPointsAfter())
+                                .append(" PF rimasti")
+                            targetArmorClass?.let {
+                                append(" (").append(result.attackRoll().total()).append(" contro CA ").append(it).append(')')
+                            }
+                            append('.')
+                        },
+                        isHit = true,
+                    )
                     if (applied.concentrationCheck().isPresent &&
                         !applied.concentrationCheck().get().maintained()
                     ) {
@@ -321,7 +354,21 @@ class BattleViewModel(
                     }
                 }
 
-                else -> push(target, FloatingNumber(++floatSequence, "Mancato", FloatKind.MISS))
+                else -> {
+                    push(target, FloatingNumber(++floatSequence, "Mancato", FloatKind.MISS))
+                    actionResolution = ActionResolution(
+                        text = buildString {
+                            append('«').append(abilityName).append("»: ")
+                                .append(targetName)
+                                .append(" mancato")
+                            targetArmorClass?.let {
+                                append(" (").append(result.attackRoll().total()).append(" contro CA ").append(it).append(')')
+                            }
+                            append("; 0 danni.")
+                        },
+                        isHit = false,
+                    )
+                }
             }
         }
     }
@@ -346,6 +393,7 @@ class BattleViewModel(
             message = "Capacità non trovata."
             return
         }
+        actionResolution = null
         if (ability.isArea) {
             beginAreaTargeting(abilityId)
             return
@@ -401,6 +449,7 @@ class BattleViewModel(
      * scelto.
      */
     fun beginAreaTargeting(abilityId: String) {
+        actionResolution = null
         val caster = activeCombatantId ?: run {
             message = "Nessun attore di turno."
             return
@@ -542,6 +591,7 @@ class BattleViewModel(
 
     fun undo() {
         message = null
+        actionResolution = null
         val effect = undoEffects.lastOrNull() ?: UndoEffect.None
         try {
             if (!session.undo()) {
@@ -851,6 +901,7 @@ class BattleViewModel(
         sessionGeneration++
         undoEffects.clear()
         floating = emptyMap()
+        actionResolution = null
         areaTargeting = null
         pendingArea = null
         singleTargeting = null
@@ -901,6 +952,10 @@ class BattleViewModel(
         message = null
     }
 
+    fun dismissActionResolution() {
+        actionResolution = null
+    }
+
     /** Mostra una nota guidata senza inviare alcun comando al motore. */
     fun showMessage(text: String) {
         message = text.takeIf { it.isNotBlank() }
@@ -929,6 +984,7 @@ class BattleViewModel(
         val revisionBefore = state.revision()
         try {
             message = null
+            actionResolution = null
             block()
         } catch (failure: CombatRuleException) {
             message = failure.message
@@ -1007,6 +1063,12 @@ data class SingleTargeting(
     val abilityId: String,
     val attackerId: String,
     val name: String,
+)
+
+/** Conferma visiva persistente di un attacco gia' risolto al clic sul bersaglio. */
+data class ActionResolution(
+    val text: String,
+    val isHit: Boolean,
 )
 
 /** Un bersaglio nell'area e l'esito, ancora modificabile, del suo tiro salvezza. */

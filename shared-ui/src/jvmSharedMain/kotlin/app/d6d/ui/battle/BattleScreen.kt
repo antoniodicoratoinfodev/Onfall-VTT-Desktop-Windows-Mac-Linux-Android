@@ -105,6 +105,21 @@ fun BattleScreen(
         }
         SessionMenuDialog(sessions)
 
+        viewModel.actionResolution?.let { resolution ->
+            val tone = if (resolution.isHit) Palette.Heal else Palette.GoldBright
+            Text(
+                text = "Risolto subito · ${resolution.text}",
+                color = tone,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(tone.copy(alpha = 0.13f))
+                    .clickable { viewModel.dismissActionResolution() }
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+            )
+        }
+
         viewModel.message?.let { text ->
             Text(
                 text = "Avviso · $text",

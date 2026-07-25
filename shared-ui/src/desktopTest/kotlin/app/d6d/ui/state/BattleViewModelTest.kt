@@ -1,7 +1,12 @@
 package app.d6d.ui.state
 
+import app.d6d.domain.combat.AbilityDefinition
+import app.d6d.domain.combat.ActivationCost
+import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.ConditionType
+import app.d6d.domain.combat.DamageFormula
+import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.EventType
 import app.d6d.engine.CombatSession
 import app.d6d.ui.content.SampleEncounter
@@ -21,6 +26,37 @@ import org.junit.jupiter.api.Test
 class BattleViewModelTest {
 
     private fun viewModel() = BattleViewModel(SampleEncounter.startedSession(seed = 4242L))
+
+    private fun guaranteedHitViewModel(): BattleViewModel {
+        val ability = AbilityDefinition.attack(
+            "colpo-certo",
+            "Colpo certo",
+            ActivationCost.ACTION,
+            100,
+            DamageFormula.fixed(DamageType.FORCE, 5),
+        )
+        val attacker = ActorDefinition.builder("attaccante-def", "Attaccante")
+            .armorClass(10)
+            .maxHitPoints(20)
+            .initiativeScore(20)
+            .abilities(listOf(ability))
+            .build()
+        val target = ActorDefinition.builder("bersaglio-def", "Bersaglio")
+            .armorClass(10)
+            .maxHitPoints(20)
+            .initiativeScore(10)
+            .build()
+        val session = CombatSession.create("clic-immediato", 4242L)
+        session.addCombatant("attaccante", attacker)
+        session.addCombatant("bersaglio", target)
+        session.setPartyCombatants(listOf("attaccante"))
+        session.setInitiative("attaccante", 20)
+        session.setInitiative("bersaglio", 10)
+        session.setInitiativeOrder(listOf("attaccante", "bersaglio"))
+        session.markReady()
+        session.start()
+        return BattleViewModel(session)
+    }
 
     @Test
     fun `l'incontro dimostrativo parte attivo e con gli schieramenti distinti`() {
@@ -108,19 +144,36 @@ class BattleViewModelTest {
     }
 
     @Test
-    fun `un bersaglio valido risolve esattamente la capacita selezionata`() {
-        val model = viewModel()
+    fun `il clic sul bersaglio applica subito il danno senza terminare il turno`() {
+        val model = guaranteedHitViewModel()
         val active = model.activeCombatantId!!
-        val target = model.effectiveTargetId()!!
+        val target = "bersaglio"
         val ability = model.abilities(active).first { !it.isArea }
+        val hitPointsBefore = model.combatant(target)!!.currentHitPoints()
+        val turnIndexBefore = model.turnIndex
         val eventsBefore = model.events.size
 
         model.beginAbilityTargeting(ability.id())
         model.onCombatantClicked(target)
 
+        val resolutionEvents = model.events.drop(eventsBefore)
+        assertEquals(hitPointsBefore - 5, model.combatant(target)!!.currentHitPoints())
+        assertTrue(resolutionEvents.any { it.type() == EventType.DAMAGE_APPLIED })
+        assertFalse(resolutionEvents.any { it.type() == EventType.TURN_ENDED })
+        assertEquals(turnIndexBefore, model.turnIndex)
+        assertEquals(active, model.activeCombatantId)
         assertNull(model.singleTargeting)
-        assertTrue(model.events.size > eventsBefore)
         assertEquals(active, model.inspectedCombatantId)
+        assertTrue(model.actionResolution?.isHit == true)
+        assertTrue(model.actionResolution?.text.orEmpty().contains("subisce 5 danni"))
+
+        // Una volta risolta la mira, un altro clic ispeziona soltanto: non puo'
+        // applicare per errore una seconda volta la stessa capacita'.
+        val revisionAfterAttack = model.state.revision()
+        val attacksAfterAttack = model.events.count { it.type() == EventType.ATTACK_ROLLED }
+        model.onCombatantClicked(target)
+        assertEquals(revisionAfterAttack, model.state.revision())
+        assertEquals(attacksAfterAttack, model.events.count { it.type() == EventType.ATTACK_ROLLED })
     }
 
     @Test
