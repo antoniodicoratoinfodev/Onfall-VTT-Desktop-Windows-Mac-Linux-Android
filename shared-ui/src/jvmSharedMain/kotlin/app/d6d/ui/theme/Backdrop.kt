@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import kotlin.math.PI
@@ -89,9 +91,13 @@ private val FireOrange = Color(0xFFFF7417)
 private val FireRed = Color(0xFFD62D16)
 private val FireDeepRed = Color(0xFF650B08)
 
-/** Centro medio del fuoco fuori campo, in frazioni della superficie. */
+/**
+ * Centro medio del fuoco, in frazioni della superficie. Sta appena sotto il bordo
+ * inferiore: quello che si vede e' la luce che sale, non la sorgente. Tenendolo
+ * dentro la tela il nucleo si leggeva come un faretto acceso in mezzo allo schermo.
+ */
 private const val FIRE_X = 0.5f
-private const val FIRE_Y = 0.74f
+private const val FIRE_Y = 0.98f
 
 /**
  * La cripta prima della luce: base scura, pietra a rilievo e vignettatura forte.
@@ -157,9 +163,27 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
 }
 
 /**
- * Luce del fuoco fuori campo. Tre frequenze diverse evitano il respiro regolare
- * di una semplice sinusoide; centro, raggio e intensita' variano insieme, ma
- * tornano esattamente al punto iniziale alla chiusura del ciclo.
+ * Riempie tutta la tela con un gradiente schiacciato attorno a [pivot].
+ *
+ * Un `radialGradient` da solo e' un cerchio perfetto e si legge come un faretto.
+ * Deformandolo — piu' largo che alto — la stessa luce sembra invece spandersi
+ * radente sulla pietra. Il rettangolo deborda dalla tela perche' dopo lo
+ * schiacciamento in verticale deve comunque coprirla tutta.
+ */
+private fun DrawScope.drawSpill(brush: Brush, pivot: Offset, scaleX: Float, scaleY: Float) {
+    scale(scaleX, scaleY, pivot) {
+        drawRect(brush, topLeft = Offset(-size.width, -size.height), size = size * 3f)
+    }
+}
+
+/**
+ * Luce del fuoco fuori campo.
+ *
+ * Frequenze diverse evitano il respiro regolare di una semplice sinusoide, e sono
+ * tutte armoniche intere, quindi il ciclo si richiude senza scatto. Il nucleo e'
+ * diviso in due lobi con sfarfallio sfasato: il punto piu' luminoso si sposta da
+ * un lato all'altro invece di limitarsi a pulsare, che era quello che faceva
+ * sembrare il fondale un'unica superficie che respira.
  */
 private fun DrawScope.drawFirelight(time: Float) {
     val w = size.width
@@ -181,12 +205,12 @@ private fun DrawScope.drawFirelight(time: Float) {
 
     // Alone rosso molto largo: colora la pietra senza trasformare il fondale in
     // una superficie arancione uniforme.
-    val outerRadius = maxDim * (0.72f + flicker * 0.10f)
-    drawRect(
-        Brush.radialGradient(
+    val outerRadius = maxDim * (0.78f + flicker * 0.10f)
+    drawSpill(
+        brush = Brush.radialGradient(
             colorStops = arrayOf(
-                0f to FireOrange.copy(alpha = 0.18f * flicker),
-                0.18f to FireRed.copy(alpha = 0.16f * flicker),
+                0f to FireOrange.copy(alpha = 0.20f * flicker),
+                0.18f to FireRed.copy(alpha = 0.17f * flicker),
                 0.46f to FireDeepRed.copy(alpha = 0.11f * flicker),
                 0.76f to FireDeepRed.copy(alpha = 0.035f * flicker),
                 1f to Color.Transparent,
@@ -194,23 +218,41 @@ private fun DrawScope.drawFirelight(time: Float) {
             center = source,
             radius = outerRadius,
         ),
+        pivot = source,
+        scaleX = 1.32f,
+        scaleY = 0.80f,
     )
 
-    // Nucleo caldo: piu' piccolo e rapido, e' quello che fa percepire la luce
-    // variabile sulle superfici semitrasparenti dei pannelli.
-    val coreRadius = maxDim * (0.24f + flicker * 0.10f)
-    drawRect(
-        Brush.radialGradient(
-            colorStops = arrayOf(
-                0f to FireYellow.copy(alpha = 0.27f * flicker),
-                0.20f to FireOrange.copy(alpha = 0.22f * flicker),
-                0.48f to FireRed.copy(alpha = 0.10f * flicker),
-                1f to Color.Transparent,
+    // I due lobi del nucleo. Sono quelli che fanno percepire la luce variabile
+    // sulle superfici semitrasparenti dei pannelli.
+    repeat(2) { lobe ->
+        val side = if (lobe == 0) -1f else 1f
+        val phase = lobe * 2.3f
+        val local = (
+            0.68f +
+                0.20f * sin(turn * 5f + phase) +
+                0.12f * sin(turn * 11f + phase * 1.7f)
+            ).coerceIn(0.34f, 1f)
+        val lobeCenter = Offset(
+            x = source.x + side * w * 0.05f * (0.6f + 0.4f * sin(turn * 3f + phase)),
+            y = source.y,
+        )
+        drawSpill(
+            brush = Brush.radialGradient(
+                colorStops = arrayOf(
+                    0f to FireYellow.copy(alpha = 0.17f * local),
+                    0.20f to FireOrange.copy(alpha = 0.14f * local),
+                    0.48f to FireRed.copy(alpha = 0.07f * local),
+                    1f to Color.Transparent,
+                ),
+                center = lobeCenter,
+                radius = maxDim * (0.26f + local * 0.10f),
             ),
-            center = Offset(source.x, source.y + h * 0.035f),
-            radius = coreRadius,
-        ),
-    )
+            pivot = lobeCenter,
+            scaleX = 1.22f,
+            scaleY = 0.84f,
+        )
+    }
 }
 
 /**
@@ -291,23 +333,33 @@ private fun DrawScope.drawFlameParticles(time: Float) {
     val h = size.height
     flameParticles.forEach { particle ->
         val life = frac(time * particle.cycles + particle.phase)
-        val y = 1.04f - life * particle.travel
+        // La brace scatta via dal fuoco e rallenta salendo, invece di scorrere a
+        // velocita' costante. La derivata di questa curva va da 2 a 0 e serve
+        // anche a dimensionare la scia.
+        val rise = life * (2f - life)
+        val speed = (2f - 2f * life) * particle.travel * particle.cycles
+        val y = 1.04f - rise * particle.travel
         val drift = particle.sway *
             sin(2.0 * PI * (time * particle.cycles + particle.phase)).toFloat()
-        val x = particle.startX + drift * (0.45f + life)
+        val x = particle.startX + drift * (0.45f + rise)
         // La scintilla nasce e muore gia' trasparente, quindi il riciclo non scatta.
         val fade = sin(PI * life).toFloat()
         if (fade <= 0.01f) return@forEach
         val flicker = 0.68f + 0.32f *
             sin(2.0 * PI * (time * particle.flicker + particle.phase)).toFloat()
         val alpha = 0.72f * fade * flicker
-        val color = when (particle.heat) {
-            0 -> FireYellow
-            1 -> FireOrange
-            else -> FireRed
+        // La brace si raffredda mentre sale: giallo, arancio, rosso. Il tono di
+        // partenza cambia da particella a particella, cosi' non si accendono tutte
+        // insieme dello stesso colore.
+        val cooling = (life + particle.heat * 0.18f).coerceIn(0f, 1f)
+        val color = if (cooling < 0.5f) {
+            lerp(FireYellow, FireOrange, cooling * 2f)
+        } else {
+            lerp(FireOrange, FireRed, (cooling - 0.5f) * 2f)
         }
         val center = Offset(x * w, y * h)
-        val radius = particle.radius * density
+        // Anche il corpo si consuma: le braci vecchie sono piu' piccole.
+        val radius = particle.radius * density * (0.55f + 0.45f * (1f - life))
         val glow = radius * 5.5f
         drawCircle(
             brush = Brush.radialGradient(
@@ -318,15 +370,20 @@ private fun DrawScope.drawFlameParticles(time: Float) {
             radius = glow,
             center = center,
         )
-        // Una breve coda verticale rende le particelle veloci simili a scintille
-        // senza sfocare quelle piu' lente e piccole.
+        // La scia e' lunga quanto la velocita' del momento: le scintille appena
+        // nate filano, quelle che si stanno fermando in alto non la hanno piu'.
         drawLine(
             color = color.copy(alpha = alpha * 0.55f),
             start = center,
-            end = Offset(center.x, center.y + radius * (1.6f + particle.cycles)),
+            end = Offset(center.x, center.y + radius * (1.2f + speed * 0.9f)),
             strokeWidth = radius * 0.75f,
             cap = StrokeCap.Round,
         )
-        drawCircle(FireYellow.copy(alpha = alpha), radius = radius * 0.68f, center = center)
+        // Cuore incandescente solo finche' la brace e' giovane.
+        drawCircle(
+            color = lerp(color, FireYellow, (1f - cooling) * 0.8f).copy(alpha = alpha),
+            radius = radius * 0.68f,
+            center = center,
+        )
     }
 }
