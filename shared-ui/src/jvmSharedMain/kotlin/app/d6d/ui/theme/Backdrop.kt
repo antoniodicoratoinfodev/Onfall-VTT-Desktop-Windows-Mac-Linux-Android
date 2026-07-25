@@ -17,14 +17,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ImageShader
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import kotlin.math.PI
@@ -38,7 +36,7 @@ import androidx.compose.ui.graphics.Canvas as bitmapCanvas
  * Nessuna immagine importata — vale lo stesso vincolo di licenza dei ritratti e
  * degli ornamenti — quindi anche lo sfondo e' interamente disegnato da codice.
  * La scena e' una cripta quasi buia rischiarata da un fuoco fuori campo: il fondo
- * tende al nero, ma una luce rossa, arancio e gialla pulsa sulla pietra incisa.
+ * tende al nero, ma una luce rossa, arancio e gialla pulsa sulla pietra.
  * Scintille di dimensione e velocita' diverse salgono dalla sorgente.
  *
  * E' pensato per stare dietro i menu e i pannelli, che vi si dissolvono sopra: la
@@ -96,8 +94,8 @@ private const val FIRE_X = 0.5f
 private const val FIRE_Y = 0.74f
 
 /**
- * La cripta prima della luce: base scura, pietra a rilievo, crepe incise e
- * vignettatura forte. Disegnata una volta per dimensione.
+ * La cripta prima della luce: base scura, pietra a rilievo e vignettatura forte.
+ * Disegnata una volta per dimensione.
  */
 private fun DrawScope.drawStoneField(vignetteStrength: Float) {
     val w = size.width
@@ -142,23 +140,6 @@ private fun DrawScope.drawStoneField(vignetteStrength: Float) {
         )
     }
 
-    // Crepe incise nella pietra: numerose e leggibili. Prima un bordo freddo in luce,
-    // poi l'incisione scura sopra, cosi' la fenditura sembra scavata.
-    repeat(13) {
-        val path = Path()
-        var x = random.nextFloat() * w
-        var y = random.nextFloat() * h * 0.25f
-        path.moveTo(x, y)
-        val segments = 8 + random.nextInt(7)
-        repeat(segments) {
-            x += (random.nextFloat() - 0.5f) * w * 0.06f
-            y += (h / segments) * (0.5f + 0.8f * random.nextFloat())
-            path.lineTo(x, y)
-        }
-        drawPath(path, Palette.Bronze.copy(alpha = 0.08f), style = Stroke(width = 2.6f, cap = StrokeCap.Round))
-        drawPath(path, Color.Black.copy(alpha = 0.24f), style = Stroke(width = 1.2f, cap = StrokeCap.Round))
-    }
-
     // Vignettatura forte, ma a molti passaggi cosi' scende senza scalini.
     drawRect(
         Brush.radialGradient(
@@ -184,7 +165,6 @@ private fun DrawScope.drawFirelight(time: Float) {
     val w = size.width
     val h = size.height
     val maxDim = size.maxDimension
-    val minDim = size.minDimension
     val turn = (2.0 * PI * time).toFloat()
     val flicker = (
         0.72f +
@@ -231,33 +211,6 @@ private fun DrawScope.drawFirelight(time: Float) {
             radius = coreRadius,
         ),
     )
-
-    // Lingue morbide, appena visibili: suggeriscono la sorgente senza disegnare
-    // una fiamma letterale dietro ai contenuti.
-    repeat(4) { index ->
-        val direction = if (index % 2 == 0) -1f else 1f
-        val local = sin(turn * (4f + index) + index * 1.37f)
-        val tongueWidth = minDim * (0.055f + index * 0.012f)
-        val tongueHeight = minDim * (0.22f + index * 0.035f + local * 0.025f)
-        val tongueCenterX = source.x +
-            direction * minDim * (0.025f + index * 0.018f) +
-            local * minDim * 0.018f
-        val tongueTop = source.y - tongueHeight * (0.76f + flicker * 0.10f)
-        drawOval(
-            brush = Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0f to Color.Transparent,
-                    0.38f to FireYellow.copy(alpha = 0.025f * flicker),
-                    0.70f to FireOrange.copy(alpha = 0.075f * flicker),
-                    1f to FireRed.copy(alpha = 0.015f * flicker),
-                ),
-                startY = tongueTop,
-                endY = tongueTop + tongueHeight,
-            ),
-            topLeft = Offset(tongueCenterX - tongueWidth / 2f, tongueTop),
-            size = Size(tongueWidth, tongueHeight),
-        )
-    }
 }
 
 /**
