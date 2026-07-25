@@ -206,10 +206,18 @@ public record CombatState(
         return List.copyOf(groups);
     }
 
-    /** I combattenti che stanno giocando il turno corrente: uno solo, o piu' se in parita'. */
+    /**
+     * I combattenti che possono giocare il turno corrente: uno solo, o piu' se in
+     * parita'. I membri a 0 PF restano nel gruppo strutturale di iniziativa, ma non
+     * sono attori del turno: in questo modo {@code turnIndex} resta stabile e
+     * persistibile mentre l'interfaccia puo' comunque mostrarli come saltati.
+     */
     public List<String> currentCombatantIds() {
         List<List<String>> groups = turnGroups();
-        return turnIndex < 0 || turnIndex >= groups.size() ? List.of() : groups.get(turnIndex);
+        if (turnIndex < 0 || turnIndex >= groups.size()) return List.of();
+        return groups.get(turnIndex).stream()
+                .filter(id -> !combatants.get(id).defeated())
+                .toList();
     }
 
     /** Il primo combattente del turno corrente, per i chiamanti che ne attendono uno solo. */

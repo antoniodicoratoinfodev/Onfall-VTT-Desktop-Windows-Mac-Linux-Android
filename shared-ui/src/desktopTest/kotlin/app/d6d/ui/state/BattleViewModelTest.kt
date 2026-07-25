@@ -2,6 +2,7 @@ package app.d6d.ui.state
 
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.ConditionType
+import app.d6d.domain.combat.EventType
 import app.d6d.engine.CombatSession
 import app.d6d.ui.content.SampleEncounter
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -55,6 +56,115 @@ class BattleViewModelTest {
         model.selectedTargetId = ally
         assertNull(model.selectedTargetId)
         assertTrue(model.isParty(active) != model.isParty(model.effectiveTargetId()!!))
+    }
+
+    @Test
+    fun `cliccare un combattente lo ispeziona senza cambiare turno o bersaglio`() {
+        val model = viewModel()
+        val active = model.activeCombatantId!!
+        val inspected = (model.partyIds + model.enemyIds).first { it != active }
+
+        model.onCombatantClicked(inspected)
+
+        assertEquals(inspected, model.inspectedCombatantId)
+        assertEquals(active, model.activeCombatantId)
+        assertNull(model.selectedTargetId)
+        assertFalse(model.canUseAbilitiesOf(inspected))
+    }
+
+    @Test
+    fun `scegliere una capacita singola aspetta il clic sul bersaglio`() {
+        val model = viewModel()
+        val active = model.activeCombatantId!!
+        val ability = model.abilities(active).first { !it.isArea }
+        val revisionBefore = model.state.revision()
+        val eventsBefore = model.events.size
+
+        model.beginAbilityTargeting(ability.id())
+
+        assertEquals(ability.id(), model.singleTargeting?.abilityId)
+        assertEquals(active, model.singleTargeting?.attackerId)
+        assertEquals(revisionBefore, model.state.revision())
+        assertEquals(eventsBefore, model.events.size)
+        assertNull(model.selectedTargetId)
+    }
+
+    @Test
+    fun `un bersaglio invalido non usa il nemico predefinito e lascia attiva la mira`() {
+        val model = viewModel()
+        val active = model.activeCombatantId!!
+        val ally = (model.partyIds.takeIf { model.isParty(active) } ?: model.enemyIds)
+            .first { it != active }
+        val ability = model.abilities(active).first { !it.isArea }
+        val revisionBefore = model.state.revision()
+
+        model.beginAbilityTargeting(ability.id())
+        model.onCombatantClicked(ally)
+
+        assertNotNull(model.singleTargeting)
+        assertEquals(revisionBefore, model.state.revision())
+        assertNull(model.selectedTargetId)
+        assertNotNull(model.message)
+    }
+
+    @Test
+    fun `un bersaglio valido risolve esattamente la capacita selezionata`() {
+        val model = viewModel()
+        val active = model.activeCombatantId!!
+        val target = model.effectiveTargetId()!!
+        val ability = model.abilities(active).first { !it.isArea }
+        val eventsBefore = model.events.size
+
+        model.beginAbilityTargeting(ability.id())
+        model.onCombatantClicked(target)
+
+        assertNull(model.singleTargeting)
+        assertTrue(model.events.size > eventsBefore)
+        assertEquals(active, model.inspectedCombatantId)
+    }
+
+    @Test
+    fun `le capacita del combattente ispezionato fuori turno restano solo consultabili`() {
+        val model = viewModel()
+        val active = model.activeCombatantId!!
+        val inspected = (model.partyIds + model.enemyIds).first { it != active }
+        val ability = model.abilities(inspected).first()
+
+        model.inspectCombatant(inspected)
+        model.beginAbilityTargeting(ability.id())
+
+        assertNull(model.singleTargeting)
+        assertEquals(active, model.activeCombatantId)
+        assertFalse(model.canUseAbilitiesOf(inspected))
+        assertNotNull(model.message)
+    }
+
+    @Test
+    fun `un combattente a zero PF resta ispezionabile ma non puo usare capacita`() {
+        val model = viewModel()
+        val target = model.effectiveTargetId()!!
+
+        model.applyManualDamage(target, 999)
+        model.inspectCombatant(target)
+
+        assertTrue(model.combatant(target)!!.defeated())
+        assertEquals(target, model.inspectedCombatantId)
+        assertTrue(model.abilities(target).isNotEmpty())
+        assertFalse(model.canUseAbilitiesOf(target))
+    }
+
+    @Test
+    fun `il cambio turno annulla mira e ispezione esplicita`() {
+        val model = viewModel()
+        val active = model.activeCombatantId!!
+        val ability = model.abilities(active).first { !it.isArea }
+
+        model.beginAbilityTargeting(ability.id())
+        model.endTurn()
+
+        assertNull(model.singleTargeting)
+        assertNotEquals(active, model.activeCombatantId)
+        assertEquals(model.activeCombatantId, model.inspectedCombatantId)
     }
 
     @Test
@@ -225,6 +335,32 @@ class BattleViewModelTest {
         assertEquals("alleato-2", model.activeActorId)
         assertEquals("nemico", model.effectiveTargetId())
         assertNull(model.message)
+    }
+
+    @Test
+    fun `la mira simultanea conserva il proprietario esatto della capacita`() {
+        val party = SampleEncounter.party().take(2)
+        val enemy = SampleEncounter.enemies().first()
+        val session = CombatSession.create("mira-simultanea", 100L)
+        session.addCombatant("alleato-1", party[0])
+        session.addCombatant("alleato-2", party[1])
+        session.addCombatant("nemico", enemy)
+        session.setPartyCombatants(listOf("alleato-1", "alleato-2"))
+        listOf("alleato-1", "alleato-2", "nemico").forEach { session.setInitiative(it, 15) }
+        session.setInitiativeOrder(listOf("alleato-1", "alleato-2", "nemico"))
+        session.setSimultaneousTies(true)
+        session.markReady()
+        session.start()
+        val model = BattleViewModel(session)
+        model.selectActiveActor("alleato-2")
+        val ability = model.abilities("alleato-2").first { !it.isArea }
+
+        model.beginAbilityTargeting(ability.id())
+        model.onCombatantClicked("nemico")
+
+        val attack = model.events.last { it.type() == EventType.ATTACK_ROLLED }
+        assertEquals("alleato-2", attack.actorId())
+        assertNull(model.singleTargeting)
     }
 
     @Test

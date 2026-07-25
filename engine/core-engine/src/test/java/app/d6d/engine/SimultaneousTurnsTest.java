@@ -3,6 +3,8 @@ package app.d6d.engine;
 import app.d6d.domain.combat.ActivationCost;
 import app.d6d.domain.combat.AttackRequest;
 import app.d6d.domain.combat.CombatState;
+import app.d6d.domain.combat.DamageComponent;
+import app.d6d.domain.combat.DamageType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -64,6 +66,39 @@ class SimultaneousTurnsTest {
         CombatState state = session.currentState();
         assertEquals(List.of("goblin", "wolf"), state.currentCombatantIds());
         assertTrue(state.currentTurnIsSimultaneous());
+    }
+
+    @Test
+    void nelGruppoMistoIlMembroAZeroVieneSaltatoMaIlGruppoRestaStabile() {
+        CombatSession session = tied(true);
+        session.applyDamage("hero", "goblin",
+                List.of(new DamageComponent(DamageType.FORCE, 100)), false);
+
+        session.endTurn();
+
+        CombatState state = session.currentState();
+        assertEquals(List.of("goblin", "wolf"), state.turnGroups().get(1));
+        assertEquals(List.of("wolf"), state.currentCombatantIds());
+        assertFalse(state.currentTurnIsSimultaneous());
+        assertThrows(
+                CombatRuleException.class,
+                () -> session.spendAction("goblin", ActivationCost.REACTION));
+    }
+
+    @Test
+    void unInteroGruppoSimultaneoAZeroVieneSaltatoConUnSoloCambioRound() {
+        CombatSession session = tied(true);
+        session.applyDamage("hero", "goblin",
+                List.of(new DamageComponent(DamageType.FORCE, 100)), false);
+        session.applyDamage("hero", "wolf",
+                List.of(new DamageComponent(DamageType.FORCE, 100)), false);
+
+        session.endTurn();
+
+        CombatState state = session.currentState();
+        assertEquals(2, state.round());
+        assertEquals(List.of("hero"), state.currentCombatantIds());
+        assertEquals(List.of("goblin", "wolf"), state.turnGroups().get(1));
     }
 
     @Test

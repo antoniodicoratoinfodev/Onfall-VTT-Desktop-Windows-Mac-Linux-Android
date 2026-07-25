@@ -62,7 +62,12 @@ fun BattleToolsDialog(
 
     val combatantIds = viewModel.partyIds + viewModel.enemyIds
     var targetId by remember(viewModel.sessionGeneration) {
-        mutableStateOf(viewModel.effectiveTargetId() ?: viewModel.activeActorId ?: combatantIds.firstOrNull())
+        mutableStateOf(
+            viewModel.selectedTargetId
+                ?: viewModel.inspectedCombatantId
+                ?: viewModel.activeActorId
+                ?: combatantIds.firstOrNull(),
+        )
     }
     if (targetId !in combatantIds) targetId = combatantIds.firstOrNull()
 

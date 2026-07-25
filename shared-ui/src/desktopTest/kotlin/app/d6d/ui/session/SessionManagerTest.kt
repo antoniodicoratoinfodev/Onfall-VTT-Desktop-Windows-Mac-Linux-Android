@@ -88,19 +88,23 @@ class SessionManagerTest {
         val battle = battle()
         val manager = manager(battle)
         val chosen = battle.enemyIds.last()
+        val inspected = (battle.partyIds + battle.enemyIds).first { it != battle.activeCombatantId }
         battle.selectedTargetId = chosen
+        battle.inspectCombatant(inspected)
         battle.rollMode = D20Mode.DISADVANTAGE
         battle.editMode = true
         battle.mapEditMode = true
 
         manager.save("con presentazione")
         battle.selectedTargetId = null
+        battle.inspectCombatant(battle.activeCombatantId!!)
         battle.rollMode = D20Mode.ADVANTAGE
         battle.editMode = false
         battle.mapEditMode = false
         manager.load(manager.sessions.first())
 
         assertEquals(chosen, battle.selectedTargetId)
+        assertEquals(inspected, battle.inspectedCombatantId)
         assertEquals(D20Mode.DISADVANTAGE, battle.rollMode)
         assertTrue(battle.editMode)
         assertTrue(battle.mapEditMode)

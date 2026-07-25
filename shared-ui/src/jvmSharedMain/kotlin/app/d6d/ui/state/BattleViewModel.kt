@@ -99,6 +99,18 @@ class BattleViewModel(
 
     private var activeActorSelection by mutableStateOf<String?>(null)
 
+    /** Combattente di cui la barra mostra informazioni e capacita', senza cambiarne il turno. */
+    private var inspectionSelection by mutableStateOf<String?>(null)
+
+    /**
+     * Capacita' singola in attesa che l'utente scelga esplicitamente il bersaglio.
+     *
+     * Conserva anche l'attore: in un turno simultaneo non si deve rischiare di
+     * lanciare la capacita' del secondo membro usando il primo.
+     */
+    var singleTargeting by mutableStateOf<SingleTargeting?>(null)
+        private set
+
     var rollMode by mutableStateOf(D20Mode.NORMAL)
 
     var floating by mutableStateOf<Map<String, List<FloatingNumber>>>(emptyMap())
@@ -156,7 +168,11 @@ class BattleViewModel(
     /** Alias storico usato dalle schermate esistenti. */
     val activeCombatantId: String? get() = activeActorId
 
-    /** Tutti i combattenti del turno corrente: piu' di uno se hanno pareggiato l'iniziativa. */
+    /**
+     * Tutti i combattenti che possono agire nel turno corrente: piu' di uno se
+     * hanno pareggiato l'iniziativa. I membri a 0 PF restano nella striscia, ma il
+     * motore li esclude da questo elenco.
+     */
     val activeCombatantIds: List<String> get() = state.currentCombatantIds()
 
     val isSimultaneousTurn: Boolean get() = state.currentTurnIsSimultaneous()
@@ -181,9 +197,54 @@ class BattleViewModel(
             message = "Il combattente scelto non appartiene al turno corrente."
             return
         }
+        if (activeActorId != combatantId) {
+            singleTargeting = null
+            areaTargeting = null
+            pendingArea = null
+            targetSelection = null
+        }
         activeActorSelection = combatantId
+        inspectionSelection = combatantId
         targetSelection = sanitizeTarget(targetSelection)
         message = null
+    }
+
+    /** Combattente mostrato nei comandi; in assenza di una scelta segue il turno reale. */
+    val inspectedCombatantId: String?
+        get() = inspectionSelection?.takeIf { combatant(it) != null } ?: activeActorId
+
+    /** Ispeziona una scheda senza trasformarla ne' nell'attore del turno ne' nel bersaglio. */
+    fun inspectCombatant(combatantId: String) {
+        if (combatant(combatantId) == null) return
+        if (combatantId in activeCombatantIds) {
+            // In un pareggio simultaneo scegliere un membro attivo significa anche
+            // scegliere quale dei due sta usando i propri comandi.
+            activeActorSelection = combatantId
+        }
+        inspectionSelection = combatantId
+        message = null
+    }
+
+    /** Vero soltanto quando le capacita' mostrate appartengono all'attore che puo' agire ora. */
+    fun canUseAbilitiesOf(combatantId: String): Boolean =
+        status == CombatStatus.ACTIVE &&
+            combatantId == activeActorId &&
+            combatant(combatantId)?.defeated() == false
+
+    /**
+     * Punto unico per tutti i clic su una creatura.
+     *
+     * Fuori dalla mira il clic ispeziona. Durante la mira conferma invece il
+     * bersaglio, senza cambiare la scheda che si sta guardando.
+     */
+    fun onCombatantClicked(combatantId: String) {
+        when {
+            singleTargeting != null -> confirmSingleTarget(combatantId)
+            areaTargeting != null -> {
+                message = "Stai mirando un'area: scegli un punto sulla mappa oppure annulla."
+            }
+            else -> inspectCombatant(combatantId)
+        }
     }
 
     /** Vero se il combattente e' fra quelli che stanno giocando ora. */
@@ -210,6 +271,10 @@ class BattleViewModel(
 
     fun initiativeScore(id: String): Int? = state.initiativeScores()[id]
 
+    /** Almeno un combattente puo' ancora ricevere un turno. */
+    val hasStandingCombatants: Boolean
+        get() = state.combatants().values.any { !it.defeated() }
+
     /** Bersaglio corrente, ripiegando sul primo avversario ancora in piedi. */
     fun effectiveTargetId(): String? {
         val active = activeActorId ?: return null
@@ -229,6 +294,11 @@ class BattleViewModel(
             message = "Nessun bersaglio valido."
             return
         }
+        attack(attacker, target, abilityId)
+    }
+
+    /** Esegue un attacco sul bersaglio esplicito, senza alcun ripiego automatico. */
+    private fun attack(attacker: String, target: String, abilityId: String) {
         command {
             val result = session.attack(AttackRequest.digital(attacker, target, abilityId, rollMode))
             val damage = result.damageResult()
@@ -256,6 +326,72 @@ class BattleViewModel(
         }
     }
 
+    /**
+     * Seleziona una capacita' utilizzabile.
+     *
+     * Le aree passano alla mira sulla griglia; le capacita' singole aspettano il
+     * clic esplicito su una creatura. Se la scheda ispezionata non e' davvero in
+     * turno non parte alcuna mira.
+     */
+    fun beginAbilityTargeting(abilityId: String) {
+        val attacker = activeActorId ?: run {
+            message = "Nessun attore di turno."
+            return
+        }
+        if (inspectedCombatantId != attacker || !canUseAbilitiesOf(attacker)) {
+            message = "Le capacità della scheda in esame sono solo consultabili: non è il suo turno."
+            return
+        }
+        val ability = abilities(attacker).firstOrNull { it.id() == abilityId } ?: run {
+            message = "Capacità non trovata."
+            return
+        }
+        if (ability.isArea) {
+            beginAreaTargeting(abilityId)
+            return
+        }
+
+        areaTargeting = null
+        pendingArea = null
+        targetSelection = null
+        singleTargeting = SingleTargeting(ability.id(), attacker, ability.name())
+        message = "Scegli il bersaglio di «${ability.name()}». Annulla per tornare all'ispezione."
+    }
+
+    /** Annulla la scelta del bersaglio di una capacita' singola. */
+    fun cancelSingleTargeting() {
+        singleTargeting = null
+        message = null
+    }
+
+    /** Conferma il bersaglio senza mai sostituirlo con il primo nemico disponibile. */
+    private fun confirmSingleTarget(targetId: String) {
+        val targeting = singleTargeting ?: return
+        if (targeting.attackerId !in activeCombatantIds || activeActorId != targeting.attackerId) {
+            singleTargeting = null
+            message = "Il turno è cambiato: seleziona di nuovo la capacità."
+            return
+        }
+        if (sanitizeTargetFor(targeting.attackerId, targetId) == null) {
+            message = when {
+                targetId == targeting.attackerId -> "L'attore non può essere il proprio bersaglio."
+                combatant(targetId)?.defeated() == true -> "Il bersaglio è già a 0 punti ferita."
+                combatant(targetId) != null &&
+                    isParty(targetId) == isParty(targeting.attackerId) ->
+                    "Questa capacità ostile richiede un avversario."
+                else -> "Bersaglio non valido."
+            }
+            return
+        }
+
+        targetSelection = targetId
+        val revisionBefore = state.revision()
+        attack(targeting.attackerId, targetId, targeting.abilityId)
+        if (state.revision() != revisionBefore) {
+            singleTargeting = null
+        }
+    }
+
     // --- incantesimi ad area ---------------------------------------------------------
 
     /**
@@ -269,8 +405,13 @@ class BattleViewModel(
             message = "Nessun attore di turno."
             return
         }
+        if (inspectedCombatantId != caster || !canUseAbilitiesOf(caster)) {
+            message = "Le capacità della scheda in esame sono solo consultabili: non è il suo turno."
+            return
+        }
         val ability = abilities(caster).firstOrNull { it.id() == abilityId } ?: return
         if (!ability.isArea) return
+        singleTargeting = null
         pendingArea = null
         message = "Mira «${ability.name()}»: clicca sulla mappa per centrare l'area. Esc per annullare."
         areaTargeting = AreaTargeting(abilityId, caster, ability.name(), ability.areaRadiusFeet(), ability.rangeFeet())
@@ -280,6 +421,7 @@ class BattleViewModel(
     fun cancelAreaTargeting() {
         areaTargeting = null
         pendingArea = null
+        message = null
     }
 
     /**
@@ -687,12 +829,13 @@ class BattleViewModel(
      * Stato di presentazione da salvare accanto al combattimento.
      *
      * Sono le scelte del tavolo che il motore non conosce: chi e' inquadrato come
-     * bersaglio, come si stanno tirando i dadi, e l'ingombro dei segnaposti non
-     * ancora collocati sulla mappa.
+     * bersaglio, chi si sta soltanto ispezionando, come si tirano i dadi e
+     * l'ingombro dei segnaposti non ancora collocati sulla mappa.
      */
     fun presentationState(): Map<String, String> = buildMap {
         selectedTargetId?.let { put("selectedTargetId", it) }
         activeActorSelection?.takeIf { it in activeCombatantIds }?.let { put("activeActorId", it) }
+        inspectionSelection?.takeIf { combatant(it) != null }?.let { put("inspectedCombatantId", it) }
         put("rollMode", rollMode.name)
         put("encounterMode", encounterMode.name)
         put("editMode", editMode.toString())
@@ -710,14 +853,19 @@ class BattleViewModel(
         floating = emptyMap()
         areaTargeting = null
         pendingArea = null
+        singleTargeting = null
         message = null
         editMode = presentation["editMode"] == "true"
         mapEditMode = editMode && presentation["mapEditMode"] == "true"
         activeActorSelection = null
+        inspectionSelection = null
         targetSelection = null
         sync(forceTurnReset = true)
         presentation["activeActorId"]?.takeIf { it in activeCombatantIds }?.let {
             activeActorSelection = it
+        }
+        presentation["inspectedCombatantId"]?.takeIf { combatant(it) != null }?.let {
+            inspectionSelection = it
         }
         selectedTargetId = presentation["selectedTargetId"]
         rollMode = presentation["rollMode"]
@@ -801,19 +949,34 @@ class BattleViewModel(
         events = session.auditTrail()
         if (forceTurnReset || previousTurn != turnIdentity(updated)) {
             activeActorSelection = null
+            inspectionSelection = null
             targetSelection = null
+            singleTargeting = null
+            areaTargeting = null
+            pendingArea = null
         } else {
             activeActorSelection = activeActorSelection?.takeIf { it in activeCombatantIds }
+            inspectionSelection = inspectionSelection?.takeIf { combatant(it) != null }
             targetSelection = sanitizeTarget(targetSelection)
+            singleTargeting = singleTargeting?.takeIf {
+                it.attackerId == activeActorId &&
+                    it.attackerId in activeCombatantIds &&
+                    combatant(it.attackerId)?.defeated() == false &&
+                    abilities(it.attackerId).any { ability -> ability.id() == it.abilityId }
+            }
         }
     }
 
     private fun sanitizeTarget(candidate: String?): String? {
         val active = activeActorId ?: return null
+        return sanitizeTargetFor(active, candidate)
+    }
+
+    private fun sanitizeTargetFor(attacker: String, candidate: String?): String? {
         return candidate?.takeIf {
-            it != active &&
+            it != attacker &&
                 combatant(it)?.defeated() == false &&
-                isParty(it) != isParty(active)
+                isParty(it) != isParty(attacker)
         }
     }
 
@@ -837,6 +1000,13 @@ data class AreaTargeting(
     val name: String,
     val radiusFeet: Int,
     val rangeFeet: Int,
+)
+
+/** Capacita' singola selezionata, in attesa del clic esplicito sul bersaglio. */
+data class SingleTargeting(
+    val abilityId: String,
+    val attackerId: String,
+    val name: String,
 )
 
 /** Un bersaglio nell'area e l'esito, ancora modificabile, del suo tiro salvezza. */

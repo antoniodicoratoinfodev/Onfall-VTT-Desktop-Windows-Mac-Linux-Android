@@ -17,7 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
@@ -81,8 +80,9 @@ private fun TurnChip(
 ) {
     val simultaneous = group.size > 1
     val allDown = group.all { viewModel.combatant(it)?.defeated() == true }
-    val selectedTarget = viewModel.effectiveTargetId()
+    val selectedTarget = viewModel.selectedTargetId
     val targeted = selectedTarget != null && selectedTarget in group
+    val inspected = viewModel.inspectedCombatantId in group
     val names = group.joinToString(" + ") { viewModel.name(it) }
 
     // Un gruppo misto (alleati e nemici insieme) non ha un colore di fazione unico.
@@ -95,24 +95,32 @@ private fun TurnChip(
 
     val shape = RoundedCornerShape(7.dp)
     val outline = when {
+        allDown -> Modifier.border(1.dp, Palette.TextFaint.copy(alpha = 0.7f), shape)
         current -> Modifier.border(1.5.dp, Palette.GoldBright, shape)
         editing -> Modifier.border(1.dp, Palette.Gold.copy(alpha = 0.4f), shape)
         targeted -> Modifier.border(1.5.dp, accent.copy(alpha = 0.9f), shape)
+        inspected -> Modifier.border(1.5.dp, Palette.Text.copy(alpha = 0.8f), shape)
         else -> Modifier.border(1.dp, Palette.Line, shape)
     }
     val chipState = buildList {
         if (current) add("Turno corrente")
         if (targeted) add("Bersaglio selezionato")
+        if (inspected) add("Scheda in esame")
         if (simultaneous) add("Turno simultaneo")
-        if (allDown) add("Tutti sconfitti")
+        if (allDown) add("Tutti a zero punti ferita, turno saltato")
     }.ifEmpty { listOf("Turno successivo") }.joinToString(". ")
 
-    // In modifica il tocco imposta il turno corrente; altrimenti seleziona il bersaglio.
-    val onChipClick: () -> Unit = if (editing) {
-        { viewModel.setCurrentTurn(group.first()) }
-    } else {
-        { viewModel.selectedTargetId = group.first() }
+    // La mira ha precedenza sulla modifica: dopo aver scelto un'abilita', il clic
+    // deve sempre significare "questo e' il bersaglio". Fuori dalla mira ispeziona.
+    fun onMemberClick(combatantId: String) {
+        when {
+            viewModel.singleTargeting != null -> viewModel.onCombatantClicked(combatantId)
+            editing -> viewModel.setCurrentTurn(combatantId)
+            else -> viewModel.onCombatantClicked(combatantId)
+        }
     }
+    val primaryId = group.firstOrNull { viewModel.combatant(it)?.defeated() == false } ?: group.first()
+    val onChipClick: () -> Unit = { onMemberClick(primaryId) }
 
     Column(
         Modifier
@@ -120,12 +128,14 @@ private fun TurnChip(
             .widthIn(max = 220.dp)
             .background(
                 when {
+                    allDown -> SolidColor(Palette.SurfaceHigh)
                     // Il turno corrente e' una velatura d'oro che sfuma verso il
                     // basso: acceso in cima, quieto sotto, come una lama di luce.
                     current -> Brush.verticalGradient(
                         listOf(Palette.Gold.copy(alpha = 0.24f), Palette.Gold.copy(alpha = 0.08f)),
                     )
                     targeted -> SolidColor(accent.copy(alpha = 0.1f))
+                    inspected -> SolidColor(Palette.Text.copy(alpha = 0.06f))
                     else -> SolidColor(Palette.Surface)
                 },
                 shape,
@@ -134,45 +144,65 @@ private fun TurnChip(
             .semantics {
                 contentDescription = "Turno di $names"
                 stateDescription = chipState
-                selected = targeted
+                selected = inspected
             }
             .clickable(
                 role = Role.Button,
-                onClickLabel = if (editing) {
+                onClickLabel = if (viewModel.singleTargeting != null) {
+                    "Scegli ${viewModel.name(primaryId)} come bersaglio"
+                } else if (editing) {
                     "Rendi corrente il turno di ${viewModel.name(group.first())}"
                 } else {
-                    "Seleziona ${viewModel.name(group.first())} come bersaglio"
+                    "Mostra capacita' e informazioni di ${viewModel.name(primaryId)}"
                 },
                 onClick = onChipClick,
             )
-            .padding(horizontal = 9.dp, vertical = 5.dp)
-            .alpha(if (allDown) 0.45f else 1f),
+            .padding(horizontal = 9.dp, vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = names,
-                color = when {
-                    current -> Palette.Text
-                    targeted -> accent
-                    else -> Palette.TextMuted
-                },
-                fontWeight = if (current) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            group.forEachIndexed { index, id ->
+                if (index > 0) {
+                    Text("+", color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
+                }
+                val memberDown = viewModel.combatant(id)?.defeated() == true
+                Text(
+                    text = viewModel.name(id),
+                    color = when {
+                        memberDown -> Palette.TextFaint
+                        allDown -> Palette.TextFaint
+                        current -> Palette.Text
+                        selectedTarget == id -> accent
+                        viewModel.inspectedCombatantId == id -> Palette.Text
+                        else -> Palette.TextMuted
+                    },
+                    fontWeight = if (current && !memberDown) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = if (simultaneous) {
+                        Modifier.clickable(
+                            role = Role.Button,
+                            onClickLabel = "Seleziona ${viewModel.name(id)}",
+                        ) { onMemberClick(id) }
+                    } else {
+                        Modifier
+                    },
+                )
+            }
         }
         Text(
             text = buildString {
                 append("Iniziativa ${viewModel.initiativeScore(group.first()) ?: "—"}")
                 if (simultaneous) append(" · insieme")
                 if (targeted) append(" · bersaglio")
+                if (allDown) append(" · 0 PF · turno saltato")
             },
             color = when {
+                allDown -> Palette.TextFaint
                 current -> Palette.Gold
                 targeted -> accent
                 else -> Palette.TextFaint
@@ -186,14 +216,20 @@ private fun TurnChip(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                MoveButton("◀", enabled = canMoveEarlier) { viewModel.moveTurn(group.first(), -1) }
+                MoveButton("◀", enabled = canMoveEarlier, muted = allDown) {
+                    viewModel.moveTurn(group.first(), -1)
+                }
                 Text(
-                    text = if (current) "corrente" else "rendi corrente",
-                    color = if (current) Palette.GoldBright else Palette.TextMuted,
+                    text = if (allDown) "turno saltato" else if (current) "corrente" else "rendi corrente",
+                    color = if (allDown) Palette.TextFaint else if (current) Palette.GoldBright else Palette.TextMuted,
                     style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.clickable(onClick = onChipClick).padding(horizontal = 4.dp, vertical = 1.dp),
+                    modifier = Modifier
+                        .clickable(enabled = !allDown, onClick = onChipClick)
+                        .padding(horizontal = 4.dp, vertical = 1.dp),
                 )
-                MoveButton("▶", enabled = canMoveLater) { viewModel.moveTurn(group.first(), +1) }
+                MoveButton("▶", enabled = canMoveLater, muted = allDown) {
+                    viewModel.moveTurn(group.first(), +1)
+                }
             }
         }
     }
@@ -201,8 +237,8 @@ private fun TurnChip(
 
 /** Comando minuto per spostare un turno nella coda. */
 @Composable
-private fun MoveButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
-    val tint = if (enabled) Palette.Gold else Palette.TextFaint
+private fun MoveButton(glyph: String, enabled: Boolean, muted: Boolean = false, onClick: () -> Unit) {
+    val tint = if (enabled && !muted) Palette.Gold else Palette.TextFaint
     Text(
         text = glyph,
         color = tint,

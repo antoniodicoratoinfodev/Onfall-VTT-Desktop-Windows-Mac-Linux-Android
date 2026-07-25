@@ -54,25 +54,9 @@ engine's Java classes directly.
 `core-engine` knows nothing about texts, classes, or monsters: the rules live in the engine, the
 content in separate packages.
 
-## Build and verification
-
-For anyone reviewing the code who wants to check that it compiles and that the tests pass. A JDK 17
-or later is required (verified with JDK 26); the Android SDK is needed only for the APK, and its path
-goes in `local.properties`.
-
-```bash
-# compile and run the whole test suite
-./gradlew test :shared-ui:desktopTest
-
-# check that the Android APK builds
-./gradlew :android-app:assembleDebug
-```
-
-Running the application for use or for play is reserved to the author. See the license.
 
 ## Run
 
-For the author's own use.
 
 ### Desktop
 
@@ -109,8 +93,6 @@ Then launch Onfall from the device's or emulator's app launcher.
 may not be run for use, forked, redistributed, or reused in part, not even single fragments, in other
 projects. The full terms are in [`LICENSE.md`](LICENSE.md).
 
-The demo material included (`SampleEncounter`) is **entirely original**. No stat block, text, name,
-or illustration comes from the commercial manuals. See `NOTICE-SRD.md`.
 
 ## Status
 

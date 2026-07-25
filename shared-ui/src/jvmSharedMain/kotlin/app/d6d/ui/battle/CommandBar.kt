@@ -193,8 +193,8 @@ private fun AbilityDefinition.damageSummary(): String =
  * Scheda di una capacita': nome e costo in testa, poi le voci che contano — quanto
  * si colpisce, a che gittata, e quanto danno fa e di che tipo — allineate come un
  * piccolo blocco statistiche, cosi' si leggono a colpo d'occhio invece di stare
- * ammucchiate in una riga sola. Tutta la scheda e' il tasto: cliccarla attacca (o,
- * per le capacita' a risoluzione manuale, apre le regole).
+ * ammucchiate in una riga sola. Tutta la scheda e' il tasto: cliccarla avvia la
+ * scelta del bersaglio (o, per le capacita' a risoluzione manuale, apre le regole).
  */
 @Composable
 private fun AbilityCard(
@@ -323,8 +323,9 @@ private fun AbilityStat(label: String, value: String, enabled: Boolean) {
 /**
  * Comandi del turno.
  *
- * Le capacita' vengono lette dallo snapshot del combattente attivo: e' il motore
- * a decidere se un'azione e' legale, qui si mostra soltanto cio' che possiede.
+ * Le capacita' vengono lette dallo snapshot del combattente ispezionato. Solo
+ * quando coincide con l'attore reale del turno diventano interattive; negli altri
+ * casi restano una consultazione grigia.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -341,9 +342,11 @@ fun CommandBar(
     val collapsed = layout.commandsCollapsed
     val scrollState = rememberScrollState()
     val activeId = viewModel.activeActorId
-    val abilities = activeId?.let { viewModel.abilities(it) }.orEmpty()
-    val budget = activeId?.let { viewModel.budget(it) }
+    val inspectedId = viewModel.inspectedCombatantId
+    val abilities = inspectedId?.let { viewModel.abilities(it) }.orEmpty()
+    val budget = inspectedId?.let { viewModel.budget(it) }
     val combatActive = viewModel.status == CombatStatus.ACTIVE
+    val displayedActorCanAct = inspectedId?.let(viewModel::canUseAbilitiesOf) == true
 
     BattleToolsDialog(viewModel, open = toolsOpen, onDismiss = { toolsOpen = false })
     BattleItemsDialog(items = sampleBattleItems, open = itemsOpen, onDismiss = { itemsOpen = false })
@@ -385,11 +388,28 @@ fun CommandBar(
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 activeId?.let { Eyebrow("Turno: ${viewModel.name(it)}", Palette.Gold) }
-                viewModel.effectiveTargetId()?.let {
+                inspectedId?.takeIf { it != activeId }?.let {
+                    Eyebrow("In esame: ${viewModel.name(it)}", Palette.Party)
+                }
+                viewModel.selectedTargetId?.let {
                     Text(
                         text = "Bersaglio: ${viewModel.name(it)}",
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                viewModel.singleTargeting?.let { targeting ->
+                    Text(
+                        text = "Scegli bersaglio per «${targeting.name}»",
+                        color = Palette.GoldBright,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    GameButton(
+                        label = "Annulla mira",
+                        accent = Palette.TextMuted,
+                        dense = true,
+                        onClick = viewModel::cancelSingleTargeting,
                     )
                 }
             }
@@ -431,6 +451,19 @@ fun CommandBar(
             }
         }
 
+        if (inspectedId != null && !displayedActorCanAct) {
+            Text(
+                text = if (viewModel.combatant(inspectedId)?.defeated() == true) {
+                    "Solo consultazione · 0 PF, il suo turno viene saltato."
+                } else {
+                    "Solo consultazione · non è il turno di ${viewModel.name(inspectedId)}."
+                },
+                color = Palette.TextFaint,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
         if (abilities.isEmpty()) {
             Text(
                 text = "Nessuna capacità disponibile per questo combattente.",
@@ -446,7 +479,7 @@ fun CommandBar(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 abilities.forEach { ability ->
-                    val affordable = combatActive && when (ability.activationCost()) {
+                    val affordable = displayedActorCanAct && when (ability.activationCost()) {
                         ActivationCost.ACTION -> budget?.actionAvailable() ?: false
                         ActivationCost.BONUS_ACTION -> budget?.bonusActionAvailable() ?: false
                         ActivationCost.REACTION -> budget?.reactionAvailable() ?: false
@@ -456,7 +489,7 @@ fun CommandBar(
                     AbilityCard(
                         ability = ability,
                         manual = manual,
-                        enabled = if (manual) combatActive else affordable,
+                        enabled = if (manual) displayedActorCanAct else affordable,
                         onClick = {
                             if (manual) {
                                 viewModel.showMessage(
@@ -464,12 +497,11 @@ fun CommandBar(
                                         "«${ability.name()}» richiede una risoluzione manuale al tavolo."
                                     },
                                 )
-                            } else if (ability.isArea) {
-                                // Non colpisce subito: entra in mira, l'area segue il
-                                // mouse e un clic sulla mappa la fa detonare.
-                                viewModel.beginAreaTargeting(ability.id())
                             } else {
-                                viewModel.attack(ability.id())
+                                // Un'area chiede un punto sulla griglia; una capacita'
+                                // singola chiede una creatura. Nessuna delle due usa
+                                // piu' un bersaglio implicito.
+                                viewModel.beginAbilityTargeting(ability.id())
                             }
                         },
                     )
@@ -500,7 +532,7 @@ fun CommandBar(
                         label = mode.italianLabel,
                         accent = if (selected) Palette.TextMuted else Palette.TextFaint,
                         selected = selected,
-                        enabled = combatActive,
+                        enabled = displayedActorCanAct,
                         dense = true,
                         onClick = {
                             viewModel.rollMode = if (selected) D20Mode.NORMAL else mode
@@ -524,9 +556,9 @@ fun CommandBar(
             }
 
             GameButton(
-                label = "Fine turno",
+                label = if (activeId == null) "Salta turno" else "Fine turno",
                 accent = Palette.Heal,
-                enabled = combatActive,
+                enabled = combatActive && viewModel.hasStandingCombatants,
                 primary = true,
                 dense = true,
                 onClick = { viewModel.endTurn() },

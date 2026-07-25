@@ -137,13 +137,19 @@ fun BattleStage(
 @Composable
 internal fun BoxScope.FloatingCombatantPlates(viewModel: BattleViewModel) {
     val layout = LocalUiLayout.current
+    val inspectedId = viewModel.inspectedCombatantId?.takeIf { it != viewModel.activeCombatantId }
+    val topId = inspectedId ?: viewModel.selectedTargetId
 
-    viewModel.effectiveTargetId()?.let { targetId ->
+    topId?.let { combatantId ->
         FloatingPanel(Alignment.TopEnd, layout.targetPlate, { layout.targetPlate = it }) {
             StagePlate(
                 viewModel,
-                targetId,
-                "Bersaglio selezionato",
+                combatantId,
+                if (inspectedId != null) {
+                    if (viewModel.selectedTargetId == combatantId) "In esame · bersaglio" else "In esame · consultazione"
+                } else {
+                    "Bersaglio selezionato"
+                },
                 scale = layout.targetPlateScale,
                 onScaleChange = { layout.targetPlateScale = it },
             )
@@ -257,7 +263,7 @@ internal fun FloatingPanel(
 private fun MapLegend(viewModel: BattleViewModel, modifier: Modifier = Modifier) {
     val grid = viewModel.battleMap.grid()
     val active = viewModel.activeCombatantId
-    val target = viewModel.effectiveTargetId()
+    val target = viewModel.selectedTargetId
     val distance = if (active != null && target != null) viewModel.distanceFeet(active, target) else null
     val movement = active?.let { viewModel.budget(it)?.movementRemainingFeet() }
     val description = buildString {
@@ -314,13 +320,20 @@ private fun StagePlate(
     val combatant = viewModel.combatant(combatantId) ?: return
     val snapshot = combatant.snapshot()
     val faction = if (viewModel.isParty(combatantId)) Faction.PARTY else Faction.ENEMY
-    val isTarget = viewModel.effectiveTargetId() == combatantId
+    val isTarget = viewModel.selectedTargetId == combatantId
     val isActive = viewModel.isActive(combatantId)
-    val accent = if (isTarget) faction.color else Palette.Gold
+    val isInspected = viewModel.inspectedCombatantId == combatantId && !isActive
+    val accent = when {
+        isTarget -> faction.color
+        isActive -> Palette.Gold
+        isInspected -> Palette.TextMuted
+        else -> Palette.Gold
+    }
     val state = buildString {
         append("${combatant.currentHitPoints()} punti ferita su ${snapshot.maxHitPoints()}.")
         if (isTarget) append(" Bersaglio selezionato.")
         if (isActive) append(" Turno attivo.")
+        if (isInspected) append(" Scheda in esame, solo consultazione.")
         if (combatant.defeated()) append(" Sconfitto.")
     }
 

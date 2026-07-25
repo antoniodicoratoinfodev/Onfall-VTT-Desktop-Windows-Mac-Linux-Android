@@ -43,6 +43,23 @@ class ConditionsAndConcentrationTest {
     }
 
     @Test
+    void aSkippedZeroHitPointTurnStillAdvancesConditionBoundaries() {
+        CombatSession session = CombatFixtures.active(301L);
+        session.applyCondition("goblin", new ConditionInstance(
+                "poison-skipped", ConditionType.POISONED, "hero", "focus-1", 1,
+                ConditionDuration.rounds(1), "", ""));
+        session.applyDamage("hero", "goblin",
+                List.of(new DamageComponent(DamageType.FORCE, 100)), false);
+
+        session.endTurn();
+
+        assertTrue(session.currentState().combatant("goblin").conditions().isEmpty());
+        assertTrue(session.auditTrail().stream().anyMatch(event ->
+                event.type() == EventType.CONDITION_EXPIRED
+                        && event.targetId().equals("goblin")));
+    }
+
+    @Test
     void sourceTurnDurationsExpireOnTheConfiguredBoundary() {
         CombatSession session = CombatFixtures.active(31L);
         session.applyCondition("goblin", new ConditionInstance(

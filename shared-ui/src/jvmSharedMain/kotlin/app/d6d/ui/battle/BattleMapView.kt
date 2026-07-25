@@ -690,8 +690,9 @@ private fun DropHighlight(dropTarget: TokenPlacementDrag, cellSize: Dp, mapOffse
 }
 
 /**
- * Un tocco su una casella libera muove il combattente attivo; su un segnaposto
- * seleziona quel combattente, esattamente come cliccarlo nella barra laterale.
+ * Un tocco su una casella libera muove il combattente attivo; su un segnaposto lo
+ * ispeziona. Se prima e' stata scelta una capacita', quel medesimo tocco conferma
+ * invece il bersaglio esplicito.
  */
 private fun onCellTapped(viewModel: BattleViewModel, column: Int, row: Int) {
     // Un tocco proprio sul bordo destro o inferiore cade fuori griglia per un pixel:
@@ -707,15 +708,25 @@ private fun onCellTapped(viewModel: BattleViewModel, column: Int, row: Int) {
     }
 
     val occupant = viewModel.occupantAt(column, row)
+    if (viewModel.singleTargeting != null) {
+        if (occupant == null) {
+            viewModel.showMessage("Scegli una creatura come bersaglio, oppure annulla la mira.")
+        } else {
+            viewModel.onCombatantClicked(occupant)
+        }
+        return
+    }
     if (occupant != null) {
-        viewModel.selectedTargetId = occupant
+        viewModel.onCombatantClicked(occupant)
         return
     }
     val active = viewModel.activeCombatantId ?: return
     if (viewModel.editMode) {
         viewModel.reposition(active, column, row)
-    } else {
+    } else if (viewModel.inspectedCombatantId == active) {
         viewModel.move(active, column, row)
+    } else {
+        viewModel.showMessage("Stai consultando un altro combattente: seleziona quello di turno per muoverlo.")
     }
 }
 
@@ -824,7 +835,8 @@ private fun MapToken(
     val snapshot = combatant.snapshot()
     val faction = if (viewModel.isParty(id)) Faction.PARTY else Faction.ENEMY
     val active = viewModel.isActive(id)
-    val targeted = viewModel.effectiveTargetId() == id
+    val targeted = viewModel.selectedTargetId == id
+    val inspected = viewModel.inspectedCombatantId == id
     val defeated = combatant.defeated()
 
     val side = cellSize * placement.squaresPerSide()
@@ -888,6 +900,7 @@ private fun MapToken(
                     append("${combatant.currentHitPoints()} su ${snapshot.maxHitPoints()} punti ferita")
                     if (active) append(", turno attivo")
                     if (targeted) append(", bersaglio selezionato")
+                    if (inspected) append(", scheda in esame")
                     if (defeated) append(", fuori combattimento")
                 }
             }
@@ -895,13 +908,24 @@ private fun MapToken(
             // comporre la scena. Modalità normale: solo il combattente di turno si
             // trascina, e lo spostamento vero passa dal motore, quindi consuma il
             // budget e non supera il raggio percorribile. Gli altri segnaposti non
-            // si trascinano: il clic li seleziona come bersaglio, come prima.
-            .pointerInput(id, placement.origin(), cellSize, viewModel.editMode, active) {
-                if (!viewModel.editMode && !active) return@pointerInput
+            // si trascinano: il clic li ispeziona, oppure li conferma come bersaglio
+            // quando una capacita' e' gia' in fase di mira.
+            .pointerInput(
+                id,
+                placement.origin(),
+                cellSize,
+                viewModel.editMode,
+                active,
+                inspected,
+                viewModel.singleTargeting,
+                viewModel.areaTargeting,
+            ) {
+                if (viewModel.singleTargeting != null || viewModel.areaTargeting != null) return@pointerInput
+                if (!viewModel.editMode && (!active || !inspected)) return@pointerInput
                 detectDragGestures(
                     onDragStart = {
                         dragOffset = Offset.Zero
-                        if (viewModel.editMode) viewModel.selectedTargetId = id
+                        if (viewModel.editMode) viewModel.inspectCombatant(id)
                     },
                     onDragCancel = { dragOffset = Offset.Zero },
                     onDragEnd = {
@@ -950,7 +974,13 @@ private fun MapToken(
                     },
                 )
             }
-            .clickable(role = Role.Button) { viewModel.selectedTargetId = id }
+            .clickable(role = Role.Button) {
+                if (viewModel.areaTargeting != null) {
+                    viewModel.resolveAreaAt(placement.origin().column(), placement.origin().row())
+                } else {
+                    viewModel.onCombatantClicked(id)
+                }
+            }
             .alpha(if (defeated) 0.5f else 1f),
         contentAlignment = Alignment.Center,
     ) {
@@ -1029,10 +1059,11 @@ private fun MapToken(
                     critFlash -> Palette.Crit
                     active -> Palette.GoldBright
                     targeted -> accent
+                    inspected -> Palette.Text
                     else -> accent.copy(alpha = 0.5f)
                 },
                 radius = size.minDimension / 2f - inset,
-                style = Stroke(width = if (active || targeted || critFlash) 2.2f else 1.2f),
+                style = Stroke(width = if (active || targeted || inspected || critFlash) 2.2f else 1.2f),
             )
         }
 

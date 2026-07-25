@@ -73,7 +73,8 @@ fun CombatantRailCard(
     val snapshot = combatant.snapshot()
     // In un turno simultaneo sono attivi tutti i membri del gruppo, non solo il primo.
     val active = viewModel.isActive(combatantId)
-    val targeted = viewModel.effectiveTargetId() == combatantId
+    val targeted = viewModel.selectedTargetId == combatantId
+    val inspected = viewModel.inspectedCombatantId == combatantId
     val defeated = combatant.defeated()
     val budget = viewModel.budget(combatantId)
 
@@ -81,12 +82,14 @@ fun CombatantRailCard(
     val outline = when {
         targeted -> Modifier.border(2.dp, faction.color, shape)
         active -> Modifier.border(1.5.dp, Palette.Gold.copy(alpha = 0.82f), shape)
+        inspected -> Modifier.border(1.5.dp, Palette.Text.copy(alpha = 0.82f), shape)
         else -> Modifier.border(1.dp, Palette.Line, shape)
     }
     val cardState = buildString {
         append("${combatant.currentHitPoints()} punti ferita su ${snapshot.maxHitPoints()}.")
         if (targeted) append(" Bersaglio selezionato.")
         if (active) append(" Turno attivo.")
+        if (inspected) append(" Scheda in esame.")
         if (defeated) append(" Sconfitto.")
     }
 
@@ -110,6 +113,7 @@ fun CombatantRailCard(
                         active -> Brush.verticalGradient(
                             listOf(Palette.SurfaceHigh, Palette.Surface),
                         )
+                        inspected -> SolidColor(Palette.SurfaceHigh)
                         else -> SolidColor(Palette.Surface)
                     },
                     shape,
@@ -126,24 +130,49 @@ fun CombatantRailCard(
                 .semantics {
                     contentDescription = "Combattente ${snapshot.name()}"
                     stateDescription = cardState
-                    selected = targeted
+                    selected = inspected
                 }
                 .clickable(
                     role = Role.Button,
-                    onClickLabel = "Apri la scheda di ${snapshot.name()}",
-                ) { onOpenSheet(snapshot.definitionId()) }
+                    onClickLabel = if (viewModel.singleTargeting != null) {
+                        "Scegli ${snapshot.name()} come bersaglio"
+                    } else {
+                        "Mostra capacita' e informazioni di ${snapshot.name()}"
+                    },
+                ) { viewModel.onCombatantClicked(combatantId) }
                 .padding(9.dp)
                 .alpha(if (defeated) 0.5f else 1f),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (active || targeted) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     text = buildList {
                         if (active) add("IN TURNO")
                         if (targeted) add("BERSAGLIO")
+                        if (inspected && !active) add("IN ESAME")
                     }.joinToString(" · "),
-                    color = if (targeted) faction.color else Palette.Gold,
+                    color = when {
+                        targeted -> faction.color
+                        active -> Palette.Gold
+                        else -> Palette.TextMuted
+                    },
                     style = MaterialTheme.typography.labelSmall,
+                )
+                Text(
+                    text = "SCHEDA ↗",
+                    color = Palette.TextMuted,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = "Apri la scheda completa di ${snapshot.name()}",
+                        ) { onOpenSheet(snapshot.definitionId()) }
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
                 )
             }
 

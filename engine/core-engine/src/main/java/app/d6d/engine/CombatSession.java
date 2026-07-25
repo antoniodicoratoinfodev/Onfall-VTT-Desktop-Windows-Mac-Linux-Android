@@ -288,7 +288,9 @@ public final class CombatSession {
         append(EventType.ENCOUNTER_STARTED, "", "", details(
                 "initiativeOrder", String.join(",", state.initiativeOrder)));
         append(EventType.ROUND_STARTED, "", "", details("round", state.round));
-        startTurnInternal();
+        if (seekFirstPlayableTurn()) {
+            startTurnInternal();
+        }
         // Setup is the immutable baseline of live play: Undo must never return the combat UI to READY/DRAFT.
         undoStack.clear();
     }
@@ -1052,21 +1054,24 @@ public final class CombatSession {
     public synchronized void endTurn() {
         requireStatus(CombatStatus.ACTIVE);
         List<String> ending = currentCombatantIds();
+        List<String> endingGroup = currentTurnGroup();
         beginCommand();
         // Il turno finisce per tutto il gruppo: in parita' i combattenti hanno
-        // giocato insieme e chiudono insieme.
-        for (String endingCombatant : ending) {
-            append(EventType.TURN_ENDED, endingCombatant, "", details("round", state.round));
+        // giocato insieme e chiudono insieme. Anche il membro a 0 PF attraversa
+        // comunque la soglia temporale di fine turno, pur senza ricevere azioni.
+        for (String endingCombatant : endingGroup) {
+            if (ending.contains(endingCombatant)) {
+                append(EventType.TURN_ENDED, endingCombatant, "", details("round", state.round));
+            }
             processConditionBoundary(endingCombatant, false);
         }
-        state.turnIndex++;
-        if (state.turnIndex >= turnGroups().size()) {
-            append(EventType.ROUND_ENDED, "", "", details("round", state.round));
-            state.round++;
-            state.turnIndex = 0;
-            append(EventType.ROUND_STARTED, "", "", details("round", state.round));
+        // I gruppi composti soltanto da combattenti a 0 PF restano visibili
+        // nell'iniziativa, ma non ricevono un turno. La scansione e' limitata a un
+        // giro completo: anche uno stato eccezionale con tutti a 0 PF non puo'
+        // innescare una ricorsione o un ciclo infinito.
+        if (advanceToNextPlayableTurn()) {
+            startTurnInternal();
         }
-        startTurnInternal();
     }
 
     /**
@@ -1087,7 +1092,7 @@ public final class CombatSession {
                 || !new HashSet<>(order).equals(expected)) {
             throw rule("Turn order must contain every combatant exactly once");
         }
-        String anchor = currentCombatantIds().get(0);
+        String anchor = currentTurnAnchor();
         beginCommand();
         state.initiativeOrder.clear();
         state.initiativeOrder.addAll(order);
@@ -1113,7 +1118,9 @@ public final class CombatSession {
         if (state.status != CombatStatus.ACTIVE && state.status != CombatStatus.PAUSED) {
             throw rule("The current turn can only be changed during active play");
         }
-        combatant(combatantId);
+        if (combatant(combatantId).currentHitPoints == 0) {
+            throw rule("A combatant at zero hit points cannot take a turn");
+        }
         List<List<String>> groups = turnGroups();
         int target = -1;
         for (int i = 0; i < groups.size(); i++) {
@@ -1128,7 +1135,7 @@ public final class CombatSession {
         }
         beginCommand();
         state.turnIndex = target;
-        for (String id : groups.get(target)) {
+        for (String id : livingCombatants(groups.get(target))) {
             MutableCombatant occupant = combatant(id);
             int speed = Math.max(0, occupant.snapshot.speedFeet() - 5 * occupant.exhaustionLevel);
             state.turnBudgets.put(id, TurnBudget.fresh(speed));
@@ -1149,7 +1156,7 @@ public final class CombatSession {
             throw rule("Initiative can only be overridden during active play");
         }
         combatant(combatantId);
-        String anchor = currentCombatantIds().get(0);
+        String anchor = currentTurnAnchor();
         beginCommand();
         state.initiativeScores.put(combatantId, total);
         List<String> resorted = state.initiativeOrder.stream()
@@ -1363,7 +1370,14 @@ public final class CombatSession {
 
     /** Avvia il turno per ogni membro del gruppo corrente. */
     private void startTurnInternal() {
-        for (String combatantId : currentCombatantIds()) {
+        List<String> active = currentCombatantIds();
+        for (String combatantId : currentTurnGroup()) {
+            // Un membro a 0 PF non riceve budget ne' evento di turno, ma la soglia
+            // d'inizio continua a far avanzare correttamente condizioni ed effetti.
+            if (!active.contains(combatantId)) {
+                processConditionBoundary(combatantId, true);
+                continue;
+            }
             MutableCombatant combatant = combatant(combatantId);
             // La velocita' e' ridotta da Exhaustion: il budget parte da quella effettiva.
             int speed = Math.max(0, combatant.snapshot.speedFeet() - 5 * combatant.exhaustionLevel);
@@ -1425,6 +1439,9 @@ public final class CombatSession {
 
     private void validateActivationCost(String combatantId, ActivationCost cost) {
         Objects.requireNonNull(cost, "cost");
+        if (combatant(combatantId).currentHitPoints == 0) {
+            throw rule("A combatant at zero hit points cannot act");
+        }
         TurnBudget budget = budget(combatantId);
         switch (cost) {
             case ACTION -> {
@@ -1581,6 +1598,11 @@ public final class CombatSession {
 
     /** Tutti i combattenti che stanno giocando il turno corrente. */
     private List<String> currentCombatantIds() {
+        return livingCombatants(currentTurnGroup());
+    }
+
+    /** Gruppo strutturale corrente, inclusi i membri a 0 PF mostrati nella striscia. */
+    private List<String> currentTurnGroup() {
         List<List<String>> groups = turnGroups();
         if (state.turnIndex < 0 || state.turnIndex >= groups.size()) throw rule("There is no current turn");
         return groups.get(state.turnIndex);
@@ -1592,8 +1614,72 @@ public final class CombatSession {
 
     /** In un turno simultaneo ognuno dei combattenti in parita' puo' agire. */
     private void requireCurrentCombatant(String combatantId) {
+        if (combatant(combatantId).currentHitPoints == 0) {
+            throw rule("A combatant at zero hit points cannot act");
+        }
         if (!currentCombatantIds().contains(combatantId)) {
             throw rule("It is not " + combatantId + "'s turn");
+        }
+    }
+
+    /** Membri ancora in piedi di un gruppo strutturale d'iniziativa. */
+    private List<String> livingCombatants(List<String> group) {
+        return group.stream()
+                .filter(id -> combatant(id).currentHitPoints > 0)
+                .collect(Collectors.toList());
+    }
+
+    /** Primo attore vivo del gruppo, oppure il suo primo membro per le sole correzioni d'ordine. */
+    private String currentTurnAnchor() {
+        List<List<String>> groups = turnGroups();
+        if (state.turnIndex < 0 || state.turnIndex >= groups.size()) {
+            throw rule("There is no current turn");
+        }
+        List<String> group = groups.get(state.turnIndex);
+        List<String> living = livingCombatants(group);
+        return living.isEmpty() ? group.get(0) : living.get(0);
+    }
+
+    /** All'avvio salta gli eventuali gruppi iniziali interamente a 0 PF senza chiudere il round. */
+    private boolean seekFirstPlayableTurn() {
+        List<List<String>> groups = turnGroups();
+        for (int index = 0; index < groups.size(); index++) {
+            if (!livingCombatants(groups.get(index)).isEmpty()) {
+                state.turnIndex = index;
+                return true;
+            }
+            processSkippedTurn(groups.get(index));
+        }
+        return false;
+    }
+
+    /**
+     * Avanza fino al prossimo gruppo con almeno un membro vivo.
+     *
+     * Il passaggio oltre l'ultimo gruppo chiude e riapre il round esattamente una
+     * volta. Se nessuno e' in piedi, dopo un giro completo restituisce {@code false}.
+     */
+    private boolean advanceToNextPlayableTurn() {
+        List<List<String>> groups = turnGroups();
+        for (int checked = 0; checked < groups.size(); checked++) {
+            state.turnIndex++;
+            if (state.turnIndex >= groups.size()) {
+                append(EventType.ROUND_ENDED, "", "", details("round", state.round));
+                state.round++;
+                state.turnIndex = 0;
+                append(EventType.ROUND_STARTED, "", "", details("round", state.round));
+            }
+            if (!livingCombatants(groups.get(state.turnIndex)).isEmpty()) return true;
+            processSkippedTurn(groups.get(state.turnIndex));
+        }
+        return false;
+    }
+
+    /** Fa trascorrere le soglie temporali di un gruppo saltato, senza concedere azioni. */
+    private void processSkippedTurn(List<String> group) {
+        for (String combatantId : group) {
+            processConditionBoundary(combatantId, true);
+            processConditionBoundary(combatantId, false);
         }
     }
 
