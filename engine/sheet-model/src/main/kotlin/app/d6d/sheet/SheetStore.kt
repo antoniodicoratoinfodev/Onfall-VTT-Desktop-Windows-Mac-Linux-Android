@@ -15,7 +15,7 @@ data class SheetLibrary(
     val abilities: List<CatalogAbility> = defaultAbilityCatalog(),
 ) {
     companion object {
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
     }
 }
 
@@ -75,6 +75,9 @@ class SheetStore(private val file: Path) {
         val abilities = library.abilities +
             defaults.filter { builtIn -> library.abilities.none { it.id == builtIn.id } }
 
+        // Dalla versione 4 la CA puo' essere calcolata. I nuovi campi hanno come
+        // predefinito MANUAL_TOTAL: una scheda precedente conserva quindi il suo
+        // identico valore finale finche' l'utente non sceglie un metodo guidato.
         val characters = if (library.schemaVersion < 2) {
             val fireball = abilities.first { it.id == "inc-palla-di-fuoco" }
             library.characters.map { sheet ->

@@ -5,6 +5,7 @@ import app.d6d.domain.catalog.ActorCatalogEntry
 import app.d6d.domain.combat.CombatantSnapshot
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.Ability
+import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.Proficiency
@@ -65,7 +66,7 @@ class RosterViewModelTest {
         val definition = entry.combatDefinition()
 
         // Non sono valori scritti a mano nel catalogo: sono derivati dalla scheda.
-        assertEquals(kaelen.armorClass, definition.armorClass())
+        assertEquals(kaelen.effectiveArmorClass, definition.armorClass())
         assertEquals(kaelen.maxHitPoints, definition.maxHitPoints())
         assertEquals(kaelen.initiativeModifier, definition.initiativeModifier())
         assertEquals(kaelen.saveBonus(Ability.CONSTITUTION), definition.constitutionSaveBonus())
@@ -84,6 +85,8 @@ class RosterViewModelTest {
         // Cambio la Destrezza: l'iniziativa derivata deve cambiare di conseguenza.
         val updated = roster.sheets.character.copy(
             armorClass = 21,
+            armorClassMethod = ArmorClassMethod.MANUAL_TOTAL,
+            armorClassOverride = null,
             abilityScores = roster.sheets.character.abilityScores + (Ability.DEXTERITY to 20),
         )
         roster.sheets.character = updated
@@ -138,10 +141,30 @@ class RosterViewModelTest {
 
         val after = roster.sheets.library.characters.first { it.id == "pg-kaelen" }
         assertEquals("Kaelen il Segnato", after.characterName)
-        assertEquals(20, after.armorClass)
+        assertEquals(20, after.armorClassOverride)
+        assertEquals(20, after.effectiveArmorClass)
+        assertEquals(before.calculatedArmorClass, after.calculatedArmorClass)
         assertEquals(40, after.maxHitPoints)
         // E il catalogo riflette la scheda aggiornata.
         assertEquals(20, catalogEntry("pg-kaelen")!!.combatDefinition().armorClass())
+    }
+
+    @Test
+    fun `modificare altri campi in combattimento non crea un override CA inutile`() {
+        val roster = roster()
+        val before = roster.sheets.library.characters.first { it.id == "pg-kaelen" }
+        val snapshot = snapshotFor(
+            before.id,
+            "Kaelen Corretto",
+            armorClass = before.calculatedArmorClass,
+            maxHitPoints = 41,
+        )
+
+        roster.applyCombatEdit(before.id, snapshot)
+
+        val after = roster.sheets.library.characters.first { it.id == before.id }
+        assertNull(after.armorClassOverride)
+        assertEquals(before.calculatedArmorClass, after.effectiveArmorClass)
     }
 
     @Test

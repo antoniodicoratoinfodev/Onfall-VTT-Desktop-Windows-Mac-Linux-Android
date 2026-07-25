@@ -2,6 +2,7 @@ package app.d6d.ui.encounter
 
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.persistence.catalog.ActorCatalogStore
+import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.SheetStore
 import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
@@ -83,7 +84,12 @@ class EncounterBuilderViewModelTest {
         val hero = roster.items.first { it.kind == RosterKind.PERSONAGGIO }
         roster.sheets.kind = SheetKind.PERSONAGGIO
         roster.sheets.selectCharacter(hero.id)
-        roster.sheets.character = roster.sheets.character.copy(armorClass = 23, maxHitPoints = 47)
+        roster.sheets.character = roster.sheets.character.copy(
+            armorClass = 23,
+            armorClassMethod = ArmorClassMethod.MANUAL_TOTAL,
+            armorClassOverride = null,
+            maxHitPoints = 47,
+        )
         roster.sheets.save()
 
         val builder = EncounterBuilderViewModel(roster, seedProvider = { 1L })

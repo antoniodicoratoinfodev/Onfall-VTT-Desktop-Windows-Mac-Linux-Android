@@ -31,6 +31,105 @@ class SheetDerivationsTest {
     }
 
     @Test
+    fun `la CA base segue il solo metodo scelto e reagisce alla Destrezza`() {
+        val dexterity = mapOf(Ability.DEXTERITY to 18)
+
+        assertEquals(
+            14,
+            CharacterSheet(
+                armorClassMethod = ArmorClassMethod.UNARMORED,
+                abilityScores = dexterity,
+            ).baseArmorClass,
+        )
+        assertEquals(
+            16,
+            CharacterSheet(
+                armorClassMethod = ArmorClassMethod.STUDDED_LEATHER,
+                abilityScores = dexterity,
+            ).baseArmorClass,
+        )
+        // Le armature medie accettano al massimo +2, non tutto il +4.
+        assertEquals(
+            17,
+            CharacterSheet(
+                armorClassMethod = ArmorClassMethod.HALF_PLATE,
+                abilityScores = dexterity,
+            ).baseArmorClass,
+        )
+        // Le armature pesanti ignorano interamente la Destrezza.
+        assertEquals(
+            16,
+            CharacterSheet(
+                armorClassMethod = ArmorClassMethod.CHAIN_MAIL,
+                abilityScores = dexterity,
+            ).baseArmorClass,
+        )
+    }
+
+    @Test
+    fun `una CA media conserva una penalita di Destrezza`() {
+        val sheet = CharacterSheet(
+            armorClassMethod = ArmorClassMethod.HALF_PLATE,
+            abilityScores = mapOf(Ability.DEXTERITY to 8),
+        )
+
+        // "Massimo +2" limita soltanto il bonus: il −1 continua ad applicarsi.
+        assertEquals(14, sheet.baseArmorClass)
+    }
+
+    @Test
+    fun `scudo e modificatori attivi compongono la CA calcolata`() {
+        val adjustments = listOf(
+            ArmorClassAdjustment("Stile di difesa", 1, active = true),
+            ArmorClassAdjustment("Maledizione", -2, active = true),
+            ArmorClassAdjustment("Scudo della fede", 5, active = false),
+        )
+        val trained = CharacterSheet(
+            armorClassMethod = ArmorClassMethod.CHAIN_MAIL,
+            shieldEquipped = true,
+            armorTraining = ArmorTraining(shields = true),
+            armorClassAdjustments = adjustments,
+        )
+        val untrained = trained.copy(armorTraining = ArmorTraining(shields = false))
+
+        assertEquals(2, trained.shieldArmorClassBonus)
+        assertEquals(17, trained.calculatedArmorClass)
+        // Senza competenza lo scudo resta registrato come equipaggiato, ma non
+        // concede il proprio +2.
+        assertEquals(0, untrained.shieldArmorClassBonus)
+        assertEquals(15, untrained.calculatedArmorClass)
+    }
+
+    @Test
+    fun `la CA finale manuale non somma di nuovo scudo e modificatori`() {
+        val sheet = CharacterSheet(
+            armorClass = 18,
+            armorClassMethod = ArmorClassMethod.MANUAL_TOTAL,
+            shieldEquipped = true,
+            armorTraining = ArmorTraining(shields = true),
+            armorClassAdjustments = listOf(ArmorClassAdjustment("Anello", 2)),
+        )
+
+        assertEquals(18, sheet.baseArmorClass)
+        assertEquals(0, sheet.armorClassAdjustmentTotal)
+        assertEquals(18, sheet.effectiveArmorClass)
+    }
+
+    @Test
+    fun `un override sostituisce il totale senza cancellare la formula`() {
+        val calculated = CharacterSheet(
+            armorClassMethod = ArmorClassMethod.CHAIN_MAIL,
+            shieldEquipped = true,
+            armorTraining = ArmorTraining(shields = true),
+        )
+        val overridden = calculated.copy(armorClassOverride = 21)
+
+        assertEquals(18, overridden.calculatedArmorClass)
+        assertEquals(21, overridden.effectiveArmorClass)
+        assertEquals(18, overridden.copy(armorClassOverride = null).effectiveArmorClass)
+    }
+
+    @Test
     fun `il bonus di competenza segue le soglie di livello`() {
         assertEquals(2, proficiencyBonusForLevel(1))
         assertEquals(2, proficiencyBonusForLevel(4))
@@ -159,6 +258,21 @@ class SheetDerivationsTest {
         // +3 di Costituzione piu' +2 di competenza al livello 1.
         assertEquals(5, definition.constitutionSaveBonus())
         assertEquals(1, definition.abilities().size)
+    }
+
+    @Test
+    fun `la definizione da combattimento usa la CA derivata`() {
+        val sheet = CharacterSheet(
+            armorClassMethod = ArmorClassMethod.STUDDED_LEATHER,
+            abilityScores = mapOf(Ability.DEXTERITY to 16),
+            shieldEquipped = true,
+            armorTraining = ArmorTraining(shields = true),
+            armorClassAdjustments = listOf(ArmorClassAdjustment("Anello", 1)),
+        )
+
+        // 12 + 3 Des + 2 scudo + 1 anello.
+        assertEquals(18, sheet.effectiveArmorClass)
+        assertEquals(18, sheet.toActorDefinition().armorClass())
     }
 
     @Test

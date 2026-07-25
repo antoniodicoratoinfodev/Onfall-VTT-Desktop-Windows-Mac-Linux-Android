@@ -14,6 +14,66 @@ import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import kotlinx.serialization.Serializable
 
+/** Quanto il modificatore di Destrezza contribuisce a un calcolo della CA base. */
+@Serializable
+enum class ArmorClassDexterity(val italianLabel: String) {
+    FULL("Destrezza completa"),
+    MAX_TWO("Destrezza, massimo +2"),
+    NONE("Senza Destrezza"),
+    ;
+
+    fun contribution(modifier: Int): Int = when (this) {
+        FULL -> modifier
+        MAX_TWO -> minOf(modifier, 2)
+        NONE -> 0
+    }
+}
+
+/**
+ * Un solo metodo determina la CA base.
+ *
+ * Le armature non sono bonus sommati alla CA senza armatura: ciascuna sostituisce
+ * il metodo base. Scudo, oggetti magici ed effetti sono invece aggiustamenti
+ * separati applicati dopo avere scelto questo metodo.
+ */
+@Serializable
+enum class ArmorClassMethod(
+    val italianLabel: String,
+    val baseValue: Int,
+    val dexterity: ArmorClassDexterity,
+) {
+    /** Mantiene esattamente la CA delle schede create prima del calcolo guidato. */
+    MANUAL_TOTAL("CA finale manuale", 0, ArmorClassDexterity.NONE),
+
+    UNARMORED("Senza armatura", 10, ArmorClassDexterity.FULL),
+    PADDED("Armatura imbottita", 11, ArmorClassDexterity.FULL),
+    LEATHER("Armatura di cuoio", 11, ArmorClassDexterity.FULL),
+    STUDDED_LEATHER("Cuoio borchiato", 12, ArmorClassDexterity.FULL),
+    HIDE("Armatura di pelle", 12, ArmorClassDexterity.MAX_TWO),
+    CHAIN_SHIRT("Giaco di maglia", 13, ArmorClassDexterity.MAX_TWO),
+    SCALE_MAIL("Corazza a scaglie", 14, ArmorClassDexterity.MAX_TWO),
+    BREASTPLATE("Corazza di piastre", 14, ArmorClassDexterity.MAX_TWO),
+    HALF_PLATE("Mezza armatura", 15, ArmorClassDexterity.MAX_TWO),
+    RING_MAIL("Corazza ad anelli", 14, ArmorClassDexterity.NONE),
+    CHAIN_MAIL("Cotta di maglia", 16, ArmorClassDexterity.NONE),
+    SPLINT("Corazza a strisce", 17, ArmorClassDexterity.NONE),
+    PLATE("Armatura a piastre", 18, ArmorClassDexterity.NONE),
+    MAGE_ARMOR("Armatura magica", 13, ArmorClassDexterity.FULL),
+
+    /** Base scritta dall'utente, con una regola di Destrezza configurabile. */
+    CUSTOM_BASE("Base personalizzata", 0, ArmorClassDexterity.NONE),
+}
+
+/** Bonus o penalita' applicato dopo il calcolo della CA base. */
+@Serializable
+data class ArmorClassAdjustment(
+    val source: String = "",
+    val value: Int = 0,
+    val active: Boolean = true,
+    /** Identita' stabile per conservare correttamente le bozze dei campi UI. */
+    val id: String = "",
+)
+
 /** Competenza nelle armature, come i quattro rombi stampati sulla scheda. */
 @Serializable
 data class ArmorTraining(
@@ -118,7 +178,19 @@ data class CharacterSheet(
     val experiencePoints: Int = 0,
 
     // --- difesa, vita e morte ---
+    /**
+     * Valore conservato per retrocompatibilita'.
+     *
+     * In [ArmorClassMethod.MANUAL_TOTAL] e' la CA finale; con
+     * [ArmorClassMethod.CUSTOM_BASE] e' invece il valore iniziale della formula.
+     * I metodi predefiniti lo ignorano.
+     */
     val armorClass: Int = 10,
+    val armorClassMethod: ArmorClassMethod = ArmorClassMethod.MANUAL_TOTAL,
+    val customArmorClassDexterity: ArmorClassDexterity = ArmorClassDexterity.NONE,
+    val armorClassAdjustments: List<ArmorClassAdjustment> = emptyList(),
+    /** Correzione eccezionale della CA finale, rimovibile senza perdere la formula. */
+    val armorClassOverride: Int? = null,
     val shieldEquipped: Boolean = false,
     val currentHitPoints: Int = 8,
     val maxHitPoints: Int = 8,
@@ -169,6 +241,50 @@ data class CharacterSheet(
     fun score(ability: Ability): Int = abilityScores[ability] ?: 10
 
     fun modifier(ability: Ability): Int = abilityModifier(score(ability))
+
+    /** Risultato del solo metodo di CA scelto, prima di scudo e aggiustamenti. */
+    val baseArmorClass: Int
+        get() {
+            if (armorClassMethod == ArmorClassMethod.MANUAL_TOTAL) return armorClass
+            val base = if (armorClassMethod == ArmorClassMethod.CUSTOM_BASE) {
+                armorClass
+            } else {
+                armorClassMethod.baseValue
+            }
+            val dexterityRule = if (armorClassMethod == ArmorClassMethod.CUSTOM_BASE) {
+                customArmorClassDexterity
+            } else {
+                armorClassMethod.dexterity
+            }
+            return base + dexterityRule.contribution(modifier(Ability.DEXTERITY))
+        }
+
+    /** Bonus dello scudo; il regolamento lo concede solo a chi ne ha competenza. */
+    val shieldArmorClassBonus: Int
+        get() = if (
+            armorClassMethod != ArmorClassMethod.MANUAL_TOTAL &&
+            shieldEquipped &&
+            armorTraining.shields
+        ) {
+            2
+        } else {
+            0
+        }
+
+    /** Somma di scudo e bonus o penalita' attivi; la CA manuale e' gia' finale. */
+    val armorClassAdjustmentTotal: Int
+        get() = if (armorClassMethod == ArmorClassMethod.MANUAL_TOTAL) {
+            0
+        } else {
+            shieldArmorClassBonus +
+                armorClassAdjustments.filter { it.active }.sumOf { it.value }
+        }
+
+    /** Totale prodotto dalla formula, prima di un eventuale override eccezionale. */
+    val calculatedArmorClass: Int get() = baseArmorClass + armorClassAdjustmentTotal
+
+    /** CA effettivamente trasferita al combattimento. */
+    val effectiveArmorClass: Int get() = armorClassOverride ?: calculatedArmorClass
 
     /** Tiro salvezza: modificatore piu' il bonus di competenza se competente. */
     fun saveBonus(ability: Ability): Int =
@@ -269,7 +385,7 @@ data class CharacterSheet(
             "1.0.0",
             rulesetVersion,
             characterName.ifBlank { "Senza nome" },
-            armorClass,
+            effectiveArmorClass,
             maxHitPoints.coerceAtLeast(1),
             currentHitPoints.coerceIn(0, maxHitPoints.coerceAtLeast(1)),
             temporaryHitPoints.coerceAtLeast(0),

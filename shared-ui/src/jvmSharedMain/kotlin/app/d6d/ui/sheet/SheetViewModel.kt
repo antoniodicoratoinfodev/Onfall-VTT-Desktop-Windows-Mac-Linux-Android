@@ -3,6 +3,7 @@ package app.d6d.ui.sheet
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.defaultAbilityCatalog
@@ -350,7 +351,10 @@ class SheetViewModel(private val store: SheetStore) {
         val stamp = System.currentTimeMillis()
         when (kind) {
             SheetKind.PERSONAGGIO -> {
-                character = CharacterSheet(id = "pg-$stamp")
+                character = CharacterSheet(
+                    id = "pg-$stamp",
+                    armorClassMethod = ArmorClassMethod.UNARMORED,
+                )
                 pristineNewCharacter = character
             }
             SheetKind.MOSTRO -> {

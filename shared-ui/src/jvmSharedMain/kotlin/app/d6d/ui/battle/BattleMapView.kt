@@ -406,14 +406,28 @@ fun BattleMapView(
                 // uno sfondo la luminosita' scelta viene spinta un filo piu' su.
                 val alpha = (gridBrightness * if (background != null) 1.3f else 1f)
                     .coerceIn(0f, 1f)
-                // Fino a circa due terzi della corsa la maglia resta il reticolo
-                // caldo di sempre; oltre, la tinta si schiarisce verso una griglia
-                // piu' luminosa e un filo piu' bianca, cosi' al 100% stacca bene
-                // sul fondo senza perdere il colore ai valori piu' bassi.
-                val whiten = ((alpha - 0.6f) / 0.4f).coerceIn(0f, 1f)
+                // La tinta segue il valore reale del cursore, non l'alpha gia'
+                // amplificato dallo sfondo: in questo modo solo il vero 100%
+                // raggiunge il bianco puro e resta distinguibile dai valori alti.
+                val whiten = ((gridBrightness - 0.6f) / 0.4f).coerceIn(0f, 1f)
                 val line = lerp(Palette.Line, Palette.LineBright, whiten).copy(alpha = alpha)
+                // Nell'ultimo quarto della corsa compare un alone sottile sotto
+                // il tratto principale. Il centro resta nitido, ma al 100% la
+                // griglia sembra realmente piu' luminosa anche sulle mappe chiare.
+                val glowAlpha = (((gridBrightness - 0.75f) / 0.25f).coerceIn(0f, 1f) * 0.28f)
                 val mapRight = mapOffset.x + camera.contentSize.width
                 val mapBottom = mapOffset.y + camera.contentSize.height
+                if (glowAlpha > 0f) {
+                    val glow = Palette.LineBright.copy(alpha = glowAlpha)
+                    for (column in camera.visibleColumns(mapOffset)) {
+                        val x = mapOffset.x + column * cellPx
+                        drawLine(glow, Offset(x, mapOffset.y), Offset(x, mapBottom), strokeWidth = 3f)
+                    }
+                    for (row in camera.visibleRows(mapOffset)) {
+                        val y = mapOffset.y + row * cellPx
+                        drawLine(glow, Offset(mapOffset.x, y), Offset(mapRight, y), strokeWidth = 3f)
+                    }
+                }
                 for (column in camera.visibleColumns(mapOffset)) {
                     val x = mapOffset.x + column * cellPx
                     drawLine(line, Offset(x, mapOffset.y), Offset(x, mapBottom), strokeWidth = 1f)

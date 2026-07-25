@@ -40,9 +40,10 @@ object Palette {
     val Surface = Color(0xFF0F1216)
     val SurfaceHigh = Color(0xFF181C22)
     val Line = Color(0xFF2B313A)
-    // Bagliore della griglia alla luminosita' massima: acciaio chiaro, leggibile
-    // sul fondo senza trasformare il reticolo in una fonte di luce colorata.
-    val LineBright = Color(0xFF8E98A6)
+    // Estremo superiore della luminosita' della griglia: bianco puro. Ai valori
+    // intermedi il reticolo conserva l'acciaio scuro di `Line`; soltanto vicino
+    // al 100% diventa davvero bianco e luminoso.
+    val LineBright = Color.White
 
     // Mantiene il vecchio nome per non propagare un cambio puramente cosmetico
     // nell'intera UI: ora e' acciaio scuro per cornici e fregi, non bronzo.

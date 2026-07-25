@@ -156,7 +156,12 @@ class RosterViewModel(
                     } else {
                         character.characterName
                     },
-                    armorClass = snapshot.armorClass(),
+                    // Una correzione esplicita fatta durante lo scontro diventa un
+                    // override rimovibile: la formula dettagliata resta intatta.
+                    // Se il valore coincide gia' col calcolo, non creiamo un
+                    // override soltanto perche' e' stato modificato un altro campo.
+                    armorClassOverride = snapshot.armorClass()
+                        .takeUnless { it == character.calculatedArmorClass },
                     maxHitPoints = snapshot.maxHitPoints(),
                     currentHitPoints = character.currentHitPoints.coerceAtMost(snapshot.maxHitPoints()),
                     speedFeet = snapshot.speedFeet(),

@@ -2,6 +2,8 @@ package app.d6d.ui.sheet
 
 import app.d6d.domain.combat.DamageType
 import app.d6d.sheet.Ability
+import app.d6d.sheet.ArmorClassAdjustment
+import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.ArmorTraining
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.CreatureSize
@@ -32,7 +34,15 @@ object SheetSamples {
         species = "Umano",
         level = 3,
         experiencePoints = 900,
-        armorClass = 18,
+        armorClass = 19,
+        armorClassMethod = ArmorClassMethod.CHAIN_MAIL,
+        armorClassAdjustments = listOf(
+            ArmorClassAdjustment(
+                source = "Stile di combattimento: Difesa",
+                value = 1,
+                id = "stile-difesa",
+            ),
+        ),
         shieldEquipped = true,
         currentHitPoints = 28,
         maxHitPoints = 34,

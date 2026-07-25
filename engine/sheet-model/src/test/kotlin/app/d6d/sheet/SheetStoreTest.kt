@@ -107,4 +107,59 @@ class SheetStoreTest {
         assertTrue(migrated.abilities.any { it.id == "nem-morso" })
         assertEquals(SheetLibrary.SCHEMA_VERSION, migrated.schemaVersion)
     }
+
+    @Test
+    fun `una scheda precedente conserva la CA finale manuale senza doppi conteggi`() {
+        val file = directory.resolve("schede.json")
+        Files.writeString(
+            file,
+            """
+            {
+              "schemaVersion": 3,
+              "characters": [
+                {
+                  "id": "pg-legacy",
+                  "armorClass": 18,
+                  "shieldEquipped": true,
+                  "abilityScores": { "DEXTERITY": 18 }
+                }
+              ],
+              "monsters": [],
+              "abilities": []
+            }
+            """.trimIndent(),
+        )
+
+        val loaded = SheetStore(file).load().characters.single()
+
+        assertEquals(ArmorClassMethod.MANUAL_TOTAL, loaded.armorClassMethod)
+        assertEquals(18, loaded.baseArmorClass)
+        assertEquals(18, loaded.effectiveArmorClass)
+        assertEquals(SheetLibrary.SCHEMA_VERSION, SheetStore(file).load().schemaVersion)
+    }
+
+    @Test
+    fun `metodo modificatori e override della CA sopravvivono al salvataggio`() {
+        val file = directory.resolve("schede.json")
+        val expected = CharacterSheet(
+            id = "pg-ca",
+            armorClassMethod = ArmorClassMethod.HALF_PLATE,
+            shieldEquipped = true,
+            armorTraining = ArmorTraining(shields = true),
+            armorClassAdjustments = listOf(
+                ArmorClassAdjustment("Anello", 1, active = true, id = "anello"),
+                ArmorClassAdjustment("Incantesimo", 2, active = false, id = "incantesimo"),
+            ),
+            armorClassOverride = 22,
+            abilityScores = mapOf(Ability.DEXTERITY to 18),
+        )
+        val store = SheetStore(file)
+
+        store.save(SheetLibrary(characters = listOf(expected)))
+        val reloaded = store.load().characters.single()
+
+        assertEquals(expected, reloaded)
+        assertEquals(20, reloaded.calculatedArmorClass)
+        assertEquals(22, reloaded.effectiveArmorClass)
+    }
 }

@@ -1,5 +1,6 @@
 package app.d6d.ui.sheet
 
+import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.SheetStore
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -56,6 +57,8 @@ class SheetViewModelTest {
 
         assertEquals(SheetNavigationResult.APPLIED, model.newSheet())
         assertFalse(model.isDirty)
+        assertEquals(ArmorClassMethod.UNARMORED, model.character.armorClassMethod)
+        assertEquals(10, model.character.effectiveArmorClass)
 
         model.character = model.character.copy(characterName = "Nuovo eroe")
         assertTrue(model.isDirty)
