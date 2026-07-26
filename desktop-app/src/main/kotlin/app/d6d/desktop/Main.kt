@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -14,10 +16,16 @@ import androidx.compose.ui.window.rememberWindowState
 import app.d6d.ui.AppIdentity
 import app.d6d.ui.AppRoot
 import app.d6d.ui.images.FilePicker
+import java.awt.Cursor
 import java.awt.FileDialog
 import java.awt.Frame
+import java.awt.Point
+import java.awt.RenderingHints
+import java.awt.Toolkit
+import java.awt.image.BufferedImage
 import java.nio.file.Files
 import java.nio.file.Path
+import javax.imageio.ImageIO
 
 /**
  * Cartella dati locale.
@@ -55,6 +63,41 @@ private fun desktopFilePicker() = FilePicker {
     if (chosen == null || directory == null) null else Path.of(directory, chosen)
 }
 
+/**
+ * Puntatore predefinito del desktop, originale ma coerente con il dark fantasy
+ * dell'interfaccia. Il ridimensionamento dei pannelli continua a usare i cursori
+ * di sistema specifici, applicati dai rispettivi componenti Compose.
+ */
+private fun fantasyPointerCursor(): Cursor = runCatching {
+    val toolkit = Toolkit.getDefaultToolkit()
+    val cursorSize = toolkit.getBestCursorSize(64, 64)
+    check(cursorSize.width > 0 && cursorSize.height > 0)
+
+    val source = ImageIO.read(
+        requireNotNull(
+            object {}.javaClass.getResourceAsStream("/cursors/fantasy-pointer.png"),
+        ) { "Risorsa del cursore non trovata" },
+    )
+    val image = if (source.width == cursorSize.width && source.height == cursorSize.height) {
+        source
+    } else {
+        BufferedImage(cursorSize.width, cursorSize.height, BufferedImage.TYPE_INT_ARGB).also { scaled ->
+            scaled.createGraphics().apply {
+                setRenderingHint(
+                    RenderingHints.KEY_INTERPOLATION,
+                    RenderingHints.VALUE_INTERPOLATION_BICUBIC,
+                )
+                drawImage(source, 0, 0, cursorSize.width, cursorSize.height, null)
+                dispose()
+            }
+        }
+    }
+
+    toolkit.createCustomCursor(image, Point(1, 1), "Onfall fantasy pointer")
+}.getOrElse {
+    Cursor.getDefaultCursor()
+}
+
 fun main() = application {
     val dataDirectory = dataDirectory()
     var exitRequested by remember { mutableStateOf(false) }
@@ -64,10 +107,16 @@ fun main() = application {
         title = AppIdentity.windowTitle,
         state = rememberWindowState(width = 1480.dp, height = 940.dp),
     ) {
+        val fantasyPointer = remember { fantasyPointerCursor() }
+
         // La shell densa e' quella predefinita sul desktop, ma se la finestra
         // viene stretta molto si passa al layout compatto invece di comprimere
         // tre pannelli in uno spazio illeggibile.
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        BoxWithConstraints(
+            Modifier
+                .fillMaxSize()
+                .pointerHoverIcon(PointerIcon(fantasyPointer)),
+        ) {
             AppRoot(
                 dataDirectory = dataDirectory,
                 compact = maxWidth < 1000.dp,
