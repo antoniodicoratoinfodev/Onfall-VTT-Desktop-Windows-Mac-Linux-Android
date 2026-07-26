@@ -7,6 +7,7 @@ import app.d6d.sheet.SheetStore
 import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.sheet.SheetKind
+import app.d6d.ui.state.BattleViewModel
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -101,6 +102,33 @@ class EncounterBuilderViewModelTest {
         assertNotNull(snapshot)
         assertEquals(23, snapshot!!.armorClass())
         assertEquals(47, snapshot.maxHitPoints())
+    }
+
+    @Test
+    fun `lo stesso personaggio ha stato runtime indipendente in due sessioni`() {
+        val roster = roster()
+        val builder = EncounterBuilderViewModel(roster, seedProvider = { 7L })
+        val hero = builder.participants.first { it.kind == RosterKind.PERSONAGGIO }
+        val first = BattleViewModel(builder.startedSession())
+        val second = BattleViewModel(builder.startedSession())
+        val hitPoints = second.combatant(hero.id)!!.currentHitPoints()
+        val armorClass = second.combatant(hero.id)!!.snapshot().armorClass()
+
+        first.applyManualDamage(hero.id, 5)
+        first.editCombatant(hero.id, armorClass = armorClass + 3)
+        first.configureMap(31, 19, 10)
+
+        assertTrue(first.combatant(hero.id)!!.currentHitPoints() < hitPoints)
+        assertEquals(hitPoints, second.combatant(hero.id)!!.currentHitPoints())
+        assertEquals(armorClass + 3, first.combatant(hero.id)!!.snapshot().armorClass())
+        assertEquals(armorClass, second.combatant(hero.id)!!.snapshot().armorClass())
+        assertEquals(20, second.battleMap.grid().columns())
+        assertEquals(15, second.battleMap.grid().rows())
+        assertEquals(5, second.battleMap.grid().feetPerSquare())
+        assertEquals(armorClass, roster.definitionFor(hero.id)!!.armorClass())
+
+        val third = BattleViewModel(builder.startedSession())
+        assertEquals(armorClass, third.combatant(hero.id)!!.snapshot().armorClass())
     }
 
     @Test

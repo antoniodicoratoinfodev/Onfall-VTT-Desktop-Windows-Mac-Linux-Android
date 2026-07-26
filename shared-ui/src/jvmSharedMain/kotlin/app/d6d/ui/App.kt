@@ -18,11 +18,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.engine.CombatSession
 import app.d6d.ui.battle.BattleScreen
+import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.AppGlyph
 import app.d6d.ui.components.GlyphIcon
 import app.d6d.ui.components.VerticalResizeHandle
@@ -57,8 +61,8 @@ import app.d6d.ui.layout.LayoutStore
 import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.layout.UiLayoutState
 import app.d6d.persistence.session.SessionArchiveStore
-import app.d6d.ui.session.SessionManager
-import app.d6d.ui.session.UnsavedSessionDialog
+import app.d6d.ui.session.SessionWorkspace
+import app.d6d.ui.session.WorkspaceOpenResult
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.AppTheme
 import app.d6d.ui.theme.AtmosphericBackground
@@ -95,6 +99,11 @@ fun AppRoot(
     modifier: Modifier = Modifier,
     // Desktop e Android aprono selettori di file diversi: la shell lo fornisce.
     filePicker: FilePicker = FilePicker { null },
+    // Il desktop inoltra qui la richiesta della X della finestra, così le bozze
+    // multi-sessione non possono essere perse senza una conferma esplicita.
+    exitRequested: Boolean = false,
+    onExitRequestHandled: () -> Unit = {},
+    onExitConfirmed: () -> Unit = {},
 ) {
     AppTheme {
         var destination by remember { mutableStateOf(Destination.BATTAGLIA) }
@@ -108,23 +117,44 @@ fun AppRoot(
                 SheetStore(dataDirectory.resolve("schede.json")),
             )
         }
-        // La taglia dei segnaposti viene dal Compendio; le correzioni in battaglia
-        // confluiscono nella scheda autorevole.
-        val battleViewModel = remember {
-            BattleViewModel(
-                SampleEncounter.startedSession(),
-                footprintProvider = { definitionId -> roster.footprintFor(definitionId) },
-            ) { definitionId, snapshot ->
-                check(roster.applyCombatEdit(definitionId, snapshot)) {
-                    roster.sheets.status ?: "Impossibile aggiornare la scheda collegata."
-                }
+        // Ogni scheda aperta riceve un BattleViewModel distinto. La taglia iniziale
+        // arriva dal Compendio e viene fotografata nel documento; le correzioni
+        // fatte in battaglia restano locali. Per cambiare il template condiviso si
+        // apre invece esplicitamente la sua scheda nel Compendio.
+        val battleFactory: (CombatSession) -> BattleViewModel = remember(roster) {
+            { session ->
+                BattleViewModel(
+                    session,
+                    footprintProvider = { definitionId -> roster.footprintFor(definitionId) },
+                )
             }
         }
         val encounterBuilder = remember { EncounterBuilderViewModel(roster) }
         val portraits = remember { PortraitRepository(ImageStore(dataDirectory), filePicker) }
-        val sessions = remember {
-            SessionManager(SessionArchiveStore(dataDirectory.resolve("sessions")), battleViewModel).also {
-                it.beginUnsavedSession("Cripta dei predoni")
+        val workspace = remember {
+            SessionWorkspace(
+                store = SessionArchiveStore(dataDirectory.resolve("sessions")),
+                initialSession = SampleEncounter.startedSession(),
+                initialDisplayName = "Cripta dei predoni",
+                battleFactory = battleFactory,
+            )
+        }
+        val activeSession = workspace.activeSession
+        val battleViewModel = activeSession.battle
+        val sessions = activeSession.manager
+        var exitWarningOpen by remember { mutableStateOf(false) }
+
+        LaunchedEffect(exitRequested) {
+            if (exitRequested) {
+                // Prima prova a chiudere pulitamente gli autosave nominati. Se
+                // restano bozze o errori, la decisione torna all'utente.
+                workspace.flushAutosaves()
+                if (workspace.openSessions.none { it.manager.hasUnsavedChanges }) {
+                    onExitConfirmed()
+                } else {
+                    exitWarningOpen = true
+                }
+                onExitRequestHandled()
             }
         }
 
@@ -145,32 +175,46 @@ fun AppRoot(
             }
         }
 
-        // Dopo il primo salvataggio con nome, ogni comando viene riversato nello
-        // stesso file con un breve debounce. Un incontro nuovo resta invece una
-        // bozza esplicita: nessun nome o file viene inventato silenziosamente.
-        LaunchedEffect(
-            battleViewModel.state,
-            battleViewModel.presentationState(),
-            sessions.currentSlug,
-        ) {
-            if (sessions.currentSlug != null && sessions.hasUnsavedChanges) {
-                delay(1_200)
-                sessions.flushAutosave()
+        // Ogni scheda conserva il proprio effetto di autosave anche quando non e'
+        // attiva: passare a un'altra mappa non cancella il debounce della prima.
+        workspace.openSessions.forEach { opened ->
+            key(opened.id) {
+                LaunchedEffect(
+                    opened.battle.state,
+                    opened.battle.presentationState(),
+                    opened.manager.currentSlug,
+                ) {
+                    if (opened.manager.currentSlug != null && opened.manager.hasUnsavedChanges) {
+                        delay(1_200)
+                        workspace.flushAutosave(opened)
+                    }
+                }
             }
         }
 
-        var pendingEncounter by remember { mutableStateOf<Triple<CombatSession, String, EncounterMode>?>(null) }
-        val adoptEncounter: (CombatSession, String, EncounterMode) -> Unit = { session, name, mode ->
-            battleViewModel.adopt(session, mapOf("encounterMode" to mode.name))
-            sessions.beginUnsavedSession(name)
+        // Un dispose della radice (chiusura desktop o ricreazione Activity) forza
+        // gli autosave già nominati; le bozze restano intenzionalmente da salvare.
+        DisposableEffect(workspace) {
+            onDispose { workspace.flushAutosaves() }
+        }
+
+        val openEncounter: (CombatSession, String, EncounterMode) -> Unit = { session, name, mode ->
+            workspace.openNew(session, name, mapOf("encounterMode" to mode.name))
             encounterBuilder.restartWizard()
             destination = Destination.BATTAGLIA
         }
-        val requestEncounter: (CombatSession, String, EncounterMode) -> Unit = { session, name, mode ->
-            if (sessions.hasUnsavedChanges) {
-                pendingEncounter = Triple(session, name, mode)
-            } else {
-                adoptEncounter(session, name, mode)
+
+        val openSavedSession: (app.d6d.persistence.session.SessionSummary) -> Unit = { summary ->
+            when (workspace.openSaved(summary)) {
+                WorkspaceOpenResult.OPENED,
+                WorkspaceOpenResult.ALREADY_OPEN -> {
+                    encounterBuilder.restartWizard()
+                    destination = Destination.BATTAGLIA
+                }
+                WorkspaceOpenResult.FAILED -> {
+                    sessions.status = workspace.status
+                    sessions.menuOpen = true
+                }
             }
         }
 
@@ -185,36 +229,37 @@ fun AppRoot(
             ) { shown ->
                 when (shown) {
                     Destination.BATTAGLIA ->
-                        BattleScreen(
-                            viewModel = battleViewModel,
-                            portraits = portraits,
-                            sessions = sessions,
-                            compact = compact,
-                            onOpenCombatantSheet = { definitionId ->
-                                if (roster.items.any { it.id == definitionId }) {
-                                    requestedCompendiumItemId = definitionId
-                                    destination = Destination.COMPENDIO
-                                } else {
-                                    battleViewModel.showMessage(
-                                        "La scheda collegata a questo combattente non è presente nel Compendio.",
-                                    )
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                        key(activeSession.id) {
+                            BattleScreen(
+                                viewModel = battleViewModel,
+                                portraits = portraits,
+                                sessions = sessions,
+                                workspace = workspace,
+                                compact = compact,
+                                onOpenCombatantSheet = { definitionId ->
+                                    if (roster.items.any { it.id == definitionId }) {
+                                        requestedCompendiumItemId = definitionId
+                                        destination = Destination.COMPENDIO
+                                    } else {
+                                        battleViewModel.showMessage(
+                                            "La scheda collegata a questo combattente non è presente nel Compendio.",
+                                        )
+                                    }
+                                },
+                                onOpenSavedSession = openSavedSession,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
 
                     Destination.INCONTRO ->
                         EncounterBuilderScreen(
                             viewModel = encounterBuilder,
                             compact = compact,
-                            sessions = sessions,
+                            workspace = workspace,
                             onStarted = { session, name, mode ->
-                                requestEncounter(session, name, mode)
+                                openEncounter(session, name, mode)
                             },
-                            onSessionLoaded = {
-                                encounterBuilder.restartWizard()
-                                destination = Destination.BATTAGLIA
-                            },
+                            onOpenBattle = { destination = Destination.BATTAGLIA },
                             onOpenCompendium = {
                                 requestedCompendiumItemId = null
                                 destination = Destination.COMPENDIO
@@ -274,17 +319,55 @@ fun AppRoot(
                     }
                 }
 
-                UnsavedSessionDialog(
-                    open = pendingEncounter != null,
-                    onDismiss = { pendingEncounter = null },
-                    onSaveFirst = {
-                        pendingEncounter = null
-                        destination = Destination.BATTAGLIA
-                        sessions.menuOpen = true
+            }
+
+            if (exitWarningOpen) {
+                val dirtySessions = workspace.openSessions.filter { it.manager.hasUnsavedChanges }
+                val draftCount = dirtySessions.count { it.manager.currentSlug == null }
+                val names = dirtySessions.take(4).joinToString(" · ") {
+                    if (it.displayName.length <= 38) {
+                        it.displayName
+                    } else {
+                        it.displayName.take(37).trimEnd() + "…"
+                    }
+                }
+                AlertDialog(
+                    onDismissRequest = {
+                        exitWarningOpen = false
+                        destination = Destination.INCONTRO
                     },
-                    onDiscard = {
-                        pendingEncounter?.let { (session, name, mode) -> adoptEncounter(session, name, mode) }
-                        pendingEncounter = null
+                    containerColor = Palette.Surface,
+                    title = {
+                        Text(
+                            "Partite non salvate",
+                            color = Palette.Text,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
+                    text = {
+                        Text(
+                            buildString {
+                                append("${dirtySessions.size} sessioni hanno modifiche da salvare")
+                                if (draftCount > 0) append(", di cui $draftCount mai salvate")
+                                append(".\n\n")
+                                append(names)
+                                if (dirtySessions.size > 4) append(" · …")
+                                append("\n\nTorna a Partita per salvarle o chiuderle una per una.")
+                            },
+                            color = Palette.TextMuted,
+                        )
+                    },
+                    confirmButton = {
+                        GameButton("Torna e salva", accent = Palette.Heal, onClick = {
+                            exitWarningOpen = false
+                            destination = Destination.INCONTRO
+                        })
+                    },
+                    dismissButton = {
+                        GameButton("Esci senza salvare", accent = Palette.Enemy, onClick = {
+                            exitWarningOpen = false
+                            onExitConfirmed()
+                        })
                     },
                 )
             }

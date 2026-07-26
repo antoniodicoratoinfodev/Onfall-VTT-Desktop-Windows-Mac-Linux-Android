@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.CombatStatus
+import app.d6d.persistence.session.SessionSummary
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.CombatantPortrait
 import app.d6d.ui.components.Eyebrow
@@ -57,6 +58,7 @@ import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.SessionMenuButton
 import app.d6d.ui.session.SessionMenuDialog
+import app.d6d.ui.session.SessionWorkspace
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.OrnateDivider
@@ -80,8 +82,10 @@ fun BattleScreen(
     viewModel: BattleViewModel,
     portraits: PortraitRepository,
     sessions: SessionManager,
+    workspace: SessionWorkspace,
     compact: Boolean,
     onOpenCombatantSheet: (String) -> Unit,
+    onOpenSavedSession: (SessionSummary) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val layout = LocalUiLayout.current
@@ -89,7 +93,13 @@ fun BattleScreen(
     // Il fondale resta trasparente in tutta la cornice di battaglia. BattleStage
     // isola invece mappa, griglia e relativi controlli con una superficie opaca.
     Column(modifier.fillMaxSize()) {
-        BattleTopBar(viewModel, sessions, compact)
+        BattleTopBar(
+            viewModel,
+            sessions,
+            workspace.openSessions.size,
+            workspace.autosaveWarning != null,
+            compact,
+        )
         // Filo d'oro sotto l'intestazione: chiude la fascia dei turni come il
         // bordo inciso di un pannello, senza il peso di un bordo pieno.
         GoldenRule()
@@ -103,7 +113,11 @@ fun BattleScreen(
                 },
             )
         }
-        SessionMenuDialog(sessions)
+        SessionMenuDialog(
+            manager = sessions,
+            onOpenInNewTab = onOpenSavedSession,
+            workspace = workspace,
+        )
 
         viewModel.actionResolution?.let { resolution ->
             val tone = if (resolution.isHit) Palette.Heal else Palette.GoldBright
@@ -477,6 +491,8 @@ private fun Rail(
 private fun BattleTopBar(
     viewModel: BattleViewModel,
     sessions: SessionManager,
+    openSessionCount: Int,
+    autosaveWarning: Boolean,
     compact: Boolean,
 ) {
     // Il pannello ordine turni si puo' contrarre per liberare spazio in cima.
@@ -510,7 +526,11 @@ private fun BattleTopBar(
             ) {
                 TurnOrderStrip(viewModel, Modifier.weight(1f), editing = viewModel.editMode)
                 EditModeButton(viewModel)
-                SessionMenuButton(sessions)
+                SessionMenuButton(
+                    sessions,
+                    openSessionCount = openSessionCount,
+                    autosaveWarning = autosaveWarning,
+                )
             }
         }
         return
@@ -578,7 +598,12 @@ private fun BattleTopBar(
                 )
             }
             EditModeButton(viewModel)
-            SessionMenuButton(sessions, dense = true)
+            SessionMenuButton(
+                sessions,
+                dense = true,
+                openSessionCount = openSessionCount,
+                autosaveWarning = autosaveWarning,
+            )
             // "Round" si e' spostato nel registro; "Attivo" non si mostra, resta solo
             // uno stato quando c'e' davvero qualcosa da segnalare (bozza, pausa...).
             if (viewModel.status != CombatStatus.ACTIVE) {

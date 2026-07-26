@@ -80,6 +80,7 @@ fun GameButton(
     // Azione principale della schermata: pillola d'oro piena, come lo stato
     // selezionato, ma senza dichiararsi "selezionata" all'accessibilita'.
     primary: Boolean = false,
+    role: Role = Role.Button,
 ) {
     val tint = if (enabled) accent else Palette.TextFaint
     val shape = RoundedCornerShape(if (dense) 5.dp else 7.dp)
@@ -137,7 +138,7 @@ fun GameButton(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
                 enabled = enabled,
-                role = Role.Button,
+                role = role,
             ) { onClick() }
             .padding(
                 horizontal = if (dense) 8.dp else 13.dp,

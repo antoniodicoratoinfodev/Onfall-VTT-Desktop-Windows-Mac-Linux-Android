@@ -381,6 +381,42 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `togliere un token dalla mappa conserva l'ingombro della sessione`() {
+        val largeId = SampleEncounter.enemies().first().id()
+        var catalogFootprint = 2
+        val model = BattleViewModel(
+            SampleEncounter.startedSession(seed = 4242L),
+            footprintProvider = { id -> if (id == largeId) catalogFootprint else 1 },
+        )
+        model.place(largeId, 2, 2, model.squaresPerSideFor(largeId))
+
+        catalogFootprint = 4
+        model.removeFromMap(largeId)
+
+        assertNull(model.placementOf(largeId))
+        assertEquals(2, model.squaresPerSideFor(largeId))
+        assertTrue(model.presentationState()["footprints"]!!.contains("$largeId=2"))
+    }
+
+    @Test
+    fun `ridurre la griglia conserva l'ingombro dei token rimasti fuori bordo`() {
+        val largeId = SampleEncounter.enemies().first().id()
+        var catalogFootprint = 2
+        val model = BattleViewModel(
+            SampleEncounter.startedSession(seed = 4242L),
+            footprintProvider = { id -> if (id == largeId) catalogFootprint else 1 },
+        )
+        model.place(largeId, 18, 13, model.squaresPerSideFor(largeId))
+
+        catalogFootprint = 4
+        model.configureMap(columns = 10, rows = 10, feetPerSquare = 5)
+
+        assertNull(model.placementOf(largeId))
+        assertEquals(2, model.squaresPerSideFor(largeId))
+        assertTrue(model.presentationState()["footprints"]!!.contains("$largeId=2"))
+    }
+
+    @Test
     fun `le cure non superano i punti ferita massimi`() {
         val model = viewModel()
         val target = model.partyIds.first()

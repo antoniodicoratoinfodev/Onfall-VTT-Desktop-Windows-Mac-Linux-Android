@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.d6d.domain.combat.CombatState
+import app.d6d.persistence.session.SessionArchive
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.persistence.session.SessionSummary
 import app.d6d.ui.state.BattleViewModel
@@ -13,6 +14,7 @@ enum class SessionSaveResult {
     SAVED,
     NOT_NEEDED,
     NAME_COLLISION,
+    OPEN_IN_ANOTHER_TAB,
     NO_CURRENT_SESSION,
     FAILED,
 }
@@ -34,6 +36,11 @@ enum class SessionLoadResult {
 class SessionManager(
     private val store: SessionArchiveStore,
     private val battle: BattleViewModel,
+    /**
+     * Lease fornito dal workspace multi-sessione. Impedisce che due schede aperte
+     * diventino proprietarie dello stesso file e si sovrascrivano via autosave.
+     */
+    private val slugOwnedByAnotherTab: (String) -> Boolean = { false },
 ) {
 
     var sessions by mutableStateOf<List<SessionSummary>>(emptyList())
@@ -51,10 +58,12 @@ class SessionManager(
     val currentDisplayName: String
         get() = currentName.ifBlank { battle.displayName }
 
-    private var savedState: CombatState? = null
-    private var savedPresentation: Map<String, String>? = null
-    private var savedDisplayName: String? = null
-    private var savedGeneration: Long? = null
+    // Anche le baseline sono stato Compose: quando un autosave le aggiorna senza
+    // cambiare slug, titolo e tab devono spegnere subito l'indicatore "da salvare".
+    private var savedState by mutableStateOf<CombatState?>(null)
+    private var savedPresentation by mutableStateOf<Map<String, String>?>(null)
+    private var savedDisplayName by mutableStateOf<String?>(null)
+    private var savedGeneration by mutableStateOf<Long?>(null)
 
     /** Include sia lo stato del motore sia le scelte di presentazione. */
     val hasUnsavedChanges: Boolean
@@ -86,6 +95,10 @@ class SessionManager(
      */
     fun save(displayName: String, overwriteExisting: Boolean = false): SessionSaveResult {
         val requestedSlug = SessionArchiveStore.slugify(displayName)
+        if (slugOwnedByAnotherTab(requestedSlug)) {
+            status = "Questa sessione è già aperta in un'altra scheda. Attivala oppure scegli un altro nome."
+            return SessionSaveResult.OPEN_IN_ANOTHER_TAB
+        }
         val ownsRequestedFile = currentSlug == requestedSlug && savedGeneration == battle.sessionGeneration
         if (store.exists(requestedSlug) && !ownsRequestedFile && !overwriteExisting) {
             status = "Esiste già una sessione con questo nome. Scegli un altro nome o conferma la sovrascrittura."
@@ -122,6 +135,10 @@ class SessionManager(
             status = "Salva prima la sessione con un nome per attivare il salvataggio automatico."
             return SessionSaveResult.NO_CURRENT_SESSION
         }
+        if (slugOwnedByAnotherTab(slug)) {
+            status = "Salvataggio sospeso: il file è collegato a un'altra scheda aperta."
+            return SessionSaveResult.OPEN_IN_ANOTHER_TAB
+        }
         if (!hasUnsavedChanges) return SessionSaveResult.NOT_NEEDED
         if (SessionArchiveStore.slugify(currentName) != slug) {
             status = "Il nome della sessione è cambiato: usa Salva per scegliere il nuovo file."
@@ -137,10 +154,16 @@ class SessionManager(
         status = null
     }
 
-    fun delete(summary: SessionSummary) = guard("Sessione eliminata.") {
-        store.delete(summary.slug)
-        if (currentSlug == summary.slug) clearCurrentSave()
-        sessions = store.list()
+    fun delete(summary: SessionSummary) {
+        if (slugOwnedByAnotherTab(summary.slug)) {
+            status = "Chiudi prima la scheda che usa «${summary.displayName}»."
+            return
+        }
+        guard("Sessione eliminata.") {
+            store.delete(summary.slug)
+            if (currentSlug == summary.slug) clearCurrentSave()
+            sessions = store.list()
+        }
     }
 
     fun dismissStatus() {
@@ -165,14 +188,13 @@ class SessionManager(
     }
 
     private fun loadInternal(summary: SessionSummary): SessionLoadResult {
+        if (slugOwnedByAnotherTab(summary.slug)) {
+            status = "Questa sessione è già aperta in un'altra scheda."
+            return SessionLoadResult.FAILED
+        }
         return try {
             val archive = store.load(summary.slug)
-            battle.adopt(archive.session, archive.presentation)
-            currentSlug = archive.summary().slug
-            currentName = archive.summary().displayName
-            markSaved()
-            menuOpen = false
-            status = "Sessione «${summary.displayName}» caricata."
+            attachLoaded(archive, announce = true)
             SessionLoadResult.LOADED
         } catch (failure: IOException) {
             status = "Errore su disco: ${failure.message}"
@@ -180,6 +202,26 @@ class SessionManager(
         } catch (failure: IllegalArgumentException) {
             status = "Sessione non valida: ${failure.message}"
             SessionLoadResult.FAILED
+        }
+    }
+
+    /**
+     * Collega a questo documento un archivio già letto dal workspace.
+     *
+     * È `internal` perché non è un comando utente: serve ad aprire il file in una
+     * nuova scheda con un BattleViewModel dedicato, senza rileggerlo e soprattutto
+     * senza sostituire la partita attiva.
+     */
+    internal fun attachLoaded(archive: SessionArchive, announce: Boolean = false) {
+        battle.adopt(archive.session, archive.presentation)
+        currentSlug = archive.summary().slug
+        currentName = archive.summary().displayName
+        markSaved()
+        menuOpen = false
+        status = if (announce) {
+            "Sessione «${archive.summary().displayName}» caricata."
+        } else {
+            null
         }
     }
 

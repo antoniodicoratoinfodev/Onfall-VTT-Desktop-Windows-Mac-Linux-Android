@@ -3,6 +3,7 @@ package app.d6d.ui.encounter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,8 +37,11 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.roster.RosterKind
+import app.d6d.ui.session.OpenSessionsPanel
 import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.SessionMenuDialog
+import app.d6d.ui.session.SessionWorkspace
+import app.d6d.ui.session.WorkspaceOpenResult
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
 
@@ -46,16 +51,24 @@ import app.d6d.ui.theme.Palette
 fun EncounterBuilderScreen(
     viewModel: EncounterBuilderViewModel,
     compact: Boolean,
-    sessions: SessionManager,
+    workspace: SessionWorkspace,
     onStarted: (CombatSession, String, EncounterMode) -> Unit,
-    onSessionLoaded: () -> Unit,
+    onOpenBattle: () -> Unit,
     onOpenCompendium: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val sessions = workspace.activeSession.manager
     // Fondo trasparente: lascia trasparire il fondale atmosferico condiviso di
     // AppRoot. Intestazione e pannelli hanno superfici proprie e restano leggibili.
     Column(modifier.fillMaxSize()) {
         EncounterHeader(viewModel.step, compact)
+        GoldenRule()
+        OpenSessionsPanel(
+            workspace = workspace,
+            onOpenBattle = onOpenBattle,
+            onNewSession = { viewModel.restartWizard() },
+            compact = compact,
+        )
         GoldenRule()
 
         viewModel.status?.let { message ->
@@ -70,7 +83,20 @@ fun EncounterBuilderScreen(
             )
         }
 
-        SessionMenuDialog(sessions, onLoaded = onSessionLoaded)
+        SessionMenuDialog(
+            manager = sessions,
+            workspace = workspace,
+            onOpenInNewTab = { summary ->
+                when (workspace.openSaved(summary)) {
+                    WorkspaceOpenResult.OPENED,
+                    WorkspaceOpenResult.ALREADY_OPEN -> {
+                        viewModel.restartWizard()
+                        onOpenBattle()
+                    }
+                    WorkspaceOpenResult.FAILED -> Unit
+                }
+            },
+        )
 
         when (viewModel.step) {
             NewGameStep.TEMPLATE -> TemplateChoiceStep(
@@ -138,7 +164,13 @@ private fun TemplateChoiceStep(
 ) {
     val people = viewModel.participants.count { it.kind == RosterKind.PERSONAGGIO }
     val creatures = viewModel.participants.count { it.kind == RosterKind.CREATURA }
-    Box(modifier.fillMaxWidth().padding(if (compact) 12.dp else 24.dp), contentAlignment = Alignment.Center) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(if (compact) 12.dp else 24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Column(
             Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -151,7 +183,8 @@ private fun TemplateChoiceStep(
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(
-                "I template esistenti non vengono mai cancellati scegliendo di creare da zero.",
+                "I personaggi possono partecipare a più sessioni: ogni partita riceve una copia " +
+                    "indipendente di PF, condizioni, turni e posizione. Creare da zero non elimina i template.",
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -173,7 +206,7 @@ private fun TemplateChoiceStep(
                     onClick = onCreateFromScratch,
                 )
                 GameButton(
-                    label = "Carica sessione",
+                    label = "Apri sessione salvata",
                     subtitle = when (sessions.sessions.size) {
                         0 -> "Nessuna sessione salvata"
                         1 -> "1 sessione salvata"
@@ -382,7 +415,10 @@ private fun GridStep(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.fillMaxWidth().padding(if (compact) 12.dp else 22.dp),
+        modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(if (compact) 12.dp else 22.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Text(
@@ -411,18 +447,18 @@ private fun GridStep(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             GameButton("− colonne", accent = Palette.TextMuted, onClick = {
-                viewModel.updateGridColumns(viewModel.gridColumns - 5)
+                viewModel.updateGridColumns(viewModel.gridColumns - 1)
             })
             Chip("${viewModel.gridColumns} colonne", Palette.Text)
             GameButton("+ colonne", accent = Palette.TextMuted, onClick = {
-                viewModel.updateGridColumns(viewModel.gridColumns + 5)
+                viewModel.updateGridColumns(viewModel.gridColumns + 1)
             })
             GameButton("− righe", accent = Palette.TextMuted, onClick = {
-                viewModel.updateGridRows(viewModel.gridRows - 5)
+                viewModel.updateGridRows(viewModel.gridRows - 1)
             })
             Chip("${viewModel.gridRows} righe", Palette.Text)
             GameButton("+ righe", accent = Palette.TextMuted, onClick = {
-                viewModel.updateGridRows(viewModel.gridRows + 5)
+                viewModel.updateGridRows(viewModel.gridRows + 1)
             })
         }
 
@@ -480,7 +516,13 @@ private fun ModeStep(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier.fillMaxWidth().padding(if (compact) 12.dp else 24.dp), contentAlignment = Alignment.Center) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(if (compact) 12.dp else 24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Column(
             Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(14.dp),

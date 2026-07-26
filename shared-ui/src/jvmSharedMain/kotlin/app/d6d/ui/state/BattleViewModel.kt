@@ -816,8 +816,29 @@ class BattleViewModel(
     fun distanceFeet(first: String, second: String): Int? =
         battleMap.distanceFeet(first, second).orElse(null)
 
-    fun configureMap(columns: Int, rows: Int, feetPerSquare: Int) = command {
-        session.configureMap(MapGrid(columns.coerceAtLeast(1), rows.coerceAtLeast(1), feetPerSquare.coerceAtLeast(1)))
+    fun configureMap(columns: Int, rows: Int, feetPerSquare: Int) {
+        val placementsBefore = state.combatants().keys.mapNotNull { combatantId ->
+            placementOf(combatantId)?.let { combatantId to it }
+        }.toMap()
+        val revisionBefore = state.revision()
+        command {
+            session.configureMap(
+                MapGrid(
+                    columns.coerceAtLeast(1),
+                    rows.coerceAtLeast(1),
+                    feetPerSquare.coerceAtLeast(1),
+                ),
+            )
+        }
+        if (state.revision() != revisionBefore) {
+            // Una griglia più piccola elimina automaticamente i token rimasti
+            // fuori bordo. Anche in quel caso la loro taglia appartiene a questa
+            // sessione e non deve tornare a dipendere dal template condiviso.
+            val removedFootprints = placementsBefore
+                .filterKeys { combatantId -> placementOf(combatantId) == null }
+                .mapValues { (_, placement) -> placement.squaresPerSide() }
+            if (removedFootprints.isNotEmpty()) footprints = footprints + removedFootprints
+        }
     }
 
     fun setMapBackground(imageName: String) {
@@ -852,7 +873,18 @@ class BattleViewModel(
         move(actor, column, row)
     }
 
-    fun removeFromMap(combatantId: String) = command { session.removeFromMap(combatantId) }
+    fun removeFromMap(combatantId: String) {
+        val existing = placementOf(combatantId)
+        val revisionBefore = state.revision()
+        command { session.removeFromMap(combatantId) }
+        // Una volta tolto dalla mappa non possiamo più leggere l'ingombro dal
+        // TokenPlacement. Lo conserviamo nella presentation della sessione,
+        // così modifiche successive al template nel Compendio non cambiano il
+        // token quando questa stessa partita lo rimetterà sulla griglia.
+        if (existing != null && state.revision() != revisionBefore) {
+            footprints = footprints + (combatantId to existing.squaresPerSide())
+        }
+    }
 
     /**
      * Dispone chi non e' ancora sulla mappa in due file contrapposte.
