@@ -55,6 +55,7 @@ import app.d6d.ui.components.VerticalResizeHandle
 import kotlin.math.roundToInt
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.layout.LocalUiLayout
+import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.SessionMenuButton
 import app.d6d.ui.session.SessionMenuDialog
@@ -83,8 +84,11 @@ fun BattleScreen(
     portraits: PortraitRepository,
     sessions: SessionManager,
     workspace: SessionWorkspace,
+    roster: RosterViewModel,
     compact: Boolean,
     onOpenCombatantSheet: (String) -> Unit,
+    onCreateRosterCharacter: () -> Unit,
+    onCreateRosterCreature: () -> Unit,
     onOpenSavedSession: (SessionSummary) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -149,9 +153,25 @@ fun BattleScreen(
         }
 
         if (compact) {
-            CompactBattleBody(viewModel, portraits, onOpenCombatantSheet, Modifier.weight(1f))
+            CompactBattleBody(
+                viewModel,
+                portraits,
+                roster,
+                onOpenCombatantSheet,
+                onCreateRosterCharacter,
+                onCreateRosterCreature,
+                Modifier.weight(1f),
+            )
         } else {
-            WideBattleBody(viewModel, portraits, onOpenCombatantSheet, Modifier.weight(1f))
+            WideBattleBody(
+                viewModel,
+                portraits,
+                roster,
+                onOpenCombatantSheet,
+                onCreateRosterCharacter,
+                onCreateRosterCreature,
+                Modifier.weight(1f),
+            )
         }
     }
 }
@@ -161,7 +181,10 @@ fun BattleScreen(
 private fun WideBattleBody(
     viewModel: BattleViewModel,
     portraits: PortraitRepository,
+    roster: RosterViewModel,
     onOpenCombatantSheet: (String) -> Unit,
+    onCreateRosterCharacter: () -> Unit,
+    onCreateRosterCreature: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -177,7 +200,10 @@ private fun WideBattleBody(
                 title = "Squadra",
                 ids = viewModel.partyIds,
                 faction = Faction.PARTY,
+                roster = roster,
                 onOpenSheet = onOpenCombatantSheet,
+                onCreateRosterCharacter = onCreateRosterCharacter,
+                onCreateRosterCreature = onCreateRosterCreature,
                 modifier = Modifier.width(layout.squadWidth),
                 dropTarget = dropTarget,
             )
@@ -228,7 +254,10 @@ private fun WideBattleBody(
                     title = "Nemici",
                     ids = viewModel.enemyIds,
                     faction = Faction.ENEMY,
+                    roster = roster,
                     onOpenSheet = onOpenCombatantSheet,
+                    onCreateRosterCharacter = onCreateRosterCharacter,
+                    onCreateRosterCreature = onCreateRosterCreature,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     dropTarget = dropTarget,
                 )
@@ -368,7 +397,10 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
 private fun CompactBattleBody(
     viewModel: BattleViewModel,
     portraits: PortraitRepository,
+    roster: RosterViewModel,
     onOpenCombatantSheet: (String) -> Unit,
+    onCreateRosterCharacter: () -> Unit,
+    onCreateRosterCreature: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var tab by remember { mutableStateOf(CompactTab.PALCO) }
@@ -397,7 +429,10 @@ private fun CompactBattleBody(
                     title = "Squadra",
                     ids = viewModel.partyIds,
                     faction = Faction.PARTY,
+                    roster = roster,
                     onOpenSheet = onOpenCombatantSheet,
+                    onCreateRosterCharacter = onCreateRosterCharacter,
+                    onCreateRosterCreature = onCreateRosterCreature,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -406,7 +441,10 @@ private fun CompactBattleBody(
                     title = "Nemici",
                     ids = viewModel.enemyIds,
                     faction = Faction.ENEMY,
+                    roster = roster,
                     onOpenSheet = onOpenCombatantSheet,
+                    onCreateRosterCharacter = onCreateRosterCharacter,
+                    onCreateRosterCreature = onCreateRosterCreature,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -431,12 +469,16 @@ private fun Rail(
     title: String,
     ids: List<String>,
     faction: Faction,
+    roster: RosterViewModel,
     onOpenSheet: (String) -> Unit,
+    onCreateRosterCharacter: () -> Unit,
+    onCreateRosterCreature: () -> Unit,
     modifier: Modifier = Modifier,
     dropTarget: TokenPlacementDrag? = null,
 ) {
     val standing = ids.count { viewModel.combatant(it)?.defeated() == false }
     val accent = if (faction == Faction.PARTY) Palette.Party else Palette.Enemy
+    var rosterDialogOpen by remember { mutableStateOf(false) }
     Column(
         modifier
             .fillMaxSize()
@@ -455,7 +497,20 @@ private fun Rail(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Eyebrow(title, color = accent)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Eyebrow(title, color = accent)
+                if (viewModel.editMode) {
+                    GameButton(
+                        "+",
+                        accent = accent,
+                        dense = true,
+                        onClick = { rosterDialogOpen = true },
+                    )
+                }
+            }
             Text(
                 text = "$standing/${ids.size} in piedi",
                 color = Palette.TextMuted,
@@ -485,6 +540,22 @@ private fun Rail(
             PanelScrollbar(listState, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
         }
     }
+
+    BattleRosterDialog(
+        open = rosterDialogOpen,
+        targetFaction = faction,
+        viewModel = viewModel,
+        roster = roster,
+        onCreateCharacter = {
+            rosterDialogOpen = false
+            onCreateRosterCharacter()
+        },
+        onCreateCreature = {
+            rosterDialogOpen = false
+            onCreateRosterCreature()
+        },
+        onDismiss = { rosterDialogOpen = false },
+    )
 }
 
 @Composable

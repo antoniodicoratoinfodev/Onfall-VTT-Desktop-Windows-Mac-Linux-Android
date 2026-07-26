@@ -53,6 +53,7 @@ import app.d6d.ui.encounter.EncounterBuilderViewModel
 import app.d6d.ui.encounter.EncounterMode
 import app.d6d.sheet.SheetStore
 import app.d6d.ui.roster.RosterScreen
+import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.sheet.ImageStore
 import app.d6d.ui.images.FilePicker
@@ -108,6 +109,7 @@ fun AppRoot(
     AppTheme {
         var destination by remember { mutableStateOf(Destination.BATTAGLIA) }
         var requestedCompendiumItemId by remember { mutableStateOf<String?>(null) }
+        var requestedCompendiumNewKind by remember { mutableStateOf<RosterKind?>(null) }
 
         // Il roster unifica schede e compendio: le schede sono la fonte, il catalogo
         // da combattimento ne discende.
@@ -235,16 +237,28 @@ fun AppRoot(
                                 portraits = portraits,
                                 sessions = sessions,
                                 workspace = workspace,
+                                roster = roster,
                                 compact = compact,
                                 onOpenCombatantSheet = { definitionId ->
                                     if (roster.items.any { it.id == definitionId }) {
                                         requestedCompendiumItemId = definitionId
+                                        requestedCompendiumNewKind = null
                                         destination = Destination.COMPENDIO
                                     } else {
                                         battleViewModel.showMessage(
                                             "La scheda collegata a questo combattente non è presente nel Compendio.",
                                         )
                                     }
+                                },
+                                onCreateRosterCharacter = {
+                                    requestedCompendiumItemId = null
+                                    requestedCompendiumNewKind = RosterKind.PERSONAGGIO
+                                    destination = Destination.COMPENDIO
+                                },
+                                onCreateRosterCreature = {
+                                    requestedCompendiumItemId = null
+                                    requestedCompendiumNewKind = RosterKind.CREATURA
+                                    destination = Destination.COMPENDIO
                                 },
                                 onOpenSavedSession = openSavedSession,
                                 modifier = Modifier.fillMaxSize(),
@@ -274,6 +288,8 @@ fun AppRoot(
                             compact = compact,
                             requestedItemId = requestedCompendiumItemId,
                             onRequestedItemHandled = { requestedCompendiumItemId = null },
+                            requestedNewKind = requestedCompendiumNewKind,
+                            onRequestedNewHandled = { requestedCompendiumNewKind = null },
                             modifier = Modifier.fillMaxSize(),
                         )
                 }

@@ -154,6 +154,56 @@ public final class CombatSession {
                 "definitionId", actor.id(), "definitionVersion", actor.definitionVersion(), "name", actor.name()));
     }
 
+    /**
+     * Adds a combatant while an encounter is already being prepared or played.
+     *
+     * <p>The new entry receives its static initiative immediately. In live play the
+     * initiative list is rebuilt around the existing current turn, so reinforcements
+     * enter the queue without stealing the action in progress.</p>
+     */
+    public synchronized void addCombatantToEncounter(String instanceId, ActorDefinition actor, boolean party) {
+        if (state.status == CombatStatus.RESOLVED) {
+            throw rule("A resolved encounter cannot receive new combatants");
+        }
+        requireText(instanceId, "instanceId");
+        Objects.requireNonNull(actor, "actor");
+        if (state.combatants.containsKey(instanceId)) {
+            throw rule("Duplicate combatant instance id: " + instanceId);
+        }
+        String anchor = (state.status == CombatStatus.ACTIVE || state.status == CombatStatus.PAUSED)
+                ? currentTurnAnchor()
+                : "";
+        CombatantSnapshot snapshot = CombatantSnapshot.from(instanceId, actor);
+        beginCommand();
+        state.rosterOrder.add(instanceId);
+        state.combatants.put(instanceId, MutableCombatant.from(snapshot));
+        state.turnBudgets.put(instanceId, TurnBudget.fresh(snapshot.speedFeet()));
+        state.initiativeScores.put(instanceId, actor.initiativeScore());
+        if (party) {
+            state.partyCombatantIds.add(instanceId);
+        }
+        if (state.status == CombatStatus.ACTIVE || state.status == CombatStatus.PAUSED) {
+            rebuildInitiativeOrder();
+            List<List<String>> groups = turnGroups();
+            for (int i = 0; i < groups.size(); i++) {
+                if (groups.get(i).contains(anchor)) {
+                    state.turnIndex = i;
+                    break;
+                }
+            }
+        } else if (state.status == CombatStatus.READY &&
+                state.initiativeScores.keySet().containsAll(state.combatants.keySet())) {
+            rebuildInitiativeOrder();
+        }
+        append(EventType.COMBATANT_ADDED, instanceId, "", details(
+                "definitionId", actor.id(),
+                "definitionVersion", actor.definitionVersion(),
+                "name", actor.name(),
+                "faction", party ? "party" : "enemy",
+                "initiative", actor.initiativeScore(),
+                "live", state.status == CombatStatus.ACTIVE || state.status == CombatStatus.PAUSED));
+    }
+
     public synchronized void markReady() {
         requireStatus(CombatStatus.DRAFT);
         if (state.combatants.isEmpty()) throw rule("An encounter needs at least one combatant");
@@ -275,12 +325,7 @@ public final class CombatSession {
         }
         beginCommand();
         if (state.initiativeOrder.size() != state.combatants.size()) {
-            state.initiativeOrder.clear();
-            state.initiativeOrder.addAll(state.rosterOrder.stream()
-                    .sorted(Comparator
-                            .<String>comparingInt(id -> state.initiativeScores.get(id)).reversed()
-                            .thenComparingInt(state.rosterOrder::indexOf))
-                    .collect(Collectors.toList()));
+            rebuildInitiativeOrder();
         }
         state.status = CombatStatus.ACTIVE;
         state.round = 1;
@@ -1211,13 +1256,7 @@ public final class CombatSession {
         String anchor = currentTurnAnchor();
         beginCommand();
         state.initiativeScores.put(combatantId, total);
-        List<String> resorted = state.initiativeOrder.stream()
-                .sorted(Comparator
-                        .<String>comparingInt(id -> state.initiativeScores.get(id)).reversed()
-                        .thenComparingInt(state.rosterOrder::indexOf))
-                .collect(Collectors.toList());
-        state.initiativeOrder.clear();
-        state.initiativeOrder.addAll(resorted);
+        rebuildInitiativeOrder();
         List<List<String>> groups = turnGroups();
         for (int i = 0; i < groups.size(); i++) {
             if (groups.get(i).contains(anchor)) {
@@ -1635,6 +1674,16 @@ public final class CombatSession {
     private TurnBudget budget(String combatantId) {
         combatant(combatantId);
         return state.turnBudgets.get(combatantId);
+    }
+
+    private void rebuildInitiativeOrder() {
+        List<String> resorted = state.rosterOrder.stream()
+                .sorted(Comparator
+                        .<String>comparingInt(id -> state.initiativeScores.get(id)).reversed()
+                        .thenComparingInt(state.rosterOrder::indexOf))
+                .collect(Collectors.toList());
+        state.initiativeOrder.clear();
+        state.initiativeOrder.addAll(resorted);
     }
 
     /**

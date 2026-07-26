@@ -1,6 +1,7 @@
 package app.d6d.engine;
 
 import app.d6d.domain.combat.CombatEvent;
+import app.d6d.domain.combat.ActorDefinition;
 import app.d6d.domain.combat.CombatantSnapshot;
 import app.d6d.domain.combat.DamageComponent;
 import app.d6d.domain.combat.DamageType;
@@ -110,6 +111,29 @@ class CombatantEditTest {
         assertTrue(session.undo());
         assertEquals(40, session.currentState().combatants().get("hero").currentHitPoints());
         assertFalse(session.currentState().combatants().get("hero").dead());
+    }
+
+    @Test
+    void aggiungereUnCombattenteDuranteLoScontroNonRubaIlTurnoCorrente() {
+        CombatSession session = CombatFixtures.active(3L);
+        ActorDefinition reinforcement = ActorDefinition.builder("wizard-definition", "Wizard")
+                .armorClass(12)
+                .maxHitPoints(18)
+                .initiativeScore(30)
+                .build();
+
+        session.addCombatantToEncounter("wizard", reinforcement, true);
+
+        assertEquals("hero", session.currentState().currentCombatantId().orElseThrow());
+        assertTrue(session.currentState().partyCombatantIds().contains("wizard"));
+        assertEquals(30, session.currentState().initiativeScores().get("wizard"));
+        assertEquals("wizard", session.currentState().initiativeOrder().get(0));
+        assertTrue(session.auditTrail().stream().anyMatch(event ->
+                event.type() == EventType.COMBATANT_ADDED && event.actorId().equals("wizard")));
+
+        assertTrue(session.undo());
+        assertFalse(session.currentState().combatants().containsKey("wizard"));
+        assertEquals("hero", session.currentState().currentCombatantId().orElseThrow());
     }
 
     @Test

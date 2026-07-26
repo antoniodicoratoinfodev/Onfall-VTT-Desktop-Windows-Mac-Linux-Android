@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import app.d6d.domain.combat.AbilityDefinition
 import app.d6d.domain.combat.AreaSpellResult
 import app.d6d.domain.combat.AttackRequest
+import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.CombatEvent
 import app.d6d.domain.combat.CombatState
 import app.d6d.domain.combat.CombatStatus
@@ -297,6 +298,21 @@ class BattleViewModel(
     // --- comandi ---------------------------------------------------------------------
 
     fun start() = command { session.start() }
+
+    fun addRosterCombatant(actor: ActorDefinition, party: Boolean): String? {
+        if (!editMode) {
+            message = "Attiva Modifica per aggiungere combattenti alla sessione."
+            return null
+        }
+        val (instanceId, copyNumber) = nextRosterInstanceId(actor.id())
+        val encounterActor = if (copyNumber == 1) actor else actor.withEncounterName("${actor.name()} $copyNumber")
+        val revisionBefore = state.revision()
+        command { session.addCombatantToEncounter(instanceId, encounterActor, party) }
+        if (state.revision() == revisionBefore) return null
+        footprints = footprints + (instanceId to footprintProvider(actor.id()).coerceIn(1, 4))
+        inspectCombatant(instanceId)
+        return instanceId
+    }
 
     fun attack(abilityId: String) {
         val attacker = activeCombatantId ?: return
@@ -1086,6 +1102,35 @@ class BattleViewModel(
         if (snapshot.status() != CombatStatus.ACTIVE && snapshot.status() != CombatStatus.PAUSED) return null
         return "${snapshot.round()}:${snapshot.turnIndex()}:${snapshot.currentCombatantIds().joinToString(",")}"
     }
+
+    private fun nextRosterInstanceId(definitionId: String): Pair<String, Int> {
+        if (combatant(definitionId) == null) return definitionId to 1
+        var copyNumber = 2
+        while (combatant("$definitionId-$copyNumber") != null) copyNumber += 1
+        return "$definitionId-$copyNumber" to copyNumber
+    }
+
+    private fun ActorDefinition.withEncounterName(encounterName: String): ActorDefinition = ActorDefinition(
+        id(),
+        definitionVersion(),
+        rulesetVersion(),
+        encounterName,
+        armorClass(),
+        maxHitPoints(),
+        currentHitPoints(),
+        temporaryHitPoints(),
+        speedFeet(),
+        initiativeModifier(),
+        initiativeScore(),
+        constitutionSaveBonus(),
+        resistances(),
+        vulnerabilities(),
+        damageImmunities(),
+        conditionImmunities(),
+        abilities(),
+        savingThrowBonuses(),
+        spellSaveDc(),
+    )
 
     private sealed interface UndoEffect {
         data object None : UndoEffect

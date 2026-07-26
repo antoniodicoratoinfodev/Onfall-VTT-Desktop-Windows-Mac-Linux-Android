@@ -79,6 +79,27 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `in modifica si puo aggiungere una voce del grimorio alla squadra`() {
+        val model = viewModel()
+        val activeBefore = model.activeCombatantId
+        val actor = ActorDefinition.builder("rinforzo-def", "Rinforzo")
+            .armorClass(12)
+            .maxHitPoints(18)
+            .initiativeScore(30)
+            .build()
+        model.editMode = true
+
+        val instanceId = model.addRosterCombatant(actor, party = true)
+        val addedId = requireNotNull(instanceId)
+
+        assertEquals("rinforzo-def", addedId)
+        assertTrue(addedId in model.partyIds)
+        assertEquals(30, model.initiativeScore(addedId))
+        assertEquals(activeBefore, model.activeCombatantId)
+        assertTrue(model.events.any { it.type() == EventType.COMBATANT_ADDED && it.actorId() == addedId })
+    }
+
+    @Test
     fun `togliere lo sfondo chiude anche l'editing mappa`() {
         val model = viewModel()
         model.setMapBackground("mappa.png")

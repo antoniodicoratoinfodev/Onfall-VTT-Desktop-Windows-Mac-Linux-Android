@@ -61,6 +61,8 @@ fun RosterScreen(
     compact: Boolean,
     requestedItemId: String? = null,
     onRequestedItemHandled: () -> Unit = {},
+    requestedNewKind: RosterKind? = null,
+    onRequestedNewHandled: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var section by remember { mutableStateOf(RosterSection.SCHEDE) }
@@ -118,6 +120,19 @@ fun RosterScreen(
                 requestNavigation(RosterNavigation.Select(item))
             }
             onRequestedItemHandled()
+        }
+    }
+
+    LaunchedEffect(requestedNewKind) {
+        requestedNewKind?.let { kind ->
+            section = RosterSection.SCHEDE
+            requestNavigation(
+                when (kind) {
+                    RosterKind.PERSONAGGIO -> RosterNavigation.NewCharacter
+                    RosterKind.CREATURA -> RosterNavigation.NewCreature
+                },
+            )
+            onRequestedNewHandled()
         }
     }
 
