@@ -56,11 +56,14 @@ fun BattleLog(
     }
     val listState = rememberLazyListState()
 
-    // Segue gli eventi nuovi soltanto quando il tavolo era gia' in cima. Chi sta
-    // consultando la cronologia non viene riportato via dal punto che sta leggendo.
-    LaunchedEffect(viewModel.events.size) {
-        if (recent.isNotEmpty() && listState.firstVisibleItemIndex == 0) {
-            listState.animateScrollToItem(0)
+    // L'evento piu' recente vive all'indice zero. Ogni nuova interazione riporta
+    // sempre il registro in cima: durante il combattimento l'ultima cosa successa
+    // deve restare visibile anche se poco prima si stava leggendo la cronologia.
+    // La generazione copre anche il caricamento di una sessione diversa che abbia,
+    // per coincidenza, lo stesso numero e la stessa sequenza finale di eventi.
+    LaunchedEffect(viewModel.sessionGeneration, viewModel.events.lastOrNull()?.sequence()) {
+        if (recent.isNotEmpty()) {
+            listState.scrollToItem(0)
         }
     }
 
