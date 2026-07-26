@@ -201,9 +201,14 @@ private fun AbilityCard(
     ability: AbilityDefinition,
     manual: Boolean,
     enabled: Boolean,
+    selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val accent = if (manual) Palette.Party else Palette.Gold
+    val accent = when {
+        selected -> Palette.GoldBright
+        manual -> Palette.Party
+        else -> Palette.Gold
+    }
     val shape = RoundedCornerShape(7.dp)
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
@@ -216,16 +221,19 @@ private fun AbilityCard(
     val borderColor by animateColorAsState(
         targetValue = when {
             !enabled -> Palette.Line.copy(alpha = 0.5f)
+            selected -> Palette.GoldBright
             hovered -> accent
             else -> Palette.Bronze.copy(alpha = 0.75f)
         },
         animationSpec = tween(140),
         label = "abilityCardBorder",
     )
-    val fill = if (enabled) {
-        Brush.verticalGradient(listOf(Palette.SurfaceHigh, Palette.Surface))
-    } else {
-        Brush.verticalGradient(listOf(Palette.Surface, Palette.Surface))
+    val fill = when {
+        selected -> Brush.verticalGradient(
+            listOf(Palette.GoldDim.copy(alpha = 0.62f), Palette.SurfaceHigh),
+        )
+        enabled -> Brush.verticalGradient(listOf(Palette.SurfaceHigh, Palette.Surface))
+        else -> Brush.verticalGradient(listOf(Palette.Surface, Palette.Surface))
     }
 
     Column(
@@ -238,8 +246,9 @@ private fun AbilityCard(
                 scaleY = pressScale
             }
             .clip(shape)
+            .semantics { this.selected = selected }
             .background(fill, shape)
-            .border(1.dp, borderColor, shape)
+            .border(if (selected) 2.dp else 1.dp, borderColor, shape)
             .hoverable(interaction, enabled = enabled)
             .clickable(
                 interactionSource = interaction,
@@ -258,7 +267,11 @@ private fun AbilityCard(
         ) {
             Text(
                 text = ability.name(),
-                color = if (enabled) Palette.Text else Palette.TextFaint,
+                color = when {
+                    selected -> Palette.GoldBright
+                    enabled -> Palette.Text
+                    else -> Palette.TextFaint
+                },
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -293,6 +306,13 @@ private fun AbilityCard(
             Text(
                 text = "Risoluzione manuale · tocca per le regole",
                 color = Palette.TextFaint,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        } else if (selected) {
+            Text(
+                text = "IN MIRA · RICLICCA PER ANNULLARE",
+                color = Palette.GoldBright,
+                fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -398,20 +418,6 @@ fun CommandBar(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                viewModel.singleTargeting?.let { targeting ->
-                    Text(
-                        text = "Scegli bersaglio per «${targeting.name}»",
-                        color = Palette.GoldBright,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    GameButton(
-                        label = "Annulla mira",
-                        accent = Palette.TextMuted,
-                        dense = true,
-                        onClick = viewModel::cancelSingleTargeting,
-                    )
-                }
             }
             CollapseToggle(
                 collapsed = collapsed,
@@ -464,6 +470,29 @@ fun CommandBar(
             )
         }
 
+        viewModel.singleTargeting?.let { targeting ->
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Scegli il bersaglio di «${targeting.name}» · " +
+                        "riclicca l'abilità o annulla per tornare all'ispezione.",
+                    color = Palette.GoldBright,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                GameButton(
+                    label = "Annulla mira",
+                    accent = Palette.TextMuted,
+                    dense = true,
+                    onClick = viewModel::cancelSingleTargeting,
+                )
+            }
+        }
+
         if (abilities.isEmpty()) {
             Text(
                 text = "Nessuna capacità disponibile per questo combattente.",
@@ -486,10 +515,13 @@ fun CommandBar(
                         else -> true
                     }
                     val manual = ability.automationStatus() == AutomationStatus.MANUAL_REQUIRED
+                    val selected = viewModel.singleTargeting?.abilityId == ability.id() ||
+                        viewModel.areaTargeting?.abilityId == ability.id()
                     AbilityCard(
                         ability = ability,
                         manual = manual,
                         enabled = if (manual) displayedActorCanAct else affordable,
+                        selected = selected,
                         onClick = {
                             if (manual) {
                                 viewModel.showMessage(

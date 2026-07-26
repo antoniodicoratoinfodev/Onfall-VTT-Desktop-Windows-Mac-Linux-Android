@@ -142,17 +142,26 @@ internal fun BoxScope.FloatingCombatantPlates(viewModel: BattleViewModel) {
 
     topId?.let { combatantId ->
         FloatingPanel(Alignment.TopEnd, layout.targetPlate, { layout.targetPlate = it }) {
-            StagePlate(
-                viewModel,
-                combatantId,
-                if (inspectedId != null) {
-                    if (viewModel.selectedTargetId == combatantId) "In esame · bersaglio" else "In esame · consultazione"
-                } else {
-                    "Bersaglio selezionato"
-                },
-                scale = layout.targetPlateScale,
-                onScaleChange = { layout.targetPlateScale = it },
-            )
+            // Cambiare scheda in consultazione non e' una perdita o una cura di PF:
+            // ricreando lo stato visivo per identita', la nuova barra compare gia'
+            // al valore corretto invece di animarsi dai PF del soggetto precedente.
+            key(combatantId) {
+                StagePlate(
+                    viewModel,
+                    combatantId,
+                    if (inspectedId != null) {
+                        if (viewModel.selectedTargetId == combatantId) {
+                            "In esame · bersaglio"
+                        } else {
+                            "In esame · consultazione"
+                        }
+                    } else {
+                        "Bersaglio selezionato"
+                    },
+                    scale = layout.targetPlateScale,
+                    onScaleChange = { layout.targetPlateScale = it },
+                )
+            }
         }
     }
 

@@ -46,13 +46,20 @@ class BattleViewModelTest {
             .maxHitPoints(20)
             .initiativeScore(10)
             .build()
+        val ally = ActorDefinition.builder("alleato-def", "Alleato")
+            .armorClass(10)
+            .maxHitPoints(20)
+            .initiativeScore(15)
+            .build()
         val session = CombatSession.create("clic-immediato", 4242L)
         session.addCombatant("attaccante", attacker)
+        session.addCombatant("alleato", ally)
         session.addCombatant("bersaglio", target)
-        session.setPartyCombatants(listOf("attaccante"))
+        session.setPartyCombatants(listOf("attaccante", "alleato"))
         session.setInitiative("attaccante", 20)
+        session.setInitiative("alleato", 15)
         session.setInitiative("bersaglio", 10)
-        session.setInitiativeOrder(listOf("attaccante", "bersaglio"))
+        session.setInitiativeOrder(listOf("attaccante", "alleato", "bersaglio"))
         session.markReady()
         session.start()
         return BattleViewModel(session)
@@ -81,7 +88,7 @@ class BattleViewModelTest {
     }
 
     @Test
-    fun `un alleato o lo stesso attore non restano selezionati come bersaglio ostile`() {
+    fun `un alleato puo essere selezionato come bersaglio ma non lo stesso attore`() {
         val model = viewModel()
         val active = model.activeCombatantId!!
         val ally = model.partyIds.first { it != active }.takeIf { model.isParty(active) }
@@ -90,8 +97,8 @@ class BattleViewModelTest {
         model.selectedTargetId = active
         assertNull(model.selectedTargetId)
         model.selectedTargetId = ally
-        assertNull(model.selectedTargetId)
-        assertTrue(model.isParty(active) != model.isParty(model.effectiveTargetId()!!))
+        assertEquals(ally, model.selectedTargetId)
+        assertEquals(ally, model.effectiveTargetId())
     }
 
     @Test
@@ -123,24 +130,61 @@ class BattleViewModelTest {
         assertEquals(revisionBefore, model.state.revision())
         assertEquals(eventsBefore, model.events.size)
         assertNull(model.selectedTargetId)
+        assertNull(model.message)
     }
 
     @Test
-    fun `un bersaglio invalido non usa il nemico predefinito e lascia attiva la mira`() {
+    fun `ricliccare la capacita selezionata annulla la mira senza usare azioni`() {
         val model = viewModel()
         val active = model.activeCombatantId!!
-        val ally = (model.partyIds.takeIf { model.isParty(active) } ?: model.enemyIds)
-            .first { it != active }
+        val ability = model.abilities(active).first { !it.isArea }
+        val revisionBefore = model.state.revision()
+        val eventsBefore = model.events.size
+
+        model.beginAbilityTargeting(ability.id())
+        assertEquals(ability.id(), model.singleTargeting?.abilityId)
+
+        model.beginAbilityTargeting(ability.id())
+
+        assertNull(model.singleTargeting)
+        assertEquals(revisionBefore, model.state.revision())
+        assertEquals(eventsBefore, model.events.size)
+        assertNull(model.message)
+    }
+
+    @Test
+    fun `lo stesso attore non usa il bersaglio predefinito e lascia attiva la mira`() {
+        val model = viewModel()
+        val active = model.activeCombatantId!!
         val ability = model.abilities(active).first { !it.isArea }
         val revisionBefore = model.state.revision()
 
         model.beginAbilityTargeting(ability.id())
-        model.onCombatantClicked(ally)
+        model.onCombatantClicked(active)
 
         assertNotNull(model.singleTargeting)
         assertEquals(revisionBefore, model.state.revision())
         assertNull(model.selectedTargetId)
         assertNotNull(model.message)
+    }
+
+    @Test
+    fun `una capacita ostile applica immediatamente il danno anche a un alleato`() {
+        val model = guaranteedHitViewModel()
+        val ability = model.abilities("attaccante").first { !it.isArea }
+        val hitPointsBefore = model.combatant("alleato")!!.currentHitPoints()
+
+        model.beginAbilityTargeting(ability.id())
+        model.onCombatantClicked("alleato")
+
+        assertEquals(hitPointsBefore - 5, model.combatant("alleato")!!.currentHitPoints())
+        assertEquals("alleato", model.selectedTargetId)
+        assertNull(model.singleTargeting)
+        assertNull(model.message)
+        assertEquals(
+            "alleato",
+            model.events.last { it.type() == EventType.ATTACK_ROLLED }.targetId(),
+        )
     }
 
     @Test

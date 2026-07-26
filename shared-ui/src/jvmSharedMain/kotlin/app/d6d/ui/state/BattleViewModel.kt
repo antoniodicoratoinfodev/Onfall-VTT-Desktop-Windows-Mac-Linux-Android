@@ -88,8 +88,8 @@ class BattleViewModel(
     private var targetSelection by mutableStateOf<String?>(null)
 
     /**
-     * Bersaglio scelto per le azioni ostili. Se non e' un avversario valido
-     * dell'attore selezionato, la scelta viene scartata immediatamente.
+     * Bersaglio scelto per l'azione. Puo' appartenere a qualunque schieramento:
+     * il combattimento consente esplicitamente il fuoco amico.
      */
     var selectedTargetId: String?
         get() = targetSelection
@@ -393,7 +393,17 @@ class BattleViewModel(
             message = "Capacità non trovata."
             return
         }
+        if (singleTargeting?.let { it.abilityId == abilityId && it.attackerId == attacker } == true) {
+            cancelSingleTargeting()
+            return
+        }
+        if (areaTargeting?.let { it.abilityId == abilityId && it.casterId == attacker } == true) {
+            cancelAreaTargeting()
+            return
+        }
+
         actionResolution = null
+        message = null
         if (ability.isArea) {
             beginAreaTargeting(abilityId)
             return
@@ -403,7 +413,6 @@ class BattleViewModel(
         pendingArea = null
         targetSelection = null
         singleTargeting = SingleTargeting(ability.id(), attacker, ability.name())
-        message = "Scegli il bersaglio di «${ability.name()}». Annulla per tornare all'ispezione."
     }
 
     /** Annulla la scelta del bersaglio di una capacita' singola. */
@@ -424,9 +433,6 @@ class BattleViewModel(
             message = when {
                 targetId == targeting.attackerId -> "L'attore non può essere il proprio bersaglio."
                 combatant(targetId)?.defeated() == true -> "Il bersaglio è già a 0 punti ferita."
-                combatant(targetId) != null &&
-                    isParty(targetId) == isParty(targeting.attackerId) ->
-                    "Questa capacità ostile richiede un avversario."
                 else -> "Bersaglio non valido."
             }
             return
@@ -1031,8 +1037,7 @@ class BattleViewModel(
     private fun sanitizeTargetFor(attacker: String, candidate: String?): String? {
         return candidate?.takeIf {
             it != attacker &&
-                combatant(it)?.defeated() == false &&
-                isParty(it) != isParty(attacker)
+                combatant(it)?.defeated() == false
         }
     }
 

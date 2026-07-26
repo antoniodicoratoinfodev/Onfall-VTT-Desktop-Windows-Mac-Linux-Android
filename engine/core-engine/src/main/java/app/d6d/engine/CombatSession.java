@@ -356,19 +356,23 @@ public final class CombatSession {
             }
             D20RollResult attackRoll = rollD20For(attacker, request.attackRoll(), ability.attackBonus());
             AttackOutcome outcome = attackOutcome(attackRoll, target.snapshot.armorClass());
-            append(EventType.ATTACK_ROLLED, request.attackerId(), request.targetId(), merge(
-                    rollDetails(attackRoll), details("abilityId", ability.id(), "armorClass", target.snapshot.armorClass())));
+            Map<String, String> attackDetails = merge(
+                    rollDetails(attackRoll),
+                    details(
+                            "abilityId", ability.id(),
+                            "abilityName", ability.name(),
+                            "armorClass", target.snapshot.armorClass()));
+            append(EventType.ATTACK_ROLLED, request.attackerId(), request.targetId(), attackDetails);
 
             if (outcome == AttackOutcome.MISS) {
-                append(EventType.ATTACK_MISSED, request.attackerId(), request.targetId(),
-                        details("abilityId", ability.id()));
+                append(EventType.ATTACK_MISSED, request.attackerId(), request.targetId(), attackDetails);
                 return new AttackResult(request.attackerId(), request.targetId(), ability.id(), attackRoll,
                         outcome, List.of(), Optional.empty());
             }
 
             boolean critical = outcome == AttackOutcome.CRITICAL_HIT;
             append(critical ? EventType.CRITICAL_HIT : EventType.ATTACK_HIT,
-                    request.attackerId(), request.targetId(), details("abilityId", ability.id()));
+                    request.attackerId(), request.targetId(), attackDetails);
             List<DamageComponent> rolledDamage = resolveAttackDamage(ability, request.manualDamageValues(), critical,
                     request.attackerId(), request.targetId());
             DamageResult damage = applyDamageInternal(request.attackerId(), request.targetId(), rolledDamage,
@@ -453,6 +457,7 @@ public final class CombatSession {
             List<String> targets = combatantsInArea(center, ability.areaRadiusFeet());
             append(EventType.AREA_SPELL_CAST, casterId, "", details(
                     "abilityId", ability.id(),
+                    "abilityName", ability.name(),
                     "center", center,
                     "radiusFeet", ability.areaRadiusFeet(),
                     "saveDc", saveDc,
@@ -487,10 +492,15 @@ public final class CombatSession {
             saved = false;
         }
         if (ability.hasSavingThrow()) {
+            Map<String, String> saveDetails = details(
+                    "abilityId", ability.id(),
+                    "abilityName", ability.name(),
+                    "save", ability.saveAbility(),
+                    "dc", saveDc,
+                    "saved", saved);
             append(EventType.SAVING_THROW_ROLLED, casterId, targetId, saveRoll == null
-                    ? details("save", ability.saveAbility(), "dc", saveDc, "saved", saved, "source", "MANUAL")
-                    : merge(rollDetails(saveRoll),
-                            details("save", ability.saveAbility(), "dc", saveDc, "saved", saved)));
+                    ? merge(saveDetails, details("source", "MANUAL"))
+                    : merge(rollDetails(saveRoll), saveDetails));
         }
         List<DamageComponent> applied = damageAfterSave(rolled, ability, saved);
         DamageResult damage = applied.isEmpty()
@@ -1223,20 +1233,38 @@ public final class CombatSession {
             Map<String, String> eventDetails;
             if (!manualValues.isEmpty()) {
                 amount = manualValues.get(index);
-                eventDetails = details("type", formula.type(), "amount", amount, "source", "manual");
+                eventDetails = details(
+                        "abilityId", ability.id(),
+                        "abilityName", ability.name(),
+                        "type", formula.type(),
+                        "formula", formula.usesDice() ? formula.dice().notation() : formula.fixedAmount(),
+                        "amount", amount,
+                        "total", amount,
+                        "source", "manual");
             } else if (formula.usesDice()) {
                 DiceRollResult roll = dice.roll(formula.dice(), critical);
                 amount = Math.max(0, roll.total());
                 eventDetails = details(
+                        "abilityId", ability.id(),
+                        "abilityName", ability.name(),
                         "type", formula.type(),
+                        "formula", formula.dice().notation(),
                         "dice", roll.dice(),
                         "modifier", roll.modifier(),
                         "amount", amount,
+                        "total", amount,
                         "critical", critical);
             } else {
                 amount = formula.fixedAmount();
                 eventDetails = details(
-                        "type", formula.type(), "amount", amount, "source", "fixed", "critical", critical);
+                        "abilityId", ability.id(),
+                        "abilityName", ability.name(),
+                        "type", formula.type(),
+                        "formula", formula.fixedAmount(),
+                        "amount", amount,
+                        "total", amount,
+                        "source", "fixed",
+                        "critical", critical);
             }
             result.add(new DamageComponent(formula.type(), amount));
             append(EventType.DAMAGE_ROLLED, attackerId, targetId, eventDetails);

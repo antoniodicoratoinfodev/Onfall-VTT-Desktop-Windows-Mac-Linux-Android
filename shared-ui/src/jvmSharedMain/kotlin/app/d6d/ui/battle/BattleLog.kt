@@ -201,41 +201,97 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
     val actor = actorId().takeIf { it.isNotBlank() }?.let { viewModel.name(it) } ?: ""
     val target = targetId().takeIf { it.isNotBlank() }?.let { viewModel.name(it) } ?: ""
     val detail: (String) -> String = { key -> details()[key].orEmpty() }
+    val abilityName = detail("abilityName").ifBlank {
+        val abilityId = detail("abilityId")
+        viewModel.abilities(actorId()).firstOrNull { it.id() == abilityId }?.name().orEmpty()
+            .ifBlank { abilityId }
+    }
+    val ability = abilityName.takeIf { it.isNotBlank() }?.let { " con «$it»" }.orEmpty()
+    val d20 = details().d20Breakdown()
 
     return when (type()) {
         EventType.ENCOUNTER_CREATED -> "Incontro creato"
         EventType.COMBATANT_ADDED -> "$actor entra nell'incontro"
-        EventType.PARTY_SET -> "Schieramenti dichiarati"
+        EventType.PARTY_SET -> {
+            val party = detail("combatantIds")
+                .split(',')
+                .filter { it.isNotBlank() }
+                .joinToString(", ") { viewModel.name(it) }
+            if (party.isBlank()) "Schieramenti dichiarati" else "Squadra dichiarata: $party"
+        }
         EventType.ENCOUNTER_READY -> "Incontro pronto"
-        EventType.INITIATIVE_SET -> "$actor iniziativa ${detail("total")}"
-        EventType.INITIATIVE_ROLLED -> "$actor tira iniziativa ${detail("total")}"
-        EventType.INITIATIVE_ORDER_SET -> "Ordine d'iniziativa fissato"
+        EventType.INITIATIVE_SET -> buildString {
+            append(actor).append(": iniziativa ").append(detail("total"))
+            if (detail("static") == "true") append(" (punteggio statico)")
+            when (detail("mode")) {
+                "ADVANTAGE" -> append(" con Vantaggio: +5")
+                "DISADVANTAGE" -> append(" con Svantaggio: −5")
+            }
+        }
+        EventType.INITIATIVE_ROLLED -> "$actor tira iniziativa: $d20"
+        EventType.INITIATIVE_ORDER_SET -> {
+            val order = detail("order")
+                .split(',')
+                .filter { it.isNotBlank() }
+                .joinToString(" → ") { viewModel.name(it) }
+            if (order.isBlank()) "Ordine d'iniziativa fissato" else "Ordine d'iniziativa: $order"
+        }
         EventType.ENCOUNTER_STARTED -> "L'incontro comincia"
         EventType.ROUND_STARTED -> "— Round ${detail("round")} —"
-        EventType.ROUND_ENDED -> "Fine del round"
+        EventType.ROUND_ENDED -> "Fine del round ${detail("round").ifBlank { round().toString() }}"
         EventType.TURN_STARTED -> "Turno di $actor"
         EventType.TURN_ENDED -> "$actor termina il turno"
         EventType.ACTION_SPENT -> "$actor usa ${detail("cost").activationCostInItalian()}"
-        EventType.MOVEMENT_SPENT -> "$actor si muove di ${detail("feet").asFeet()}"
+        EventType.MOVEMENT_SPENT ->
+            "$actor usa ${detail("feet").asFeet()} di movimento; " +
+                "ne restano ${detail("remaining").asFeet()}"
         EventType.SPELL_SLOT_SPENT -> "$actor consuma uno slot"
         EventType.ATTACK_ROLLED ->
-            "$actor attacca $target — tiro ${detail("total")} contro CA ${detail("armorClass")}"
-        EventType.ATTACK_MISSED -> "$actor manca $target"
-        EventType.ATTACK_HIT -> "$actor colpisce $target"
-        EventType.CRITICAL_HIT -> "COLPO CRITICO di $actor su $target"
+            "$actor tira per colpire $target$ability: $d20 contro CA ${detail("armorClass")}"
+        EventType.ATTACK_MISSED -> buildString {
+            append(actor).append(" manca ").append(target).append(ability)
+            if (d20.isNotBlank()) append(": ").append(d20).append(" contro CA ").append(detail("armorClass"))
+        }
+        EventType.ATTACK_HIT -> buildString {
+            append(actor).append(" colpisce ").append(target).append(ability)
+            if (d20.isNotBlank()) append(": ").append(d20).append(" contro CA ").append(detail("armorClass"))
+        }
+        EventType.CRITICAL_HIT -> buildString {
+            append("COLPO CRITICO di ").append(actor).append(" su ").append(target).append(ability)
+            if (d20.isNotBlank()) append(": ").append(d20).append(" contro CA ").append(detail("armorClass"))
+        }
         EventType.AREA_SPELL_CAST ->
-            "$actor scatena un'area — raggio ${detail("radiusFeet").asFeet()}, CD ${detail("saveDc")}, " +
-                "${detail("targets")} creature nel raggio"
+            "$actor usa ${abilityName.ifBlank { "un'area" }} al centro ${detail("center")} — " +
+                "raggio ${detail("radiusFeet").asFeet()}, CD ${detail("saveDc")}, " +
+                "${detail("targets")} creature coinvolte"
         EventType.SAVING_THROW_ROLLED -> {
             val esito = if (detail("saved") == "true") "supera" else "fallisce"
-            val tiro = detail("total")
-            if (tiro.isNotBlank()) "$target $esito il tiro salvezza ($tiro contro CD ${detail("dc")})"
-            else "$target $esito il tiro salvezza (deciso al tavolo)"
+            val save = detail("save").saveAbilityInItalian()
+            if (d20.isNotBlank()) {
+                "$target $esito il tiro salvezza su $save contro ${abilityName.ifBlank { actor }}: " +
+                    "$d20 contro CD ${detail("dc")}"
+            } else {
+                "$target $esito il tiro salvezza su $save contro " +
+                    "${abilityName.ifBlank { actor }} (deciso al tavolo)"
+            }
         }
-        EventType.DAMAGE_ROLLED -> "Danno tirato: ${detail("total")}"
+        EventType.DAMAGE_ROLLED -> {
+            val damageType = detail("type").damageTypeInItalian()
+            val recipient = target.takeIf { it.isNotBlank() }?.let { " su $it" }.orEmpty()
+            "$actor determina i danni${ability}$recipient: ${details().damageBreakdown()} $damageType"
+        }
         EventType.DAMAGE_APPLIED -> if (detail("hitPointsAfter").isNotBlank()) {
             val total = detail("totalAdjusted").ifBlank { detail("adjusted") }
-            "$target subisce $total danni (PF ${detail("hitPointsAfter")})"
+            buildString {
+                if (actor.isNotBlank()) append(actor).append(" infligge a ") else append(target).append(" subisce ")
+                if (actor.isNotBlank()) append(target).append(' ')
+                append(total).append(" danni")
+                val temporary = detail("temporaryAbsorbed").toIntOrNull() ?: 0
+                val lost = detail("hitPointsLost").toIntOrNull()
+                if (temporary > 0) append(" (").append(temporary).append(" assorbiti dai PF temporanei)")
+                if (lost != null) append("; PF persi ").append(lost)
+                append("; ").append(target).append(" resta a ").append(detail("hitPointsAfter")).append(" PF")
+            }
         } else {
             val type = detail("type").damageTypeInItalian()
             val adjustment = when {
@@ -244,40 +300,78 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
                 detail("vulnerable") == "true" -> " · vulnerabile"
                 else -> ""
             }
-            "Danno $type: ${detail("raw")} → ${detail("adjusted")}$adjustment"
+            "$actor applica a $target il danno $type: ${detail("raw")} → ${detail("adjusted")}$adjustment"
         }
-        EventType.ZERO_HIT_POINTS -> "$target cade a 0 PF"
-        EventType.HEALED -> "$target recupera ${detail("restored")} PF"
+        EventType.ZERO_HIT_POINTS -> "$target cade a 0 PF per il danno di $actor"
+        EventType.HEALED ->
+            "$target recupera ${detail("restored")} PF " +
+                "(richiesti ${detail("requested")}, ora ${detail("hitPointsAfter")} PF)"
         EventType.TEMPORARY_HIT_POINTS_GRANTED ->
-            "$target ha ${detail("retained")} PF temporanei (offerti ${detail("offered")})"
-        EventType.CONDITION_APPLIED -> "$target ora è ${detail("type").conditionInItalian()}"
-        EventType.CONDITION_REMOVED -> "$target non è più ${detail("type").conditionInItalian()}"
-        EventType.CONDITION_EXPIRED -> "Su $target scade: ${detail("type").conditionInItalian()}"
-        EventType.CONDITION_IMMUNE -> "$target è immune a: ${detail("type").conditionInItalian()}"
-        EventType.CONCENTRATION_STARTED -> "$actor inizia a concentrarsi"
-        EventType.CONCENTRATION_CHECKED ->
-            "Concentrazione di $target: CD ${detail("dc")}, " +
+            "$target riceve ${detail("offered")} PF temporanei; " +
+                "ne conserva ${detail("retained")} (prima ${detail("before")})"
+        EventType.CONDITION_APPLIED -> {
+            val condition = detail("condition").ifBlank { detail("type") }.conditionInItalian()
+            val source = actor.takeIf { it.isNotBlank() }?.let { " da $it" }.orEmpty()
+            val duration = detail("remaining").takeIf { it.isNotBlank() }?.let {
+                " · durata residua $it (${detail("expiry").conditionExpiryInItalian()})"
+            }.orEmpty()
+            "$target diventa $condition$source$duration"
+        }
+        EventType.CONDITION_REMOVED -> {
+            val condition = detail("condition").ifBlank { detail("type") }.conditionInItalian()
+            "$target non è più $condition"
+        }
+        EventType.CONDITION_EXPIRED -> {
+            val condition = detail("condition").ifBlank { detail("type") }.conditionInItalian()
+            "Su $target scade: $condition"
+        }
+        EventType.CONDITION_IMMUNE -> {
+            val condition = detail("condition").ifBlank { detail("type") }.conditionInItalian()
+            "$actor tenta di applicare $condition a $target, ma il bersaglio è immune"
+        }
+        EventType.CONCENTRATION_STARTED ->
+            "$actor inizia a concentrarsi${ability}"
+        EventType.CONCENTRATION_CHECKED -> {
+            val who = actor.ifBlank { target }
+            val dc = detail("difficultyClass").ifBlank { detail("dc") }
+            "$who prova a mantenere la concentrazione: $d20 contro CD $dc — " +
                 if (detail("maintained") == "true") "mantenuta" else "persa"
-        EventType.CONCENTRATION_ENDED -> "$actor perde la concentrazione"
+        }
+        EventType.CONCENTRATION_ENDED -> buildString {
+            append(actor).append(" perde la concentrazione").append(ability)
+            detail("reason").takeIf { it.isNotBlank() }?.let { append(" (").append(it.reasonInItalian()).append(')') }
+        }
         EventType.ENCOUNTER_PAUSED -> "Incontro in pausa"
         EventType.ENCOUNTER_RESUMED -> "Incontro ripreso"
         EventType.ENCOUNTER_RESOLVED -> "Incontro risolto: ${detail("outcome")}"
         // L'annullamento resta scritto nel registro invece di sparire: il log e'
         // append-only, quindi la cronologia mostra anche i ripensamenti del tavolo.
-        EventType.UNDO_PERFORMED -> "Comando annullato"
+        EventType.UNDO_PERFORMED ->
+            "Comando annullato: ripristinata la revisione precedente alla ${detail("revertedRevision")}"
 
-        EventType.DEATH_SAVE_ROLLED -> when (detail("outcome")) {
-            "natural20" -> "$actor: 20 naturale, recupera 1 PF"
-            else -> {
-                val who = actor.ifBlank { target }
-                "$who — tiro contro morte: ${detail("successes").ifBlank { "0" }} successi, " +
-                    "${detail("failures").ifBlank { detail("totalFailures") }} fallimenti"
+        EventType.DEATH_SAVE_ROLLED -> {
+            val who = target.ifBlank { actor }
+            when {
+                detail("source") == "damage" -> {
+                    "$who subisce ${detail("failures")} fallimenti contro morte per il danno di $actor; " +
+                        "fallimenti totali ${detail("totalFailures")}"
+                }
+                detail("outcome") == "natural20" -> "$who tira contro morte: $d20 — recupera 1 PF"
+                else -> {
+                    "$who tira contro morte: $d20 — " +
+                        "${detail("successes").ifBlank { "0" }} successi, " +
+                        "${detail("failures").ifBlank { detail("totalFailures") }} fallimenti"
+                }
             }
         }
 
         EventType.STABILIZED -> "${actor.ifBlank { target }} è stabilizzato"
         EventType.KNOCKED_OUT -> "$target messo fuori combattimento a 1 PF"
-        EventType.DIED -> "${target.ifBlank { actor }} muore (${detail("cause").causeInItalian()})"
+        EventType.DIED -> buildString {
+            val who = target.ifBlank { actor }
+            append(who).append(" muore (").append(detail("cause").causeInItalian()).append(')')
+            if (actor.isNotBlank() && actor != who) append(" per l'azione di ").append(actor)
+        }
         EventType.EXHAUSTION_CHANGED ->
             "$actor: sfinimento ${detail("before")} → ${detail("after")} " +
                 "(${detail("d20Penalty")} ai D20, ${detail("speedPenaltyFeet").asFeet()})"
@@ -332,6 +426,53 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
 
 private fun String.asFeet(): String = toIntOrNull()?.let(::feetWithMetres) ?: "$this piedi"
 
+/** Formula completa di un tiro d20, inclusi entrambi i dadi di Vantaggio/Svantaggio. */
+private fun Map<String, String>.d20Breakdown(): String {
+    val natural = this["natural"].orEmpty()
+    val total = this["total"].orEmpty()
+    if (natural.isBlank()) return total
+
+    val rolled = this["dice"].orEmpty()
+    val die = when (this["mode"]) {
+        "ADVANTAGE" -> "d20 $rolled (Vantaggio, scelto $natural)"
+        "DISADVANTAGE" -> "d20 $rolled (Svantaggio, scelto $natural)"
+        else -> "d20 $natural"
+    }
+    val modifier = this["modifier"].orEmpty().modifierOperation()
+    val source = if (this["source"] == "MANUAL") " · inserito manualmente" else ""
+    return buildString {
+        append(die)
+        if (modifier.isNotBlank()) append(' ').append(modifier)
+        if (total.isNotBlank()) append(" = ").append(total)
+        append(source)
+    }
+}
+
+/** Valori effettivi dei dadi di danno, formula originale, modificatore e totale. */
+private fun Map<String, String>.damageBreakdown(): String {
+    val amount = this["amount"].orEmpty().ifBlank { this["total"].orEmpty() }
+    val formula = this["formula"].orEmpty()
+    val prefix = formula.takeIf { it.isNotBlank() }?.let { "$it · " }.orEmpty()
+    return when (this["source"]?.lowercase()) {
+        "manual" -> "${prefix}valore inserito $amount"
+        "fixed" -> "${prefix}danno fisso $amount"
+        else -> {
+            val dice = this["dice"].orEmpty()
+            val modifier = this["modifier"].orEmpty().modifierOperation()
+            buildString {
+                append(prefix).append("dadi ").append(dice)
+                if (modifier.isNotBlank()) append(' ').append(modifier)
+                append(" = ").append(amount)
+            }
+        }
+    }
+}
+
+private fun String.modifierOperation(): String {
+    val value = toIntOrNull() ?: return takeIf { it.isNotBlank() }?.let { "+ $it" }.orEmpty()
+    return if (value < 0) "− ${-value}" else "+ $value"
+}
+
 private fun String.activationCostInItalian(): String = runCatching {
     when (ActivationCost.valueOf(this)) {
         ActivationCost.ACTION -> "l'azione"
@@ -349,6 +490,34 @@ private fun String.conditionInItalian(): String = runCatching {
 private fun String.damageTypeInItalian(): String = runCatching {
     DamageType.valueOf(this).italianLabel.lowercase()
 }.getOrDefault(lowercase())
+
+private fun String.saveAbilityInItalian(): String = when (this) {
+    "STRENGTH" -> "Forza"
+    "DEXTERITY" -> "Destrezza"
+    "CONSTITUTION" -> "Costituzione"
+    "INTELLIGENCE" -> "Intelligenza"
+    "WISDOM" -> "Saggezza"
+    "CHARISMA" -> "Carisma"
+    else -> lowercase().ifBlank { "caratteristica non indicata" }
+}
+
+private fun String.conditionExpiryInItalian(): String = when (this) {
+    "START_OF_TARGET_TURN" -> "inizio turno del bersaglio"
+    "END_OF_TARGET_TURN" -> "fine turno del bersaglio"
+    "START_OF_SOURCE_TURN" -> "inizio turno della fonte"
+    "END_OF_SOURCE_TURN" -> "fine turno della fonte"
+    "CONCENTRATION" -> "concentrazione"
+    "MANUAL" -> "rimozione manuale"
+    else -> lowercase().ifBlank { "scadenza non indicata" }
+}
+
+private fun String.reasonInItalian(): String = when (this) {
+    "zero hit points" -> "0 PF"
+    "failed save" -> "tiro salvezza fallito"
+    "replaced" -> "sostituita da un'altra concentrazione"
+    "manual" -> "interrotta manualmente"
+    else -> ifBlank { "motivo non indicato" }
+}
 
 private fun String.causeInItalian(): String = when (this) {
     "three successes" -> "tre successi"

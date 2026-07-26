@@ -11,6 +11,7 @@ import app.d6d.domain.combat.D20Mode;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.EventType;
+import app.d6d.domain.combat.CombatEvent;
 import app.d6d.domain.combat.ResolutionMethod;
 import org.junit.jupiter.api.Test;
 
@@ -35,6 +36,17 @@ class AttackResolutionTest {
         assertEquals(hpBefore, session.currentState().combatant("goblin").currentHitPoints());
         assertFalse(session.currentState().turnBudgets().get("hero").actionAvailable());
         assertEquals(0, session.currentState().turnBudgets().get("hero").attacksRemaining());
+
+        CombatEvent miss = session.auditTrail().stream()
+                .filter(event -> event.type() == EventType.ATTACK_MISSED)
+                .findFirst().orElseThrow();
+        assertEquals("sword", miss.details().get("abilityId"));
+        assertEquals(result.attackRoll().naturalRoll(), Integer.parseInt(miss.details().get("natural")));
+        assertEquals(result.attackRoll().modifier(), Integer.parseInt(miss.details().get("modifier")));
+        assertEquals(result.attackRoll().total(), Integer.parseInt(miss.details().get("total")));
+        assertEquals(
+                session.currentState().combatant("goblin").snapshot().armorClass(),
+                Integer.parseInt(miss.details().get("armorClass")));
     }
 
     @Test
@@ -50,6 +62,9 @@ class AttackResolutionTest {
         assertEquals("MANUAL", session.auditTrail().stream()
                 .filter(event -> event.type() == EventType.ATTACK_ROLLED).findFirst().orElseThrow()
                 .details().get("source"));
+        assertEquals("sword", session.auditTrail().stream()
+                .filter(event -> event.type() == EventType.DAMAGE_ROLLED).findFirst().orElseThrow()
+                .details().get("abilityId"));
     }
 
     @Test
