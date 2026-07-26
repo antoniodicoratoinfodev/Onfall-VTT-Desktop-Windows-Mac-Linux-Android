@@ -37,25 +37,28 @@ has an immediate visual representation and there are no licensing constraints on
 
 ## Screenshots
 
-**Starting a session** — choose between saved templates, a blank Compendium, or loading a saved
-session.
-
-![Starting a session](sample/Screenshot_2026-07-26_at_01_25_43.png)
-
-**Compendium, quick view** — characters and creatures side by side, with ability scores, speed,
-size, and the weapons/abilities catalogue used in combat.
-
-![Compendium quick view](sample/Screenshot_2026-07-26_at_01_26_02.png)
-
-**Compendium, character sheet** — the full sheet for a character, with background, class, AC
-calculation, hit points, and hit dice.
-
-![Compendium character sheet](sample/Screenshot_2026-07-26_at_01_26_08.png)
-
-**Battle screen** — party on the left, tactical map in the center, enemies on the right, turn order
-on top, and the event log below.
-
-![Battle screen](sample/Screenshot_2026-07-26_at_18_24_55.png)
+<table>
+<tr>
+<td align="center">
+<img src="sample/Screenshot_2026-07-26_at_01_25_43.png" width="420"/><br/>
+<sub>Starting a session — templates, blank Compendium, or a saved session</sub>
+</td>
+<td align="center">
+<img src="sample/Screenshot_2026-07-26_at_01_26_02.png" width="420"/><br/>
+<sub>Compendium, quick view — ability scores, speed, size, weapons and abilities</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/Screenshot_2026-07-26_at_01_26_08.png" width="420"/><br/>
+<sub>Compendium, character sheet — background, class, AC calculation, hit points</sub>
+</td>
+<td align="center">
+<img src="sample/Screenshot_2026-07-26_at_18_24_55.png" width="420"/><br/>
+<sub>Battle screen — party, tactical map, enemies, turn order, event log</sub>
+</td>
+</tr>
+</table>
 
 ## Architecture
 
