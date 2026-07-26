@@ -110,16 +110,16 @@ fun MapControls(
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 GameButton("− colonne", accent = Palette.TextMuted, dense = true, onClick = {
-                    viewModel.configureMap(grid.columns() - 5, grid.rows(), grid.feetPerSquare())
+                    viewModel.configureMap(grid.columns() - 1, grid.rows(), grid.feetPerSquare())
                 })
                 GameButton("+ colonne", accent = Palette.TextMuted, dense = true, onClick = {
-                    viewModel.configureMap(grid.columns() + 5, grid.rows(), grid.feetPerSquare())
+                    viewModel.configureMap(grid.columns() + 1, grid.rows(), grid.feetPerSquare())
                 })
                 GameButton("− righe", accent = Palette.TextMuted, dense = true, onClick = {
-                    viewModel.configureMap(grid.columns(), grid.rows() - 5, grid.feetPerSquare())
+                    viewModel.configureMap(grid.columns(), grid.rows() - 1, grid.feetPerSquare())
                 })
                 GameButton("+ righe", accent = Palette.TextMuted, dense = true, onClick = {
-                    viewModel.configureMap(grid.columns(), grid.rows() + 5, grid.feetPerSquare())
+                    viewModel.configureMap(grid.columns(), grid.rows() + 1, grid.feetPerSquare())
                 })
 
                 listOf(5, 10, 20, 50).forEach { feet ->
