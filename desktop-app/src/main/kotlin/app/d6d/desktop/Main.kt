@@ -108,6 +108,7 @@ fun main() = application {
         state = rememberWindowState(width = 1480.dp, height = 940.dp),
     ) {
         val fantasyPointer = remember { fantasyPointerCursor() }
+        val clickFlames = rememberClickFlameState()
 
         // La shell densa e' quella predefinita sul desktop, ma se la finestra
         // viene stretta molto si passa al layout compatto invece di comprimere
@@ -115,7 +116,8 @@ fun main() = application {
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .pointerHoverIcon(PointerIcon(fantasyPointer)),
+                .pointerHoverIcon(PointerIcon(fantasyPointer))
+                .clickFlameBursts(clickFlames),
         ) {
             AppRoot(
                 dataDirectory = dataDirectory,
@@ -126,6 +128,7 @@ fun main() = application {
                 onExitRequestHandled = { exitRequested = false },
                 onExitConfirmed = ::exitApplication,
             )
+            ClickFlameOverlay(clickFlames, Modifier.fillMaxSize())
         }
     }
 }
