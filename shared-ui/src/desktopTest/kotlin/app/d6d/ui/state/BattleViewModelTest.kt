@@ -79,6 +79,19 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `togliere lo sfondo chiude anche l'editing mappa`() {
+        val model = viewModel()
+        model.setMapBackground("mappa.png")
+        model.editMode = true
+        model.mapEditMode = true
+
+        model.setMapBackground("")
+
+        assertEquals("", model.battleMap.backgroundImage())
+        assertFalse(model.mapEditMode)
+    }
+
+    @Test
     fun `il bersaglio predefinito appartiene sempre allo schieramento opposto`() {
         val model = viewModel()
         val active = model.activeCombatantId!!

@@ -820,7 +820,10 @@ class BattleViewModel(
         session.configureMap(MapGrid(columns.coerceAtLeast(1), rows.coerceAtLeast(1), feetPerSquare.coerceAtLeast(1)))
     }
 
-    fun setMapBackground(imageName: String) = command { session.setMapBackground(imageName) }
+    fun setMapBackground(imageName: String) {
+        if (imageName.isBlank()) mapEditMode = false
+        command { session.setMapBackground(imageName) }
+    }
 
     /** Colloca lo sfondo sulla griglia (misure in caselle). Un passo annullabile. */
     fun setMapBackgroundTransform(offsetX: Double, offsetY: Double, width: Double, height: Double) = command {

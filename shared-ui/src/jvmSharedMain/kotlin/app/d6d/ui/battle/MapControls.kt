@@ -91,21 +91,11 @@ fun MapControls(
                 dense = true,
                 onClick = { expanded = !expanded },
             )
-            // Compare solo in modifica: da' accesso a spostare e stirare lo sfondo.
-            if (viewModel.editMode) {
-                GameButton(
-                    label = if (viewModel.mapEditMode) "Modifica mappa attiva" else "Modifica mappa",
-                    accent = if (viewModel.mapEditMode) Palette.Heal else Palette.Gold,
-                    selected = viewModel.mapEditMode,
-                    dense = true,
-                    onClick = { viewModel.mapEditMode = !viewModel.mapEditMode },
-                )
-            }
         }
 
-        if (viewModel.editMode && viewModel.mapEditMode) {
+        if (viewModel.mapEditMode) {
             Text(
-                text = "Trascina l'immagine per spostarla · afferra un angolo per ridimensionarla.",
+                text = "Trascina l'immagine per spostarla · angoli: proporzioni bloccate · lati: stretching libero.",
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
@@ -176,9 +166,33 @@ fun MapControls(
                     onClick = { showMapPicker = true },
                 )
                 if (viewModel.battleMap.backgroundImage().isNotBlank()) {
+                    GameButton(
+                        label = "Editing mappa",
+                        accent = if (viewModel.mapEditMode) Palette.Heal else Palette.Gold,
+                        selected = viewModel.mapEditMode,
+                        dense = true,
+                        onClick = {
+                            val activate = !viewModel.mapEditMode
+                            // La modifica dello sfondo resta una sotto-modalita'
+                            // sicura della modifica generale, ma questo comando vi
+                            // entra direttamente senza obbligare a cercare prima
+                            // il pulsante nella barra superiore.
+                            if (activate) viewModel.editMode = true
+                            viewModel.mapEditMode = activate
+                        },
+                    )
                     GameButton("Togli sfondo", accent = Palette.TextFaint, dense = true, onClick = {
                         viewModel.setMapBackground("")
                     })
+                    if (viewModel.mapEditMode) {
+                        GameButton("Adatta e centra", accent = Palette.TextMuted, dense = true, onClick = {
+                            // Una trasformazione non impostata fa ricalcolare alla
+                            // vista il miglior "contain" usando le proporzioni vere
+                            // dell'immagine. E' anche la via di recupero se lo sfondo
+                            // era stato trascinato interamente fuori inquadratura.
+                            viewModel.setMapBackgroundTransform(0.0, 0.0, 0.0, 0.0)
+                        })
+                    }
                 }
                 GameButton("Disponi tutti", accent = Palette.Heal, dense = true, onClick = {
                     viewModel.autoPlaceMissing { id -> viewModel.squaresPerSideFor(id) }

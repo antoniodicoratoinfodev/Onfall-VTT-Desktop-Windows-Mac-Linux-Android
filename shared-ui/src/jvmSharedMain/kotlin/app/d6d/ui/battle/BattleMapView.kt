@@ -553,9 +553,9 @@ fun BattleMapView(
 }
 
 /**
- * Velo di modifica dello sfondo: sposta trascinando il corpo dell'immagine, stira
- * afferrando un angolo (l'angolo opposto resta fermo). Un solo gesto = un solo passo
- * salvato, quindi annullabile in un colpo.
+ * Velo di modifica dello sfondo: sposta trascinando il corpo dell'immagine,
+ * ridimensiona in proporzione dagli angoli e stira liberamente dai lati. Un solo
+ * gesto = un solo passo salvato, quindi annullabile in un colpo.
  */
 @Composable
 private fun BackgroundEditOverlay(
@@ -578,7 +578,9 @@ private fun BackgroundEditOverlay(
         Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                val hitRadius = 20.dp.toPx()
+                // Bersaglio tattile da 48 dp anche se la maniglia disegnata resta
+                // compatta: sul desktop la piu' vicina vince nelle sovrapposizioni.
+                val hitRadius = 24.dp.toPx()
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val cell = cellState.value
@@ -591,16 +593,21 @@ private fun BackgroundEditOverlay(
                     val right = left + (start.width * cell).toFloat()
                     val bottom = top + (start.height * cell).toFloat()
 
-                    fun near(px: Float, py: Float) =
-                        (down.position - Offset(px, py)).getDistance() <= hitRadius
-
-                    val handle = when {
-                        near(left, top) -> BgHandle.TL
-                        near(right, top) -> BgHandle.TR
-                        near(left, bottom) -> BgHandle.BL
-                        near(right, bottom) -> BgHandle.BR
-                        else -> null
-                    }
+                    val centreX = (left + right) / 2f
+                    val centreY = (top + bottom) / 2f
+                    val handle = listOf(
+                        BgHandle.TL to Offset(left, top),
+                        BgHandle.T to Offset(centreX, top),
+                        BgHandle.TR to Offset(right, top),
+                        BgHandle.R to Offset(right, centreY),
+                        BgHandle.BR to Offset(right, bottom),
+                        BgHandle.B to Offset(centreX, bottom),
+                        BgHandle.BL to Offset(left, bottom),
+                        BgHandle.L to Offset(left, centreY),
+                    )
+                        .minByOrNull { (_, point) -> (down.position - point).getDistance() }
+                        ?.takeIf { (_, point) -> (down.position - point).getDistance() <= hitRadius }
+                        ?.first
                     val insideBody = handle == null &&
                         down.position.x in left..right && down.position.y in top..bottom
                     // Fuori dall'immagine, in modifica, non si fa nulla: si evita di
@@ -608,6 +615,8 @@ private fun BackgroundEditOverlay(
                     if (handle == null && !insideBody) return@awaitEachGesture
 
                     var working = start
+                    var travelledXSquares = 0.0
+                    var travelledYSquares = 0.0
                     onDraftState.value(working)
                     down.consume()
 
@@ -620,17 +629,32 @@ private fun BackgroundEditOverlay(
                         }
                         val move = change.positionChange()
                         val liveCellPx = cellState.value.takeIf { it > 0f } ?: cell
-                        val dx = (move.x / liveCellPx).toDouble()
-                        val dy = (move.y / liveCellPx).toDouble()
+                        // Si accumula gia' in caselle: se la rotella cambia lo zoom
+                        // durante il gesto, il tratto percorso prima non viene
+                        // reinterpretato con la nuova scala.
+                        travelledXSquares += (move.x / liveCellPx).toDouble()
+                        travelledYSquares += (move.y / liveCellPx).toDouble()
                         working = if (handle != null) {
-                            working.resizedBy(handle, dx, dy)
+                            start.resizedBy(handle, travelledXSquares, travelledYSquares)
                         } else {
-                            MapBackground(working.offsetX + dx, working.offsetY + dy, working.width, working.height)
+                            MapBackground(
+                                start.offsetX + travelledXSquares,
+                                start.offsetY + travelledYSquares,
+                                start.width,
+                                start.height,
+                            )
                         }
                         onDraftState.value(working)
                         change.consume()
                     }
-                    onCommitState.value(working)
+                    if (working != start) {
+                        onCommitState.value(working)
+                    } else {
+                        // Un semplice tocco non crea un evento fittizio nella
+                        // cronologia e non colloca definitivamente il valore di
+                        // default calcolato dall'interfaccia.
+                        onDraftState.value(null)
+                    }
                 }
             },
     ) {
@@ -645,20 +669,40 @@ private fun BackgroundEditOverlay(
             size = Size(w, h),
             style = Stroke(width = 2f),
         )
-        val r = 7.dp.toPx()
+        val centreX = left + w / 2f
+        val centreY = top + h / 2f
+        val cornerRadius = 7.dp.toPx()
+        val sideLongRadius = 9.dp.toPx()
+        val sideShortRadius = 4.dp.toPx()
         listOf(
-            Offset(left, top), Offset(left + w, top),
-            Offset(left, top + h), Offset(left + w, top + h),
-        ).forEach { corner ->
+            BgHandle.TL to Offset(left, top),
+            BgHandle.T to Offset(centreX, top),
+            BgHandle.TR to Offset(left + w, top),
+            BgHandle.R to Offset(left + w, centreY),
+            BgHandle.BR to Offset(left + w, top + h),
+            BgHandle.B to Offset(centreX, top + h),
+            BgHandle.BL to Offset(left, top + h),
+            BgHandle.L to Offset(left, centreY),
+        ).forEach { (handle, point) ->
+            val radiusX = when (handle) {
+                BgHandle.T, BgHandle.B -> sideLongRadius
+                BgHandle.L, BgHandle.R -> sideShortRadius
+                else -> cornerRadius
+            }
+            val radiusY = when (handle) {
+                BgHandle.T, BgHandle.B -> sideShortRadius
+                BgHandle.L, BgHandle.R -> sideLongRadius
+                else -> cornerRadius
+            }
             drawRect(
                 color = Palette.Abyss.copy(alpha = 0.85f),
-                topLeft = Offset(corner.x - r, corner.y - r),
-                size = Size(r * 2, r * 2),
+                topLeft = Offset(point.x - radiusX, point.y - radiusY),
+                size = Size(radiusX * 2, radiusY * 2),
             )
             drawRect(
                 color = Palette.GoldBright,
-                topLeft = Offset(corner.x - r, corner.y - r),
-                size = Size(r * 2, r * 2),
+                topLeft = Offset(point.x - radiusX, point.y - radiusY),
+                size = Size(radiusX * 2, radiusY * 2),
                 style = Stroke(width = 2f),
             )
         }
@@ -1127,8 +1171,8 @@ private fun MapNotConfigured(viewModel: BattleViewModel, modifier: Modifier = Mo
     }
 }
 
-/** I quattro angoli afferrabili dello sfondo in modifica. */
-private enum class BgHandle { TL, TR, BL, BR }
+/** Le otto maniglie afferrabili dello sfondo in modifica. */
+internal enum class BgHandle { TL, T, TR, R, BR, B, BL, L }
 
 /** Lato minimo dello sfondo, in caselle: non si puo' stirare fino a farlo sparire. */
 private const val MIN_BG_SQUARES = 0.5
@@ -1163,27 +1207,69 @@ private fun containBackground(
 }
 
 /**
- * Nuovo rettangolo dopo aver trascinato un angolo, tenendo fermo l'angolo opposto.
+ * Nuovo rettangolo dopo aver trascinato una maniglia.
  *
- * Lavora in caselle. L'angolo opposto e' l'ancora: resta dov'e' mentre quello
- * afferrato segue il dito. Un lato minimo evita che l'immagine collassi, e l'ancora
- * non si sposta neppure quando si supera quel minimo.
+ * Dagli angoli il rapporto larghezza/altezza corrente rimane invariato e l'angolo
+ * opposto resta fermo. Le maniglie centrali cambiano invece un solo asse, cosi'
+ * permettono lo stretching intenzionale. In entrambi i casi un lato minimo evita
+ * che l'immagine collassi o si ribalti oltre la propria ancora.
  */
-private fun MapBackground.resizedBy(handle: BgHandle, dxSquares: Double, dySquares: Double): MapBackground {
+internal fun MapBackground.resizedBy(
+    handle: BgHandle,
+    dxSquares: Double,
+    dySquares: Double,
+): MapBackground {
     val left = offsetX
     val top = offsetY
     val right = offsetX + width
     val bottom = offsetY + height
-    val anchorX = if (handle == BgHandle.TL || handle == BgHandle.BL) right else left
-    val anchorY = if (handle == BgHandle.TL || handle == BgHandle.TR) bottom else top
-    val movingX = (if (handle == BgHandle.TL || handle == BgHandle.BL) left else right) + dxSquares
-    val movingY = (if (handle == BgHandle.TL || handle == BgHandle.TR) top else bottom) + dySquares
-
-    val newWidth = abs(movingX - anchorX).coerceAtLeast(MIN_BG_SQUARES)
-    val newHeight = abs(movingY - anchorY).coerceAtLeast(MIN_BG_SQUARES)
-    val newLeft = if (movingX <= anchorX) anchorX - newWidth else anchorX
-    val newTop = if (movingY <= anchorY) anchorY - newHeight else anchorY
-    return MapBackground(newLeft, newTop, newWidth, newHeight)
+    return when (handle) {
+        BgHandle.L -> {
+            val newLeft = (left + dxSquares).coerceAtMost(right - MIN_BG_SQUARES)
+            MapBackground(newLeft, top, right - newLeft, height)
+        }
+        BgHandle.R -> {
+            val newWidth = (width + dxSquares).coerceAtLeast(MIN_BG_SQUARES)
+            MapBackground(left, top, newWidth, height)
+        }
+        BgHandle.T -> {
+            val newTop = (top + dySquares).coerceAtMost(bottom - MIN_BG_SQUARES)
+            MapBackground(left, newTop, width, bottom - newTop)
+        }
+        BgHandle.B -> {
+            val newHeight = (height + dySquares).coerceAtLeast(MIN_BG_SQUARES)
+            MapBackground(left, top, width, newHeight)
+        }
+        BgHandle.TL, BgHandle.TR, BgHandle.BR, BgHandle.BL -> {
+            val fromLeft = handle == BgHandle.TL || handle == BgHandle.BL
+            val fromTop = handle == BgHandle.TL || handle == BgHandle.TR
+            val horizontalDirection = if (fromLeft) -1.0 else 1.0
+            val verticalDirection = if (fromTop) -1.0 else 1.0
+            val horizontalScale = 1.0 + dxSquares * horizontalDirection / width
+            val verticalScale = 1.0 + dySquares * verticalDirection / height
+            // L'asse mosso di piu', in termini percentuali, guida il gesto. L'altro
+            // segue la proporzione: il risultato e' prevedibile anche trascinando
+            // l'angolo quasi soltanto in orizzontale o quasi soltanto in verticale.
+            val requestedScale =
+                if (abs(horizontalScale - 1.0) >= abs(verticalScale - 1.0)) {
+                    horizontalScale
+                } else {
+                    verticalScale
+                }
+            val minimumScale = maxOf(MIN_BG_SQUARES / width, MIN_BG_SQUARES / height)
+            val scale = requestedScale.coerceAtLeast(minimumScale)
+            val newWidth = width * scale
+            val newHeight = height * scale
+            val anchorX = if (fromLeft) right else left
+            val anchorY = if (fromTop) bottom else top
+            MapBackground(
+                if (fromLeft) anchorX - newWidth else anchorX,
+                if (fromTop) anchorY - newHeight else anchorY,
+                newWidth,
+                newHeight,
+            )
+        }
+    }
 }
 
 /** Fascia in cima alla mappa mentre si mira un'area: cosa, quanto ampia e come annullare. */
