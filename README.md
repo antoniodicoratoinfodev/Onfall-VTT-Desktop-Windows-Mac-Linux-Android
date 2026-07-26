@@ -92,8 +92,3 @@ Then launch Onfall from the device's or emulator's app launcher.
 **All rights reserved.** The code may be consulted **only for analysis and technical evaluation**. It
 may not be run for use, forked, redistributed, or reused in part, not even single fragments, in other
 projects. The full terms are in [`LICENSE.md`](LICENSE.md).
-
-
-## Status
-
-See `docs/STATO.md` for the honest map between the project brief and what actually runs.
