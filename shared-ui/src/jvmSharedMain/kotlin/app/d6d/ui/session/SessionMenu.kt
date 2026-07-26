@@ -211,7 +211,7 @@ fun SessionMenuDialog(
             }
 
             if (workspace != null && workspace.openSessions.size > 1) {
-                Eyebrow("Aperte ora (${workspace.openSessions.size})")
+                Eyebrow("Sessioni preparate (${workspace.openSessions.size})")
                 Text(
                     "Passa a un'altra mappa senza chiudere o ricaricare la partita corrente.",
                     color = Palette.TextMuted,

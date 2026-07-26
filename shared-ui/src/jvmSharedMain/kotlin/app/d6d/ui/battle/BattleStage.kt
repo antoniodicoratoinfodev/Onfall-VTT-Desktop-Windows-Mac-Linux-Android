@@ -343,7 +343,8 @@ private fun StagePlate(
         if (isTarget) append(" Bersaglio selezionato.")
         if (isActive) append(" Turno attivo.")
         if (isInspected) append(" Scheda in esame, solo consultazione.")
-        if (combatant.defeated()) append(" Sconfitto.")
+        if (combatant.dead()) append(" Morto.")
+        else if (combatant.defeated()) append(" Sconfitto.")
     }
 
     val plateShape = RoundedCornerShape(10.dp)

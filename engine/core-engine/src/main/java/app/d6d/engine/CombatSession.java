@@ -602,6 +602,48 @@ public final class CombatSession {
     }
 
     /**
+     * Correzione manuale dei punti ferita attuali, pensata per la modalità
+     * Modifica del tavolo.
+     *
+     * <p>Portare una creatura a 0 PF con questa correzione la dichiara morta
+     * esplicitamente: non la lascia nel normale stato di tiri salvezza contro
+     * morte. Qualunque valore positivo azzera invece lo stato dei tiri contro
+     * morte; una morte dovuta a Exhaustion resta invariata.</p>
+     */
+    public synchronized void setCurrentHitPoints(String combatantId, int hitPoints) {
+        MutableCombatant target = combatant(combatantId);
+        if (hitPoints < 0 || hitPoints > target.snapshot.maxHitPoints()) {
+            throw rule("Current hit points must be between 0 and " + target.snapshot.maxHitPoints());
+        }
+
+        beginCommand();
+        int before = target.currentHitPoints;
+        int temporaryBefore = target.temporaryHitPoints;
+        boolean wasDead = target.deathSaves.dead() || target.exhaustionLevel >= CombatantState.MAX_EXHAUSTION;
+        target.currentHitPoints = hitPoints;
+        if (hitPoints == 0) {
+            // L'azione e' una dichiarazione del tavolo, non danno: 0 significa
+            // morto come richiesto dalla modalità Modifica.
+            target.temporaryHitPoints = 0;
+            target.deathSaves = new DeathSaveState(0, DeathSaveState.REQUIRED, false);
+            if (target.concentration != null) {
+                endConcentrationInternal(combatantId, "manual current hit points edit");
+            }
+        } else {
+            target.deathSaves = DeathSaveState.none();
+        }
+        append(EventType.CURRENT_HIT_POINTS_SET, "", combatantId, details(
+                "before", before,
+                "after", hitPoints,
+                "temporaryBefore", temporaryBefore,
+                "temporaryAfter", target.temporaryHitPoints,
+                "zeroMeansDead", hitPoints == 0));
+        if (hitPoints == 0 && !wasDead) {
+            append(EventType.DIED, "", combatantId, details("cause", "manual current hit points edit"));
+        }
+    }
+
+    /**
      * Tiro salvezza contro morte all'inizio del turno di una creatura a 0 punti ferita.
      *
      * <p>10 o piu' e' un successo, meno di 10 un fallimento. Il 20 naturale fa

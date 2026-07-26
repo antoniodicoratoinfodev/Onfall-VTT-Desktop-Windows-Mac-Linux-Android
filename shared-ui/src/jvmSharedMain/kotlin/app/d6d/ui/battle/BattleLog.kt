@@ -178,6 +178,7 @@ private val EventType.tint: Color
         EventType.ATTACK_HIT, EventType.DAMAGE_APPLIED -> Palette.Text
         EventType.ATTACK_MISSED -> Palette.TextMuted
         EventType.HEALED, EventType.TEMPORARY_HIT_POINTS_GRANTED -> Palette.Heal
+        EventType.CURRENT_HIT_POINTS_SET -> Palette.Party
         EventType.ZERO_HIT_POINTS -> Palette.Critical
         EventType.CONDITION_APPLIED, EventType.CONDITION_EXPIRED,
         EventType.CONDITION_REMOVED, EventType.CONDITION_IMMUNE -> Palette.Bloodied
@@ -309,6 +310,9 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
         EventType.HEALED ->
             "$target recupera ${detail("restored")} PF " +
                 "(richiesti ${detail("requested")}, ora ${detail("hitPointsAfter")} PF)"
+        EventType.CURRENT_HIT_POINTS_SET ->
+            "$target: PF attuali ${detail("before")} → ${detail("after")}" +
+                if (detail("zeroMeansDead") == "true") " — morto" else ""
         EventType.TEMPORARY_HIT_POINTS_GRANTED ->
             "$target riceve ${detail("offered")} PF temporanei; " +
                 "ne conserva ${detail("retained")} (prima ${detail("before")})"
@@ -519,6 +523,7 @@ private fun String.reasonInItalian(): String = when (this) {
     "failed save" -> "tiro salvezza fallito"
     "replaced" -> "sostituita da un'altra concentrazione"
     "manual" -> "interrotta manualmente"
+    "manual current hit points edit" -> "PF impostati manualmente"
     else -> ifBlank { "motivo non indicato" }
 }
 
@@ -528,5 +533,6 @@ private fun String.causeInItalian(): String = when (this) {
     "massive damage" -> "danno massiccio"
     "exhaustion" -> "sfinimento"
     "manual" -> "stabilizzazione manuale"
+    "manual current hit points edit" -> "PF impostati manualmente"
     else -> ifBlank { "causa non specificata" }
 }

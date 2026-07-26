@@ -97,6 +97,22 @@ class CombatantEditTest {
     }
 
     @Test
+    void impostareManualmenteZeroPuntiFeritaDichiaraLaCreaturaMorta() {
+        CombatSession session = CombatFixtures.active(3L);
+
+        session.setCurrentHitPoints("hero", 0);
+
+        assertEquals(0, session.currentState().combatants().get("hero").currentHitPoints());
+        assertTrue(session.currentState().combatants().get("hero").dead());
+        assertTrue(session.auditTrail().stream().anyMatch(event -> event.type() == EventType.CURRENT_HIT_POINTS_SET));
+        assertTrue(session.auditTrail().stream().anyMatch(event -> event.type() == EventType.DIED));
+
+        assertTrue(session.undo());
+        assertEquals(40, session.currentState().combatants().get("hero").currentHitPoints());
+        assertFalse(session.currentState().combatants().get("hero").dead());
+    }
+
+    @Test
     void ilRegistroConservaOgniStatisticaPrimaEDopo() {
         CombatSession session = CombatFixtures.active(3L);
         CombatantSnapshot before = snapshotOf(session, "hero");

@@ -670,6 +670,12 @@ class BattleViewModel(
         if (healed > 0) push(targetId, FloatingNumber(++floatSequence, "+$healed", FloatKind.HEAL))
     }
 
+    /** Correzione dei PF attuali disponibile solo ai controlli della modalità Modifica. */
+    fun setCurrentHitPoints(combatantId: String, value: Int) {
+        val maximum = combatant(combatantId)?.snapshot()?.maxHitPoints() ?: return
+        command { session.setCurrentHitPoints(combatantId, value.coerceIn(0, maximum)) }
+    }
+
     fun grantTemporary(targetId: String, amount: Int) = command {
         val granted = session.grantTemporaryHitPoints(targetId, amount)
         if (granted > 0) {

@@ -553,6 +553,25 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `in modifica i PF attuali possono essere impostati e zero significa morto`() {
+        val model = viewModel()
+        val target = model.partyIds.first()
+        val originalHitPoints = model.combatant(target)!!.currentHitPoints()
+
+        model.setCurrentHitPoints(target, 0)
+
+        assertEquals(0, model.combatant(target)!!.currentHitPoints())
+        assertTrue(model.combatant(target)!!.dead())
+        assertTrue(model.events.any { it.type() == EventType.CURRENT_HIT_POINTS_SET })
+        assertTrue(model.events.any { it.type() == EventType.DIED })
+
+        model.undo()
+
+        assertEquals(originalHitPoints, model.combatant(target)!!.currentHitPoints())
+        assertFalse(model.combatant(target)!!.dead())
+    }
+
+    @Test
     fun `annullare ripristina la scheda precedente`() {
         val model = viewModel()
         val target = model.partyIds.first()

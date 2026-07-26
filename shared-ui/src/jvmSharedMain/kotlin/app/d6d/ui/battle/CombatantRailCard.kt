@@ -90,7 +90,8 @@ fun CombatantRailCard(
         if (targeted) append(" Bersaglio selezionato.")
         if (active) append(" Turno attivo.")
         if (inspected) append(" Scheda in esame.")
-        if (defeated) append(" Sconfitto.")
+        if (combatant.dead()) append(" Morto.")
+        else if (defeated) append(" Sconfitto.")
     }
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -268,7 +269,9 @@ private fun CombatantHeader(
             )
         }
     }
-    val stats = @Composable { CombatantStats(viewModel, combatantId, snapshot, narrow) }
+    val stats = @Composable {
+        CombatantStats(viewModel, combatantId, snapshot, currentHitPoints, narrow)
+    }
 
     // In modifica il ritratto diventa la maniglia per trascinare il personaggio
     // sulla mappa: al rilascio il motore lo colloca nella casella scelta (e
@@ -345,6 +348,7 @@ private fun CombatantStats(
     viewModel: BattleViewModel,
     combatantId: String,
     snapshot: app.d6d.domain.combat.CombatantSnapshot,
+    currentHitPoints: Int,
     narrow: Boolean,
 ) {
     val armorClass = @Composable {
@@ -385,6 +389,25 @@ private fun CombatantStats(
             )
         }
     }
+    val currentHitPointsField = @Composable {
+        EditableValue(
+            value = currentHitPoints.toString(),
+            editMode = viewModel.editMode,
+            numeric = true,
+            fieldWidth = 68.dp,
+            onCommit = { text ->
+                text.trim().toIntOrNull()?.let {
+                    viewModel.setCurrentHitPoints(combatantId, it)
+                }
+            },
+        ) {
+            Text(
+                text = "PF att. $currentHitPoints",
+                color = if (currentHitPoints == 0) Palette.Critical else Palette.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
     val initiative: (@Composable () -> Unit)? = viewModel.initiativeScore(combatantId)?.let { score ->
         @Composable {
             EditableValue(
@@ -406,7 +429,7 @@ private fun CombatantStats(
             }
         }
     }
-    val items = listOfNotNull(armorClass, hitPoints, initiative)
+    val items = listOfNotNull(armorClass, currentHitPointsField, hitPoints, initiative)
 
     if (narrow) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
