@@ -40,21 +40,21 @@ has an immediate visual representation and there are no licensing constraints on
 <table>
 <tr>
 <td align="center">
-<img src="sample/Screenshot_2026-07-26_at_01_25_43.png" width="420"/><br/>
+<img src="sample/Screenshot%202026-07-26%20at%2001.25.43.png" width="420"/><br/>
 <sub>Starting a session — templates, blank Compendium, or a saved session</sub>
 </td>
 <td align="center">
-<img src="sample/Screenshot_2026-07-26_at_01_26_02.png" width="420"/><br/>
+<img src="sample/Screenshot%202026-07-26%20at%2001.26.02.png" width="420"/><br/>
 <sub>Compendium, quick view — ability scores, speed, size, weapons and abilities</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
-<img src="sample/Screenshot_2026-07-26_at_01_26_08.png" width="420"/><br/>
+<img src="sample/Screenshot%202026-07-26%20at%2001.26.08.png" width="420"/><br/>
 <sub>Compendium, character sheet — background, class, AC calculation, hit points</sub>
 </td>
 <td align="center">
-<img src="sample/Screenshot_2026-07-26_at_18_24_55.png" width="420"/><br/>
+<img src="sample/Screenshot%202026-07-26%20at%2018.24.55.png" width="420"/><br/>
 <sub>Battle screen — party, tactical map, enemies, turn order, event log</sub>
 </td>
 </tr>
