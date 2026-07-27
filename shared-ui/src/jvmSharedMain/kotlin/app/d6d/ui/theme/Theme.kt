@@ -68,6 +68,9 @@ object Palette {
     /** Fazione avversaria: rosso netto, riservato a nemici ed errori. */
     val Enemy = Color(0xFFDB6A6A)
 
+    /** Anteprima della gittata in hover: ambra desaturato, caldo ma discreto. */
+    val RangePreview = Color(0xFFB6926B)
+
     // I colori caldi sopravvivono solo come informazione semantica: arancio per
     // l'avvertimento e rosso per una condizione critica.
     val Healthy = Color(0xFFC7D1DC)

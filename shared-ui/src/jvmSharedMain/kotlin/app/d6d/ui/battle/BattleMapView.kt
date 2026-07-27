@@ -818,7 +818,9 @@ private fun AbilityRangeOverlay(
     if (endColumn <= startColumn || endRow <= startRow) return
 
     val cellPx = with(LocalDensity.current) { cellSize.toPx() }
-    val tint = if (targeting) Palette.GoldBright else Palette.Party
+    // Il semplice passaggio del mouse deve restare informativo senza sembrare una
+    // mira gia' confermata: usa quindi un ambra caldo, distinto e poco saturo.
+    val tint = if (targeting) Palette.GoldBright else Palette.RangePreview
     Canvas(Modifier.fillMaxSize()) {
         val topLeft = Offset(
             mapOffset.x + startColumn * cellPx,
@@ -829,15 +831,15 @@ private fun AbilityRangeOverlay(
             (endRow - startRow) * cellPx,
         )
         drawRect(
-            color = tint.copy(alpha = if (targeting) 0.16f else 0.10f),
+            color = tint.copy(alpha = if (targeting) 0.16f else 0.08f),
             topLeft = topLeft,
             size = rangeSize,
         )
         drawRect(
-            color = tint.copy(alpha = if (targeting) 0.95f else 0.72f),
+            color = tint.copy(alpha = if (targeting) 0.95f else 0.60f),
             topLeft = topLeft,
             size = rangeSize,
-            style = Stroke(width = if (targeting) 2.5.dp.toPx() else 1.5.dp.toPx()),
+            style = Stroke(width = if (targeting) 2.5.dp.toPx() else 1.dp.toPx()),
         )
     }
 }
