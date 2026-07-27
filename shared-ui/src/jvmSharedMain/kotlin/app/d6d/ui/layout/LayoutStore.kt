@@ -1,5 +1,7 @@
 package app.d6d.ui.layout
 
+import app.d6d.ui.battle.MAX_CELL_DP
+import app.d6d.ui.battle.MIN_CELL_DP
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.nio.file.Files
@@ -70,7 +72,9 @@ data class UiLayout(
         logHeightDp = logHeightDp.clampOr(40f, 640f, 230f),
         topBarHeightDp = topBarHeightDp.clampOr(48f, 320f, 64f),
         commandBarHeightDp = commandBarHeightDp.clampOr(48f, 640f, 176f),
-        mapCellSizeDp = mapCellSizeDp.clampOr(14f, 140f, 46f),
+        // Deve usare gli stessi estremi di slider, pulsanti e rotellina: in caso
+        // contrario uno zoom molto ampio verrebbe perso al riavvio dell'app.
+        mapCellSizeDp = mapCellSizeDp.clampOr(MIN_CELL_DP, MAX_CELL_DP, 46f),
         mapGridBrightness = mapGridBrightness.clampOr(0.05f, 1f, 0.5f),
         targetPlate = targetPlate?.sanitized(),
         activePlate = activePlate?.sanitized(),

@@ -83,6 +83,15 @@ class LayoutStoreTest {
     }
 
     @Test
+    fun `lo zoom molto ampio della mappa sopravvive alla ricarica`() {
+        val store = store()
+
+        store.save(UiLayout(mapCellSizeDp = 1f))
+
+        assertEquals(1f, store.load().mapCellSizeDp)
+    }
+
+    @Test
     fun `senza posizione salvata le targhe restano prive di offset`() {
         val loaded = store().load()
         assertNull(loaded.targetPlate)

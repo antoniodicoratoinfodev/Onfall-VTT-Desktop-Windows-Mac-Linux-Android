@@ -226,9 +226,18 @@ fun MapControls(
     }
 }
 
-/** Dimensione minima e massima di una casella, in dp. Condivise con lo zoom a rotellina. */
-internal val MIN_CELL = 14.dp
-internal val MAX_CELL = 140.dp
+/**
+ * Dimensione minima e massima di una casella, in dp.
+ *
+ * Un minimo di 1 dp permette anche alla griglia massima (400 × 400) di entrare
+ * interamente in un viewport desktop comune. Le caselle diventano volutamente
+ * molto piccole: a questa scala lo scopo e' orientarsi sulla mappa completa,
+ * prima di ingrandire di nuovo la zona di gioco.
+ */
+internal const val MIN_CELL_DP = 1f
+internal const val MAX_CELL_DP = 140f
+internal val MIN_CELL = MIN_CELL_DP.dp
+internal val MAX_CELL = MAX_CELL_DP.dp
 
 /** Estremi della luminosita' della griglia: mai del tutto invisibile, mai piena. */
 internal const val MIN_GRID_BRIGHTNESS = 0.05f
