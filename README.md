@@ -1,10 +1,10 @@
 # Onfall
 
 Onfall is an offline-first combat and encounter tracker compatible with 5e and 5.5e (D&D 2024).
-The bundled examples are original, rather than copies of SRD content; any future SRD-derived content
-pack must carry its required attribution and licence notice. See [`NOTICE-SRD.md`](NOTICE-SRD.md).
-Its engine and user interface are original, and desktop and Android share the same engine, data, and
-screens.
+Multiplayer support is planned for the future. The bundled examples are original, rather than copies
+of SRD content; any future SRD-derived content pack must carry its required attribution and licence
+notice. See [`NOTICE-SRD.md`](NOTICE-SRD.md). Its engine and user interface are original, and
+desktop and Android share the same engine, data, and screens.
 
 > **Read only repository.** This code is published solely for review and technical evaluation, that
 > is, for analysis of the code and of the author's technical ability. It is not meant to be used, run
