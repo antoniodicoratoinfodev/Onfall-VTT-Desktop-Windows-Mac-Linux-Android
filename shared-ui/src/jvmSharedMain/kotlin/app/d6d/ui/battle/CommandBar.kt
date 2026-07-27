@@ -31,9 +31,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -204,6 +208,7 @@ private fun AbilityCard(
     enabled: Boolean,
     selected: Boolean,
     onClick: () -> Unit,
+    onHoverChange: (Boolean) -> Unit,
 ) {
     val accent = when {
         selected -> Palette.GoldBright
@@ -214,6 +219,13 @@ private fun AbilityCard(
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
+    val currentOnHoverChange = rememberUpdatedState(onHoverChange)
+    LaunchedEffect(hovered) {
+        currentOnHoverChange.value(hovered)
+    }
+    DisposableEffect(Unit) {
+        onDispose { currentOnHoverChange.value(false) }
+    }
     val pressScale by animateFloatAsState(
         targetValue = if (pressed && enabled) 0.97f else 1f,
         animationSpec = tween(90),
@@ -250,7 +262,9 @@ private fun AbilityCard(
             .semantics { this.selected = selected }
             .background(fill, shape)
             .border(if (selected) 2.dp else 1.dp, borderColor, shape)
-            .hoverable(interaction, enabled = enabled)
+            // Anche una scheda in sola consultazione mostra la propria portata:
+            // il clic resta disabilitato, ma il passaggio del mouse e' informativo.
+            .hoverable(interaction, enabled = true)
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
@@ -518,26 +532,33 @@ fun CommandBar(
                     val manual = ability.automationStatus() == AutomationStatus.MANUAL_REQUIRED
                     val selected = viewModel.singleTargeting?.abilityId == ability.id() ||
                         viewModel.areaTargeting?.abilityId == ability.id()
-                    AbilityCard(
-                        ability = ability,
-                        manual = manual,
-                        enabled = if (manual) displayedActorCanAct else affordable,
-                        selected = selected,
-                        onClick = {
-                            if (manual) {
-                                viewModel.showMessage(
-                                    ability.rulesText().withMetricFeet().ifBlank {
-                                        "«${ability.name()}» richiede una risoluzione manuale al tavolo."
-                                    },
-                                )
-                            } else {
-                                // Un'area chiede un punto sulla griglia; una capacita'
-                                // singola chiede una creatura. Nessuna delle due usa
-                                // piu' un bersaglio implicito.
-                                viewModel.beginAbilityTargeting(ability.id())
-                            }
-                        },
-                    )
+                    key(inspectedId, ability.id()) {
+                        AbilityCard(
+                            ability = ability,
+                            manual = manual,
+                            enabled = if (manual) displayedActorCanAct else affordable,
+                            selected = selected,
+                            onClick = {
+                                if (manual) {
+                                    viewModel.showMessage(
+                                        ability.rulesText().withMetricFeet().ifBlank {
+                                            "«${ability.name()}» richiede una risoluzione manuale al tavolo."
+                                        },
+                                    )
+                                } else {
+                                    // Un'area chiede un punto sulla griglia; una capacita'
+                                    // singola chiede una creatura. Nessuna delle due usa
+                                    // piu' un bersaglio implicito.
+                                    viewModel.beginAbilityTargeting(ability.id())
+                                }
+                            },
+                            onHoverChange = { hovered ->
+                                inspectedId?.let { actorId ->
+                                    viewModel.setAbilityRangeHovered(actorId, ability.id(), hovered)
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }

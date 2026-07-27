@@ -168,6 +168,30 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `la portata compare al passaggio del mouse e resta durante la mira`() {
+        val model = viewModel()
+        val active = model.activeCombatantId!!
+        val ability = model.abilities(active).first { !it.isArea }
+
+        model.setAbilityRangeHovered(active, ability.id(), hovered = true)
+
+        assertEquals(active, model.abilityRangePreview?.combatantId)
+        assertEquals(ability.id(), model.abilityRangePreview?.abilityId)
+        assertEquals(ability.rangeFeet(), model.abilityRangePreview?.rangeFeet)
+        assertFalse(model.abilityRangePreview!!.targeting)
+
+        model.beginAbilityTargeting(ability.id())
+        model.setAbilityRangeHovered(active, ability.id(), hovered = false)
+
+        assertEquals(ability.id(), model.abilityRangePreview?.abilityId)
+        assertTrue(model.abilityRangePreview!!.targeting)
+
+        model.cancelSingleTargeting()
+
+        assertNull(model.abilityRangePreview)
+    }
+
+    @Test
     fun `ricliccare la capacita selezionata annulla la mira senza usare azioni`() {
         val model = viewModel()
         val active = model.activeCombatantId!!

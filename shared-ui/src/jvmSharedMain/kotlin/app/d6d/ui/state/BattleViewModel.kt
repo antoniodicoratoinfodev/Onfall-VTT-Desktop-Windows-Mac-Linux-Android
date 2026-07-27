@@ -148,6 +148,41 @@ class BattleViewModel(
     var pendingArea by mutableStateOf<PendingArea?>(null)
         private set
 
+    /** Capacita' sotto il puntatore; non viene salvata e non modifica il combattimento. */
+    private var hoveredAbilityRange by mutableStateOf<AbilityRangePreview?>(null)
+
+    /**
+     * Portata da mostrare sulla mappa.
+     *
+     * Una capacita' gia' in mira ha precedenza sul semplice passaggio del mouse:
+     * cosi' il suo raggio resta visibile mentre il puntatore lascia la scheda per
+     * raggiungere il bersaglio o il punto d'impatto.
+     */
+    val abilityRangePreview: AbilityRangePreview?
+        get() {
+            areaTargeting?.let {
+                return AbilityRangePreview(
+                    combatantId = it.casterId,
+                    abilityId = it.abilityId,
+                    rangeFeet = it.rangeFeet,
+                    targeting = true,
+                )
+            }
+            singleTargeting?.let { targeting ->
+                abilities(targeting.attackerId)
+                    .firstOrNull { it.id() == targeting.abilityId }
+                    ?.let { ability ->
+                        return AbilityRangePreview(
+                            combatantId = targeting.attackerId,
+                            abilityId = ability.id(),
+                            rangeFeet = ability.rangeFeet(),
+                            targeting = true,
+                        )
+                    }
+            }
+            return hoveredAbilityRange
+        }
+
     // --- proiezioni di sola lettura -------------------------------------------------
 
     val status: CombatStatus get() = state.status()
@@ -967,6 +1002,7 @@ class BattleViewModel(
         actionResolution = null
         areaTargeting = null
         pendingArea = null
+        hoveredAbilityRange = null
         singleTargeting = null
         message = null
         editMode = presentation["editMode"] == "true"
@@ -1017,6 +1053,26 @@ class BattleViewModel(
 
     fun dismissActionResolution() {
         actionResolution = null
+    }
+
+    /** Mostra o ritira l'anteprima della portata quando il mouse attraversa una capacita'. */
+    fun setAbilityRangeHovered(combatantId: String, abilityId: String, hovered: Boolean) {
+        if (!hovered) {
+            if (
+                hoveredAbilityRange?.combatantId == combatantId &&
+                hoveredAbilityRange?.abilityId == abilityId
+            ) {
+                hoveredAbilityRange = null
+            }
+            return
+        }
+        val ability = abilities(combatantId).firstOrNull { it.id() == abilityId } ?: return
+        hoveredAbilityRange = AbilityRangePreview(
+            combatantId = combatantId,
+            abilityId = ability.id(),
+            rangeFeet = ability.rangeFeet(),
+            targeting = false,
+        )
     }
 
     /** Mostra una nota guidata senza inviare alcun comando al motore. */
@@ -1154,6 +1210,14 @@ data class SingleTargeting(
     val abilityId: String,
     val attackerId: String,
     val name: String,
+)
+
+/** Portata di una capacita' da evidenziare attorno al relativo combattente. */
+data class AbilityRangePreview(
+    val combatantId: String,
+    val abilityId: String,
+    val rangeFeet: Int,
+    val targeting: Boolean,
 )
 
 /** Conferma visiva persistente di un attacco gia' risolto al clic sul bersaglio. */

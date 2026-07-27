@@ -456,6 +456,21 @@ fun BattleMapView(
             }
         }
 
+        viewModel.abilityRangePreview?.let { preview ->
+            viewModel.placementOf(preview.combatantId)?.let { placement ->
+                AbilityRangeOverlay(
+                    placement = placement,
+                    rangeFeet = preview.rangeFeet,
+                    feetPerSquare = grid.feetPerSquare(),
+                    columns = grid.columns(),
+                    rows = grid.rows(),
+                    cellSize = liveCell,
+                    mapOffset = mapOffset,
+                    targeting = preview.targeting,
+                )
+            }
+        }
+
         map.orderedPlacements().forEach { placement ->
             key(placement.combatantId()) {
                 MapToken(viewModel, portraits, placement, liveCell, mapOffset)
@@ -772,6 +787,58 @@ private fun onCellTapped(viewModel: BattleViewModel, column: Int, row: Int) {
         viewModel.move(active, column, row)
     } else {
         viewModel.showMessage("Stai consultando un altro combattente: seleziona quello di turno per muoverlo.")
+    }
+}
+
+/**
+ * Evidenzia le caselle che possono contenere il bersaglio o il centro dell'area.
+ *
+ * Il motore misura le distanze di griglia con Chebyshev (una diagonale vale una
+ * casella), quindi la portata corretta e' un rettangolo espanso attorno all'intera
+ * sagoma del combattente, non un cerchio euclideo che escluderebbe gli angoli.
+ */
+@Composable
+private fun AbilityRangeOverlay(
+    placement: TokenPlacement,
+    rangeFeet: Int,
+    feetPerSquare: Int,
+    columns: Int,
+    rows: Int,
+    cellSize: Dp,
+    mapOffset: Offset,
+    targeting: Boolean,
+) {
+    if (feetPerSquare <= 0 || columns <= 0 || rows <= 0 || rangeFeet < 0) return
+    val rangeSquares = rangeFeet / feetPerSquare
+    val origin = placement.origin()
+    val startColumn = (origin.column() - rangeSquares).coerceAtLeast(0)
+    val startRow = (origin.row() - rangeSquares).coerceAtLeast(0)
+    val endColumn = (origin.column() + placement.squaresPerSide() + rangeSquares).coerceAtMost(columns)
+    val endRow = (origin.row() + placement.squaresPerSide() + rangeSquares).coerceAtMost(rows)
+    if (endColumn <= startColumn || endRow <= startRow) return
+
+    val cellPx = with(LocalDensity.current) { cellSize.toPx() }
+    val tint = if (targeting) Palette.GoldBright else Palette.Party
+    Canvas(Modifier.fillMaxSize()) {
+        val topLeft = Offset(
+            mapOffset.x + startColumn * cellPx,
+            mapOffset.y + startRow * cellPx,
+        )
+        val rangeSize = Size(
+            (endColumn - startColumn) * cellPx,
+            (endRow - startRow) * cellPx,
+        )
+        drawRect(
+            color = tint.copy(alpha = if (targeting) 0.16f else 0.10f),
+            topLeft = topLeft,
+            size = rangeSize,
+        )
+        drawRect(
+            color = tint.copy(alpha = if (targeting) 0.95f else 0.72f),
+            topLeft = topLeft,
+            size = rangeSize,
+            style = Stroke(width = if (targeting) 2.5.dp.toPx() else 1.5.dp.toPx()),
+        )
     }
 }
 
