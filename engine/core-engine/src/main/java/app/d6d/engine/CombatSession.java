@@ -512,8 +512,17 @@ public final class CombatSession {
             for (String targetId : targets) {
                 perTarget.add(resolveAreaTarget(casterId, targetId, ability, saveDc, rolled, savedByTarget));
             }
-            return new AreaSpellResult(
+            AreaSpellResult result = new AreaSpellResult(
                     casterId, ability.id(), center, ability.areaRadiusFeet(), saveDc, rolled, perTarget);
+            // Un'area puo' comprendere il lanciatore. Se questi si porta a 0 PF e
+            // nel suo gruppo non resta nessun altro attore vivo, il turno non deve
+            // restare sospeso senza un combattente corrente: si chiude e si passa
+            // al prossimo gruppo giocabile nello stesso comando (e nello stesso
+            // passo di Undo) del lancio.
+            if (caster.currentHitPoints == 0 && currentCombatantIds().isEmpty()) {
+                endTurnInternal();
+            }
+            return result;
         } catch (RuntimeException | Error failure) {
             rollbackFailedCommand();
             throw failure;
@@ -1150,9 +1159,14 @@ public final class CombatSession {
 
     public synchronized void endTurn() {
         requireStatus(CombatStatus.ACTIVE);
+        beginCommand();
+        endTurnInternal();
+    }
+
+    /** Chiude il gruppo corrente; il chiamante ha gia' aperto il comando annullabile. */
+    private void endTurnInternal() {
         List<String> ending = currentCombatantIds();
         List<String> endingGroup = currentTurnGroup();
-        beginCommand();
         // Il turno finisce per tutto il gruppo: in parita' i combattenti hanno
         // giocato insieme e chiudono insieme. Anche il membro a 0 PF attraversa
         // comunque la soglia temporale di fine turno, pur senza ricevere azioni.

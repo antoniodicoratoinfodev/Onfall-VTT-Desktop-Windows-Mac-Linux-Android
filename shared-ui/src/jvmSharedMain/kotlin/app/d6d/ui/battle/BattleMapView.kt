@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -884,6 +885,13 @@ private fun MapToken(
     val defeated = combatant.defeated()
 
     val side = cellSize * placement.squaresPerSide()
+    // Sotto una certa scala il token continua a occupare il corretto spazio della
+    // griglia, ma conserva un piccolo badge visivo centrato. Se anche il badge si
+    // riducesse fino a 1 dp, Compose comprimerebbe la riga di testo e le iniziali
+    // scivolerebbero fuori dal cerchio fino a sparire.
+    val compactBadge = side * 0.76f < MIN_TOKEN_BADGE
+    val badgeSide = maxOf(side * 0.76f, MIN_TOKEN_BADGE)
+    val labelSize = maxOf(side.value * 0.26f, MIN_TOKEN_LABEL_SP).sp
     // La posizione anima in coordinate di casella, non in pixel. Un movimento vero
     // (cambia colonna/riga) scorre dolcemente; uno zoom (cambia solo `cellSize`)
     // riallinea invece il segnaposto nello stesso frame della griglia. Animare il
@@ -1031,9 +1039,18 @@ private fun MapToken(
         // L'immagine viene ritagliata a cerchio dentro l'anello.
         Box(
             Modifier
-                .size(side * 0.76f)
+                // `requiredSize` lascia che il badge minimo ecceda il piccolo box
+                // della casella; Box lo centra e non lo ritaglia.
+                .requiredSize(badgeSide)
                 .clip(CircleShape)
-                .background(Palette.SurfaceHigh),
+                .background(Palette.SurfaceHigh)
+                .then(
+                    if (compactBadge) {
+                        Modifier.border(1.dp, accent.copy(alpha = 0.9f), CircleShape)
+                    } else {
+                        Modifier
+                    },
+                ),
             contentAlignment = Alignment.Center,
         ) {
             if (portrait != null) {
@@ -1043,14 +1060,24 @@ private fun MapToken(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
-            } else {
-                Text(
-                    text = if (defeated) "✕" else initials(snapshot.name()),
-                    color = if (defeated) Palette.TextFaint else Palette.Text,
-                    fontWeight = FontWeight.Black,
-                    fontSize = (side.value * 0.26f).sp,
-                )
             }
+        }
+
+        if (portrait == null) {
+            Text(
+                text = if (defeated) "✕" else initials(snapshot.name()),
+                color = if (defeated) Palette.TextFaint else Palette.Text,
+                fontWeight = FontWeight.Black,
+                fontSize = labelSize,
+                lineHeight = labelSize,
+                maxLines = 1,
+                softWrap = false,
+                textAlign = TextAlign.Center,
+                // Il testo e' sopra il badge, non dentro il suo `clip(CircleShape)`.
+                // La misura senza limiti evita che il box tattico da 1–2 dp ne
+                // comprima la baseline o tagli la parte bassa dei caratteri.
+                modifier = Modifier.wrapContentSize(Alignment.Center, unbounded = true),
+            )
         }
 
         Canvas(Modifier.size(side)) {
@@ -1116,6 +1143,10 @@ private fun MapToken(
         }
     }
 }
+
+/** Minimi solo visivi: posizione e ingombro tattico continuano a seguire la griglia. */
+private val MIN_TOKEN_BADGE = 16.dp
+private const val MIN_TOKEN_LABEL_SP = 9f
 
 /** Invito alla configurazione quando la mappa non esiste ancora. */
 @Composable

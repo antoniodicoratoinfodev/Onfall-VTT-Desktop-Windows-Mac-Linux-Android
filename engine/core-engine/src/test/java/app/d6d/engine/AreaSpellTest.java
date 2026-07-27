@@ -118,6 +118,27 @@ class AreaSpellTest {
     }
 
     @Test
+    void includes_the_caster_and_advances_if_the_caster_knocks_itself_out() {
+        CombatSession session = scene(42L);
+        // Anche il minimo di 8d6 basta a portarlo a 0: il caso non dipende dal seed.
+        session.setCurrentHitPoints("wizard", 1);
+
+        AreaSpellResult result = session.castArea("wizard", new GridPosition(1, 1), "fireball");
+
+        Map<String, AreaTargetResult> byId = byTarget(result);
+        assertTrue(byId.containsKey("wizard"), "il lanciatore dentro la sfera deve essere colpito");
+        assertEquals(0, session.currentState().combatant("wizard").currentHitPoints());
+        assertEquals(
+                "centre",
+                session.currentState().currentCombatantId().orElseThrow(),
+                "un lanciatore a 0 PF non deve lasciare il turno senza un attore");
+
+        assertTrue(session.undo(), "lancio e avanzamento devono essere un solo comando annullabile");
+        assertEquals(1, session.currentState().combatant("wizard").currentHitPoints());
+        assertEquals("wizard", session.currentState().currentCombatantId().orElseThrow());
+    }
+
+    @Test
     void manual_resolution_applies_the_table_decisions_without_rolling() {
         CombatSession session = scene(7L);
 
