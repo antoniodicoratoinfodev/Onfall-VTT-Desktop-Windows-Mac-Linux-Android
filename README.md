@@ -1,7 +1,10 @@
 # Onfall
 
-Onfall is a combat and encounter tracker compatible with 5.5e/SRD. It is offline first and has a
-video game style interface. Desktop and Android share the same engine, data, and screens.
+Onfall is an offline-first combat and encounter tracker compatible with 5e and 5.5e (D&D 2024).
+The bundled examples are original, rather than copies of SRD content; any future SRD-derived content
+pack must carry its required attribution and licence notice. See [`NOTICE-SRD.md`](NOTICE-SRD.md).
+Its engine and user interface are original, and desktop and Android share the same engine, data, and
+screens.
 
 > **Read only repository.** This code is published solely for review and technical evaluation, that
 > is, for analysis of the code and of the author's technical ability. It is not meant to be used, run
@@ -9,11 +12,31 @@ video game style interface. Desktop and Android share the same engine, data, and
 
 ## What it is
 
-Three products living on the same engine:
+Four parts living on the same engine:
 
-1. an **archive** of characters, creatures, and abilities (the Compendium);
-2. a **combat engine** that is independent from the interface, deterministic, and undoable;
-3. a **game interface** that presents the fight as a turn based battle.
+1. the **Compendium**, an editable archive of characters, creatures, and reusable abilities;
+2. an **encounter builder** that turns Compendium templates into an independent game session;
+3. a **combat engine** that is independent from the interface, deterministic, audited, and undoable;
+4. a **game interface** that presents the fight as a turn based battle.
+
+## Features
+
+- Build an encounter from saved templates, choose each participant's faction and quantity, configure
+  the grid and its scale, then start in either a pre-arranged Fight mode or a free-placement mode.
+  A combatant is copied into the session, so changes to HP, conditions, turns, and position never
+  alter its Compendium template.
+- Create and edit character sheets, creature stat blocks, and a shared ability catalog. The
+  Compendium also keeps a local library of portraits and map backgrounds that can be reused across
+  sessions.
+- Run attacks and area effects from the active combatant's abilities, with digital d20 rolls,
+  advantage/disadvantage, damage types, saving throws, conditions, concentration, death saves,
+  healing, temporary HP, and exhaustion. Table tools cover the same state changes when they need
+  to be entered manually.
+- Save named sessions and reopen them in independent tabs. A saved session includes the combat
+  state, map and token placements, event log, and dice state, so its subsequent digital rolls stay
+  reproducible. Named sessions are autosaved after changes and unsaved work is guarded on close.
+- Keep an append-only event log and undo successful engine commands without advancing the random
+  number generator.
 
 ## Interface
 
@@ -32,8 +55,9 @@ and picks the current one, drags characters from the side bars onto the map, and
 ignoring the movement limits. Outside Edit mode those shortcuts disappear, so a session is not
 altered by mistake.
 
-All portraits are drawn as vectors from code. There is no imported image, so every creature added
-has an immediate visual representation and there are no licensing constraints on the graphics.
+Every creature has an immediate vector portrait drawn from code, so the default visual set has no
+external image-licensing dependency. A local portrait library and map archive can also use images
+chosen by the player.
 
 ## Screenshots
 
