@@ -6,6 +6,7 @@ build/
 out/
 bin/
 .kotlin/
+tmp/
 
 # --- Percorso SDK specifico della macchina ---
 # Contiene il percorso locale dell'Android SDK: non va versionato, ognuno ha il suo.

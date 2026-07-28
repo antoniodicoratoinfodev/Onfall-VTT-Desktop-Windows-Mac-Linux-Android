@@ -149,7 +149,7 @@ public final class CombatSession {
         beginCommand();
         state.rosterOrder.add(instanceId);
         state.combatants.put(instanceId, MutableCombatant.from(snapshot));
-        state.turnBudgets.put(instanceId, TurnBudget.fresh(snapshot.speedFeet()));
+        state.turnBudgets.put(instanceId, TurnBudget.fresh(snapshot.speedFeet(), snapshot.attacksPerAction()));
         append(EventType.COMBATANT_ADDED, instanceId, "", details(
                 "definitionId", actor.id(), "definitionVersion", actor.definitionVersion(), "name", actor.name()));
     }
@@ -177,7 +177,7 @@ public final class CombatSession {
         beginCommand();
         state.rosterOrder.add(instanceId);
         state.combatants.put(instanceId, MutableCombatant.from(snapshot));
-        state.turnBudgets.put(instanceId, TurnBudget.fresh(snapshot.speedFeet()));
+        state.turnBudgets.put(instanceId, TurnBudget.fresh(snapshot.speedFeet(), snapshot.attacksPerAction()));
         state.initiativeScores.put(instanceId, actor.initiativeScore());
         if (party) {
             state.partyCombatantIds.add(instanceId);
@@ -387,18 +387,11 @@ public final class CombatSession {
             throw rule("Manual damage must contain one value per damage component");
         }
         validateRange(request.attackerId(), request.targetId(), ability);
-        validateActivationCost(request.attackerId(), ability.activationCost());
-        if (ability.activationCost() == ActivationCost.ACTION
-                && budget(request.attackerId()).attacksRemaining() == 0) {
-            throw rule("No attacks remain in the Attack action");
-        }
+        validateAttackActivationCost(request.attackerId(), ability.activationCost());
 
         beginCommand();
         try {
-            consumeActivationCost(request.attackerId(), ability.activationCost());
-            if (ability.activationCost() == ActivationCost.ACTION) {
-                state.turnBudgets.put(request.attackerId(), budget(request.attackerId()).useAttack());
-            }
+            consumeAttackActivationCost(request.attackerId(), ability.activationCost());
             D20RollResult attackRoll = rollD20For(attacker, request.attackRoll(), ability.attackBonus());
             AttackOutcome outcome = attackOutcome(attackRoll, target.snapshot.armorClass());
             Map<String, String> attackDetails = merge(
@@ -1249,7 +1242,7 @@ public final class CombatSession {
         for (String id : livingCombatants(groups.get(target))) {
             MutableCombatant occupant = combatant(id);
             int speed = Math.max(0, occupant.snapshot.speedFeet() - 5 * occupant.exhaustionLevel);
-            state.turnBudgets.put(id, TurnBudget.fresh(speed));
+            state.turnBudgets.put(id, TurnBudget.fresh(speed, occupant.snapshot.attacksPerAction()));
             append(EventType.TURN_STARTED, id, "", details("round", state.round));
         }
     }
@@ -1504,7 +1497,7 @@ public final class CombatSession {
             MutableCombatant combatant = combatant(combatantId);
             // La velocita' e' ridotta da Exhaustion: il budget parte da quella effettiva.
             int speed = Math.max(0, combatant.snapshot.speedFeet() - 5 * combatant.exhaustionLevel);
-            state.turnBudgets.put(combatantId, TurnBudget.fresh(speed));
+            state.turnBudgets.put(combatantId, TurnBudget.fresh(speed, combatant.snapshot.attacksPerAction()));
             processConditionBoundary(combatantId, true);
             append(EventType.TURN_STARTED, combatantId, "", details("round", state.round));
         }
@@ -1580,6 +1573,44 @@ public final class CombatSession {
             }
             case LEGENDARY_ACTION -> throw rule("Legendary action pools are not part of this vertical slice");
             case NONE -> { }
+        }
+    }
+
+    /**
+     * An attack paid with an Action starts the Attack action on its first strike.
+     * Further strikes from that same action spend only its remaining attack count.
+     */
+    private void validateAttackActivationCost(String combatantId, ActivationCost cost) {
+        if (cost != ActivationCost.ACTION) {
+            validateActivationCost(combatantId, cost);
+            return;
+        }
+        MutableCombatant combatant = combatant(combatantId);
+        if (combatant.currentHitPoints == 0) {
+            throw rule("A combatant at zero hit points cannot act");
+        }
+        requireCurrentCombatant(combatantId);
+        TurnBudget budget = budget(combatantId);
+        if (budget.attacksRemaining() == 0) {
+            throw rule("No attacks remain in the Attack action");
+        }
+        if (!budget.actionAvailable()
+                && budget.attacksRemaining() >= combatant.snapshot.attacksPerAction()) {
+            throw rule("Action already spent");
+        }
+    }
+
+    private void consumeAttackActivationCost(String combatantId, ActivationCost cost) {
+        if (cost != ActivationCost.ACTION) {
+            consumeActivationCost(combatantId, cost);
+            return;
+        }
+        TurnBudget current = budget(combatantId);
+        boolean startsAttackAction = current.actionAvailable();
+        TurnBudget updated = startsAttackAction ? current.useAction() : current;
+        state.turnBudgets.put(combatantId, updated.useAttack());
+        if (startsAttackAction) {
+            append(EventType.ACTION_SPENT, combatantId, "", details("cost", cost));
         }
     }
 
@@ -1681,8 +1712,14 @@ public final class CombatSession {
     }
 
     private AbilityDefinition ability(MutableCombatant combatant, String abilityId) {
-        return combatant.snapshot.abilities().stream().filter(ability -> ability.id().equals(abilityId)).findFirst()
+        AbilityDefinition ability = combatant.snapshot.abilities().stream()
+                .filter(candidate -> candidate.id().equals(abilityId)).findFirst()
                 .orElseThrow(() -> rule("Unknown ability: " + abilityId));
+        // Un tratto passivo vale sempre: non si attiva e non consuma il turno.
+        if (ability.passive()) {
+            throw rule("A passive trait cannot be activated: " + abilityId);
+        }
+        return ability;
     }
 
     private TurnBudget budget(String combatantId) {

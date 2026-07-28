@@ -48,13 +48,16 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
 import app.d6d.domain.combat.AbilityDefinition
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.D20Mode
 import app.d6d.sheet.feetWithMetres
+import app.d6d.sheet.rulesTextLead
 import app.d6d.sheet.withMetricFeet
 import app.d6d.ui.compendium.italianAbbreviation
 import app.d6d.ui.compendium.italianLabel
@@ -193,6 +196,79 @@ private fun AbilityDefinition.damageSummary(): String =
         val amount = if (formula.usesDice()) formula.dice().notation() else formula.fixedAmount().toString()
         "$amount ${formula.type().italianLabel.lowercase()}"
     }
+
+/**
+ * Targhetta di un tratto permanente: solo il nome, accanto a chi ha il turno.
+ *
+ * Non e' un comando — non c'e' niente da spendere — quindi resta minuta e spiega
+ * se stessa al passaggio del mouse. Sui dispositivi a tocco, dove il passaggio del
+ * mouse non esiste, il tocco fissa e sgancia la stessa spiegazione.
+ */
+@Composable
+private fun PassiveTraitChip(ability: AbilityDefinition) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    var pinned by remember { mutableStateOf(false) }
+    val explained = hovered || pinned
+
+    Box {
+        Text(
+            text = ability.name(),
+            color = if (explained) Palette.GoldBright else Palette.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(Palette.Night.copy(alpha = 0.7f))
+                .border(
+                    1.dp,
+                    if (explained) Palette.GoldBright else Palette.Line,
+                    RoundedCornerShape(4.dp),
+                )
+                .hoverable(interaction)
+                .clickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    role = Role.Button,
+                    onClick = { pinned = !pinned },
+                )
+                .padding(horizontal = 5.dp, vertical = 2.dp),
+        )
+        if (explained) {
+            Popup(
+                alignment = Alignment.TopStart,
+                offset = IntOffset(0, TRAIT_TOOLTIP_OFFSET_PX),
+                onDismissRequest = { pinned = false },
+            ) {
+                Column(
+                    Modifier
+                        .widthIn(max = 320.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Palette.Surface)
+                        .border(1.dp, Palette.GoldBright, RoundedCornerShape(6.dp))
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = ability.name(),
+                        color = Palette.GoldBright,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Text(
+                        text = ability.rulesText().rulesTextLead().withMetricFeet().ifBlank {
+                            "Vale sempre, senza spendere nulla nel turno."
+                        },
+                        color = Palette.Text,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Stacca il riquadro dalla targhetta quanto basta a non coprirla. */
+private const val TRAIT_TOOLTIP_OFFSET_PX = 22
 
 /**
  * Scheda di una capacita': nome e costo in testa, poi le voci che contano — quanto
@@ -378,7 +454,8 @@ fun CommandBar(
     val scrollState = rememberScrollState()
     val activeId = viewModel.activeActorId
     val inspectedId = viewModel.inspectedCombatantId
-    val abilities = inspectedId?.let { viewModel.abilities(it) }.orEmpty()
+    val abilities = inspectedId?.let { viewModel.activeAbilities(it) }.orEmpty()
+    val passives = inspectedId?.let { viewModel.passiveAbilities(it) }.orEmpty()
     val budget = inspectedId?.let { viewModel.budget(it) }
     val movementRemaining = activeId?.let { viewModel.budget(it)?.movementRemainingFeet() }
     val combatActive = viewModel.status == CombatStatus.ACTIVE
@@ -433,6 +510,11 @@ fun CommandBar(
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+                // I tratti permanenti stanno accanto al nome di chi agisce, non fra
+                // le capacita' giocabili: non si spendono, servono solo da promemoria.
+                passives.forEach { trait ->
+                    key(inspectedId, trait.id()) { PassiveTraitChip(trait) }
                 }
             }
             CollapseToggle(

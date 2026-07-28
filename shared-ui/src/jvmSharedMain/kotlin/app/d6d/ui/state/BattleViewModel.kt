@@ -324,6 +324,17 @@ class BattleViewModel(
     fun abilities(id: String): List<AbilityDefinition> =
         combatant(id)?.snapshot()?.abilities().orEmpty()
 
+    /** Le capacita' giocabili: quelle che si spendono nel turno. */
+    fun activeAbilities(id: String): List<AbilityDefinition> =
+        abilities(id).filterNot { it.passive() }
+
+    /**
+     * I tratti permanenti — padronanza d'armi, Incantesimi, talenti — che valgono
+     * sempre e non si attivano: restano fuori dalle schede delle capacita'.
+     */
+    fun passiveAbilities(id: String): List<AbilityDefinition> =
+        abilities(id).filter { it.passive() }
+
     fun isParty(id: String): Boolean = id in state.partyCombatantIds()
 
     fun initiativeScore(id: String): Int? = state.initiativeScores()[id]
@@ -1216,6 +1227,7 @@ class BattleViewModel(
         abilities(),
         savingThrowBonuses(),
         spellSaveDc(),
+        attacksPerAction(),
     )
 
     private sealed interface UndoEffect {

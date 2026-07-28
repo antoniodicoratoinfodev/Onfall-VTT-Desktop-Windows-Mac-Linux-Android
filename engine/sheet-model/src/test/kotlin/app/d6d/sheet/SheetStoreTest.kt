@@ -11,6 +11,19 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 class SheetStoreTest {
+    @Test
+    fun `un archivio senza versione viene migrato dallo schema uno`() {
+        val file = directory.resolve("versionless.json")
+        Files.writeString(
+            file,
+            """{"characters":[],"monsters":[]}""",
+        )
+
+        val loaded = SheetStore(file).load()
+
+        assertEquals(SheetLibrary.SCHEMA_VERSION, loaded.schemaVersion)
+        assertTrue(loaded.abilities.isNotEmpty())
+    }
 
     @TempDir
     lateinit var directory: Path

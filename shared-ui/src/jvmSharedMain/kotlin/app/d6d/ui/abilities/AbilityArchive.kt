@@ -37,6 +37,8 @@ import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
+import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.Ability
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CatalogDamage
@@ -68,8 +70,20 @@ fun AbilityArchive(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val abilities = viewModel.library.abilities.sortedBy { it.name.lowercase() }
-    val first = abilities.firstOrNull()
+    val catalog = viewModel.abilityCatalog.sortedBy { it.name.lowercase() }
+    var categoryFilter by remember { mutableStateOf<RuleElementKind?>(null) }
+    var classFilter by remember { mutableStateOf<CharacterClassId?>(null) }
+    val categories = RuleElementKind.entries.filter { category ->
+        catalog.any { it.category == category }
+    }
+    val abilities = catalog.filter { ability ->
+        val matchesCategory = categoryFilter == null || ability.category == categoryFilter
+        val matchesClass = classFilter == null ||
+            ability.classEligibility.isEmpty() ||
+            ability.classEligibility.any { it.classId == classFilter }
+        matchesCategory && matchesClass
+    }
+    val first = catalog.firstOrNull()
     var selectedId by remember { mutableStateOf(first?.id) }
     var draft by remember { mutableStateOf(first ?: newAbility()) }
     var compactDetail by remember { mutableStateOf(false) }
@@ -85,6 +99,13 @@ fun AbilityArchive(
         val created = newAbility()
         selectedId = null
         draft = created
+        compactDetail = true
+    }
+
+    fun duplicate(ability: CatalogAbility) {
+        val copy = ability.asCustomCopy()
+        selectedId = null
+        draft = copy
         compactDetail = true
     }
 
@@ -119,22 +140,29 @@ fun AbilityArchive(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                AbilityEditor(
+                AbilityDetails(
                     draft = draft,
                     onChange = { draft = it },
                     onSave = {
-                        if (viewModel.upsertAbility(draft)) {
+                        if (!draft.immutable && viewModel.upsertAbility(draft)) {
                             selectedId = draft.id
                         }
                     },
-                    onDelete = if (selectedId == null) null else {
+                    onDelete = if (selectedId == null || draft.immutable) null else {
                         { pendingDelete = draft }
                     },
+                    onDuplicate = { duplicate(draft) },
                     modifier = Modifier.weight(1f),
                 )
             } else {
                 AbilityList(
                     abilities = abilities,
+                    totalCount = catalog.size,
+                    categories = categories,
+                    categoryFilter = categoryFilter,
+                    classFilter = classFilter,
+                    onCategoryFilter = { categoryFilter = it },
+                    onClassFilter = { classFilter = it },
                     selectedId = selectedId,
                     onSelect = ::select,
                     modifier = Modifier.weight(1f),
@@ -144,21 +172,28 @@ fun AbilityArchive(
             Row(Modifier.weight(1f)) {
                 AbilityList(
                     abilities = abilities,
+                    totalCount = catalog.size,
+                    categories = categories,
+                    categoryFilter = categoryFilter,
+                    classFilter = classFilter,
+                    onCategoryFilter = { categoryFilter = it },
+                    onClassFilter = { classFilter = it },
                     selectedId = selectedId,
                     onSelect = ::select,
                     modifier = Modifier.width(286.dp),
                 )
-                AbilityEditor(
+                AbilityDetails(
                     draft = draft,
                     onChange = { draft = it },
                     onSave = {
-                        if (viewModel.upsertAbility(draft)) {
+                        if (!draft.immutable && viewModel.upsertAbility(draft)) {
                             selectedId = draft.id
                         }
                     },
-                    onDelete = if (selectedId == null) null else {
+                    onDelete = if (selectedId == null || draft.immutable) null else {
                         { pendingDelete = draft }
                     },
+                    onDuplicate = { duplicate(draft) },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -184,10 +219,10 @@ fun AbilityArchive(
                 )
             },
             confirmButton = {
-                if (usage == 0) {
+                if (usage == 0 && !ability.immutable) {
                     GameButton("Elimina", accent = Palette.Enemy, onClick = {
                         if (viewModel.deleteAbility(ability.id)) {
-                            val remaining = viewModel.library.abilities.firstOrNull()
+                            val remaining = viewModel.abilityCatalog.firstOrNull()
                             selectedId = remaining?.id
                             draft = remaining ?: newAbility()
                         }
@@ -213,7 +248,7 @@ private fun AbilityArchiveHeader(compact: Boolean, onCreate: () -> Unit) {
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                text = "Attacchi, incantesimi e capacità riusabili nelle schede dei personaggi.",
+                text = "Regole SRD e capacità personalizzate riusabili nelle schede dei personaggi.",
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -242,6 +277,12 @@ private fun AbilityArchiveHeader(compact: Boolean, onCreate: () -> Unit) {
 @Composable
 private fun AbilityList(
     abilities: List<CatalogAbility>,
+    totalCount: Int,
+    categories: List<RuleElementKind>,
+    categoryFilter: RuleElementKind?,
+    classFilter: CharacterClassId?,
+    onCategoryFilter: (RuleElementKind?) -> Unit,
+    onClassFilter: (CharacterClassId?) -> Unit,
     selectedId: String?,
     onSelect: (CatalogAbility) -> Unit,
     modifier: Modifier = Modifier,
@@ -252,16 +293,6 @@ private fun AbilityList(
             .background(Palette.Surface.copy(alpha = 0.45f))
             .padding(9.dp),
     ) {
-        if (abilities.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    "Nessuna abilità nel catalogo.",
-                    color = Palette.TextFaint,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            return
-        }
         val listState = rememberLazyListState()
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
@@ -269,12 +300,105 @@ private fun AbilityList(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                item { Eyebrow("Abilità (${abilities.size})", color = Palette.Party) }
+                item {
+                    AbilityFilters(
+                        categories = categories,
+                        categoryFilter = categoryFilter,
+                        classFilter = classFilter,
+                        onCategoryFilter = onCategoryFilter,
+                        onClassFilter = onClassFilter,
+                    )
+                }
+                item {
+                    Eyebrow(
+                        "Abilità (${abilities.size}${if (abilities.size == totalCount) "" else " di $totalCount"})",
+                        color = Palette.Party,
+                    )
+                }
+                if (abilities.isEmpty()) {
+                    item {
+                        Box(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 28.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "Nessuna abilità corrisponde ai filtri.",
+                                color = Palette.TextFaint,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+                }
                 items(abilities, key = { it.id }) { ability ->
                     AbilityListRow(ability, selected = ability.id == selectedId) { onSelect(ability) }
                 }
             }
             PanelScrollbar(listState, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AbilityFilters(
+    categories: List<RuleElementKind>,
+    categoryFilter: RuleElementKind?,
+    classFilter: CharacterClassId?,
+    onCategoryFilter: (RuleElementKind?) -> Unit,
+    onClassFilter: (CharacterClassId?) -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.Night, RoundedCornerShape(8.dp))
+            .border(1.dp, Palette.Line, RoundedCornerShape(8.dp))
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Text("CATEGORIA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            GameButton(
+                label = "Tutte",
+                accent = if (categoryFilter == null) Palette.Gold else Palette.TextMuted,
+                selected = categoryFilter == null,
+                dense = true,
+                onClick = { onCategoryFilter(null) },
+            )
+            categories.forEach { category ->
+                GameButton(
+                    label = category.italianLabel,
+                    accent = if (categoryFilter == category) Palette.Gold else Palette.TextMuted,
+                    selected = categoryFilter == category,
+                    dense = true,
+                    onClick = { onCategoryFilter(category) },
+                )
+            }
+        }
+
+        Text("CLASSE", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            GameButton(
+                label = "Tutte",
+                accent = if (classFilter == null) Palette.Party else Palette.TextMuted,
+                selected = classFilter == null,
+                dense = true,
+                onClick = { onClassFilter(null) },
+            )
+            CharacterClassId.entries.forEach { classId ->
+                GameButton(
+                    label = classId.italianLabel,
+                    accent = if (classFilter == classId) Palette.Party else Palette.TextMuted,
+                    selected = classFilter == classId,
+                    dense = true,
+                    onClick = { onClassFilter(classId) },
+                )
+            }
         }
     }
 }
@@ -308,6 +432,210 @@ private fun AbilityListRow(ability: CatalogAbility, selected: Boolean, onClick: 
             if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
             if (ability.isArea) Chip("Area ${ability.areaRadiusFeet} ft", Palette.Crit)
         }
+        AbilityMetadataChips(ability)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AbilityMetadataChips(ability: CatalogAbility) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Chip(ability.category.italianLabel, Palette.Crit)
+        if (ability.classEligibility.isEmpty()) {
+            Chip("Tutte le classi", Palette.Party)
+        } else {
+            ability.classEligibility
+                .map { it.classId }
+                .distinct()
+                .sortedBy { it.ordinal }
+                .forEach { classId ->
+                    Chip(classId.italianLabel, Palette.Party)
+                }
+            ability.classEligibility
+                .map { it.minimumLevel }
+                .distinct()
+                .sorted()
+                .forEach { minimumLevel ->
+                    Chip("Dal ${minimumLevel}º livello", Palette.Gold)
+                }
+        }
+        ability.spellLevel?.let { level ->
+            Chip(if (level == 0) "Trucchetto" else "Incantesimo di ${level}º livello", Palette.Heal)
+        }
+        if (ability.sourcePage > 0) {
+            Chip("Pagina ${ability.sourcePage}", Palette.TextMuted)
+        }
+        if (ability.immutable) {
+            Chip("SRD · sola lettura", Palette.GoldBright)
+        }
+    }
+}
+
+@Composable
+private fun AbilityDetails(
+    draft: CatalogAbility,
+    onChange: (CatalogAbility) -> Unit,
+    onSave: () -> Unit,
+    onDelete: (() -> Unit)?,
+    onDuplicate: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (draft.immutable) {
+        ReadOnlyAbilityDetails(
+            ability = draft,
+            onDuplicate = onDuplicate,
+            modifier = modifier,
+        )
+    } else {
+        AbilityEditor(
+            draft = draft,
+            onChange = onChange,
+            onSave = onSave,
+            onDelete = onDelete,
+            modifier = modifier,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReadOnlyAbilityDetails(
+    ability: CatalogAbility,
+    onDuplicate: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SheetBox("Contenuto SRD") {
+                Text(
+                    text = ability.name.ifBlank { "Senza nome" },
+                    color = Palette.Text,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                AbilityMetadataChips(ability)
+                Text(
+                    text = "ID ${ability.id}",
+                    color = Palette.TextFaint,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                if (ability.prerequisite.isNotBlank()) {
+                    Text(
+                        text = "Prerequisito: ${ability.prerequisite}",
+                        color = Palette.GoldBright,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+
+            SheetBox("Regole") {
+                Text(
+                    text = ability.rulesText.ifBlank { "Nessun testo di regole disponibile." },
+                    color = Palette.Text,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+
+            SheetBox("Funzionamento") {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Chip(ability.activationCost.label, Palette.Gold)
+                    Chip(ability.resolutionMethod.label, Palette.Party)
+                    if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
+                    if (ability.isArea) Chip("Area ${ability.areaRadiusFeet} ft", Palette.Crit)
+                }
+                if (ability.resourceId != null || ability.resourceCost > 0) {
+                    Text(
+                        text = buildString {
+                            append("Risorsa: ").append(ability.resourceId ?: "specifica")
+                            if (ability.resourceCost > 0) append(" · costo ").append(ability.resourceCost)
+                        },
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            if (
+                ability.spellLevel != null ||
+                ability.school.isNotBlank() ||
+                ability.castingTime.isNotBlank() ||
+                ability.components.isNotBlank() ||
+                ability.duration.isNotBlank()
+            ) {
+                SheetBox("Incantesimo") {
+                    ability.spellLevel?.let { level ->
+                        ReadOnlyProperty(
+                            "Livello",
+                            if (level == 0) "Trucchetto" else "$level",
+                        )
+                    }
+                    if (ability.school.isNotBlank()) ReadOnlyProperty("Scuola", ability.school)
+                    if (ability.castingTime.isNotBlank()) {
+                        ReadOnlyProperty("Tempo di lancio", ability.castingTime)
+                    }
+                    if (ability.components.isNotBlank()) ReadOnlyProperty("Componenti", ability.components)
+                    if (ability.duration.isNotBlank()) ReadOnlyProperty("Durata", ability.duration)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        if (ability.concentration) Chip("Concentrazione", Palette.Gold)
+                        if (ability.ritual) Chip("Rituale", Palette.Party)
+                    }
+                }
+            }
+        }
+
+        Column(
+            Modifier.fillMaxWidth().background(Palette.Surface).padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Text(
+                text = "Questa voce proviene dal pacchetto SRD ed è protetta dalle modifiche.",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            GameButton(
+                label = "Duplica come personalizzata",
+                accent = Palette.Party,
+                onClick = onDuplicate,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReadOnlyProperty(label: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = label,
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.width(112.dp),
+        )
+        Text(
+            text = value,
+            color = Palette.Text,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -563,6 +891,18 @@ private fun AbilityEditor(
 private fun newAbility(): CatalogAbility = CatalogAbility(
     id = "abilita-${System.currentTimeMillis()}",
     name = "Nuova abilità",
+)
+
+private fun CatalogAbility.asCustomCopy(): CatalogAbility = copy(
+    id = "abilita-${System.currentTimeMillis()}",
+    name = "$name (copia)",
+    category = RuleElementKind.CUSTOM,
+    classEligibility = emptyList(),
+    sourcePackId = null,
+    sourcePackVersion = "1.0.0",
+    sourcePage = 0,
+    prerequisite = "",
+    immutable = false,
 )
 
 @OptIn(ExperimentalLayoutApi::class)

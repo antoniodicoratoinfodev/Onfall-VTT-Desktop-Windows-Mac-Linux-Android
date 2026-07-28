@@ -79,6 +79,15 @@ class DomainModelTest {
     }
 
     @Test
+    void turnBudgetCanStartWithEveryAttackGrantedByTheAttackAction() {
+        TurnBudget budget = TurnBudget.fresh(30, 3);
+
+        assertEquals(3, budget.attacksRemaining());
+        assertEquals(1, TurnBudget.fresh(30).attacksRemaining());
+        assertThrows(IllegalArgumentException.class, () -> TurnBudget.fresh(30, 0));
+    }
+
+    @Test
     void conditionDurationCannotTickPastItsExpiry() {
         ConditionDuration duration = ConditionDuration.rounds(2);
         assertEquals(1, duration.decrement().remainingOccurrences());

@@ -2,6 +2,9 @@ package app.d6d.sheet
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -15,7 +18,7 @@ data class SheetLibrary(
     val abilities: List<CatalogAbility> = defaultAbilityCatalog(),
 ) {
     companion object {
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
     }
 }
 
@@ -41,8 +44,18 @@ class SheetStore(private val file: Path) {
         if (!Files.exists(file)) return SheetLibrary()
         val text = Files.readString(file)
         if (text.isBlank()) return SheetLibrary()
+        val storedVersion = json.parseToJsonElement(text)
+            .jsonObject["schemaVersion"]
+            ?.jsonPrimitive
+            ?.intOrNull
+            ?: 1
+        require(storedVersion <= SheetLibrary.SCHEMA_VERSION) {
+            "Il file usa lo schema $storedVersion, ma questa versione dell'app supporta " +
+                "fino allo schema ${SheetLibrary.SCHEMA_VERSION}. Aggiorna l'app prima di salvarlo."
+        }
         val decoded = json.decodeFromString(SheetLibrary.serializer(), text)
-        return if (decoded.schemaVersion < SheetLibrary.SCHEMA_VERSION) {
+            .copy(schemaVersion = storedVersion)
+        return if (storedVersion < SheetLibrary.SCHEMA_VERSION) {
             migrate(decoded)
         } else {
             decoded

@@ -1,6 +1,7 @@
 package app.d6d.persistence.catalog;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -130,6 +131,63 @@ class ActorCatalogJsonCodecTest {
         assertEquals(
                 List.of(character),
                 ActorCatalogJsonCodec.fromMap(ActorCatalogJsonCodec.toMap(List.of(character))));
+    }
+
+    @Test
+    void persistsPassiveTraitsAndDefaultsLegacyCatalogsToActiveAbilities() {
+        AbilityDefinition mastery = AbilityDefinition.builder("mastery", "Weapon mastery")
+                .activationCost(ActivationCost.NONE)
+                .resolutionMethod(ResolutionMethod.MANUAL)
+                .automationStatus(AutomationStatus.MANUAL_REQUIRED)
+                .passive(true)
+                .build();
+        ActorTemplate template = new ActorTemplate(
+                "fighter",
+                "Fighter",
+                ActorKind.PLAYER_CHARACTER,
+                5,
+                Map.of());
+        ActorDefinition definition = ActorDefinition.builder("fighter", "Fighter")
+                .maxHitPoints(40)
+                .abilities(List.of(mastery))
+                .build();
+        ActorCatalogEntry character = ActorCatalogEntry.character(template, definition, true);
+
+        Map<String, Object> document = mutableDocument(character);
+        List<ActorCatalogEntry> decoded = ActorCatalogJsonCodec.decode(document);
+        assertTrue(decoded.get(0).combatDefinition().abilities().get(0).passive());
+
+        Map<String, Object> encodedEntry = object(array(document.get("entries")).get(0));
+        Map<String, Object> encodedDefinition = object(encodedEntry.get("combatDefinition"));
+        Map<String, Object> encodedAbility = object(array(encodedDefinition.get("abilities")).get(0));
+        encodedAbility.remove("passive");
+        List<ActorCatalogEntry> legacy = ActorCatalogJsonCodec.decode(document);
+        assertFalse(legacy.get(0).combatDefinition().abilities().get(0).passive());
+    }
+
+    @Test
+    void persistsExtraAttackAndDefaultsLegacyCatalogsToOneAttack() {
+        ActorTemplate template = new ActorTemplate(
+                "fighter",
+                "Fighter",
+                ActorKind.PLAYER_CHARACTER,
+                5,
+                Map.of());
+        ActorDefinition definition = ActorDefinition.builder("fighter", "Fighter")
+                .maxHitPoints(40)
+                .attacksPerAction(2)
+                .build();
+        ActorCatalogEntry character = ActorCatalogEntry.character(template, definition, true);
+
+        Map<String, Object> document = mutableDocument(character);
+        List<ActorCatalogEntry> decoded = ActorCatalogJsonCodec.decode(document);
+        assertEquals(2, decoded.get(0).combatDefinition().attacksPerAction());
+
+        Map<String, Object> encodedEntry = object(array(document.get("entries")).get(0));
+        Map<String, Object> encodedDefinition = object(encodedEntry.get("combatDefinition"));
+        encodedDefinition.remove("attacksPerAction");
+        List<ActorCatalogEntry> legacy = ActorCatalogJsonCodec.decode(document);
+        assertEquals(1, legacy.get(0).combatDefinition().attacksPerAction());
     }
 
     @Test

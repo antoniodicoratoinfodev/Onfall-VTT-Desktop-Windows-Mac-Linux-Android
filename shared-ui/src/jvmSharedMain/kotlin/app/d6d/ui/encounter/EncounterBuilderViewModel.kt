@@ -354,6 +354,7 @@ class EncounterBuilderViewModel(
         abilities(),
         savingThrowBonuses(),
         spellSaveDc(),
+        attacksPerAction(),
     )
 
     /** Posiziona i due schieramenti attorno al centro, rispettando ingombri e collisioni. */

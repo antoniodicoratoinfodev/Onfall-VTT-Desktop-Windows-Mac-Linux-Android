@@ -12,6 +12,8 @@ import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
+import app.d6d.rules.character.CharacterProgression
+import app.d6d.rules.character.ExperienceProgression
 import kotlinx.serialization.Serializable
 
 /** Quanto il modificatore di Destrezza contribuisce a un calcolo della CA base. */
@@ -41,11 +43,30 @@ enum class ArmorClassMethod(
     val italianLabel: String,
     val baseValue: Int,
     val dexterity: ArmorClassDexterity,
+    val secondaryAbility: Ability? = null,
 ) {
     /** Mantiene esattamente la CA delle schede create prima del calcolo guidato. */
     MANUAL_TOTAL("CA finale manuale", 0, ArmorClassDexterity.NONE),
 
     UNARMORED("Senza armatura", 10, ArmorClassDexterity.FULL),
+    BARBARIAN_UNARMORED(
+        "Difesa senza armatura (Barbaro)",
+        10,
+        ArmorClassDexterity.FULL,
+        Ability.CONSTITUTION,
+    ),
+    MONK_UNARMORED(
+        "Difesa senza armatura (Monaco)",
+        10,
+        ArmorClassDexterity.FULL,
+        Ability.WISDOM,
+    ),
+    DRACONIC_RESILIENCE(
+        "Resilienza draconica",
+        10,
+        ArmorClassDexterity.FULL,
+        Ability.CHARISMA,
+    ),
     PADDED("Armatura imbottita", 11, ArmorClassDexterity.FULL),
     LEATHER("Armatura di cuoio", 11, ArmorClassDexterity.FULL),
     STUDDED_LEATHER("Cuoio borchiato", 12, ArmorClassDexterity.FULL),
@@ -124,6 +145,12 @@ data class SpellSlot(val level: Int, val total: Int = 0, val spent: Int = 0) {
     val remaining: Int get() = (total - spent).coerceAtLeast(0)
 }
 
+/** Riserva di Dadi Vita per una taglia di dado, necessaria per la multiclasse. */
+@Serializable
+data class HitDicePool(val dieSides: Int, val total: Int, val spent: Int = 0) {
+    val remaining: Int get() = (total - spent).coerceAtLeast(0)
+}
+
 /** Riga della tabella "Trucchetti e incantesimi preparati". */
 @Serializable
 data class SpellEntry(
@@ -141,7 +168,10 @@ data class SpellEntry(
 @Serializable
 data class Spellcasting(
     val ability: Ability = Ability.INTELLIGENCE,
+    val abilitiesByClass: Map<app.d6d.rules.character.CharacterClassId, Ability> = emptyMap(),
     val slots: List<SpellSlot> = (1..9).map { SpellSlot(it) },
+    /** Gli slot della Magia del patto non si sommano agli slot Incantesimi. */
+    val pactSlots: SpellSlot? = null,
     val spells: List<SpellEntry> = emptyList(),
 )
 
@@ -176,6 +206,11 @@ data class CharacterSheet(
     val species: String = "",
     val level: Int = 1,
     val experiencePoints: Int = 0,
+    /**
+     * Progressione guidata e versionata. Vuota per le schede create prima del
+     * content pack SRD, che continuano a funzionare in modalità manuale.
+     */
+    val progression: CharacterProgression = CharacterProgression(),
 
     // --- difesa, vita e morte ---
     /**
@@ -192,12 +227,17 @@ data class CharacterSheet(
     /** Correzione eccezionale della CA finale, rimovibile senza perdere la formula. */
     val armorClassOverride: Int? = null,
     val shieldEquipped: Boolean = false,
+    /** Resistenze del personaggio trasferite allo snapshot di combattimento. */
+    val damageResistances: Set<DamageType> = emptySet(),
+    /** Tipo attivo e sostituibile di Resilienza immonda, separato dalle resistenze permanenti. */
+    val fiendishResilienceDamageType: DamageType? = null,
     val currentHitPoints: Int = 8,
     val maxHitPoints: Int = 8,
     val temporaryHitPoints: Int = 0,
     val hitDiceMax: Int = 1,
     val hitDiceSpent: Int = 0,
     val hitDieSides: Int = 8,
+    val hitDicePools: List<HitDicePool> = emptyList(),
     val deathSaveSuccesses: Int = 0,
     val deathSaveFailures: Int = 0,
 
@@ -236,7 +276,27 @@ data class CharacterSheet(
     val money: Money = Money(),
 ) {
 
-    val proficiencyBonus: Int get() = proficiencyBonusForLevel(level)
+    /** Livello totale SRD; sulle schede legacy conserva il vecchio campo manuale. */
+    val effectiveLevel: Int
+        get() = progression.totalLevel.takeIf { it > 0 } ?: level.coerceIn(1, 20)
+
+    val proficiencyBonus: Int get() = proficiencyBonusForLevel(effectiveLevel)
+
+    /** Livello massimo già raggiungibile con i PE annotati. */
+    val experienceEligibleLevel: Int
+        get() = ExperienceProgression.levelForExperience(experiencePoints)
+
+    /** Il passaggio di livello è sempre una scelta esplicita, mai automatico. */
+    val canLevelUp: Boolean
+        get() = progression.configured &&
+            effectiveLevel < 20 &&
+            experienceEligibleLevel > effectiveLevel
+
+    val nextLevelExperienceThreshold: Int?
+        get() = ExperienceProgression.nextThreshold(effectiveLevel)
+
+    val experienceToNextLevel: Int?
+        get() = nextLevelExperienceThreshold?.let { (it - experiencePoints).coerceAtLeast(0) }
 
     fun score(ability: Ability): Int = abilityScores[ability] ?: 10
 
@@ -256,7 +316,9 @@ data class CharacterSheet(
             } else {
                 armorClassMethod.dexterity
             }
-            return base + dexterityRule.contribution(modifier(Ability.DEXTERITY))
+            return base +
+                dexterityRule.contribution(modifier(Ability.DEXTERITY)) +
+                (armorClassMethod.secondaryAbility?.let(::modifier) ?: 0)
         }
 
     /** Bonus dello scudo; il regolamento lo concede solo a chi ne ha competenza. */
@@ -302,13 +364,48 @@ data class CharacterSheet(
 
     val passivePerception: Int get() = 10 + skillBonus(Skill.PERCEZIONE)
 
-    val hitDiceRemaining: Int get() = (hitDiceMax - hitDiceSpent).coerceAtLeast(0)
+    val hitDiceRemaining: Int
+        get() = if (hitDicePools.isEmpty()) {
+            (hitDiceMax - hitDiceSpent).coerceAtLeast(0)
+        } else {
+            hitDicePools.sumOf { it.remaining }
+        }
 
     val spellSaveDc: Int?
         get() = spellcasting?.let { 8 + proficiencyBonus + modifier(it.ability) }
 
     val spellAttackBonus: Int?
         get() = spellcasting?.let { proficiencyBonus + modifier(it.ability) }
+
+    /**
+     * Numero di attacchi nella singola Azione Attacco. I privilegi omonimi non
+     * si sommano in multiclasse; il Guerriero è l'eccezione che sale a tre/quattro.
+     */
+    val attacksPerAction: Int
+        get() {
+            val fighterLevel = progression.levelIn(app.d6d.rules.character.CharacterClassId.FIGHTER)
+            if (fighterLevel >= 20) return 4
+            if (fighterLevel >= 11) return 3
+            if (
+                progression.selectedFeatureIds.any {
+                    it.endsWith(":lama-divoratrice") || it.endsWith(":devouring-blade")
+                }
+            ) {
+                return 3
+            }
+            val hasExtraAttack =
+                fighterLevel >= 5 ||
+                    listOf(
+                        app.d6d.rules.character.CharacterClassId.BARBARIAN,
+                        app.d6d.rules.character.CharacterClassId.MONK,
+                        app.d6d.rules.character.CharacterClassId.PALADIN,
+                        app.d6d.rules.character.CharacterClassId.RANGER,
+                    ).any { progression.levelIn(it) >= 5 } ||
+                    progression.selectedFeatureIds.any {
+                        it.endsWith(":lama-assetata") || it.endsWith(":thirsting-blade")
+                    }
+            return if (hasExtraAttack) 2 else 1
+        }
 
     /** Un personaggio a 0 PF non e' semplicemente "morto": entra nei tiri contro morte. */
     val unconscious: Boolean get() = currentHitPoints <= 0 && deathSaveFailures < 3
@@ -393,13 +490,14 @@ data class CharacterSheet(
             initiativeModifier,
             initiativeScore,
             saveBonus(Ability.CONSTITUTION),
-            emptySet<DamageType>(),
+            damageResistances + listOfNotNull(fiendishResilienceDamageType),
             emptySet<DamageType>(),
             emptySet<DamageType>(),
             emptySet<ConditionType>(),
             combatAbilities + catalogAbilities,
             savingThrowBonusMap(::saveBonus),
             spellSaveDc ?: 0,
+            attacksPerAction,
         )
     }
 }

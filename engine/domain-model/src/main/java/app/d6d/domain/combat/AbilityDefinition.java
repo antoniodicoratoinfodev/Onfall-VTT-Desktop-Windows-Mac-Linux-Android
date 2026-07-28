@@ -11,6 +11,10 @@ import java.util.Objects;
  * engine resolves it as a saving throw: each creature in the area rolls that save
  * against the caster's spell save DC and, if {@code halfOnSave}, takes half damage
  * on a success instead of none.</p>
+ *
+ * <p>A {@code passive} ability is a standing trait — weapon mastery, spellcasting,
+ * a feat — that is never activated on a turn. The engine refuses to resolve it and
+ * the interface lists it apart from the abilities the player can spend a turn on.</p>
  */
 public record AbilityDefinition(
         String id,
@@ -28,7 +32,8 @@ public record AbilityDefinition(
         String rulesText,
         int areaRadiusFeet,
         SaveAbility saveAbility,
-        boolean halfOnSave) {
+        boolean halfOnSave,
+        boolean passive) {
 
     public AbilityDefinition {
         id = requireText(id, "id");
@@ -61,7 +66,17 @@ public record AbilityDefinition(
             ActivationCost activationCost, ResolutionMethod resolutionMethod, int attackBonus, int rangeFeet,
             int maxTargets, List<DamageFormula> damage, AutomationStatus automationStatus, String rulesText) {
         this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
-                maxTargets, damage, automationStatus, rulesText, 0, null, false);
+                maxTargets, damage, automationStatus, rulesText, 0, null, false, false);
+    }
+
+    /** Backward-compatible constructor: an ability the player activates, never a passive trait. */
+    public AbilityDefinition(
+            String id, String version, String source, String rulesetVersion, String name,
+            ActivationCost activationCost, ResolutionMethod resolutionMethod, int attackBonus, int rangeFeet,
+            int maxTargets, List<DamageFormula> damage, AutomationStatus automationStatus, String rulesText,
+            int areaRadiusFeet, SaveAbility saveAbility, boolean halfOnSave) {
+        this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
+                maxTargets, damage, automationStatus, rulesText, areaRadiusFeet, saveAbility, halfOnSave, false);
     }
 
     /** True when the ability affects a spherical area rather than a single target. */
@@ -112,6 +127,7 @@ public record AbilityDefinition(
         private int areaRadiusFeet;
         private SaveAbility saveAbility;
         private boolean halfOnSave;
+        private boolean passive;
 
         private Builder(String id, String name) {
             this.id = id;
@@ -132,11 +148,12 @@ public record AbilityDefinition(
         public Builder areaRadiusFeet(int value) { this.areaRadiusFeet = value; return this; }
         public Builder saveAbility(SaveAbility value) { this.saveAbility = value; return this; }
         public Builder halfOnSave(boolean value) { this.halfOnSave = value; return this; }
+        public Builder passive(boolean value) { this.passive = value; return this; }
 
         public AbilityDefinition build() {
             return new AbilityDefinition(id, version, source, rulesetVersion, name, activationCost,
                     resolutionMethod, attackBonus, rangeFeet, maxTargets, damage, automationStatus, rulesText,
-                    areaRadiusFeet, saveAbility, halfOnSave);
+                    areaRadiusFeet, saveAbility, halfOnSave, passive);
         }
     }
 }

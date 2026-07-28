@@ -1,10 +1,11 @@
 # Onfall
 
 Onfall is an offline-first combat and encounter tracker compatible with 5e and 5.5e (D&D 2024).
-Multiplayer support is planned for the future. The bundled examples are original, rather than copies
-of SRD content; any future SRD-derived content pack must carry its required attribution and licence
-notice. See [`NOTICE-SRD.md`](NOTICE-SRD.md). Its engine and user interface are original, and
-desktop and Android share the same engine, data, and screens.
+Multiplayer support is planned for the future. The application includes a separate Italian SRD
+5.2.1 content pack for guided character creation, class progression, feats, actions and spells.
+Its attribution and licence notice are in [`NOTICE-SRD.md`](NOTICE-SRD.md). The engine, user
+interface and bundled encounter examples are original, and desktop and Android share the same
+engine, data, and screens.
 
 > **Read only repository.** This code is published solely for review and technical evaluation, that
 > is, for analysis of the code and of the author's technical ability. It is not meant to be used, run
@@ -28,6 +29,10 @@ Four parts living on the same engine:
 - Create and edit character sheets, creature stat blocks, and a shared ability catalog. The
   Compendium also keeps a local library of portraits and map backgrounds that can be reused across
   sessions.
+- Create SRD characters through guided, validated choices for all 12 classes and their SRD
+  subclasses, then advance them from level 1 to 20 at the official XP thresholds. Class resources,
+  proficiencies, feats, cantrips, prepared spells, spellbooks, always-prepared spells and derived
+  Extra Attacks remain attached to the sheet and available to the Compendium and combat screens.
 - Run attacks and area effects from the active combatant's abilities, with digital d20 rolls,
   advantage/disadvantage, damage types, saving throws, conditions, concentration, death saves,
   healing, temporary HP, and exhaustion. Table tools cover the same state changes when they need
@@ -91,7 +96,9 @@ chosen by the player.
 | `engine/domain-model` | Java 17 | actors, abilities, conditions, state, campaigns. Immutable, zero dependencies |
 | `engine/core-engine` | Java 17 | seeded dice, state machine, append only audit, XP budget |
 | `engine/persistence-json` | Java 17 | atomic saves, backups, import and export |
+| `engine/character-rules` | Kotlin | versioned class choices, XP progression and class resources |
 | `engine/sheet-model` | Kotlin | 2024 character sheet and 2025 monster stat block |
+| `content/srd-5.2.1-it` | Kotlin/JSON | Italian SRD classes, feats, actions and spells (CC BY 4.0) |
 | `shared-ui` | Kotlin + Compose MP | theme, components, screens, presentation state |
 | `desktop-app` | Kotlin | JVM window, dense shell |
 | `android-app` | Kotlin | Activity, touch shell |

@@ -45,6 +45,7 @@ import app.d6d.sheet.SpellSlot
 import app.d6d.sheet.Spellcasting
 import app.d6d.sheet.WeaponEntry
 import app.d6d.sheet.abilityModifier
+import app.d6d.rules.character.RecoveryPeriod
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.images.PortraitPicker
@@ -70,6 +71,7 @@ fun CharacterSheetEditor(
     val sheet = viewModel.character
     val update: (CharacterSheet) -> Unit = { viewModel.character = it }
     var deleteId by remember(viewModel.selectedId) { mutableStateOf<String?>(null) }
+    var showProgressionDialog by remember(viewModel.selectedId) { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize()) {
         Column(
@@ -81,6 +83,12 @@ fun CharacterSheetEditor(
             verticalArrangement = Arrangement.spacedBy(11.dp),
         ) {
             HeaderSection(sheet, portraits, compact, update)
+            ProgressionOverview(
+                viewModel = viewModel,
+                sheet = sheet,
+                compact = compact,
+                onOpenProgression = { showProgressionDialog = true },
+            )
             ArmorClassSection(sheet, compact, update)
 
             if (compact) {
@@ -88,7 +96,7 @@ fun CharacterSheetEditor(
                 CombatColumn(
                     sheet,
                     update,
-                    availableAbilities = viewModel.library.abilities,
+                    availableAbilities = viewModel.abilityCatalog,
                     compact = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -98,7 +106,7 @@ fun CharacterSheetEditor(
                     CombatColumn(
                         sheet,
                         update,
-                        availableAbilities = viewModel.library.abilities,
+                        availableAbilities = viewModel.abilityCatalog,
                         compact = false,
                         modifier = Modifier.weight(1f),
                     )
@@ -154,9 +162,138 @@ fun CharacterSheetEditor(
             },
         )
     }
+
+    if (showProgressionDialog) {
+        SrdProgressionDialog(viewModel) { showProgressionDialog = false }
+    }
 }
 
 // --- intestazione -----------------------------------------------------------------
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProgressionOverview(
+    viewModel: SheetViewModel,
+    sheet: CharacterSheet,
+    compact: Boolean,
+    onOpenProgression: () -> Unit,
+) {
+    if (!sheet.progression.configured) {
+        SheetBox("Creazione e livelli SRD 5.2.1", Modifier.fillMaxWidth()) {
+            Text(
+                "La modalità guidata propone classe, competenze, privilegi, talenti, trucchetti, " +
+                    "incantesimi e risorse nelle quantità previste dallo SRD. Le schede manuali " +
+                    "esistenti restano invariate finché non la attivi.",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            GameButton(
+                "Avvia creazione guidata",
+                accent = Palette.Gold,
+                onClick = onOpenProgression,
+            )
+        }
+        return
+    }
+
+    SheetBox("Progressione SRD 5.2.1", Modifier.fillMaxWidth()) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            sheet.progression.classLevels.forEach {
+                Chip("${it.classId.italianLabel} ${it.level}", Palette.Party)
+            }
+            Chip("Bonus competenza ${signed(sheet.proficiencyBonus)}", Palette.Gold)
+            Chip("${sheet.experiencePoints} PE", Palette.Temporary)
+        }
+
+        if (sheet.canLevelUp) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Palette.Gold.copy(alpha = 0.12f), RoundedCornerShape(7.dp))
+                    .border(1.dp, Palette.Gold.copy(alpha = 0.65f), RoundedCornerShape(7.dp))
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "Passaggio disponibile: i PE consentono il livello ${sheet.effectiveLevel + 1}.",
+                    color = Palette.GoldBright,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                GameButton(
+                    "Sali al livello ${sheet.effectiveLevel + 1}",
+                    accent = Palette.Gold,
+                    onClick = onOpenProgression,
+                )
+            }
+        } else {
+            sheet.nextLevelExperienceThreshold?.let { threshold ->
+                Text(
+                    "Prossimo livello a $threshold PE · ne mancano ${sheet.experienceToNextLevel}.",
+                    color = Palette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+
+        val visibleResourcePools = sheet.progression.resourcePools.filter { it.maximum > 0 }
+        if (visibleResourcePools.isNotEmpty()) {
+            Text("RISORSE DI CLASSE", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                visibleResourcePools.forEach { pool ->
+                    Column(
+                        Modifier
+                            .width(if (compact) 150.dp else 180.dp)
+                            .background(Palette.Night, RoundedCornerShape(6.dp))
+                            .padding(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            buildString {
+                                append(pool.name)
+                                if (pool.dieSides > 0) append(" · d${pool.dieSides}")
+                            },
+                            color = Palette.Text,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "${pool.remaining}/${pool.maximum} · ${pool.recovery.italianLabel}",
+                            color = Palette.TextMuted,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        PipRow(pool.maximum, pool.spent, color = Palette.Gold) {
+                            viewModel.setCharacterResourceSpent(pool.resourceId, it)
+                        }
+                    }
+                }
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                GameButton(
+                    "Riposo breve",
+                    accent = Palette.Temporary,
+                    dense = true,
+                    onClick = { viewModel.recoverCharacterResources(RecoveryPeriod.SHORT_REST) },
+                )
+                GameButton(
+                    "Riposo lungo",
+                    accent = Palette.Heal,
+                    dense = true,
+                    onClick = { viewModel.recoverCharacterResources(RecoveryPeriod.LONG_REST) },
+                )
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -188,21 +325,38 @@ private fun HeaderSection(
                 SheetField("Background", sheet.background, Modifier.weight(1f)) {
                     update(sheet.copy(background = it))
                 }
-                SheetField("Classe", sheet.className, Modifier.weight(1f)) {
-                    update(sheet.copy(className = it))
+                if (sheet.progression.configured) {
+                    DerivedValue("Classe", sheet.className, Modifier.weight(1f), accent = Palette.Party)
+                } else {
+                    SheetField("Classe", sheet.className, Modifier.weight(1f)) {
+                        update(sheet.copy(className = it))
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 SheetField("Specie", sheet.species, Modifier.weight(1f)) {
                     update(sheet.copy(species = it))
                 }
-                SheetField("Sottoclasse", sheet.subclass, Modifier.weight(1f)) {
-                    update(sheet.copy(subclass = it))
+                if (sheet.progression.configured) {
+                    DerivedValue(
+                        "Sottoclasse",
+                        sheet.subclass.ifBlank { "—" },
+                        Modifier.weight(1f),
+                        accent = Palette.Party,
+                    )
+                } else {
+                    SheetField("Sottoclasse", sheet.subclass, Modifier.weight(1f)) {
+                        update(sheet.copy(subclass = it))
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetNumberField("Livello", sheet.level, Modifier.weight(1f)) {
-                    update(sheet.copy(level = it.coerceIn(1, 20)))
+                if (sheet.progression.configured) {
+                    DerivedValue("Livello", sheet.effectiveLevel.toString(), Modifier.weight(1f))
+                } else {
+                    SheetNumberField("Livello", sheet.level, Modifier.weight(1f)) {
+                        update(sheet.copy(level = it.coerceIn(1, 20)))
+                    }
                 }
                 SheetNumberField("PE", sheet.experiencePoints, Modifier.weight(1f)) {
                     update(sheet.copy(experiencePoints = it.coerceAtLeast(0)))
@@ -288,8 +442,12 @@ private fun CompactHeaderSection(
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetField("Classe", sheet.className, fieldModifier) {
-                            update(sheet.copy(className = it))
+                        if (sheet.progression.configured) {
+                            DerivedValue("Classe", sheet.className, fieldModifier, accent = Palette.Party)
+                        } else {
+                            SheetField("Classe", sheet.className, fieldModifier) {
+                                update(sheet.copy(className = it))
+                            }
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
@@ -298,13 +456,26 @@ private fun CompactHeaderSection(
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetField("Sottoclasse", sheet.subclass, fieldModifier) {
-                            update(sheet.copy(subclass = it))
+                        if (sheet.progression.configured) {
+                            DerivedValue(
+                                "Sottoclasse",
+                                sheet.subclass.ifBlank { "—" },
+                                fieldModifier,
+                                accent = Palette.Party,
+                            )
+                        } else {
+                            SheetField("Sottoclasse", sheet.subclass, fieldModifier) {
+                                update(sheet.copy(subclass = it))
+                            }
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Livello", sheet.level, fieldModifier) {
-                            update(sheet.copy(level = it.coerceIn(1, 20)))
+                        if (sheet.progression.configured) {
+                            DerivedValue("Livello", sheet.effectiveLevel.toString(), fieldModifier)
+                        } else {
+                            SheetNumberField("Livello", sheet.level, fieldModifier) {
+                                update(sheet.copy(level = it.coerceIn(1, 20)))
+                            }
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
@@ -815,7 +986,10 @@ private fun armorClassBaseFormula(sheet: CharacterSheet): String {
         ArmorClassDexterity.MAX_TWO -> "$base + DES (${signed(contribution)}, massimo +2)"
         ArmorClassDexterity.NONE -> "$base, senza Destrezza"
     }
-    return "$detail = CA base ${sheet.baseArmorClass}"
+    val secondary = sheet.armorClassMethod.secondaryAbility?.let { ability ->
+        " + ${ability.abbreviation} (${signed(sheet.modifier(ability))})"
+    }.orEmpty()
+    return "$detail$secondary = CA base ${sheet.baseArmorClass}"
 }
 
 private fun armorClassFormula(sheet: CharacterSheet): String {
@@ -1087,8 +1261,23 @@ private fun CombatColumn(
     }
 
     if (abilityPickerOpen) {
+        val guidedIds = buildSet {
+            addAll(sheet.progression.selectedFeatureIds)
+            addAll(sheet.progression.featIds)
+            addAll(sheet.progression.knownCantripIds)
+            addAll(sheet.progression.preparedSpellIds)
+        }
+        val pickerAbilities = availableAbilities.filter { ability ->
+            if (!sheet.progression.configured) {
+                true
+            } else {
+                ability.category == app.d6d.rules.character.RuleElementKind.CUSTOM ||
+                    ability.category == app.d6d.rules.character.RuleElementKind.COMMON_ACTION ||
+                    ability.id in guidedIds
+            }
+        }
         AbilityPickerDialog(
-            abilities = availableAbilities,
+            abilities = pickerAbilities,
             selectedIds = sheet.abilityIds.toSet(),
             onSelect = { ability ->
                 update(sheet.copy(abilityIds = (sheet.abilityIds + ability.id).distinct()))
@@ -1403,10 +1592,18 @@ private fun SpellcastingSection(
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.labelSmall,
                         )
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Ability.entries.forEach { ability ->
-                                SheetCheck(ability.abbreviation, casting.ability == ability) {
-                                    if (it) update(sheet.copy(spellcasting = casting.copy(ability = ability)))
+                        if (sheet.progression.configured && casting.abilitiesByClass.isNotEmpty()) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                casting.abilitiesByClass.forEach { (classId, ability) ->
+                                    Chip("${classId.italianLabel}: ${ability.abbreviation}", Palette.Party)
+                                }
+                            }
+                        } else {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Ability.entries.forEach { ability ->
+                                    SheetCheck(ability.abbreviation, casting.ability == ability) {
+                                        if (it) update(sheet.copy(spellcasting = casting.copy(ability = ability)))
+                                    }
                                 }
                             }
                         }
@@ -1434,7 +1631,7 @@ private fun SpellcastingSection(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             casting.slots.forEach { slot ->
-                SlotBlock(slot) { updated ->
+                SlotBlock(slot, editableTotal = !sheet.progression.configured) { updated ->
                     update(
                         sheet.copy(
                             spellcasting = casting.copy(
@@ -1444,12 +1641,56 @@ private fun SpellcastingSection(
                     )
                 }
             }
+            casting.pactSlots?.let { pact ->
+                PactSlotBlock(pact) { updated ->
+                    update(sheet.copy(spellcasting = casting.copy(pactSlots = updated)))
+                }
+            }
+        }
+
+        if (casting.spells.isNotEmpty()) {
+            Text(
+                "Trucchetti e incantesimi selezionati",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            casting.spells
+                .sortedWith(compareBy({ it.level }, { it.name.lowercase() }))
+                .groupBy { it.level }
+                .forEach { (level, spells) ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            if (level == 0) "TRUCCHETTI" else "LIVELLO $level",
+                            color = Palette.Gold,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            spells.forEach { spell ->
+                                Chip(
+                                    buildString {
+                                        append(spell.name)
+                                        if (spell.concentration) append(" · C")
+                                        if (spell.ritual) append(" · R")
+                                    },
+                                    if (level == 0) Palette.Party else Palette.Temporary,
+                                )
+                            }
+                        }
+                    }
+                }
         }
     }
 }
 
 @Composable
-private fun SlotBlock(slot: SpellSlot, onChange: (SpellSlot) -> Unit) {
+private fun SlotBlock(
+    slot: SpellSlot,
+    editableTotal: Boolean,
+    onChange: (SpellSlot) -> Unit,
+) {
     Column(
         Modifier
             .width(112.dp)
@@ -1463,9 +1704,40 @@ private fun SlotBlock(slot: SpellSlot, onChange: (SpellSlot) -> Unit) {
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
         )
-        SheetNumberField("Totali", slot.total) { onChange(slot.copy(total = it.coerceIn(0, 9))) }
+        if (editableTotal) {
+            SheetNumberField("Totali", slot.total) { onChange(slot.copy(total = it.coerceIn(0, 9))) }
+        } else {
+            Text(
+                "Totali ${slot.total}",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
         // Le caselle mostrano gli slot spesi sul totale disponibile.
         PipRow(slot.total.coerceAtMost(9), slot.spent, color = Palette.Temporary) {
+            onChange(slot.copy(spent = it.coerceIn(0, slot.total)))
+        }
+    }
+}
+
+@Composable
+private fun PactSlotBlock(slot: SpellSlot, onChange: (SpellSlot) -> Unit) {
+    Column(
+        Modifier
+            .width(150.dp)
+            .background(Palette.Night, RoundedCornerShape(6.dp))
+            .border(1.dp, Palette.Gold.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
+            .padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text(
+            "PATTO · LIVELLO ${slot.level}",
+            color = Palette.Gold,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        Text("Riposo breve o lungo", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        PipRow(slot.total, slot.spent, color = Palette.Gold) {
             onChange(slot.copy(spent = it.coerceIn(0, slot.total)))
         }
     }

@@ -123,4 +123,63 @@ class AttackResolutionTest {
         assertEquals(randomState, session.currentState().randomState());
         assertTrue(session.currentState().turnBudgets().get("actor").actionAvailable());
     }
+
+    @Test
+    void aPassiveTraitCannotBeActivatedAndLeavesTheTurnUntouched() {
+        AbilityDefinition weaponMastery = AbilityDefinition.builder("mastery", "Weapon mastery")
+                .activationCost(ActivationCost.NONE)
+                .resolutionMethod(ResolutionMethod.MANUAL)
+                .automationStatus(AutomationStatus.MANUAL_REQUIRED)
+                .passive(true)
+                .build();
+        ActorDefinition fighter = ActorDefinition.builder("fighter-definition", "Fighter")
+                .maxHitPoints(30)
+                .abilities(List.of(CombatFixtures.sword(), weaponMastery))
+                .build();
+        CombatSession session = CombatSession.create("passive", 7L);
+        session.addCombatant("fighter", fighter);
+        session.addCombatant("target", CombatFixtures.goblin());
+        session.setInitiative("fighter", 20);
+        session.setInitiative("target", 10);
+        session.markReady();
+        session.start();
+
+        int auditSize = session.auditTrail().size();
+        assertThrows(CombatRuleException.class, () -> session.attack(
+                AttackRequest.manual("fighter", "target", "mastery", 1, List.of(1))));
+
+        assertEquals(auditSize, session.auditTrail().size());
+        assertTrue(session.currentState().turnBudgets().get("fighter").actionAvailable());
+    }
+
+    @Test
+    void extraAttackSpendsTheActionOnceAndRejectsAThirdStrike() {
+        ActorDefinition fighter = ActorDefinition.builder("fighter-definition", "Fighter")
+                .maxHitPoints(30)
+                .attacksPerAction(2)
+                .abilities(List.of(CombatFixtures.sword()))
+                .build();
+        CombatSession session = CombatSession.create("extra-attack", 10L);
+        session.addCombatant("fighter", fighter);
+        session.addCombatant("target", CombatFixtures.goblin());
+        session.setInitiative("fighter", 20);
+        session.setInitiative("target", 10);
+        session.markReady();
+        session.start();
+
+        session.attack(AttackRequest.manual("fighter", "target", "sword", 1, List.of(1)));
+        assertFalse(session.currentState().turnBudgets().get("fighter").actionAvailable());
+        assertEquals(1, session.currentState().turnBudgets().get("fighter").attacksRemaining());
+
+        session.attack(AttackRequest.manual("fighter", "target", "sword", 1, List.of(1)));
+        assertEquals(0, session.currentState().turnBudgets().get("fighter").attacksRemaining());
+        assertEquals(1, session.auditTrail().stream()
+                .filter(event -> event.type() == EventType.ACTION_SPENT)
+                .count());
+
+        int auditSize = session.auditTrail().size();
+        assertThrows(CombatRuleException.class, () -> session.attack(
+                AttackRequest.manual("fighter", "target", "sword", 1, List.of(1))));
+        assertEquals(auditSize, session.auditTrail().size());
+    }
 }

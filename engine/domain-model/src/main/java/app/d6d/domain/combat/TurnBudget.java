@@ -19,7 +19,14 @@ public record TurnBudget(
     }
 
     public static TurnBudget fresh(int speedFeet) {
-        return new TurnBudget(speedFeet, 0, true, true, true, true, 1, false);
+        return fresh(speedFeet, 1);
+    }
+
+    public static TurnBudget fresh(int speedFeet, int attacksPerAction) {
+        if (attacksPerAction < 1) {
+            throw new IllegalArgumentException("attacksPerAction must be at least 1");
+        }
+        return new TurnBudget(speedFeet, 0, true, true, true, true, attacksPerAction, false);
     }
 
     public int movementRemainingFeet() {

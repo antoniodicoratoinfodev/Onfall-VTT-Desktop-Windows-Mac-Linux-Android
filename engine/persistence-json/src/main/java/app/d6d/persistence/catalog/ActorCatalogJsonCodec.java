@@ -139,6 +139,7 @@ public final class ActorCatalogJsonCodec {
         definition.savingThrowBonuses().forEach((ability, bonus) -> savingThrowBonuses.put(ability.name(), bonus));
         result.put("savingThrowBonuses", savingThrowBonuses);
         result.put("spellSaveDc", definition.spellSaveDc());
+        result.put("attacksPerAction", definition.attacksPerAction());
         result.put("resistances", enumNames(definition.resistances()));
         result.put("vulnerabilities", enumNames(definition.vulnerabilities()));
         result.put("damageImmunities", enumNames(definition.damageImmunities()));
@@ -177,6 +178,7 @@ public final class ActorCatalogJsonCodec {
         result.put("damage", damage);
         result.put("automationStatus", ability.automationStatus().name());
         result.put("rulesText", ability.rulesText());
+        result.put("passive", ability.passive());
         return result;
     }
 
@@ -267,6 +269,9 @@ public final class ActorCatalogJsonCodec {
         int spellSaveDc = value.get("spellSaveDc") == null
                 ? 0
                 : integer(value.get("spellSaveDc"), path + ".spellSaveDc");
+        int attacksPerAction = value.get("attacksPerAction") == null
+                ? 1
+                : integer(value.get("attacksPerAction"), path + ".attacksPerAction");
         Set<DamageType> resistances = damageTypes(
                 required(value, "resistances", path),
                 path + ".resistances");
@@ -307,7 +312,8 @@ public final class ActorCatalogJsonCodec {
                     conditionImmunities,
                     abilities,
                     savingThrowBonuses,
-                    spellSaveDc);
+                    spellSaveDc,
+                    attacksPerAction);
         } catch (IllegalArgumentException exception) {
             throw formatError(path, messageOf(exception));
         }
@@ -362,6 +368,7 @@ public final class ActorCatalogJsonCodec {
                 required(value, "automationStatus", path),
                 path + ".automationStatus");
         String rulesText = text(required(value, "rulesText", path), path + ".rulesText");
+        boolean passive = value.get("passive") != null && bool(value.get("passive"), path + ".passive");
 
         try {
             return new AbilityDefinition(
@@ -380,7 +387,8 @@ public final class ActorCatalogJsonCodec {
                     rulesText,
                     areaRadiusFeet,
                     saveAbility,
-                    halfOnSave);
+                    halfOnSave,
+                    passive);
         } catch (IllegalArgumentException exception) {
             throw formatError(path, messageOf(exception));
         }

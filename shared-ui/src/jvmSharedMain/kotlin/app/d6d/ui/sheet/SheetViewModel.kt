@@ -3,9 +3,17 @@ package app.d6d.ui.sheet
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.d6d.content.srd521it.Srd521ItContent
+import app.d6d.content.srd521it.SrdChoiceOption
+import app.d6d.content.srd521it.SrdChoiceResolver
+import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.character.ChoiceDefinition
+import app.d6d.rules.character.LevelUpRequest
+import app.d6d.rules.character.RecoveryPeriod
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
+import app.d6d.sheet.GuidedCharacterService
 import app.d6d.sheet.defaultAbilityCatalog
 import app.d6d.sheet.MonsterStatBlock
 import app.d6d.sheet.SheetLibrary
@@ -36,9 +44,19 @@ enum class SheetNavigationResult {
  * personaggio e' completa, lo stat block del mostro e' la versione ridotta.
  */
 class SheetViewModel(private val store: SheetStore) {
+    private val guidedCharacters by lazy { GuidedCharacterService(Srd521ItContent.pack) }
+
+    val srdClasses get() = Srd521ItContent.pack.classes
 
     var library by mutableStateOf(SheetLibrary())
         private set
+
+    /**
+     * Le voci SRD sono distribuite dal content pack e restano immutabili; nel
+     * file dell'utente persistono soltanto capacità private e riferimenti scelti.
+     */
+    val abilityCatalog: List<CatalogAbility>
+        get() = (library.abilities + bundledSrdAbilities).distinctBy { it.id }
 
     private var currentKind by mutableStateOf(SheetKind.PERSONAGGIO)
 
@@ -255,16 +273,104 @@ class SheetViewModel(private val store: SheetStore) {
         onSaved?.invoke(SheetKind.MOSTRO)
     }
 
-    /** Crea o aggiorna una capacità del Compendio senza toccare la scheda aperta. */
-    fun upsertAbility(ability: CatalogAbility): Boolean = guard("Abilità salvata.") {
-        // La conversione applica in un solo punto tutte le validazioni meccaniche.
-        ability.toDefinition()
-        val updatedLibrary = library.copy(
-            abilities = library.abilities.filterNot { it.id == ability.id } + ability,
+    fun setCharacterResourceSpent(resourceId: String, spent: Int) {
+        val progression = character.progression
+        character = character.copy(
+            progression = progression.copy(
+                resourcePools = progression.resourcePools.map { pool ->
+                    if (pool.resourceId == resourceId) {
+                        pool.copy(spent = spent.coerceIn(0, pool.maximum))
+                    } else {
+                        pool
+                    }
+                },
+            ),
         )
-        store.save(updatedLibrary)
-        library = updatedLibrary
-        onAbilitiesChanged?.invoke()
+    }
+
+    fun recoverCharacterResources(period: RecoveryPeriod) {
+        val restored = character.progression.resourcePools.map { it.recoveredAfter(period) }
+        val casting = character.spellcasting
+        character = character.copy(
+            progression = character.progression.copy(resourcePools = restored),
+            spellcasting = casting?.copy(
+                slots = if (period == RecoveryPeriod.LONG_REST) {
+                    casting.slots.map { it.copy(spent = 0) }
+                } else {
+                    casting.slots
+                },
+                pactSlots = casting.pactSlots?.let {
+                    if (
+                        period == RecoveryPeriod.SHORT_REST ||
+                        period == RecoveryPeriod.LONG_REST
+                    ) {
+                        it.copy(spent = 0)
+                    } else {
+                        it
+                    }
+                },
+            ),
+        )
+        status = if (period == RecoveryPeriod.LONG_REST) {
+            "Risorse da riposo lungo recuperate."
+        } else {
+            "Risorse da riposo breve recuperate."
+        }
+    }
+
+    fun progressionRequirements(
+        classId: CharacterClassId,
+        provisionalSelections: List<app.d6d.rules.character.ChoiceSelection> = emptyList(),
+    ): List<ChoiceDefinition> =
+        guidedCharacters.requirements(character, classId, provisionalSelections)
+
+    fun progressionOptions(
+        choice: ChoiceDefinition,
+        classId: CharacterClassId,
+        provisionalSelections: List<app.d6d.rules.character.ChoiceSelection> = emptyList(),
+    ): List<SrdChoiceOption> =
+        SrdChoiceResolver.options(
+            choice = choice,
+            classId = classId,
+            classLevel = character.progression.levelIn(classId) + 1,
+            sheet = character,
+            provisionalSelections = provisionalSelections,
+        )
+
+    fun fixedHitPointIncrease(classId: CharacterClassId): Int =
+        guidedCharacters.fixedHitPointIncrease(character, classId)
+
+    fun advanceCharacter(request: LevelUpRequest): Boolean {
+        val validation = guidedCharacters.validate(character, request)
+        if (!validation.valid) {
+            status = validation.issues.joinToString("\n") { it.message }
+            return false
+        }
+        character = guidedCharacters.advance(character, request)
+        status = if (character.effectiveLevel == 1) {
+            "Personaggio SRD creato: completa i dettagli narrativi e salva."
+        } else {
+            "Livello ${character.effectiveLevel} applicato. Controlla e salva la scheda."
+        }
+        return true
+    }
+
+    /** Crea o aggiorna una capacità del Compendio senza toccare la scheda aperta. */
+    fun upsertAbility(ability: CatalogAbility): Boolean {
+        if (ability.immutable || bundledSrdAbilities.any { it.id == ability.id }) {
+            status = "Il contenuto SRD è in sola lettura. Duplicalo per creare una variante personale."
+            return false
+        }
+        return guard("Abilità salvata.") {
+        // La conversione applica in un solo punto tutte le validazioni meccaniche.
+            ability.toDefinition()
+            val updatedLibrary = library.copy(
+                abilities = library.abilities.filterNot { it.id == ability.id } + ability,
+            )
+            store.save(updatedLibrary)
+            library = updatedLibrary
+            onAbilitiesChanged?.invoke()
+        }
     }
 
     /** Numero di schede persistite o in modifica che usano la capacità. */
@@ -286,6 +392,10 @@ class SheetViewModel(private val store: SheetStore) {
      * controllo dell'utente.
      */
     fun deleteAbility(id: String): Boolean {
+        if (bundledSrdAbilities.any { it.id == id }) {
+            status = "Il contenuto SRD incluso non può essere eliminato."
+            return false
+        }
         val usedBy = abilityUsageCount(id)
         if (usedBy > 0) {
             status = "Impossibile eliminare: l'abilità è usata da $usedBy " +
@@ -385,4 +495,8 @@ class SheetViewModel(private val store: SheetStore) {
         }
         return status == successMessage
     }
+}
+
+private val bundledSrdAbilities: List<CatalogAbility> by lazy {
+    Srd521ItContent.catalog
 }

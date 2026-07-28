@@ -1,55 +1,12 @@
 package app.d6d.sheet
 
+import app.d6d.rules.character.Ability as RulesAbility
+import app.d6d.rules.character.Skill as RulesSkill
 import kotlinx.serialization.Serializable
 
-/** Le sei caratteristiche, nell'ordine in cui compaiono sulla scheda. */
-@Serializable
-enum class Ability(val italianLabel: String, val abbreviation: String) {
-    STRENGTH("Forza", "FOR"),
-    DEXTERITY("Destrezza", "DES"),
-    CONSTITUTION("Costituzione", "COS"),
-    INTELLIGENCE("Intelligenza", "INT"),
-    WISDOM("Saggezza", "SAG"),
-    CHARISMA("Carisma", "CAR"),
-}
-
-/**
- * Le diciotto abilita' della scheda, ciascuna con la caratteristica che la governa.
- *
- * L'ordine rispetta quello stampato sulla scheda ufficiale italiana, cosi' che
- * l'interfaccia possa elencarle senza riordinarle.
- */
-@Serializable
-enum class Skill(val ability: Ability, val italianLabel: String) {
-    ATLETICA(Ability.STRENGTH, "Atletica"),
-
-    ACROBAZIA(Ability.DEXTERITY, "Acrobazia"),
-    FURTIVITA(Ability.DEXTERITY, "Furtivita'"),
-    RAPIDITA_DI_MANO(Ability.DEXTERITY, "Rapidita' di mano"),
-
-    ARCANO(Ability.INTELLIGENCE, "Arcano"),
-    INDAGARE(Ability.INTELLIGENCE, "Indagare"),
-    NATURA(Ability.INTELLIGENCE, "Natura"),
-    RELIGIONE(Ability.INTELLIGENCE, "Religione"),
-    STORIA(Ability.INTELLIGENCE, "Storia"),
-
-    ADDESTRARE_ANIMALI(Ability.WISDOM, "Addestrare animali"),
-    INTUIZIONE(Ability.WISDOM, "Intuizione"),
-    MEDICINA(Ability.WISDOM, "Medicina"),
-    PERCEZIONE(Ability.WISDOM, "Percezione"),
-    SOPRAVVIVENZA(Ability.WISDOM, "Sopravvivenza"),
-
-    INGANNO(Ability.CHARISMA, "Inganno"),
-    INTIMIDIRE(Ability.CHARISMA, "Intimidire"),
-    INTRATTENERE(Ability.CHARISMA, "Intrattenere"),
-    PERSUASIONE(Ability.CHARISMA, "Persuasione"),
-    ;
-
-    companion object {
-        /** Abilita' governate da una caratteristica, nell'ordine di scheda. */
-        fun of(ability: Ability): List<Skill> = entries.filter { it.ability == ability }
-    }
-}
+/** Alias compatibili: le regole condivise sono ora la fonte unica di caratteristiche e abilità. */
+typealias Ability = RulesAbility
+typealias Skill = RulesSkill
 
 /** Grado di competenza in un tiro salvezza o in un'abilita'. */
 @Serializable

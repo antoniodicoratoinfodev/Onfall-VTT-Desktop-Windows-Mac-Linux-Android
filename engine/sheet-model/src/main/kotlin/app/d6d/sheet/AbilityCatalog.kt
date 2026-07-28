@@ -14,6 +14,9 @@ import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
+import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.character.ClassEligibility
+import app.d6d.rules.character.RuleElementKind
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 
@@ -68,6 +71,29 @@ data class CatalogAbility(
     val areaRadiusFeet: Int = 0,
     val saveAbility: Ability? = null,
     val halfOnSave: Boolean = false,
+    /** Metadati del contenuto: vuoti per le capacità private create dall'utente. */
+    val category: RuleElementKind = RuleElementKind.CUSTOM,
+    val classEligibility: List<ClassEligibility> = emptyList(),
+    val sourcePackId: String? = null,
+    val sourcePackVersion: String = "1.0.0",
+    val sourcePage: Int = 0,
+    val spellLevel: Int? = null,
+    val school: String = "",
+    val castingTime: String = "",
+    val components: String = "",
+    val duration: String = "",
+    val concentration: Boolean = false,
+    val ritual: Boolean = false,
+    val prerequisite: String = "",
+    val resourceId: String? = null,
+    val resourceCost: Int = 0,
+    val immutable: Boolean = false,
+    /**
+     * Tratto permanente — padronanza d'armi, Incantesimi, un talento — che non si
+     * attiva mai nel turno. Resta fuori dalle capacità giocabili e viene mostrato
+     * accanto al nome di chi ha il turno.
+     */
+    val passive: Boolean = false,
 ) {
     val isArea: Boolean get() = areaRadiusFeet > 0
 
@@ -91,6 +117,9 @@ data class CatalogAbility(
         require(rangeFeet >= 0) { "La gittata non può essere negativa." }
         require(maxTargets > 0) { "Il numero di bersagli deve essere positivo." }
         require(areaRadiusFeet >= 0) { "Il raggio dell'area non può essere negativo." }
+        require(sourcePage >= 0) { "La pagina sorgente non può essere negativa." }
+        require(spellLevel == null || spellLevel in 0..9) { "Il livello dell'incantesimo deve essere 0-9." }
+        require(resourceCost >= 0) { "Il costo in risorse non può essere negativo." }
         require(resolutionMethod != ResolutionMethod.ATTACK_ROLL || dealsDamage) {
             "Un attacco deve indicare il danno."
         }
@@ -108,8 +137,8 @@ data class CatalogAbility(
             emptyList()
         }
         return AbilityDefinition.builder(id, name)
-            .version("1.0.0")
-            .source("content-user-private")
+            .version(sourcePackVersion)
+            .source(sourcePackId ?: "content-user-private")
             .rulesetVersion(rulesetVersion)
             .activationCost(activationCost)
             .resolutionMethod(resolutionMethod)
@@ -122,8 +151,14 @@ data class CatalogAbility(
             .areaRadiusFeet(areaRadiusFeet)
             .saveAbility(saveAbility?.let { SaveAbility.valueOf(it.name) })
             .halfOnSave(halfOnSave)
+            .passive(passive)
             .build()
     }
+
+    fun availableTo(classId: CharacterClassId, classLevel: Int): Boolean =
+        classEligibility.isEmpty() || classEligibility.any {
+            it.classId == classId && classLevel >= it.minimumLevel
+        }
 }
 
 /**

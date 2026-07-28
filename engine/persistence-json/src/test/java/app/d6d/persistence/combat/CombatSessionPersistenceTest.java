@@ -48,6 +48,7 @@ class CombatSessionPersistenceTest {
         CombatSession restored = codec.decode(Json.parseObject(Json.encode(encoded)));
 
         assertEquals(savedState, restored.currentState());
+        assertEquals(2, restored.currentState().combatant("hero").snapshot().attacksPerAction());
         assertEquals(Set.of("hero"), restored.currentState().partyCombatantIds());
         assertEquals(savedAudit, restored.auditTrail());
         assertFalse(restored.canUndo());
@@ -117,6 +118,28 @@ class CombatSessionPersistenceTest {
         assertEquals(original.auditTrail(), target.load().auditTrail());
     }
 
+    @Test
+    void legacySessionWithoutAttacksPerActionDefaultsSnapshotsToOne() {
+        CombatSessionJsonCodec codec = new CombatSessionJsonCodec();
+        Map<String, Object> encoded = codec.encode(populatedActiveSession(505L));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> state = (Map<String, Object>) encoded.get("currentState");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> combatants = (Map<String, Object>) state.get("combatants");
+        for (Object rawCombatant : combatants.values()) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> combatant = (Map<String, Object>) rawCombatant;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> snapshot = (Map<String, Object>) combatant.get("snapshot");
+            snapshot.remove("attacksPerAction");
+        }
+
+        CombatSession restored = codec.decode(Json.parseObject(Json.encode(encoded)));
+
+        assertEquals(1, restored.currentState().combatant("hero").snapshot().attacksPerAction());
+        assertEquals(1, restored.currentState().combatant("goblin").snapshot().attacksPerAction());
+    }
+
     private static CombatSession populatedActiveSession(long seed) {
         AbilityDefinition blade = AbilityDefinition.builder("blade", "Runic blade")
                 .version("3")
@@ -147,6 +170,7 @@ class CombatSessionPersistenceTest {
                 .initiativeModifier(4)
                 .initiativeScore(14)
                 .constitutionSaveBonus(6)
+                .attacksPerAction(2)
                 .resistances(Set.of(DamageType.FIRE, DamageType.COLD))
                 .vulnerabilities(Set.of(DamageType.PSYCHIC))
                 .damageImmunities(Set.of(DamageType.POISON))

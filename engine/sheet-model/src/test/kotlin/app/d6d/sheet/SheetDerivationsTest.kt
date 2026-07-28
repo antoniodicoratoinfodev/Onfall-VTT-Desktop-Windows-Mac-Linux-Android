@@ -9,6 +9,9 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.character.CharacterProgression
+import app.d6d.rules.character.ClassLevelState
 
 /**
  * Valori derivati della scheda.
@@ -17,6 +20,34 @@ import org.junit.jupiter.api.Test
  * regolamento e non come farebbe l'aritmetica ingenua.
  */
 class SheetDerivationsTest {
+    @Test
+    fun `attacco extra segue il livello di classe senza sommarsi in multiclasse`() {
+        val multiclass = CharacterSheet(
+            progression = CharacterProgression(
+                classLevels = listOf(
+                    ClassLevelState(CharacterClassId.FIGHTER, 5),
+                    ClassLevelState(CharacterClassId.BARBARIAN, 5),
+                ),
+            ),
+        )
+        assertEquals(2, multiclass.attacksPerAction)
+        assertEquals(
+            3,
+            multiclass.copy(
+                progression = CharacterProgression(
+                    classLevels = listOf(ClassLevelState(CharacterClassId.FIGHTER, 11)),
+                ),
+            ).attacksPerAction,
+        )
+        assertEquals(
+            4,
+            multiclass.copy(
+                progression = CharacterProgression(
+                    classLevels = listOf(ClassLevelState(CharacterClassId.FIGHTER, 20)),
+                ),
+            ).attacksPerAction,
+        )
+    }
 
     @Test
     fun `il modificatore si arrotonda per difetto anche sotto dieci`() {

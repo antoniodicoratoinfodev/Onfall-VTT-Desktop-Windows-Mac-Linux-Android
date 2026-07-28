@@ -25,7 +25,8 @@ public record ActorDefinition(
         Set<ConditionType> conditionImmunities,
         List<AbilityDefinition> abilities,
         Map<SaveAbility, Integer> savingThrowBonuses,
-        int spellSaveDc) {
+        int spellSaveDc,
+        int attacksPerAction) {
 
     public ActorDefinition {
         id = requireText(id, "id");
@@ -38,6 +39,9 @@ public record ActorDefinition(
         }
         if (spellSaveDc < 0) {
             throw new IllegalArgumentException("spellSaveDc cannot be negative");
+        }
+        if (attacksPerAction < 1) {
+            throw new IllegalArgumentException("attacksPerAction must be at least 1");
         }
         resistances = Set.copyOf(Objects.requireNonNull(resistances, "resistances"));
         vulnerabilities = Set.copyOf(Objects.requireNonNull(vulnerabilities, "vulnerabilities"));
@@ -60,7 +64,20 @@ public record ActorDefinition(
             List<AbilityDefinition> abilities) {
         this(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints, currentHitPoints,
                 temporaryHitPoints, speedFeet, initiativeModifier, initiativeScore, constitutionSaveBonus,
-                resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities, Map.of(), 0);
+                resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities, Map.of(), 0, 1);
+    }
+
+    /** Backward-compatible constructor: one attack for each Attack action. */
+    public ActorDefinition(
+            String id, String definitionVersion, String rulesetVersion, String name, int armorClass,
+            int maxHitPoints, int currentHitPoints, int temporaryHitPoints, int speedFeet, int initiativeModifier,
+            int initiativeScore, int constitutionSaveBonus, Set<DamageType> resistances,
+            Set<DamageType> vulnerabilities, Set<DamageType> damageImmunities, Set<ConditionType> conditionImmunities,
+            List<AbilityDefinition> abilities, Map<SaveAbility, Integer> savingThrowBonuses, int spellSaveDc) {
+        this(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints, currentHitPoints,
+                temporaryHitPoints, speedFeet, initiativeModifier, initiativeScore, constitutionSaveBonus,
+                resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities,
+                savingThrowBonuses, spellSaveDc, 1);
     }
 
     /** Saving-throw bonus for an ability, or 0 when the actor has no recorded save. */
@@ -104,6 +121,7 @@ public record ActorDefinition(
         private List<AbilityDefinition> abilities = List.of();
         private Map<SaveAbility, Integer> savingThrowBonuses = Map.of();
         private int spellSaveDc;
+        private int attacksPerAction = 1;
 
         private Builder(String id, String name) {
             this.id = id;
@@ -127,6 +145,7 @@ public record ActorDefinition(
         public Builder abilities(List<AbilityDefinition> value) { this.abilities = value; return this; }
         public Builder savingThrowBonuses(Map<SaveAbility, Integer> value) { this.savingThrowBonuses = value; return this; }
         public Builder spellSaveDc(int value) { this.spellSaveDc = value; return this; }
+        public Builder attacksPerAction(int value) { this.attacksPerAction = value; return this; }
 
         public ActorDefinition build() {
             int resolvedCurrentHitPoints = currentHitPoints == null ? maxHitPoints : currentHitPoints;
@@ -141,7 +160,8 @@ public record ActorDefinition(
             return new ActorDefinition(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints,
                     resolvedCurrentHitPoints, temporaryHitPoints, speedFeet, initiativeModifier,
                     resolvedInitiativeScore, constitutionSaveBonus, resistances, vulnerabilities,
-                    damageImmunities, conditionImmunities, abilities, savingThrowBonuses, spellSaveDc);
+                    damageImmunities, conditionImmunities, abilities, savingThrowBonuses, spellSaveDc,
+                    attacksPerAction);
         }
     }
 }
