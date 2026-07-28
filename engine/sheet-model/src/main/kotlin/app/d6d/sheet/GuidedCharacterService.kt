@@ -489,7 +489,7 @@ class GuidedCharacterService(val pack: RulesContentPack) {
  * Il personaggio è competente in quello che la sua classe gli insegna a usare,
  * quindi il bonus di competenza rientra sempre nel tiro per colpire.
  */
-private fun WeaponDefinition.toWeaponEntry(
+fun WeaponDefinition.toWeaponEntry(
     abilityScores: Map<Ability, Int>,
     proficiencyBonus: Int,
 ): WeaponEntry {

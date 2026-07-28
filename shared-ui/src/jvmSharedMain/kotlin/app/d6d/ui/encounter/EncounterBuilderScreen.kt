@@ -143,7 +143,7 @@ private fun EncounterHeader(step: NewGameStep, compact: Boolean) {
         )
         Text(
             text = when (step) {
-                NewGameStep.TEMPLATE -> "1 di 4 · Scegli se usare i template salvati o creare tutto da zero."
+                NewGameStep.TEMPLATE -> "1 di 4 · Parti da una partita inclusa, dai tuoi template o da zero."
                 NewGameStep.PARTECIPANTI -> "2 di 4 · Scegli personaggi, mob, quantità e schieramenti."
                 NewGameStep.GRIGLIA -> "3 di 4 · Imposta dimensioni e scala metrica della griglia."
                 NewGameStep.MODALITA -> "4 di 4 · Scegli l'esperienza e avvia la partita."
@@ -188,6 +188,32 @@ private fun TemplateChoiceStep(
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodyMedium,
             )
+
+            // Le partite incluse stanno in cima: sono la strada piu' corta per
+            // avere un tavolo giocabile, e chi apre l'app la prima volta non ha
+            // ancora niente di proprio da usare.
+            Eyebrow("Partite incluse")
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                viewModel.includedTemplates.forEach { template ->
+                    GameButton(
+                        label = template.name,
+                        subtitle = "Livello ${template.partyLevel} · ${template.party.size} personaggi · " +
+                            "${template.opponentCount} avversari",
+                        accent = Palette.Gold,
+                        onClick = { viewModel.useIncludedTemplate(template) },
+                    )
+                }
+            }
+            Text(
+                viewModel.includedTemplates.joinToString("\n") { "«${it.name}» — ${it.summary}" },
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+
+            Eyebrow("Oppure")
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(12.dp),

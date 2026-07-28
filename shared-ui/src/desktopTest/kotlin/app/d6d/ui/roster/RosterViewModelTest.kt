@@ -60,16 +60,16 @@ class RosterViewModelTest {
     @Test
     fun `le statistiche di combattimento di un personaggio vengono dalla scheda`() {
         val roster = roster()
-        val kaelen = roster.sheets.library.characters.first { it.id == "pg-kaelen" }
+        val tarvos = roster.sheets.library.characters.first { it.id == "pg-tarvos" }
 
-        val entry = catalogEntry("pg-kaelen")!!
+        val entry = catalogEntry("pg-tarvos")!!
         val definition = entry.combatDefinition()
 
         // Non sono valori scritti a mano nel catalogo: sono derivati dalla scheda.
-        assertEquals(kaelen.effectiveArmorClass, definition.armorClass())
-        assertEquals(kaelen.maxHitPoints, definition.maxHitPoints())
-        assertEquals(kaelen.initiativeModifier, definition.initiativeModifier())
-        assertEquals(kaelen.saveBonus(Ability.CONSTITUTION), definition.constitutionSaveBonus())
+        assertEquals(tarvos.effectiveArmorClass, definition.armorClass())
+        assertEquals(tarvos.maxHitPoints, definition.maxHitPoints())
+        assertEquals(tarvos.initiativeModifier, definition.initiativeModifier())
+        assertEquals(tarvos.saveBonus(Ability.CONSTITUTION), definition.constitutionSaveBonus())
         // Un personaggio in catalogo e' sempre un membro della squadra senza Grado di Sfida.
         assertEquals(ActorKind.PLAYER_CHARACTER, entry.template().kind())
         assertTrue(entry.activePartyMember())
@@ -80,7 +80,7 @@ class RosterViewModelTest {
     fun `modificare la scheda sovrascrive l'entrata di catalogo del personaggio`() {
         val roster = roster()
         roster.sheets.kind = SheetKind.PERSONAGGIO
-        roster.sheets.selectCharacter("pg-kaelen")
+        roster.sheets.selectCharacter("pg-tarvos")
 
         // Cambio la Destrezza: l'iniziativa derivata deve cambiare di conseguenza.
         val updated = roster.sheets.character.copy(
@@ -92,7 +92,7 @@ class RosterViewModelTest {
         roster.sheets.character = updated
         roster.sheets.save()
 
-        val definition = catalogEntry("pg-kaelen")!!.combatDefinition()
+        val definition = catalogEntry("pg-tarvos")!!.combatDefinition()
         assertEquals(21, definition.armorClass())
         // Destrezza 20 → modificatore +5 → iniziativa +5.
         assertEquals(5, definition.initiativeModifier())
@@ -123,39 +123,39 @@ class RosterViewModelTest {
     fun `eliminare una scheda la toglie dal catalogo`() {
         val roster = roster()
         roster.sheets.kind = SheetKind.PERSONAGGIO
-        roster.sheets.selectCharacter("pg-kaelen")
+        roster.sheets.selectCharacter("pg-tarvos")
 
-        roster.sheets.delete("pg-kaelen")
+        roster.sheets.delete("pg-tarvos")
 
-        assertNull(catalogEntry("pg-kaelen"))
-        assertFalse(roster.items.any { it.id == "pg-kaelen" })
+        assertNull(catalogEntry("pg-tarvos"))
+        assertFalse(roster.items.any { it.id == "pg-tarvos" })
     }
 
     @Test
     fun `una correzione in combattimento confluisce nella scheda del personaggio`() {
         val roster = roster()
-        val before = roster.sheets.library.characters.first { it.id == "pg-kaelen" }
-        val snapshot = snapshotFor(before.id, "Kaelen il Segnato", armorClass = 20, maxHitPoints = 40)
+        val before = roster.sheets.library.characters.first { it.id == "pg-tarvos" }
+        val snapshot = snapshotFor(before.id, "Tarvos il Segnato", armorClass = 20, maxHitPoints = 40)
 
-        roster.applyCombatEdit("pg-kaelen", snapshot)
+        roster.applyCombatEdit("pg-tarvos", snapshot)
 
-        val after = roster.sheets.library.characters.first { it.id == "pg-kaelen" }
-        assertEquals("Kaelen il Segnato", after.characterName)
+        val after = roster.sheets.library.characters.first { it.id == "pg-tarvos" }
+        assertEquals("Tarvos il Segnato", after.characterName)
         assertEquals(20, after.armorClassOverride)
         assertEquals(20, after.effectiveArmorClass)
         assertEquals(before.calculatedArmorClass, after.calculatedArmorClass)
         assertEquals(40, after.maxHitPoints)
         // E il catalogo riflette la scheda aggiornata.
-        assertEquals(20, catalogEntry("pg-kaelen")!!.combatDefinition().armorClass())
+        assertEquals(20, catalogEntry("pg-tarvos")!!.combatDefinition().armorClass())
     }
 
     @Test
     fun `modificare altri campi in combattimento non crea un override CA inutile`() {
         val roster = roster()
-        val before = roster.sheets.library.characters.first { it.id == "pg-kaelen" }
+        val before = roster.sheets.library.characters.first { it.id == "pg-tarvos" }
         val snapshot = snapshotFor(
             before.id,
-            "Kaelen Corretto",
+            "Tarvos Corretto",
             armorClass = before.calculatedArmorClass,
             maxHitPoints = 41,
         )
@@ -243,19 +243,19 @@ class RosterViewModelTest {
         assertTrue(roster.sheets.upsertAbility(ability))
 
         roster.sheets.kind = SheetKind.PERSONAGGIO
-        roster.sheets.selectCharacter("pg-kaelen")
+        roster.sheets.selectCharacter("pg-tarvos")
         roster.sheets.character = roster.sheets.character.copy(abilityIds = listOf(ability.id))
         assertTrue(roster.sheets.save())
 
         assertEquals(
             2,
-            roster.definitionFor("pg-kaelen")!!.ability(ability.id).damage().single().dice().count(),
+            roster.definitionFor("pg-tarvos")!!.ability(ability.id).damage().single().dice().count(),
         )
 
         assertTrue(roster.sheets.upsertAbility(ability.copy(diceCount = 4)))
         assertEquals(
             4,
-            catalogEntry("pg-kaelen")!!.combatDefinition()
+            catalogEntry("pg-tarvos")!!.combatDefinition()
                 .ability(ability.id).damage().single().dice().count(),
         )
     }

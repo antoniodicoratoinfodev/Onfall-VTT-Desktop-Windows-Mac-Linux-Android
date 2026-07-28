@@ -7,6 +7,7 @@ import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.CombatantSnapshot
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.SheetStore
+import app.d6d.ui.content.SessionTemplate
 import app.d6d.ui.sheet.SheetKind
 import app.d6d.ui.sheet.SheetViewModel
 
@@ -63,7 +64,14 @@ class RosterViewModel(
                     it.id,
                     it.characterName.ifBlank { "Senza nome" },
                     RosterKind.PERSONAGGIO,
-                    "${it.className} ${it.level}".trim().ifBlank { "Personaggio" },
+                    // Una scheda guidata scrive gia' i livelli dentro la classe
+                    // ("Guerriero 3 / Ladro 2"): ripeterli darebbe "Guerriero 3 3".
+                    // Quelle manuali tengono il livello in un campo a parte.
+                    if (it.progression.configured) {
+                        it.className.trim().ifBlank { "Personaggio" }
+                    } else {
+                        "${it.className} ${it.level}".trim().ifBlank { "Personaggio" }
+                    },
                 )
             }
             val creatures = sheets.library.monsters.map {
@@ -92,6 +100,17 @@ class RosterViewModel(
         sheets.library.monsters.firstOrNull { it.id == id }
             ?.let { return it.toActorDefinition() }
         return null
+    }
+
+    /**
+     * Assicura che il contenuto di un template incluso sia nel Compendio.
+     *
+     * I template nominano schede del roster invece di portarne una copia: se
+     * l'utente ne ha cancellata qualcuna, sceglierlo la rimette al suo posto,
+     * senza toccare quelle che ha modificato.
+     */
+    internal fun installTemplateContent(template: SessionTemplate) {
+        sheets.restoreMissing(template.party, template.monsters)
     }
 
     /** Quale editor e' aperto, dedotto dal tipo di scheda in modifica. */

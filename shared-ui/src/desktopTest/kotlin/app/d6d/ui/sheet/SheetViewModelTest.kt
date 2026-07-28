@@ -99,14 +99,12 @@ class SheetViewModelTest {
     }
 
     @Test
-    fun `il catalogo iniziale contiene palla di fuoco e salva nuove abilita`() {
+    fun `il catalogo distribuito arriva dal content pack e le abilita private si salvano`() {
         val model = model()
 
-        assertTrue(model.library.abilities.any { it.name == "Palla di Fuoco" })
-        assertTrue(model.library.abilities.any { it.name == "Arco Lungo" })
-        assertTrue(model.library.abilities.any { it.name == "Pugnale" })
-        assertTrue(model.library.abilities.any { it.name == "Dardo Runico" })
-        assertTrue(model.library.abilities.any { it.name == "Morso Gelido" })
+        // Le voci SRD non stanno nel file dell'utente: le porta il content pack.
+        assertTrue(model.library.abilities.isEmpty())
+        assertTrue(model.abilityCatalog.any { it.name == "Palla di fuoco" })
 
         val ability = CatalogAbility(id = "abilita-prova", name = "Colpo di prova")
         assertTrue(model.upsertAbility(ability))
@@ -116,24 +114,21 @@ class SheetViewModelTest {
     }
 
     @Test
-    fun `i personaggi di esempio usano le voci del catalogo`() {
+    fun `i personaggi inclusi usano le voci del catalogo SRD`() {
         val model = model()
-        val sylva = model.library.characters.first { it.id == "pg-sylva" }
-        val mirethe = model.library.characters.first { it.id == "pg-mirethe" }
-        val kaelen = model.library.characters.first { it.id == "pg-kaelen" }
+        val sibilla = model.library.characters.first { it.id == "pg-sibilla" }
+        val nerea = model.library.characters.first { it.id == "pg-nerea" }
 
-        assertTrue("arma-arco" in sylva.abilityIds)
-        assertTrue("arma-pugnale" in sylva.abilityIds)
-        assertTrue("inc-dardo-runico" in mirethe.abilityIds)
-        assertTrue("inc-palla-di-fuoco" in mirethe.abilityIds)
-        assertTrue("abilita-recuperare-energie" in kaelen.abilityIds)
-        assertTrue(kaelen.weapons.isEmpty())
+        assertTrue(sibilla.abilityIds.any { it.startsWith("srd521-it:spell:") })
+        assertTrue(nerea.abilityIds.any { it.startsWith("srd521-it:spell:") })
+        assertTrue(model.abilityCatalog.map { it.id }.containsAll(nerea.abilityIds))
     }
 
     @Test
     fun `una abilita usata da una scheda non puo essere eliminata`() {
         val model = model()
-        val ability = model.library.abilities.first()
+        val ability = CatalogAbility(id = "abilita-prova", name = "Colpo di prova")
+        assertTrue(model.upsertAbility(ability))
         model.character = model.character.copy(abilityIds = listOf(ability.id))
 
         assertFalse(model.deleteAbility(ability.id))

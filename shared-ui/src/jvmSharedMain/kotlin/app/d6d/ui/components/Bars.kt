@@ -34,20 +34,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.healthColor
 import app.d6d.ui.theme.shaded
@@ -217,8 +211,7 @@ private fun HoverLabel(label: String, content: @Composable () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     var visible by remember { mutableStateOf(false) }
-    val gapPx = with(LocalDensity.current) { 4.dp.roundToPx() }
-    val position = remember(gapPx) { TooltipAbove(gapPx) }
+    val position = rememberTooltipPosition()
 
     // Breve sosta prima di mostrare il testo: passando veloci sui tre segnalini
     // le etichette non devono lampeggiare una dietro l'altra.
@@ -245,21 +238,5 @@ private fun HoverLabel(label: String, content: @Composable () -> Unit) {
                 )
             }
         }
-    }
-}
-
-/** Colloca il fumetto centrato sopra l'ancora; se in cima non entra, lo mette sotto. */
-private class TooltipAbove(private val gapPx: Int) : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-    ): IntOffset {
-        val x = (anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2)
-            .coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
-        val above = anchorBounds.top - popupContentSize.height - gapPx
-        val y = if (above >= 0) above else anchorBounds.bottom + gapPx
-        return IntOffset(x, y)
     }
 }

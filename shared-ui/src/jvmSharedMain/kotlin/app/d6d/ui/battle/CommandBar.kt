@@ -48,7 +48,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import app.d6d.domain.combat.AbilityDefinition
@@ -63,6 +62,7 @@ import app.d6d.ui.compendium.italianAbbreviation
 import app.d6d.ui.compendium.italianLabel
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.components.rememberTooltipPosition
 import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
@@ -210,6 +210,7 @@ private fun PassiveTraitChip(ability: AbilityDefinition) {
     val hovered by interaction.collectIsHoveredAsState()
     var pinned by remember { mutableStateOf(false) }
     val explained = hovered || pinned
+    val position = rememberTooltipPosition(gap = 6.dp)
 
     Box {
         Text(
@@ -235,8 +236,7 @@ private fun PassiveTraitChip(ability: AbilityDefinition) {
         )
         if (explained) {
             Popup(
-                alignment = Alignment.TopStart,
-                offset = IntOffset(0, TRAIT_TOOLTIP_OFFSET_PX),
+                popupPositionProvider = position,
                 onDismissRequest = { pinned = false },
             ) {
                 Column(
@@ -266,9 +266,6 @@ private fun PassiveTraitChip(ability: AbilityDefinition) {
         }
     }
 }
-
-/** Stacca il riquadro dalla targhetta quanto basta a non coprirla. */
-private const val TRAIT_TOOLTIP_OFFSET_PX = 22
 
 /**
  * Scheda di una capacita': nome e costo in testa, poi le voci che contano — quanto

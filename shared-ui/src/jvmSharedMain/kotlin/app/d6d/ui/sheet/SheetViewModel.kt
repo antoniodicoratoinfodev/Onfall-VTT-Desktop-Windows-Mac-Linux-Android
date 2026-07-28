@@ -14,13 +14,10 @@ import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.GuidedCharacterService
-import app.d6d.sheet.defaultAbilityCatalog
 import app.d6d.sheet.MonsterStatBlock
 import app.d6d.sheet.SheetLibrary
 import app.d6d.sheet.SheetStore
-import app.d6d.ui.content.SampleEncounter
-import app.d6d.ui.roster.characterSheetFrom
-import app.d6d.ui.roster.monsterStatBlockFrom
+import app.d6d.ui.content.SessionTemplates
 import java.io.IOException
 
 /** Quale delle due schede si sta redigendo. */
@@ -273,6 +270,35 @@ class SheetViewModel(private val store: SheetStore) {
         onSaved?.invoke(SheetKind.MOSTRO)
     }
 
+    /**
+     * Rimette nell'archivio le schede di un template che non ci sono piu'.
+     *
+     * Un template incluso non porta con se' delle copie: nomina schede del
+     * Compendio, che l'utente puo' legittimamente avere cancellato. Qui vengono
+     * reinstallate solo quelle mancanti — chi le ha modificate se le tiene — e in
+     * una sola scrittura, perche' salvarne dodici di fila riscriverebbe dodici
+     * volte lo stesso file.
+     */
+    internal fun restoreMissing(
+        characters: List<CharacterSheet>,
+        monsters: List<MonsterStatBlock>,
+    ): Boolean {
+        val knownCharacters = library.characters.mapTo(mutableSetOf()) { it.id }
+        val knownMonsters = library.monsters.mapTo(mutableSetOf()) { it.id }
+        val missingCharacters = characters.filterNot { it.id in knownCharacters }
+        val missingMonsters = monsters.filterNot { it.id in knownMonsters }
+        if (missingCharacters.isEmpty() && missingMonsters.isEmpty()) return false
+        return guard("Schede del template ripristinate.") {
+            val updatedLibrary = library.copy(
+                characters = library.characters + missingCharacters,
+                monsters = library.monsters + missingMonsters,
+            )
+            store.save(updatedLibrary)
+            library = updatedLibrary
+            onSaved?.invoke(kind)
+        }
+    }
+
     fun setCharacterResourceSpent(resourceId: String, spent: Int) {
         val progression = character.progression
         character = character.copy(
@@ -411,38 +437,19 @@ class SheetViewModel(private val store: SheetStore) {
     }
 
     /**
-     * Roster iniziale.
+     * Roster iniziale: il contenuto delle tre partite incluse.
      *
-     * Rispecchia l'incontro dimostrativo: la squadra come schede complete e gli
-     * avversari come stat block, con gli stessi identificatori, cosi' roster e
-     * battaglia partono coerenti. Kaelen e il Mastino sono redatti a mano come
-     * esempi ricchi; gli altri sono ricostruiti dalla stessa proiezione da
-     * combattimento e riproducono statistiche identiche.
+     * Le squadre e il loro bestiario entrano nel Compendio con gli stessi
+     * identificatori che usano i template, cosi' chi ne sceglie uno ritrova le
+     * schede al posto di riferimenti a vuoto. Sono dodici personaggi, uno per
+     * ciascuna classe dello SRD. Le capacita' restano fuori dall'archivio: quelle
+     * SRD le distribuisce il content pack, non il file dell'utente.
      */
-    private fun seeded(): SheetLibrary {
-        val abilities = defaultAbilityCatalog()
-        val handwritten = SheetSamples.character().copy(
-            weapons = emptyList(),
-            abilityIds = listOf(
-                "arma-spadone",
-                "arma-giavellotto",
-                "abilita-recuperare-energie",
-                "abilita-azione-impetuosa",
-            ),
-        )
-        val handwrittenMonster = SheetSamples.monster()
-        val party = SampleEncounter.party()
-            .filterNot { it.id() == handwritten.id }
-            .map { characterSheetFrom(it, abilities) }
-        val enemies = SampleEncounter.enemies()
-            .filterNot { it.id() == handwrittenMonster.id }
-            .map { monsterStatBlockFrom(it, challengeRating = "1", baseXp = 200) }
-        return SheetLibrary(
-            characters = listOf(handwritten) + party,
-            monsters = listOf(handwrittenMonster) + enemies,
-            abilities = abilities,
-        )
-    }
+    private fun seeded(): SheetLibrary = SheetLibrary(
+        characters = SessionTemplates.all.flatMap { it.party },
+        monsters = SessionTemplates.all.flatMap { it.monsters },
+        abilities = emptyList(),
+    )
 
     private fun selectCharacterInternal(sheet: CharacterSheet) {
         character = sheet

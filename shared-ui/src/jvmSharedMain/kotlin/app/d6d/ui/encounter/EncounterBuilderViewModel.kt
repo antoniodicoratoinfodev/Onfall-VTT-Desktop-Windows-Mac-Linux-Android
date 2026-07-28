@@ -9,6 +9,8 @@ import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
+import app.d6d.ui.content.SessionTemplate
+import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.roster.RosterItem
 import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
@@ -29,6 +31,7 @@ enum class NewGameStep {
 
 /** Da dove arrivano personaggi e creature della nuova partita. */
 enum class TemplateSource(val label: String) {
+    INCLUSA("Partita inclusa"),
     ESISTENTI("Template già creati"),
     DA_ZERO("Crea da zero"),
 }
@@ -143,6 +146,47 @@ class EncounterBuilderViewModel(
         templateSource = TemplateSource.ESISTENTI
         scratchBaselineIds = emptySet()
         resetRecommended()
+        step = NewGameStep.PARTECIPANTI
+    }
+
+    /** Le partite gia' pronte distribuite con l'app. */
+    internal val includedTemplates: List<SessionTemplate> get() = SessionTemplates.all
+
+    /**
+     * Compila la procedura con una partita inclusa.
+     *
+     * Non salta i passaggi: li riempie. Squadra, avversari, nome e griglia
+     * arrivano dal template, ma restano tutti modificabili prima di avviare —
+     * togliere un nemico o allargare la mappa non e' un caso particolare, e' il
+     * normale funzionamento del passaggio successivo.
+     */
+    internal fun useIncludedTemplate(template: SessionTemplate) {
+        // Un template nomina schede del Compendio: se ne mancano, si rimettono
+        // prima di selezionarle, altrimenti la selezione cadrebbe nel vuoto.
+        roster.installTemplateContent(template)
+        templateSource = TemplateSource.INCLUSA
+        scratchBaselineIds = emptySet()
+        val party = template.party.associate { sheet ->
+            sheet.id to ParticipantChoice(true, MIN_QUANTITY, EncounterFaction.ALLEATI)
+        }
+        val opponents = template.opponents.associate { opponent ->
+            opponent.statBlock.id to ParticipantChoice(
+                selected = true,
+                quantity = opponent.quantity.coerceIn(MIN_QUANTITY, MAX_QUANTITY),
+                faction = EncounterFaction.AVVERSARI,
+            )
+        }
+        val untouched = roster.items
+            .filterNot { it.id in party || it.id in opponents }
+            .associate { it.id to ParticipantChoice(false, MIN_QUANTITY, defaultChoice(it).faction) }
+        choices = untouched + party + opponents
+        encounterName = template.name
+        gridColumns = template.gridColumns.coerceIn(MIN_GRID_SIDE, MAX_GRID_SIDE)
+        gridRows = template.gridRows.coerceIn(MIN_GRID_SIDE, MAX_GRID_SIDE)
+        feetPerSquare = template.feetPerSquare.coerceIn(MIN_FEET_PER_SQUARE, MAX_FEET_PER_SQUARE)
+        // Le partite incluse sono scontri pronti: la mappa si apre gia' schierata.
+        mode = EncounterMode.FIGHT
+        status = null
         step = NewGameStep.PARTECIPANTI
     }
 

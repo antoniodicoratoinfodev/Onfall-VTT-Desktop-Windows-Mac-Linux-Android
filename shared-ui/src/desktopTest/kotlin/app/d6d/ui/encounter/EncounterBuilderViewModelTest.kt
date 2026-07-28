@@ -223,4 +223,47 @@ class EncounterBuilderViewModelTest {
         assertTrue(state.battleMap().configured())
         assertTrue(state.battleMap().orderedPlacements().isEmpty())
     }
+
+    @Test
+    fun `una partita inclusa compila squadra, avversari, nome e griglia`() {
+        val builder = EncounterBuilderViewModel(roster(), seedProvider = { 13L })
+        val template = builder.includedTemplates.first { it.partyLevel == 4 }
+
+        builder.useIncludedTemplate(template)
+
+        assertEquals(NewGameStep.PARTECIPANTI, builder.step)
+        assertEquals(template.name, builder.encounterName)
+        assertEquals(template.gridColumns, builder.gridColumns)
+        assertEquals(template.gridRows, builder.gridRows)
+        assertEquals(template.party.size, builder.allyCount)
+        assertEquals(template.opponentCount, builder.opponentCount)
+
+        val selected = builder.participants.filter { it.selected }.map { it.id }.toSet()
+        assertEquals(
+            (template.party.map { it.id } + template.opponents.map { it.statBlock.id }).toSet(),
+            selected,
+        )
+
+        // Il template resta uno stampo: la partita che ne nasce e' modificabile
+        // come le altre, e avviarla non lo consuma.
+        val state = builder.startedSession().currentState()
+        assertEquals(template.party.size + template.opponentCount, state.combatants().size)
+        assertEquals(template.party.size, state.partyCombatantIds().size)
+    }
+
+    @Test
+    fun `una partita inclusa rimette le schede cancellate dal compendio`() {
+        val roster = roster()
+        val builder = EncounterBuilderViewModel(roster, seedProvider = { 17L })
+        val template = builder.includedTemplates.first { it.partyLevel == 1 }
+        val victim = template.party.first()
+        roster.sheets.kind = SheetKind.PERSONAGGIO
+        roster.sheets.delete(victim.id)
+        assertFalse(roster.items.any { it.id == victim.id })
+
+        builder.useIncludedTemplate(template)
+
+        assertTrue(roster.items.any { it.id == victim.id })
+        assertTrue(builder.participants.any { it.id == victim.id && it.selected })
+    }
 }

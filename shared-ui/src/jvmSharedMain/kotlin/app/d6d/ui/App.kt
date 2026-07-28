@@ -47,7 +47,7 @@ import app.d6d.ui.components.AppGlyph
 import app.d6d.ui.components.GlyphIcon
 import app.d6d.ui.components.VerticalResizeHandle
 import app.d6d.ui.components.initials
-import app.d6d.ui.content.SampleEncounter
+import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.cursors.CursorPreferences
 import app.d6d.ui.encounter.EncounterBuilderScreen
 import app.d6d.ui.encounter.EncounterBuilderViewModel
@@ -136,11 +136,15 @@ fun AppRoot(
         }
         val encounterBuilder = remember { EncounterBuilderViewModel(roster) }
         val portraits = remember { PortraitRepository(ImageStore(dataDirectory), filePicker) }
+        // All'avvio si apre il template piu' semplice: un tavolo nuovo trova una
+        // partita giocabile invece di una mappa vuota, e le altre due si scelgono
+        // dalla procedura Nuova partita.
         val workspace = remember {
+            val opening = SessionTemplates.default
             SessionWorkspace(
                 store = SessionArchiveStore(dataDirectory.resolve("sessions")),
-                initialSession = SampleEncounter.startedSession(),
-                initialDisplayName = "Cripta dei predoni",
+                initialSession = opening.startedSession(),
+                initialDisplayName = opening.name,
                 battleFactory = battleFactory,
             )
         }
