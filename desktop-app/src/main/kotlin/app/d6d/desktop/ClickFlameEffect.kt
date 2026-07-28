@@ -77,16 +77,32 @@ internal class ClickFlameState {
 internal fun rememberClickFlameState(): ClickFlameState = remember { ClickFlameState() }
 
 /**
- * Osserva la pressione nella fase finale senza consumarla. Il fuoco nasce sul
- * mouse-down, non al rilascio, così la risposta visiva è immediata.
+ * Osserva il gesto nella fase finale senza consumarlo. Il fuoco nasce soltanto
+ * dopo un vero clic: se il puntatore supera la soglia di trascinamento, come
+ * quando si afferra la mappa, il rilascio non produce alcuna fiamma.
  */
 internal fun Modifier.clickFlameBursts(state: ClickFlameState): Modifier =
     pointerInput(state) {
+        val dragThreshold = viewConfiguration.touchSlop
         awaitPointerEventScope {
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Final)
-                if (event.type == PointerEventType.Press) {
-                    event.changes.firstOrNull()?.position?.let(state::emit)
+                if (event.type != PointerEventType.Press) continue
+                val pressed = event.changes.firstOrNull { it.pressed } ?: continue
+                val pointerId = pressed.id
+                val origin = pressed.position
+                var dragged = false
+
+                while (true) {
+                    val next = awaitPointerEvent(PointerEventPass.Final)
+                    val change = next.changes.firstOrNull { it.id == pointerId } ?: break
+                    if ((change.position - origin).getDistance() > dragThreshold) {
+                        dragged = true
+                    }
+                    if (!change.pressed) {
+                        if (!dragged) state.emit(origin)
+                        break
+                    }
                 }
             }
         }

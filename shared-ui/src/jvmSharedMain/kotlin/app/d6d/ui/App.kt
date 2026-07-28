@@ -48,6 +48,7 @@ import app.d6d.ui.components.GlyphIcon
 import app.d6d.ui.components.VerticalResizeHandle
 import app.d6d.ui.components.initials
 import app.d6d.ui.content.SampleEncounter
+import app.d6d.ui.cursors.CursorPreferences
 import app.d6d.ui.encounter.EncounterBuilderScreen
 import app.d6d.ui.encounter.EncounterBuilderViewModel
 import app.d6d.ui.encounter.EncounterMode
@@ -100,6 +101,8 @@ fun AppRoot(
     modifier: Modifier = Modifier,
     // Desktop e Android aprono selettori di file diversi: la shell lo fornisce.
     filePicker: FilePicker = FilePicker { null },
+    // Solo il desktop offre cursori personalizzati; null mantiene Android invariato.
+    cursorPreferences: CursorPreferences? = null,
     // Il desktop inoltra qui la richiesta della X della finestra, così le bozze
     // multi-sessione non possono essere perse senza una conferma esplicita.
     exitRequested: Boolean = false,
@@ -290,6 +293,7 @@ fun AppRoot(
                             onRequestedItemHandled = { requestedCompendiumItemId = null },
                             requestedNewKind = requestedCompendiumNewKind,
                             onRequestedNewHandled = { requestedCompendiumNewKind = null },
+                            cursorPreferences = cursorPreferences,
                             modifier = Modifier.fillMaxSize(),
                         )
                 }

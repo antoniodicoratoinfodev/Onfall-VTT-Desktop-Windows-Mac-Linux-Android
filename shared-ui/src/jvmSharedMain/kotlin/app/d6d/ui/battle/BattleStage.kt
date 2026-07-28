@@ -274,10 +274,8 @@ private fun MapLegend(viewModel: BattleViewModel, modifier: Modifier = Modifier)
     val active = viewModel.activeCombatantId
     val target = viewModel.selectedTargetId
     val distance = if (active != null && target != null) viewModel.distanceFeet(active, target) else null
-    val movement = active?.let { viewModel.budget(it)?.movementRemainingFeet() }
     val description = buildString {
         append("Scala della mappa: una casella equivale a ${feetWithMetres(grid.feetPerSquare())}.")
-        if (movement != null) append(" Movimento residuo: ${feetWithMetres(movement)}.")
         append(
             distance?.let { " Distanza dal bersaglio: ${feetWithMetres(it)}." }
                 ?: " Distanza dal bersaglio non determinata.",
@@ -299,13 +297,6 @@ private fun MapLegend(viewModel: BattleViewModel, modifier: Modifier = Modifier)
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodySmall,
         )
-        if (movement != null) {
-            Text(
-                text = "Movimento residuo: ${feetWithMetres(movement)}",
-                color = Palette.Party,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
         Text(
             text = distance?.let { "Distanza dal bersaglio: ${feetWithMetres(it)}" }
                 ?: "Distanza non determinata",

@@ -85,6 +85,7 @@ import app.d6d.domain.space.TokenPlacement
 import app.d6d.ui.components.Faction
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumberView
+import app.d6d.ui.components.LocalMapDragCursor
 import app.d6d.ui.components.color
 import app.d6d.ui.components.initials
 import app.d6d.ui.images.PortraitRepository
@@ -162,6 +163,7 @@ fun BattleMapView(
     // Casella sotto il mouse: serve a far seguire al puntatore il cerchio dell'area
     // di un incantesimo mentre lo si mira. Fuori dalla griglia resta nulla.
     var hoverCell by remember { mutableStateOf<IntOffset?>(null) }
+    val setMapDragCursor by rememberUpdatedState(LocalMapDragCursor.current)
     val areaTargeting = viewModel.areaTargeting
     val pendingArea = viewModel.pendingArea
     var manualCardBounds by remember { mutableStateOf<Rect?>(null) }
@@ -321,37 +323,42 @@ fun BattleMapView(
                     if (manualCardBounds?.contains(down.position) == true) {
                         return@awaitEachGesture
                     }
-                    var panning = false
-                    var travelled = Offset.Zero
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) {
-                            // Rilascio senza trascinamento: comando sulla casella. Il
-                            // punto torna in coordinate della griglia togliendo la
-                            // traslazione, perche' la mappa puo' essere stata spostata.
-                            if (!panning) {
-                                val cell = with(density) { liveCell.toPx() }
-                                val currentCamera = geometry(cell)
-                                currentCamera.cellAt(down.position, effectiveOffset(currentCamera))?.let {
-                                    onCellTapped(viewModel, it.x, it.y)
+                    setMapDragCursor(true)
+                    try {
+                        var panning = false
+                        var travelled = Offset.Zero
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                // Rilascio senza trascinamento: comando sulla casella. Il
+                                // punto torna in coordinate della griglia togliendo la
+                                // traslazione, perche' la mappa puo' essere stata spostata.
+                                if (!panning) {
+                                    val cell = with(density) { liveCell.toPx() }
+                                    val currentCamera = geometry(cell)
+                                    currentCamera.cellAt(down.position, effectiveOffset(currentCamera))?.let {
+                                        onCellTapped(viewModel, it.x, it.y)
+                                    }
                                 }
+                                change.consume()
+                                break
                             }
-                            change.consume()
-                            break
+                            val movement = change.positionChange()
+                            if (!panning) {
+                                travelled += movement
+                                if (travelled.getDistance() > viewConfiguration.touchSlop) panning = true
+                            }
+                            if (panning) {
+                                val currentCamera = geometry(with(density) { liveCell.toPx() })
+                                val nextPan = currentCamera.constrain(effectiveOffset(currentCamera) + movement)
+                                pan = nextPan
+                                dropTarget?.gridOriginPx = nextPan
+                                change.consume()
+                            }
                         }
-                        val movement = change.positionChange()
-                        if (!panning) {
-                            travelled += movement
-                            if (travelled.getDistance() > viewConfiguration.touchSlop) panning = true
-                        }
-                        if (panning) {
-                            val currentCamera = geometry(with(density) { liveCell.toPx() })
-                            val nextPan = currentCamera.constrain(effectiveOffset(currentCamera) + movement)
-                            pan = nextPan
-                            dropTarget?.gridOriginPx = nextPan
-                            change.consume()
-                        }
+                    } finally {
+                        setMapDragCursor(false)
                     }
                 }
             }
@@ -440,19 +447,20 @@ fun BattleMapView(
             }
         }
 
-        // Raggio di movimento residuo. Per l'attore corrente il resto della mappa
-        // si vela d'ombra; per gli altri attivi di un turno simultaneo resta il
-        // riquadro leggero, cosi' i veli non si sommano.
-        viewModel.activeCombatantIds.forEach { activeId ->
-            viewModel.placementOf(activeId)?.let { placement ->
-                MovementReach(
-                    viewModel = viewModel,
-                    placement = placement,
-                    cellSize = liveCell,
-                    mapOffset = mapOffset,
-                    contentSize = camera.contentSize,
-                    veiled = activeId == viewModel.activeCombatantId,
-                )
+        // Il raggio residuo è un'anteprima esplicita: compare soltanto dopo il
+        // clic sul comando dedicato, senza partecipare ai limiti di trascinamento.
+        if (viewModel.movementReachVisible) {
+            viewModel.activeCombatantIds.forEach { activeId ->
+                viewModel.placementOf(activeId)?.let { placement ->
+                    MovementReach(
+                        viewModel = viewModel,
+                        placement = placement,
+                        cellSize = liveCell,
+                        mapOffset = mapOffset,
+                        contentSize = camera.contentSize,
+                        veiled = activeId == viewModel.activeCombatantId,
+                    )
+                }
             }
         }
 
@@ -818,9 +826,9 @@ private fun AbilityRangeOverlay(
     if (endColumn <= startColumn || endRow <= startRow) return
 
     val cellPx = with(LocalDensity.current) { cellSize.toPx() }
-    // Il semplice passaggio del mouse deve restare informativo senza sembrare una
-    // mira gia' confermata: usa quindi un ambra caldo, distinto e poco saturo.
-    val tint = if (targeting) Palette.GoldBright else Palette.RangePreview
+    // Hover e mira confermata descrivono la stessa gittata e condividono quindi
+    // l'ambra caldo; lo stato attivo si distingue solo per intensita' e spessore.
+    val tint = Palette.RangePreview
     Canvas(Modifier.fillMaxSize()) {
         val topLeft = Offset(
             mapOffset.x + startColumn * cellPx,

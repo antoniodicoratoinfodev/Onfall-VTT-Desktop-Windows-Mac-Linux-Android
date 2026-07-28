@@ -380,6 +380,7 @@ fun CommandBar(
     val inspectedId = viewModel.inspectedCombatantId
     val abilities = inspectedId?.let { viewModel.abilities(it) }.orEmpty()
     val budget = inspectedId?.let { viewModel.budget(it) }
+    val movementRemaining = activeId?.let { viewModel.budget(it)?.movementRemainingFeet() }
     val combatActive = viewModel.status == CombatStatus.ACTIVE
     val displayedActorCanAct = inspectedId?.let(viewModel::canUseAbilitiesOf) == true
 
@@ -609,6 +610,17 @@ fun CommandBar(
                 )
             }
 
+            GameButton(
+                label = "Movimento residuo",
+                subtitle = movementRemaining
+                    ?.let { feetWithMetres(it) }
+                    ?: "Non disponibile",
+                accent = Palette.Party,
+                enabled = viewModel.movementReachAvailable,
+                selected = viewModel.movementReachVisible,
+                dense = true,
+                onClick = viewModel::toggleMovementReach,
+            )
             GameButton(
                 label = if (activeId == null) "Salta turno" else "Fine turno",
                 accent = Palette.Heal,

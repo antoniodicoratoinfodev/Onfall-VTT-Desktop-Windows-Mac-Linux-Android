@@ -38,6 +38,8 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
+import app.d6d.ui.cursors.CursorArchive
+import app.d6d.ui.cursors.CursorPreferences
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.maps.MapArchive
 import app.d6d.ui.sheet.CharacterSheetEditor
@@ -63,6 +65,7 @@ fun RosterScreen(
     onRequestedItemHandled: () -> Unit = {},
     requestedNewKind: RosterKind? = null,
     onRequestedNewHandled: () -> Unit = {},
+    cursorPreferences: CursorPreferences? = null,
     modifier: Modifier = Modifier,
 ) {
     var section by remember { mutableStateOf(RosterSection.SCHEDE) }
@@ -136,6 +139,12 @@ fun RosterScreen(
         }
     }
 
+    LaunchedEffect(cursorPreferences != null) {
+        if (cursorPreferences == null && section == RosterSection.CURSORI) {
+            section = RosterSection.SCHEDE
+        }
+    }
+
     val editor: @Composable (Modifier) -> Unit = { editorModifier ->
         when (viewModel.editorKind) {
             RosterKind.PERSONAGGIO ->
@@ -156,12 +165,19 @@ fun RosterScreen(
             section == RosterSection.SCHEDE &&
             compactPane == CompactRosterPane.DETAIL
         if (!editingCompactSheet) {
-            RosterSectionBar(section) { section = it }
+            RosterSectionBar(
+                current = section,
+                cursorsAvailable = cursorPreferences != null,
+                onSelect = { section = it },
+            )
         }
 
         when (section) {
             RosterSection.MAPPE -> MapArchive(portraits, compact, Modifier.weight(1f))
             RosterSection.ABILITA -> AbilityArchive(viewModel.sheets, compact, Modifier.weight(1f))
+            RosterSection.CURSORI -> cursorPreferences?.let {
+                CursorArchive(it, compact, Modifier.weight(1f))
+            }
 
             RosterSection.SCHEDE ->
                 if (compact && compactPane == CompactRosterPane.DETAIL) {
@@ -226,33 +242,42 @@ fun RosterScreen(
 
 private enum class CompactRosterPane { LIST, DETAIL }
 
-/** Sezioni del Compendio: attori, capacità riusabili e archivio delle mappe. */
+/** Sezioni del Compendio: attori, capacità, mappe e personalizzazione desktop. */
 private enum class RosterSection(val label: String) {
     SCHEDE("Schede"),
     ABILITA("Abilità"),
     MAPPE("Mappe"),
+    CURSORI("Cursori"),
 }
 
-/** Barra in cima al Compendio per passare fra i tre archivi. */
+/** Barra in cima al Compendio; la sezione cursori compare solo sul desktop. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RosterSectionBar(current: RosterSection, onSelect: (RosterSection) -> Unit) {
-    Row(
+private fun RosterSectionBar(
+    current: RosterSection,
+    cursorsAvailable: Boolean,
+    onSelect: (RosterSection) -> Unit,
+) {
+    FlowRow(
         Modifier
             .fillMaxWidth()
             .background(Palette.Abyss)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(7.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        RosterSection.entries.forEach { entry ->
-            GameButton(
-                label = entry.label,
-                accent = if (current == entry) Palette.Gold else Palette.TextMuted,
-                selected = current == entry,
-                dense = true,
-                onClick = { onSelect(entry) },
-            )
-        }
+        RosterSection.entries
+            .filter { it != RosterSection.CURSORI || cursorsAvailable }
+            .forEach { entry ->
+                GameButton(
+                    label = entry.label,
+                    accent = if (current == entry) Palette.Gold else Palette.TextMuted,
+                    selected = current == entry,
+                    dense = true,
+                    onClick = { onSelect(entry) },
+                )
+            }
     }
 }
 

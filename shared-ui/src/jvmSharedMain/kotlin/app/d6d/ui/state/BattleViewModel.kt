@@ -152,6 +152,15 @@ class BattleViewModel(
     private var hoveredAbilityRange by mutableStateOf<AbilityRangePreview?>(null)
 
     /**
+     * L'alone del movimento è una richiesta esplicita dell'utente.
+     *
+     * Non fa parte della sessione né delle regole: limita soltanto il disegno
+     * dell'anteprima sulla mappa e riparte spento a ogni attore/turno.
+     */
+    var movementReachVisible by mutableStateOf(false)
+        private set
+
+    /**
      * Portata da mostrare sulla mappa.
      *
      * Una capacita' gia' in mira ha precedenza sul semplice passaggio del mouse:
@@ -244,6 +253,7 @@ class BattleViewModel(
             return
         }
         if (activeActorId != combatantId) {
+            movementReachVisible = false
             singleTargeting = null
             areaTargeting = null
             pendingArea = null
@@ -265,6 +275,7 @@ class BattleViewModel(
         if (combatantId in activeCombatantIds) {
             // In un pareggio simultaneo scegliere un membro attivo significa anche
             // scegliere quale dei due sta usando i propri comandi.
+            if (activeActorId != combatantId) movementReachVisible = false
             activeActorSelection = combatantId
         }
         inspectionSelection = combatantId
@@ -827,6 +838,20 @@ class BattleViewModel(
         return budget.movementRemainingFeet() / feetPerSquare
     }
 
+    /** L'attore corrente ha una posizione e almeno una casella ancora percorribile. */
+    val movementReachAvailable: Boolean
+        get() {
+            val active = activeActorId ?: return false
+            return status == CombatStatus.ACTIVE &&
+                placementOf(active) != null &&
+                movementSquaresRemaining(active) > 0
+        }
+
+    /** Accende o spegne l'anteprima senza inviare alcun comando al motore. */
+    fun toggleMovementReach() {
+        movementReachVisible = movementReachAvailable && !movementReachVisible
+    }
+
     /**
      * Ingombro dei segnaposti, in caselle per lato.
      *
@@ -1004,6 +1029,7 @@ class BattleViewModel(
         pendingArea = null
         hoveredAbilityRange = null
         singleTargeting = null
+        movementReachVisible = false
         message = null
         editMode = presentation["editMode"] == "true"
         mapEditMode = editMode && presentation["mapEditMode"] == "true"
@@ -1123,6 +1149,7 @@ class BattleViewModel(
         state = updated
         events = session.auditTrail()
         if (forceTurnReset || previousTurn != turnIdentity(updated)) {
+            movementReachVisible = false
             activeActorSelection = null
             inspectionSelection = null
             targetSelection = null
@@ -1139,6 +1166,9 @@ class BattleViewModel(
                     combatant(it.attackerId)?.defeated() == false &&
                     abilities(it.attackerId).any { ability -> ability.id() == it.abilityId }
             }
+        }
+        if (movementReachVisible && !movementReachAvailable) {
+            movementReachVisible = false
         }
     }
 

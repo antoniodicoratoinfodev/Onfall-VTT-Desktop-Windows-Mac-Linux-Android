@@ -6,7 +6,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.decodeToImageBitmap
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.unit.dp
@@ -15,6 +17,10 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import app.d6d.ui.AppIdentity
 import app.d6d.ui.AppRoot
+import app.d6d.ui.components.LocalMapDragCursor
+import app.d6d.ui.cursors.CursorPair
+import app.d6d.ui.cursors.CursorPairPreview
+import app.d6d.ui.cursors.CursorPreferences
 import app.d6d.ui.images.FilePicker
 import java.awt.Cursor
 import java.awt.FileDialog
@@ -23,9 +29,11 @@ import java.awt.Point
 import java.awt.RenderingHints
 import java.awt.Toolkit
 import java.awt.image.BufferedImage
+import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.ImageIO
+import kotlin.math.roundToInt
 
 /**
  * Cartella dati locale.
@@ -64,20 +72,22 @@ private fun desktopFilePicker() = FilePicker {
 }
 
 /**
- * Puntatore predefinito del desktop, originale ma coerente con il dark fantasy
- * dell'interfaccia. Il ridimensionamento dei pannelli continua a usare i cursori
- * di sistema specifici, applicati dai rispettivi componenti Compose.
+ * Carica un cursore fantasy e lo adatta alla dimensione preferita dal sistema.
+ * Anche il punto attivo viene scalato: il guanto che afferra mantiene quindi la
+ * presa sulla stessa coordinata della mappa su monitor e piattaforme differenti.
  */
-private fun fantasyPointerCursor(): Cursor = runCatching {
+private fun fantasyCursor(
+    imageBytes: ByteArray,
+    hotspotAt64Px: Point,
+    name: String,
+    fallback: Int,
+): Cursor = runCatching {
     val toolkit = Toolkit.getDefaultToolkit()
     val cursorSize = toolkit.getBestCursorSize(64, 64)
     check(cursorSize.width > 0 && cursorSize.height > 0)
 
-    val source = ImageIO.read(
-        requireNotNull(
-            object {}.javaClass.getResourceAsStream("/cursors/fantasy-pointer.png"),
-        ) { "Risorsa del cursore non trovata" },
-    )
+    val source = ImageIO.read(ByteArrayInputStream(imageBytes))
+    checkNotNull(source) { "Immagine del cursore non valida" }
     val image = if (source.width == cursorSize.width && source.height == cursorSize.height) {
         source
     } else {
@@ -93,22 +103,112 @@ private fun fantasyPointerCursor(): Cursor = runCatching {
         }
     }
 
-    toolkit.createCustomCursor(image, Point(1, 1), "Onfall fantasy pointer")
+    val hotspot = Point(
+        (hotspotAt64Px.x * cursorSize.width / 64f)
+            .roundToInt()
+            .coerceIn(0, cursorSize.width - 1),
+        (hotspotAt64Px.y * cursorSize.height / 64f)
+            .roundToInt()
+            .coerceIn(0, cursorSize.height - 1),
+    )
+    toolkit.createCustomCursor(image, hotspot, name)
 }.getOrElse {
-    Cursor.getDefaultCursor()
+    Cursor.getPredefinedCursor(fallback)
+}
+
+private object CursorResourceAnchor
+
+private fun cursorResourceBytes(resource: String): ByteArray =
+    requireNotNull(CursorResourceAnchor::class.java.getResourceAsStream(resource)) {
+        "Risorsa del cursore non trovata: $resource"
+    }.use { it.readBytes() }
+
+private data class DesktopCursorPair(
+    val pointer: Cursor,
+    val grab: Cursor,
+    val preview: CursorPairPreview,
+)
+
+/**
+ * Costruisce cursori e anteprime dagli stessi byte: il Compendio mostra quindi
+ * esattamente i PNG che la finestra usa per puntare e afferrare la mappa.
+ */
+private fun desktopCursorPair(
+    pair: CursorPair,
+    pointerResource: String,
+    grabResource: String,
+): DesktopCursorPair {
+    val pointerBytes = cursorResourceBytes(pointerResource)
+    val grabBytes = cursorResourceBytes(grabResource)
+    val suffix = pair.name.lowercase()
+    return DesktopCursorPair(
+        pointer = fantasyCursor(
+            imageBytes = pointerBytes,
+            hotspotAt64Px = Point(1, 1),
+            name = "Onfall fantasy pointer $suffix",
+            fallback = Cursor.DEFAULT_CURSOR,
+        ),
+        grab = fantasyCursor(
+            imageBytes = grabBytes,
+            hotspotAt64Px = Point(23, 18),
+            name = "Onfall fantasy grab $suffix",
+            fallback = Cursor.HAND_CURSOR,
+        ),
+        preview = CursorPairPreview(
+            pair = pair,
+            pointer = pointerBytes.decodeToImageBitmap(),
+            grab = grabBytes.decodeToImageBitmap(),
+        ),
+    )
 }
 
 fun main() = application {
     val dataDirectory = dataDirectory()
     var exitRequested by remember { mutableStateOf(false) }
+    val cursorStore = remember(dataDirectory) {
+        CursorPairStore(dataDirectory.resolve("cursor-pair.txt"))
+    }
+    var selectedCursorPair by remember(cursorStore) { mutableStateOf(cursorStore.load()) }
+    val selectCursorPair = remember(cursorStore) {
+        { pair: CursorPair ->
+            // Prima aggiorna lo stato: anche se il disco non fosse scrivibile, il
+            // cambio nella sessione corrente deve essere immediato.
+            selectedCursorPair = pair
+            cursorStore.save(pair)
+            Unit
+        }
+    }
 
     Window(
         onCloseRequest = { exitRequested = true },
         title = AppIdentity.windowTitle,
         state = rememberWindowState(width = 1480.dp, height = 940.dp),
     ) {
-        val fantasyPointer = remember { fantasyPointerCursor() }
+        val cursorPairs = remember {
+            mapOf(
+                CursorPair.COLD to desktopCursorPair(
+                    pair = CursorPair.COLD,
+                    pointerResource = "/cursors/fantasy-pointer-knight-a-cold.png",
+                    grabResource = "/cursors/fantasy-grab-knight-a-cold.png",
+                ),
+                CursorPair.WARM to desktopCursorPair(
+                    pair = CursorPair.WARM,
+                    pointerResource = "/cursors/fantasy-pointer-knight-b-warm.png",
+                    grabResource = "/cursors/fantasy-grab-knight-b-warm.png",
+                ),
+            )
+        }
+        val activeCursors = cursorPairs.getValue(selectedCursorPair)
+        val cursorPreferences = CursorPreferences(
+            selected = selectedCursorPair,
+            previews = CursorPair.entries.map { cursorPairs.getValue(it).preview },
+            onSelect = selectCursorPair,
+        )
         val clickFlames = rememberClickFlameState()
+        var grabbingMap by remember { mutableStateOf(false) }
+        val setGrabbingMap = remember {
+            { grabbing: Boolean -> grabbingMap = grabbing }
+        }
 
         // La shell densa e' quella predefinita sul desktop, ma se la finestra
         // viene stretta molto si passa al layout compatto invece di comprimere
@@ -116,18 +216,23 @@ fun main() = application {
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .pointerHoverIcon(PointerIcon(fantasyPointer))
+                .pointerHoverIcon(
+                    PointerIcon(if (grabbingMap) activeCursors.grab else activeCursors.pointer),
+                )
                 .clickFlameBursts(clickFlames),
         ) {
-            AppRoot(
-                dataDirectory = dataDirectory,
-                compact = maxWidth < 1000.dp,
-                modifier = Modifier.fillMaxSize(),
-                filePicker = desktopFilePicker(),
-                exitRequested = exitRequested,
-                onExitRequestHandled = { exitRequested = false },
-                onExitConfirmed = ::exitApplication,
-            )
+            CompositionLocalProvider(LocalMapDragCursor provides setGrabbingMap) {
+                AppRoot(
+                    dataDirectory = dataDirectory,
+                    compact = maxWidth < 1000.dp,
+                    modifier = Modifier.fillMaxSize(),
+                    filePicker = desktopFilePicker(),
+                    cursorPreferences = cursorPreferences,
+                    exitRequested = exitRequested,
+                    onExitRequestHandled = { exitRequested = false },
+                    onExitConfirmed = ::exitApplication,
+                )
+            }
             ClickFlameOverlay(clickFlames, Modifier.fillMaxSize())
         }
     }

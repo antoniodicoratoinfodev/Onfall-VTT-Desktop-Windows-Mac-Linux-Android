@@ -671,6 +671,42 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `l anteprima del movimento richiede il pulsante e non modifica il budget`() {
+        val model = viewModel()
+        val actor = model.activeCombatantId!!
+
+        // Senza un token sulla griglia il comando non inventa un'anteprima.
+        model.toggleMovementReach()
+        assertFalse(model.movementReachVisible)
+
+        model.place(actor, 2, 2, model.squaresPerSideFor(actor))
+        val feetBefore = model.budget(actor)!!.movementRemainingFeet()
+        val squaresBefore = model.movementSquaresRemaining(actor)
+
+        model.toggleMovementReach()
+
+        assertTrue(model.movementReachVisible)
+        assertEquals(feetBefore, model.budget(actor)!!.movementRemainingFeet())
+        assertEquals(squaresBefore, model.movementSquaresRemaining(actor))
+
+        model.toggleMovementReach()
+        assertFalse(model.movementReachVisible)
+    }
+
+    @Test
+    fun `il cambio turno spegne l anteprima del movimento`() {
+        val model = viewModel()
+        val actor = model.activeCombatantId!!
+        model.place(actor, 2, 2, model.squaresPerSideFor(actor))
+        model.toggleMovementReach()
+        assertTrue(model.movementReachVisible)
+
+        model.endTurn()
+
+        assertFalse(model.movementReachVisible)
+    }
+
+    @Test
     fun `trascinare il token attivo in gioco consuma il budget e riduce il raggio`() {
         val model = viewModel()
         val actor = model.activeCombatantId!!
@@ -696,8 +732,11 @@ class BattleViewModelTest {
         // Esaurisce il budget spostandosi fino a dove arriva, poi verifica che non
         // resti spazio: e' il caso in cui il trascinamento non deve piu' muoverlo.
         val reach = model.movementSquaresRemaining(actor)
+        model.toggleMovementReach()
+        assertTrue(model.movementReachVisible)
         model.move(actor, (2 + reach).coerceAtMost(grid.columns() - 1), 2)
 
         assertEquals(0, model.movementSquaresRemaining(actor))
+        assertFalse(model.movementReachVisible)
     }
 }
