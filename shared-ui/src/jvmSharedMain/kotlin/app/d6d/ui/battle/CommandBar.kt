@@ -88,6 +88,11 @@ fun GameButton(
     // selezionato, ma senza dichiararsi "selezionata" all'accessibilita'.
     primary: Boolean = false,
     role: Role = Role.Button,
+    /**
+     * Notificato quando il puntatore entra o esce. Serve ai comandi che mostrano
+     * un'anteprima al passaggio del mouse; sul tocco non viene mai chiamato.
+     */
+    onHoverChange: ((Boolean) -> Unit)? = null,
 ) {
     val tint = if (enabled) accent else Palette.TextFaint
     val shape = RoundedCornerShape(if (dense) 5.dp else 7.dp)
@@ -128,6 +133,17 @@ fun GameButton(
         animationSpec = tween(90),
         label = "gameButtonPress",
     )
+
+    if (onHoverChange != null) {
+        val currentOnHoverChange = rememberUpdatedState(onHoverChange)
+        LaunchedEffect(hovered) { currentOnHoverChange.value(hovered) }
+        // Il pulsante puo' sparire mentre il puntatore ci sta sopra — la fascia si
+        // contrae, cambia il turno — e allora l'uscita non arriverebbe mai: senza
+        // questo, l'anteprima resterebbe accesa per sempre.
+        DisposableEffect(Unit) {
+            onDispose { currentOnHoverChange.value(false) }
+        }
+    }
 
     val labelColor = if (solid) Palette.Abyss else tint
     Column(
@@ -699,6 +715,9 @@ fun CommandBar(
                 selected = viewModel.movementReachVisible,
                 dense = true,
                 onClick = viewModel::toggleMovementReach,
+                // Passarci sopra basta a vedere dove si arriva; il clic serve solo
+                // a tenere l'alone acceso dopo che il puntatore se n'è andato.
+                onHoverChange = viewModel::setMovementReachHovered,
             )
             GameButton(
                 label = if (activeId == null) "Salta turno" else "Fine turno",

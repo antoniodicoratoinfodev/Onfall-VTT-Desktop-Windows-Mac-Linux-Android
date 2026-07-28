@@ -447,9 +447,10 @@ fun BattleMapView(
             }
         }
 
-        // Il raggio residuo è un'anteprima esplicita: compare soltanto dopo il
-        // clic sul comando dedicato, senza partecipare ai limiti di trascinamento.
-        if (viewModel.movementReachVisible) {
+        // Il raggio residuo è un'anteprima: si accende passando il mouse sul comando
+        // dedicato e ci resta se lo si preme, senza mai partecipare ai limiti di
+        // trascinamento.
+        if (viewModel.movementReachShown) {
             viewModel.activeCombatantIds.forEach { activeId ->
                 viewModel.placementOf(activeId)?.let { placement ->
                     MovementReach(

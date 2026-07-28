@@ -161,6 +161,19 @@ class BattleViewModel(
         private set
 
     /**
+     * Alone chiesto dal solo passaggio del mouse sul comando.
+     *
+     * Non e' una scelta dell'utente: sta fuori dall'interruttore perche' quando il
+     * puntatore se ne va deve tornare esattamente com'era, acceso o spento che
+     * fosse. Sul tocco resta sempre falso e non cambia nulla.
+     */
+    private var movementReachHover by mutableStateOf(false)
+
+    /** L'alone da disegnare sulla mappa: acceso dall'interruttore o, di passaggio, dal puntatore. */
+    val movementReachShown: Boolean
+        get() = movementReachVisible || (movementReachHover && movementReachAvailable)
+
+    /**
      * Portata da mostrare sulla mappa.
      *
      * Una capacita' gia' in mira ha precedenza sul semplice passaggio del mouse:
@@ -864,6 +877,18 @@ class BattleViewModel(
     }
 
     /**
+     * Anticipa l'alone mentre il puntatore sosta sul comando.
+     *
+     * Guardare quanto si arriva e' una domanda continua durante il turno, e
+     * doverla fare accendendo e spegnendo un interruttore costa due clic per una
+     * risposta che dura un istante. Il passaggio del mouse la mostra e basta; il
+     * clic resta per quando la si vuole tenere ferma.
+     */
+    fun setMovementReachHovered(hovered: Boolean) {
+        movementReachHover = hovered
+    }
+
+    /**
      * Ingombro dei segnaposti, in caselle per lato.
      *
      * Lo snapshot da combattimento non porta la taglia — al motore serve la
@@ -1041,6 +1066,7 @@ class BattleViewModel(
         hoveredAbilityRange = null
         singleTargeting = null
         movementReachVisible = false
+        movementReachHover = false
         message = null
         editMode = presentation["editMode"] == "true"
         mapEditMode = editMode && presentation["mapEditMode"] == "true"

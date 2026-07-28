@@ -694,6 +694,37 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `il passaggio del mouse mostra l anteprima e la restituisce com era`() {
+        val model = viewModel()
+        val actor = model.activeCombatantId!!
+
+        // Senza token sulla griglia non c'e' niente da anticipare.
+        model.setMovementReachHovered(true)
+        assertFalse(model.movementReachShown)
+        model.setMovementReachHovered(false)
+
+        model.place(actor, 2, 2, model.squaresPerSideFor(actor))
+        val feetBefore = model.budget(actor)!!.movementRemainingFeet()
+
+        model.setMovementReachHovered(true)
+        assertTrue(model.movementReachShown)
+        // Passare col mouse non e' una scelta: l'interruttore resta spento e il
+        // budget non si tocca.
+        assertFalse(model.movementReachVisible)
+        assertEquals(feetBefore, model.budget(actor)!!.movementRemainingFeet())
+
+        model.setMovementReachHovered(false)
+        assertFalse(model.movementReachShown)
+
+        // Con l'interruttore acceso, uscire col puntatore non lo spegne.
+        model.toggleMovementReach()
+        model.setMovementReachHovered(true)
+        model.setMovementReachHovered(false)
+        assertTrue(model.movementReachVisible)
+        assertTrue(model.movementReachShown)
+    }
+
+    @Test
     fun `il cambio turno spegne l anteprima del movimento`() {
         val model = viewModel()
         val actor = model.activeCombatantId!!
