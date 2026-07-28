@@ -113,19 +113,22 @@ class SrdWeaponsAndPassivesTest {
             catalog.values.filter { it.category == RuleElementKind.CANTRIP }.none { it.passive },
             "Nessun trucchetto può finire fra i tratti permanenti.",
         )
-        // L'azione di Magia dichiara soltanto che il personaggio sa lanciare:
-        // a lanciare sono i singoli incantesimi, che restano schede premibili.
+        // Magia e Attacco dichiarano soltanto che il personaggio sa lanciare o
+        // combattere: a risolvere sono i singoli incantesimi e le singole armi,
+        // che restano schede premibili. Le altre dieci azioni si giocano.
+        val markers = setOf("srd521-it:action:magia", "srd521-it:action:attacco")
+        val commonActions = catalog.values.filter { it.category == RuleElementKind.COMMON_ACTION }
+        assertEquals(12, commonActions.size, "Lo SRD elenca dodici azioni comuni.")
         assertTrue(
-            catalog.values
-                .filter { it.category == RuleElementKind.COMMON_ACTION }
-                .filterNot { it.id == "srd521-it:action:magia" }
-                .none { it.passive },
+            commonActions.filterNot { it.id in markers }.none { it.passive },
             "Le altre azioni comuni restano giocabili.",
         )
-        assertTrue(
-            requireNotNull(catalog["srd521-it:action:magia"]).passive,
-            "L'azione di Magia è un'indicazione, non un comando.",
-        )
+        markers.forEach { id ->
+            assertTrue(
+                requireNotNull(catalog[id]) { "Azione assente: $id." }.passive,
+                "«$id» è un'indicazione, non un comando.",
+            )
+        }
         val rage = catalog.values.single { it.id == "srd521-it:feature:barbaro:ira" }
         assertFalse(rage.passive, "L'Ira costa un'azione bonus, quindi si gioca.")
     }

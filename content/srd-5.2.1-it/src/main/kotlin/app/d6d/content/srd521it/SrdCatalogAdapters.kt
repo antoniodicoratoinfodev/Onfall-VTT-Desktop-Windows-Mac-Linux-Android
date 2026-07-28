@@ -64,12 +64,17 @@ private fun RuleElementDefinition.isPassiveTrait(cost: ActivationCost): Boolean 
 /**
  * Azioni comuni che da sole non risolvono niente.
  *
- * L'azione di Magia dice che il personaggio sa lanciare incantesimi, ma a
- * lanciarli sono i singoli incantesimi, ognuno con la propria scheda e il
- * proprio bersaglio: come comando sarebbe una scheda su cui non c'è nulla da
- * premere. Vale quindi come indicazione, accanto a chi ha il turno.
+ * Nominano ciò che fanno altre capacità: l'azione di Magia dice che il
+ * personaggio sa lanciare, ma a lanciare sono i singoli incantesimi; l'azione
+ * di Attacco dice che sa combattere, ma a colpire sono le singole armi. Ognuna
+ * di quelle ha già la propria scheda con bersaglio, gittata e danno, mentre
+ * queste due, come comando, sarebbero schede su cui non c'è nulla da premere.
+ * Valgono quindi come indicazione, accanto a chi ha il turno.
  */
-private val markerActionIds = setOf("srd521-it:action:magia")
+private val markerActionIds = setOf(
+    "srd521-it:action:magia",
+    "srd521-it:action:attacco",
+)
 
 /**
  * Lo SRD descrive l'attivazione a parole. Le voci che iniziano con "Passiva" o
