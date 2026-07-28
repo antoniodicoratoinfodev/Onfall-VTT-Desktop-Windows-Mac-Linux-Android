@@ -77,7 +77,11 @@ fun CombatantPortrait(
         0f
     }
 
-    val accent = if (defeated) Palette.TextFaint else faction.color
+    val accent = when {
+        defeated -> Palette.TextFaint
+        active -> Palette.Turn
+        else -> faction.color
+    }
     val ringColor = if (defeated) Palette.TextFaint else healthColor(currentHitPoints, safeMax)
 
     Box(modifier.size(diameter), contentAlignment = Alignment.Center) {

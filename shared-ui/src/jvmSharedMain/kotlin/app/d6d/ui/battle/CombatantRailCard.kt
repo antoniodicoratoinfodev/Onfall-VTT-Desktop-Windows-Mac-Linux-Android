@@ -81,7 +81,7 @@ fun CombatantRailCard(
     val shape = RoundedCornerShape(10.dp)
     val outline = when {
         targeted -> Modifier.border(2.dp, faction.color, shape)
-        active -> Modifier.border(1.5.dp, Palette.Gold.copy(alpha = 0.82f), shape)
+        active -> Modifier.border(2.dp, Palette.TurnBright.copy(alpha = 0.95f), shape)
         inspected -> Modifier.border(1.5.dp, Palette.Text.copy(alpha = 0.82f), shape)
         else -> Modifier.border(1.dp, Palette.Line, shape)
     }
@@ -106,13 +106,14 @@ fun CombatantRailCard(
                 .clip(shape)
                 .background(
                     when {
-                        // Bersaglio: velatura di fazione che sfuma; turno attivo:
-                        // superficie in rilievo. Entrambe piu' vive di una lastra piatta.
+                        // Bersaglio: velatura di fazione che sfuma. Il turno attivo
+                        // usa invece l'oro caldo del puntatore, ben distinto dalla
+                        // superficie chiara riservata alla scheda in esame.
                         targeted -> Brush.verticalGradient(
                             listOf(faction.color.copy(alpha = 0.16f), faction.color.copy(alpha = 0.06f)),
                         )
                         active -> Brush.verticalGradient(
-                            listOf(Palette.SurfaceHigh, Palette.Surface),
+                            listOf(Palette.Turn.copy(alpha = 0.24f), Palette.Turn.copy(alpha = 0.07f)),
                         )
                         inspected -> SolidColor(Palette.SurfaceHigh)
                         else -> SolidColor(Palette.Surface)
@@ -158,7 +159,7 @@ fun CombatantRailCard(
                     }.joinToString(" · "),
                     color = when {
                         targeted -> faction.color
-                        active -> Palette.Gold
+                        active -> Palette.TurnBright
                         else -> Palette.TextMuted
                     },
                     style = MaterialTheme.typography.labelSmall,
@@ -259,7 +260,11 @@ private fun CombatantHeader(
         ) {
             Text(
                 text = snapshot.name(),
-                color = if (defeated) Palette.TextMuted else Palette.Text,
+                color = when {
+                    defeated -> Palette.TextMuted
+                    active -> Palette.TurnBright
+                    else -> Palette.Text
+                },
                 fontWeight = FontWeight.Bold,
                 // Quando la barra e' stretta il nome puo' andare a capo invece di
                 // essere troncato con i puntini.

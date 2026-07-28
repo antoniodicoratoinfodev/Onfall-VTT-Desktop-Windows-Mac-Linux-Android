@@ -55,6 +55,14 @@ object Palette {
     val GoldBright = Color(0xFFCBD7E6)
     val GoldDim = Color(0xFF586B82)
 
+    /**
+     * Turno corrente nelle barre Squadra/Nemici: oro caldo ripreso dai riflessi
+     * del puntatore. Resta separato dall'accento ardesia e dal bianco usato per
+     * la scheda semplicemente in esame.
+     */
+    val Turn = Color(0xFFC9A45C)
+    val TurnBright = Color(0xFFEDD595)
+
     // Testo quasi bianco e secondari freddi, per una lettura pulita sul nero.
     val Text = Color(0xFFECEFF4)
     val TextMuted = Color(0xFFA5ADB8)
