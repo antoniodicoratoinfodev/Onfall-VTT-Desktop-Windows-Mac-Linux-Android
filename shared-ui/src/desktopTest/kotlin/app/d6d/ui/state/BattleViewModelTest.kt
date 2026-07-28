@@ -694,6 +694,26 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `riclassificare una capacita la sposta subito nel tavolo gia' aperto`() {
+        // Il combattente e' fotografato all'inizio dell'incontro: qui si verifica
+        // che la classificazione arrivi comunque dal Compendio, a partita aperta.
+        var passiveIds = emptySet<String>()
+        val model = BattleViewModel(
+            SampleEncounter.startedSession(seed = 4242L),
+            passiveProvider = { abilityId -> if (abilityId in passiveIds) true else null },
+        )
+        val actor = model.activeCombatantId!!
+        val ability = model.activeAbilities(actor).first()
+
+        assertTrue(model.passiveAbilities(actor).none { it.id() == ability.id() })
+
+        passiveIds = setOf(ability.id())
+
+        assertTrue(model.passiveAbilities(actor).any { it.id() == ability.id() })
+        assertTrue(model.activeAbilities(actor).none { it.id() == ability.id() })
+    }
+
+    @Test
     fun `il passaggio del mouse mostra l anteprima e la restituisce com era`() {
         val model = viewModel()
         val actor = model.activeCombatantId!!

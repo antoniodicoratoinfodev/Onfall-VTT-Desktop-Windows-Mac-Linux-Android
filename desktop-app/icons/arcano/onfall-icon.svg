@@ -1,0 +1,378 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Fondo -->
+    <radialGradient id="tile" cx="0.5" cy="0.42" r="0.78">
+      <stop offset="0" stop-color="#241C41"/>
+      <stop offset="0.42" stop-color="#0E0D1C"/>
+      <stop offset="1" stop-color="#040409"/>
+    </radialGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C9B6EA" stop-opacity="0.16"/>
+      <stop offset="0.36" stop-color="#C9B6EA" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="nebulaA" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#8B62D8" stop-opacity="0.36"/>
+      <stop offset="1" stop-color="#8B62D8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="nebulaB" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#2F6E9E" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#2F6E9E" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="aura" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#B99ADD" stop-opacity="0.50"/>
+      <stop offset="0.34" stop-color="#7C5BB5" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#7C5BB5" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#CDB4F0" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#CDB4F0" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Metalli: una sola luce, da sopra a sinistra -->
+    <linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="330" y1="290" x2="700" y2="840">
+      <stop offset="0" stop-color="#C6CCE4"/>
+      <stop offset="0.22" stop-color="#8D93B2"/>
+      <stop offset="0.55" stop-color="#5A5F7C"/>
+      <stop offset="1" stop-color="#2A2D40"/>
+    </linearGradient>
+    <linearGradient id="shieldBody" gradientUnits="userSpaceOnUse" x1="340" y1="300" x2="690" y2="830">
+      <stop offset="0" stop-color="#434964"/>
+      <stop offset="0.5" stop-color="#222434"/>
+      <stop offset="1" stop-color="#0C0D16"/>
+    </linearGradient>
+    <radialGradient id="shieldFace" cx="0.34" cy="0.26" r="0.9">
+      <stop offset="0" stop-color="#332E52"/>
+      <stop offset="0.5" stop-color="#1A1829"/>
+      <stop offset="1" stop-color="#07070E"/>
+    </radialGradient>
+    <linearGradient id="blade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4E5670"/>
+      <stop offset="0.10" stop-color="#9FADC6"/>
+      <stop offset="0.30" stop-color="#E4EBF7"/>
+      <stop offset="0.46" stop-color="#FBFDFF"/>
+      <stop offset="0.54" stop-color="#C3CDE0"/>
+      <stop offset="0.78" stop-color="#7E8AA8"/>
+      <stop offset="1" stop-color="#414963"/>
+    </linearGradient>
+    <linearGradient id="fuller" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2C3049" stop-opacity="0.85"/>
+      <stop offset="0.55" stop-color="#4A5273" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#A9B6D2" stop-opacity="0.5"/>
+    </linearGradient>
+    <linearGradient id="gold" gradientUnits="userSpaceOnUse" x1="330" y1="560" x2="700" y2="650">
+      <stop offset="0" stop-color="#F0DCA9"/>
+      <stop offset="0.3" stop-color="#C6A466"/>
+      <stop offset="0.7" stop-color="#9A7A3E"/>
+      <stop offset="1" stop-color="#5E4A22"/>
+    </linearGradient>
+    <linearGradient id="goldStud" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F2E0B4"/>
+      <stop offset="0.5" stop-color="#B8934F"/>
+      <stop offset="1" stop-color="#6A5227"/>
+    </linearGradient>
+    <linearGradient id="leather" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0B0B13"/>
+      <stop offset="0.4" stop-color="#2B2640"/>
+      <stop offset="0.62" stop-color="#1D1A2C"/>
+      <stop offset="1" stop-color="#08080E"/>
+    </linearGradient>
+    <radialGradient id="gem" cx="0.36" cy="0.3" r="0.78">
+      <stop offset="0" stop-color="#E9DDFF"/>
+      <stop offset="0.28" stop-color="#B99ADD"/>
+      <stop offset="0.72" stop-color="#6E4EA8"/>
+      <stop offset="1" stop-color="#38255E"/>
+    </radialGradient>
+
+    <!-- Filtri -->
+    <filter id="soft" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="26"/>
+    </filter>
+    <filter id="mist" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="42"/>
+    </filter>
+    <filter id="castShadow" x="-60%" y="-60%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <filter id="glowSm" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <filter id="glowXs" x="-260%" y="-260%" width="620%" height="620%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <filter id="ringGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+
+    <clipPath id="tileClip">
+      <rect x="96" y="96" width="832" height="832" rx="186" ry="186"/>
+    </clipPath>
+    <path id="shieldPath" d="M 512 286
+             C 620 286 696 302 722 316
+             C 722 476 714 602 658 696
+             C 612 772 558 814 512 840
+             C 466 814 412 772 366 696
+             C 310 602 302 476 302 316
+             C 328 302 404 286 512 286 Z"/>
+    <clipPath id="shieldClip"><use href="#shieldPath"/></clipPath>
+
+    <!-- Silhouette della spada, per l'ombra portata sullo scudo -->
+    <g id="swordShape">
+      <path d="M 512 122 C 528 208 550 268 570 308 L 570 600 L 454 600 L 454 308
+               C 474 268 496 208 512 122 Z"/>
+      <path d="M 512 596 C 442 596 372 588 316 566 C 300 560 292 578 306 590
+               C 356 626 430 640 512 640 C 594 640 668 626 718 590
+               C 732 578 724 560 708 566 C 652 588 582 596 512 596 Z"/>
+      <rect x="478" y="636" width="68" height="118" rx="18"/>
+      <circle cx="512" cy="790" r="42"/>
+    </g>
+
+    <!-- Glifi runici -->
+    <g id="gl1" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M -11 -15 L 0 15 L 11 -15 M -6 1 H 6"/>
+    </g>
+    <g id="gl2" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 0 -15 V 15 M -11 -7 L 0 -1 L 11 -7"/>
+    </g>
+    <g id="gl3" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M -10 -15 H 10 M 0 -15 V 15 M -8 12 H 8"/>
+    </g>
+    <g id="gl4" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M -11 15 L 0 -15 L 11 15 M -8 6 H 8"/>
+    </g>
+    <g id="gl5" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M -10 -13 L 10 13 M 10 -13 L -10 13 M 0 -17 V -13"/>
+    </g>
+    <g id="gl6" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M -9 -15 V 15 M -9 -15 L 10 0 L -9 12"/>
+    </g>
+  </defs>
+
+  <!-- Piastrella -->
+  <rect x="96" y="96" width="832" height="832" rx="186" ry="186" fill="url(#tile)"/>
+  <g clip-path="url(#tileClip)">
+    <!-- Volta notturna -->
+    <ellipse cx="330" cy="270" rx="330" ry="280" fill="url(#nebulaA)" filter="url(#mist)"/>
+    <ellipse cx="760" cy="760" rx="300" ry="260" fill="url(#nebulaB)" filter="url(#mist)"/>
+    <rect x="96" y="96" width="832" height="832" fill="url(#sheen)"/>
+    <g fill="#E7DEFF">
+      <circle cx="196" cy="214" r="3.5" fill-opacity="0.8"/>
+      <circle cx="284" cy="168" r="2.5" fill-opacity="0.6"/>
+      <circle cx="760" cy="180" r="3" fill-opacity="0.7"/>
+      <circle cx="856" cy="300" r="2.5" fill-opacity="0.55"/>
+      <circle cx="880" cy="560" r="3.5" fill-opacity="0.6"/>
+      <circle cx="164" cy="470" r="3" fill-opacity="0.55"/>
+      <circle cx="152" cy="690" r="2.5" fill-opacity="0.5"/>
+      <circle cx="300" cy="880" r="3" fill-opacity="0.45"/>
+      <circle cx="720" cy="892" r="2.5" fill-opacity="0.45"/>
+      <circle cx="600" cy="146" r="2.5" fill-opacity="0.6"/>
+      <circle cx="428" cy="150" r="2" fill-opacity="0.5"/>
+      <circle cx="836" cy="720" r="2" fill-opacity="0.45"/>
+    </g>
+
+    <circle cx="512" cy="520" r="360" fill="url(#aura)"/>
+
+    <!-- Cerchio rituale -->
+    <g transform="rotate(9 512 520)">
+      <g filter="url(#ringGlow)" opacity="0.55">
+        <circle cx="512" cy="520" r="322" fill="none" stroke="#9B7FD8" stroke-opacity="0.5" stroke-width="4"/>
+      </g>
+      <circle cx="512" cy="520" r="322" fill="none" stroke="#B99ADD" stroke-opacity="0.42" stroke-width="3"/>
+      <circle cx="512" cy="520" r="286" fill="none" stroke="#B99ADD" stroke-opacity="0.24" stroke-width="2.5"/>
+      <!-- tacche fra un glifo e l'altro -->
+      <g stroke="#CDB4F0" stroke-opacity="0.35" stroke-width="3" stroke-linecap="round">
+        <path d="M 512 292 v 14" transform="rotate(15 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(45 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(75 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(105 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(135 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(165 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(195 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(225 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(255 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(285 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(315 512 520)"/>
+        <path d="M 512 292 v 14" transform="rotate(345 512 520)"/>
+      </g>
+      <!-- glifi: alcuni accesi, altri quasi spenti, come se il sigillo respirasse -->
+      <g stroke="#CDB4F0">
+        <g transform="rotate(0 512 520)" stroke-opacity="0.9"><use href="#gl1" x="512" y="216"/></g>
+        <g transform="rotate(30 512 520)" stroke-opacity="0.55"><use href="#gl2" x="512" y="216"/></g>
+        <g transform="rotate(60 512 520)" stroke-opacity="0.8"><use href="#gl3" x="512" y="216"/></g>
+        <g transform="rotate(90 512 520)" stroke-opacity="0.5"><use href="#gl4" x="512" y="216"/></g>
+        <g transform="rotate(120 512 520)" stroke-opacity="0.85"><use href="#gl5" x="512" y="216"/></g>
+        <g transform="rotate(150 512 520)" stroke-opacity="0.55"><use href="#gl6" x="512" y="216"/></g>
+        <g transform="rotate(180 512 520)" stroke-opacity="0.75"><use href="#gl1" x="512" y="216"/></g>
+        <g transform="rotate(210 512 520)" stroke-opacity="0.5"><use href="#gl3" x="512" y="216"/></g>
+        <g transform="rotate(240 512 520)" stroke-opacity="0.88"><use href="#gl2" x="512" y="216"/></g>
+        <g transform="rotate(270 512 520)" stroke-opacity="0.55"><use href="#gl6" x="512" y="216"/></g>
+        <g transform="rotate(300 512 520)" stroke-opacity="0.8"><use href="#gl4" x="512" y="216"/></g>
+        <g transform="rotate(330 512 520)" stroke-opacity="0.5"><use href="#gl5" x="512" y="216"/></g>
+      </g>
+      <!-- i glifi accesi hanno un alone -->
+      <g stroke="#E4D6FF" stroke-opacity="0.35" filter="url(#glowSm)">
+        <g transform="rotate(0 512 520)"><use href="#gl1" x="512" y="216"/></g>
+        <g transform="rotate(120 512 520)"><use href="#gl5" x="512" y="216"/></g>
+        <g transform="rotate(240 512 520)"><use href="#gl2" x="512" y="216"/></g>
+      </g>
+    </g>
+
+    <!-- Fascio di luce dalla punta -->
+    <rect x="470" y="110" width="84" height="300" fill="url(#beam)" filter="url(#soft)"/>
+
+    <!-- Ombra dello scudo sul fondo -->
+    <g filter="url(#castShadow)" opacity="0.5">
+      <use href="#shieldPath" fill="#05040A" transform="translate(14 20)"/>
+    </g>
+
+    <!-- Scudo -->
+    <use href="#shieldPath" fill="url(#shieldBody)"/>
+    <g clip-path="url(#shieldClip)">
+      <!-- incavo interno -->
+      <g transform="translate(512 550) scale(0.88) translate(-512 -550)">
+        <use href="#shieldPath" fill="url(#shieldFace)"/>
+        <use href="#shieldPath" fill="none" stroke="#0A0912" stroke-opacity="0.9" stroke-width="16"
+             transform="translate(0 -12)"/>
+        <use href="#shieldPath" fill="none" stroke="#5B5480" stroke-opacity="0.55" stroke-width="5"/>
+      </g>
+      <!-- sigillo inciso -->
+      <g stroke="#C4A9F0" stroke-opacity="0.7" stroke-width="6" fill="none" stroke-linejoin="round">
+        <circle cx="512" cy="516" r="132"/>
+        <path d="M 512 384 L 626 582 L 398 582 Z"/>
+        <path d="M 512 648 L 398 450 L 626 450 Z"/>
+      </g>
+      <g stroke="#E9DDFF" stroke-opacity="0.4" stroke-width="10" fill="none" filter="url(#glowSm)">
+        <circle cx="512" cy="516" r="132"/>
+      </g>
+      <g stroke="#E4D6FF" stroke-opacity="0.3" stroke-width="2.5" fill="none">
+        <circle cx="512" cy="516" r="154"/>
+        <circle cx="512" cy="516" r="112"/>
+      </g>
+      <!-- luce fredda dall'alto a sinistra -->
+      <path d="M 250 700 L 620 210 L 726 210 L 336 780 Z" fill="#CBD7E6" fill-opacity="0.06"/>
+      <!-- ombra portata della spada -->
+      <g filter="url(#castShadow)" opacity="0.55">
+        <use href="#swordShape" fill="#05040A" transform="translate(16 22)"/>
+      </g>
+    </g>
+    <!-- bordo metallico con luce direzionale -->
+    <use href="#shieldPath" fill="none" stroke="url(#rim)" stroke-width="17" stroke-linejoin="round"/>
+    <use href="#shieldPath" fill="none" stroke="#0A0912" stroke-opacity="0.8" stroke-width="4"
+         stroke-linejoin="round" transform="translate(512 550) scale(1.021) translate(-512 -550)"/>
+    <use href="#shieldPath" fill="none" stroke="#A98BE4" stroke-opacity="0.5" stroke-width="4"
+         stroke-linejoin="round" transform="translate(512 550) scale(0.978) translate(-512 -550)"/>
+    <!-- rivetti -->
+    <g>
+      <g transform="translate(404 297)"><circle r="11" fill="url(#goldStud)" stroke="#4C3A18" stroke-width="3"/><circle cx="-3" cy="-3" r="3.4" fill="#FBF1D6" fill-opacity="0.8"/></g>
+      <g transform="translate(620 297)"><circle r="11" fill="url(#goldStud)" stroke="#4C3A18" stroke-width="3"/><circle cx="-3" cy="-3" r="3.4" fill="#FBF1D6" fill-opacity="0.8"/></g>
+      <g transform="translate(313 551)"><circle r="11" fill="url(#goldStud)" stroke="#4C3A18" stroke-width="3"/><circle cx="-3" cy="-3" r="3.4" fill="#FBF1D6" fill-opacity="0.75"/></g>
+      <g transform="translate(711 551)"><circle r="11" fill="url(#goldStud)" stroke="#4C3A18" stroke-width="3"/><circle cx="-3" cy="-3" r="3.4" fill="#FBF1D6" fill-opacity="0.7"/></g>
+    </g>
+
+    <!-- Bagliore dietro la lama -->
+    <ellipse cx="512" cy="300" rx="70" ry="190" fill="#9B7FD8" fill-opacity="0.42" filter="url(#soft)"/>
+
+    <!-- Spada -->
+    <g>
+      <path d="M 512 122 C 528 208 550 268 570 308 L 570 600 L 454 600 L 454 308
+               C 474 268 496 208 512 122 Z" fill="url(#blade)"/>
+      <!-- sgusciatura scavata: ombra a sinistra, luce a destra -->
+      <path d="M 500 200 L 524 200 L 524 592 L 500 592 Z" fill="url(#fuller)"/>
+      <path d="M 524 206 L 528 206 L 528 590 L 524 590 Z" fill="#EAF1FF" fill-opacity="0.5"/>
+      <!-- riflesso obliquo -->
+      <path d="M 454 470 L 570 388 L 570 424 L 454 506 Z" fill="#FFFFFF" fill-opacity="0.16"/>
+      <!-- fili incantati -->
+      <g stroke="#CDB4F0" stroke-opacity="0.9" stroke-width="4" fill="none" filter="url(#glowXs)">
+        <path d="M 512 128 C 527 210 549 268 568 308 L 568 594"/>
+        <path d="M 512 128 C 497 210 475 268 456 308 L 456 594"/>
+      </g>
+      <path d="M 512 122 C 528 208 550 268 570 308 L 570 600 L 454 600 L 454 308
+               C 474 268 496 208 512 122 Z" fill="none"
+            stroke="#05060C" stroke-opacity="0.55" stroke-width="4" stroke-linejoin="round"/>
+      <!-- rune incise -->
+      <g stroke="#A87FE0" stroke-opacity="1" stroke-width="13" fill="none" filter="url(#glowSm)"
+         stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 500 318 L 512 300 L 524 318"/>
+        <path d="M 512 360 V 396"/>
+        <path d="M 500 432 H 524 M 512 432 V 462"/>
+      </g>
+      <g stroke="#FBF8FF" stroke-opacity="1" stroke-width="5.5" fill="none"
+         stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 500 318 L 512 300 L 524 318 M 504 312 H 520"/>
+        <path d="M 512 360 V 396 M 500 372 L 512 380 L 524 372"/>
+        <path d="M 500 432 H 524 M 512 432 V 462"/>
+      </g>
+
+      <!-- guardia -->
+      <path d="M 512 596 C 442 596 372 588 316 566
+               C 300 560 292 578 306 590 C 356 626 430 640 512 640
+               C 594 640 668 626 718 590 C 732 578 724 560 708 566
+               C 652 588 582 596 512 596 Z"
+            fill="url(#gold)" stroke="#4C3A18" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M 330 578 C 384 600 448 610 512 610 C 576 610 640 600 694 578"
+            fill="none" stroke="#FBF1D6" stroke-opacity="0.45" stroke-width="6" stroke-linecap="round"/>
+      <path d="M 344 602 C 396 622 452 630 512 630 C 572 630 628 622 680 602"
+            fill="none" stroke="#3A2C12" stroke-opacity="0.5" stroke-width="5" stroke-linecap="round"/>
+      <!-- gemma della guardia, sfaccettata -->
+      <g>
+        <circle cx="512" cy="614" r="25" fill="url(#gem)" stroke="#4C3A18" stroke-width="5"/>
+        <path d="M 512 594 L 528 614 L 512 634 L 496 614 Z" fill="#EFE6FF" fill-opacity="0.45"/>
+        <path d="M 512 594 L 528 614 L 512 614 Z" fill="#FFFFFF" fill-opacity="0.4"/>
+        <circle cx="512" cy="614" r="25" fill="#B99ADD" fill-opacity="0.5" filter="url(#glowSm)"/>
+      </g>
+
+      <!-- impugnatura in cuoio avvolto -->
+      <rect x="478" y="636" width="68" height="118" rx="18" fill="url(#leather)"
+            stroke="#2F2A47" stroke-width="5"/>
+      <g stroke="#0A0912" stroke-opacity="0.75" stroke-width="4" stroke-linecap="round">
+        <path d="M 486 662 L 538 652"/>
+        <path d="M 486 688 L 538 678"/>
+        <path d="M 486 714 L 538 704"/>
+        <path d="M 486 740 L 538 730"/>
+      </g>
+      <g stroke="#B8934F" stroke-opacity="0.75" stroke-width="5" stroke-linecap="round">
+        <path d="M 486 656 L 538 646"/>
+        <path d="M 486 682 L 538 672"/>
+        <path d="M 486 708 L 538 698"/>
+        <path d="M 486 734 L 538 724"/>
+      </g>
+
+      <!-- pomo: gemma incastonata negli artigli -->
+      <circle cx="512" cy="790" r="42" fill="url(#goldStud)" stroke="#4C3A18" stroke-width="5"/>
+      <g fill="#8E7038">
+        <path d="M 512 748 l 9 14 h -18 Z"/>
+        <path d="M 554 790 l -14 9 v -18 Z"/>
+        <path d="M 512 832 l -9 -14 h 18 Z"/>
+        <path d="M 470 790 l 14 -9 v 18 Z"/>
+      </g>
+      <circle cx="512" cy="790" r="24" fill="url(#gem)" stroke="#4C3A18" stroke-width="4"/>
+      <path d="M 512 768 L 530 790 L 512 812 L 494 790 Z" fill="#EFE6FF" fill-opacity="0.4"/>
+      <path d="M 512 768 L 530 790 L 512 790 Z" fill="#FFFFFF" fill-opacity="0.42"/>
+      <circle cx="512" cy="790" r="24" fill="#B99ADD" fill-opacity="0.45" filter="url(#glowSm)"/>
+    </g>
+
+    <!-- Faville -->
+    <g fill="#CDB4F0">
+      <circle cx="332" cy="700" r="7" fill-opacity="0.75"/>
+      <circle cx="300" cy="618" r="5" fill-opacity="0.6"/>
+      <circle cx="356" cy="556" r="4" fill-opacity="0.5"/>
+      <circle cx="266" cy="530" r="6" fill-opacity="0.45"/>
+      <circle cx="694" cy="686" r="6.5" fill-opacity="0.7"/>
+      <circle cx="732" cy="602" r="4.5" fill-opacity="0.55"/>
+      <circle cx="678" cy="544" r="4" fill-opacity="0.45"/>
+      <circle cx="762" cy="512" r="5.5" fill-opacity="0.4"/>
+    </g>
+    <g fill="#F2ECFF" filter="url(#glowXs)">
+      <circle cx="332" cy="700" r="4" fill-opacity="0.85"/>
+      <circle cx="694" cy="686" r="4" fill-opacity="0.85"/>
+      <circle cx="300" cy="618" r="3" fill-opacity="0.7"/>
+      <circle cx="732" cy="602" r="3" fill-opacity="0.7"/>
+    </g>
+
+    <!-- Bruma alla base -->
+    <ellipse cx="512" cy="880" rx="300" ry="70" fill="#7C5BB5" fill-opacity="0.22" filter="url(#mist)"/>
+  </g>
+
+  <!-- Bordo della piastrella -->
+  <rect x="100" y="100" width="824" height="824" rx="182" ry="182"
+        fill="none" stroke="#4A4560" stroke-opacity="0.9" stroke-width="6"/>
+</svg>

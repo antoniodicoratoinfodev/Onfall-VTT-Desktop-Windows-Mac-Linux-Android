@@ -16,9 +16,17 @@ data class SheetLibrary(
     val characters: List<CharacterSheet> = emptyList(),
     val monsters: List<MonsterStatBlock> = emptyList(),
     val abilities: List<CatalogAbility> = defaultAbilityCatalog(),
+    /**
+     * Capacità del pacchetto SRD che questo tavolo ha riclassificato.
+     *
+     * Il pacchetto resta intatto e in sola lettura: qui si annota soltanto se una
+     * sua voce, in questa installazione, valga come tratto permanente o come
+     * capacità da spendere nel turno. Assente significa "come dice il pacchetto".
+     */
+    val passiveOverrides: Map<String, Boolean> = emptyMap(),
 ) {
     companion object {
-        const val SCHEMA_VERSION = 5
+        const val SCHEMA_VERSION = 6
     }
 }
 

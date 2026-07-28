@@ -60,6 +60,16 @@ class BattleViewModel(
     // il roster, cosi' la dimensione del segnaposto viene dal Compendio. Precede
     // editSink perche' quest'ultimo resti il parametro finale, usato come lambda.
     private val footprintProvider: (String) -> Int = { 1 },
+    /**
+     * Classificazione autorevole di una capacita', per identificatore: vero se e'
+     * un tratto permanente, null se il Compendio non la conosce.
+     *
+     * Lo snapshot del combattente e' fotografato all'inizio dell'incontro, quindi
+     * senza questa lettura una riclassificazione varrebbe solo dalla partita dopo.
+     * Chi la cambia lo fa perche' e' finita nel posto sbagliato: deve spostarsi
+     * subito, anche a tavolo aperto.
+     */
+    private val passiveProvider: (String) -> Boolean? = { null },
     private val editSink: CombatantEditSink = CombatantEditSink { _, _ -> },
 ) {
 
@@ -337,16 +347,19 @@ class BattleViewModel(
     fun abilities(id: String): List<AbilityDefinition> =
         combatant(id)?.snapshot()?.abilities().orEmpty()
 
+    /** Tratto permanente secondo il Compendio, o secondo la definizione se non la conosce. */
+    private fun AbilityDefinition.isPassiveNow(): Boolean = passiveProvider(id()) ?: passive()
+
     /** Le capacita' giocabili: quelle che si spendono nel turno. */
     fun activeAbilities(id: String): List<AbilityDefinition> =
-        abilities(id).filterNot { it.passive() }
+        abilities(id).filterNot { it.isPassiveNow() }
 
     /**
      * I tratti permanenti — padronanza d'armi, Incantesimi, talenti — che valgono
      * sempre e non si attivano: restano fuori dalle schede delle capacita'.
      */
     fun passiveAbilities(id: String): List<AbilityDefinition> =
-        abilities(id).filter { it.passive() }
+        abilities(id).filter { it.isPassiveNow() }
 
     fun isParty(id: String): Boolean = id in state.partyCombatantIds()
 

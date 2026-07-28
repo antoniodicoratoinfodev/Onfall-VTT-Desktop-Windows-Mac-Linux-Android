@@ -125,6 +125,41 @@ class SheetViewModelTest {
     }
 
     @Test
+    fun `una voce SRD si puo riclassificare senza modificare il pacchetto`() {
+        val file = directory.resolve("schede.json")
+        val model = model(file)
+        val srd = model.abilityCatalog.first { it.id.startsWith("srd521-it:") && !it.passive }
+
+        assertTrue(model.setAbilityPassive(srd.id, true))
+        assertTrue(model.abilityCatalog.first { it.id == srd.id }.passive)
+        assertTrue(model.abilityPassiveIsOverridden(srd.id))
+        // Il pacchetto resta in sola lettura: la scelta vive nell'archivio utente,
+        // non in una copia modificata della voce.
+        assertTrue(model.library.abilities.none { it.id == srd.id })
+        assertFalse(model.upsertAbility(srd.copy(name = "Modificata")))
+
+        val reopened = model(file)
+        assertTrue(reopened.abilityCatalog.first { it.id == srd.id }.passive)
+
+        // Tornare al valore del pacchetto cancella l'annotazione.
+        assertTrue(reopened.setAbilityPassive(srd.id, false))
+        assertFalse(reopened.abilityPassiveIsOverridden(srd.id))
+        assertFalse(model(file).abilityCatalog.first { it.id == srd.id }.passive)
+    }
+
+    @Test
+    fun `una abilita personale porta la classificazione in se stessa`() {
+        val model = model()
+        val ability = CatalogAbility(id = "abilita-prova", name = "Colpo di prova")
+        assertTrue(model.upsertAbility(ability))
+
+        assertTrue(model.setAbilityPassive(ability.id, true))
+
+        assertTrue(model.library.abilities.first { it.id == ability.id }.passive)
+        assertFalse(model.abilityPassiveIsOverridden(ability.id))
+    }
+
+    @Test
     fun `una abilita usata da una scheda non puo essere eliminata`() {
         val model = model()
         val ability = CatalogAbility(id = "abilita-prova", name = "Colpo di prova")

@@ -109,6 +109,16 @@ fun AbilityArchive(
         compactDetail = true
     }
 
+    /**
+     * Riclassifica la voce SRD aperta. La bozza mostrata segue subito, altrimenti
+     * i due tasti resterebbero indietro rispetto all'archivio appena salvato.
+     */
+    fun setPassive(passive: Boolean) {
+        if (viewModel.setAbilityPassive(draft.id, passive)) {
+            draft = draft.copy(passive = passive)
+        }
+    }
+
     Column(modifier.fillMaxSize()) {
         AbilityArchiveHeader(compact, onCreate = ::create)
 
@@ -152,6 +162,8 @@ fun AbilityArchive(
                         { pendingDelete = draft }
                     },
                     onDuplicate = { duplicate(draft) },
+                    passiveOverridden = viewModel.abilityPassiveIsOverridden(draft.id),
+                    onPassiveChange = ::setPassive,
                     modifier = Modifier.weight(1f),
                 )
             } else {
@@ -194,6 +206,8 @@ fun AbilityArchive(
                         { pendingDelete = draft }
                     },
                     onDuplicate = { duplicate(draft) },
+                    passiveOverridden = viewModel.abilityPassiveIsOverridden(draft.id),
+                    onPassiveChange = ::setPassive,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -427,6 +441,10 @@ private fun AbilityListRow(ability: CatalogAbility, selected: Boolean, onClick: 
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            // Il primo tag dice subito da che parte sta: un tratto permanente non
+            // si gioca nel turno, e vederlo prima del costo evita di cercarlo fra
+            // i comandi.
+            if (ability.passive) Chip("Passiva", Palette.Crit)
             Chip(ability.activationCost.label, Palette.Gold)
             Chip(ability.resolutionMethod.label, Palette.Party)
             if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
@@ -481,12 +499,16 @@ private fun AbilityDetails(
     onSave: () -> Unit,
     onDelete: (() -> Unit)?,
     onDuplicate: () -> Unit,
+    passiveOverridden: Boolean,
+    onPassiveChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (draft.immutable) {
         ReadOnlyAbilityDetails(
             ability = draft,
             onDuplicate = onDuplicate,
+            overridden = passiveOverridden,
+            onPassiveChange = onPassiveChange,
             modifier = modifier,
         )
     } else {
@@ -505,6 +527,8 @@ private fun AbilityDetails(
 private fun ReadOnlyAbilityDetails(
     ability: CatalogAbility,
     onDuplicate: () -> Unit,
+    overridden: Boolean,
+    onPassiveChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize()) {
@@ -556,6 +580,11 @@ private fun ReadOnlyAbilityDetails(
                     if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
                     if (ability.isArea) Chip("Area ${ability.areaRadiusFeet} ft", Palette.Crit)
                 }
+                PassiveSelector(
+                    passive = ability.passive,
+                    overridden = overridden,
+                    onChange = onPassiveChange,
+                )
                 if (ability.resourceId != null || ability.resourceCost > 0) {
                     Text(
                         text = buildString {
@@ -604,7 +633,8 @@ private fun ReadOnlyAbilityDetails(
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Text(
-                text = "Questa voce proviene dal pacchetto SRD ed è protetta dalle modifiche.",
+                text = "Questa voce proviene dal pacchetto SRD ed è protetta dalle modifiche. " +
+                    "Puoi comunque decidere tu se giocarla come attiva o come passiva.",
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -615,6 +645,55 @@ private fun ReadOnlyAbilityDetails(
             )
         }
     }
+}
+
+/**
+ * Sceglie se la capacità si spende nel turno o vale sempre.
+ *
+ * E' l'unica cosa modificabile anche sulle voci SRD, che restano per il resto in
+ * sola lettura: non cambia il contenuto del pacchetto — nome, regole e numeri
+ * restano i suoi — ma dice a questo tavolo dove va messa. Una padronanza d'arme
+ * fra i comandi da premere sarebbe rumore; un privilegio classificato come
+ * permanente per sbaglio sparirebbe dai comandi che servono.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PassiveSelector(
+    passive: Boolean,
+    overridden: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Text("NEL TURNO", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        GameButton(
+            label = "Attiva",
+            accent = if (!passive) Palette.Gold else Palette.TextMuted,
+            selected = !passive,
+            dense = true,
+            onClick = { onChange(false) },
+        )
+        GameButton(
+            label = "Passiva",
+            accent = if (passive) Palette.Crit else Palette.TextMuted,
+            selected = passive,
+            dense = true,
+            onClick = { onChange(true) },
+        )
+        if (overridden) Chip("Scelta del tavolo", Palette.Crit)
+    }
+    Text(
+        text = if (passive) {
+            "Tratto permanente: vale sempre, resta fuori dai comandi e compare accanto a chi ha il turno."
+        } else {
+            "Capacità da spendere: compare fra i comandi di chi ha il turno."
+        },
+        color = Palette.TextMuted,
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 @Composable
@@ -668,6 +747,12 @@ private fun AbilityEditor(
             }
 
             SheetBox("Funzionamento") {
+                PassiveSelector(
+                    passive = draft.passive,
+                    overridden = false,
+                    onChange = { onChange(draft.copy(passive = it)) },
+                )
+
                 Text("COSTO", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),

@@ -2,6 +2,7 @@ package app.d6d.desktop
 
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -9,9 +10,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.decodeToImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -27,6 +30,7 @@ import java.awt.FileDialog
 import java.awt.Frame
 import java.awt.Point
 import java.awt.RenderingHints
+import java.awt.Taskbar
 import java.awt.Toolkit
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
@@ -123,6 +127,33 @@ private fun cursorResourceBytes(resource: String): ByteArray =
         "Risorsa del cursore non trovata: $resource"
     }.use { it.readBytes() }
 
+/**
+ * Icona dell'applicazione.
+ *
+ * Un'icona mancante non e' un motivo per non aprire il programma: se la risorsa
+ * non c'e' si torna a quella predefinita del sistema invece di far cadere l'avvio.
+ */
+private fun appIconBytes(): ByteArray? = runCatching {
+    CursorResourceAnchor::class.java.getResourceAsStream("/icons/onfall-icon.png")
+        ?.use { it.readBytes() }
+}.getOrNull()
+
+/**
+ * Icona nel Dock di macOS e nella barra delle applicazioni.
+ *
+ * La finestra da sola non basta: fuori da un pacchetto nativo il Dock mostra
+ * l'icona di Java finche' non gliene si passa una a mano. La Taskbar non e'
+ * disponibile ovunque, quindi ogni fallimento resta silenzioso.
+ */
+private fun applyTaskbarIcon(bytes: ByteArray) {
+    runCatching {
+        if (!Taskbar.isTaskbarSupported()) return
+        val taskbar = Taskbar.getTaskbar()
+        if (!taskbar.isSupported(Taskbar.Feature.ICON_IMAGE)) return
+        taskbar.iconImage = ImageIO.read(ByteArrayInputStream(bytes))
+    }
+}
+
 private data class DesktopCursorPair(
     val pointer: Cursor,
     val grab: Cursor,
@@ -162,7 +193,14 @@ private fun desktopCursorPair(
     )
 }
 
-fun main() = application {
+fun main() {
+    val iconBytes = appIconBytes()
+    iconBytes?.let(::applyTaskbarIcon)
+    application { OnfallApplication(iconBytes) }
+}
+
+@Composable
+private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
     val dataDirectory = dataDirectory()
     var exitRequested by remember { mutableStateOf(false) }
     val cursorStore = remember(dataDirectory) {
@@ -179,10 +217,15 @@ fun main() = application {
         }
     }
 
+    val windowIcon = remember(iconBytes) {
+        iconBytes?.let { runCatching { BitmapPainter(it.decodeToImageBitmap()) }.getOrNull() }
+    }
+
     Window(
         onCloseRequest = { exitRequested = true },
         title = AppIdentity.windowTitle,
         state = rememberWindowState(width = 1480.dp, height = 940.dp),
+        icon = windowIcon,
     ) {
         val cursorPairs = remember {
             mapOf(

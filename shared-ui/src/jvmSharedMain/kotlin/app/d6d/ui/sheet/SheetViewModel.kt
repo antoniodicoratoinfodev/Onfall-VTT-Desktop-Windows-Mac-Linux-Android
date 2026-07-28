@@ -53,7 +53,16 @@ class SheetViewModel(private val store: SheetStore) {
      * file dell'utente persistono soltanto capacità private e riferimenti scelti.
      */
     val abilityCatalog: List<CatalogAbility>
-        get() = (library.abilities + bundledSrdAbilities).distinctBy { it.id }
+        get() = (library.abilities + bundledSrdAbilities)
+            .distinctBy { it.id }
+            .map { ability ->
+                // La riclassificazione del tavolo vince sul pacchetto, che resta
+                // immutato: e' una scelta d'uso, non una modifica al contenuto.
+                library.passiveOverrides[ability.id]
+                    ?.takeIf { it != ability.passive }
+                    ?.let { ability.copy(passive = it) }
+                    ?: ability
+            }
 
     private var currentKind by mutableStateOf(SheetKind.PERSONAGGIO)
 
@@ -398,6 +407,46 @@ class SheetViewModel(private val store: SheetStore) {
             onAbilitiesChanged?.invoke()
         }
     }
+
+    /**
+     * Riclassifica una capacità fra tratto permanente e capacità da spendere.
+     *
+     * Una voce personale cambia in se stessa. Una voce del pacchetto SRD non si
+     * tocca: la scelta viene annotata a parte, e riportarla al valore del
+     * pacchetto cancella l'annotazione invece di lasciarne una identica.
+     */
+    fun setAbilityPassive(abilityId: String, passive: Boolean): Boolean {
+        val own = library.abilities.firstOrNull { it.id == abilityId }
+        if (own != null && !own.immutable && bundledSrdAbilities.none { it.id == abilityId }) {
+            return upsertAbility(own.copy(passive = passive))
+        }
+        val bundled = bundledSrdAbilities.firstOrNull { it.id == abilityId }
+        if (bundled == null) {
+            status = "Abilità non trovata nel Compendio."
+            return false
+        }
+        val updated = if (bundled.passive == passive) {
+            library.passiveOverrides - abilityId
+        } else {
+            library.passiveOverrides + (abilityId to passive)
+        }
+        if (updated == library.passiveOverrides) return true
+        val message = if (passive) {
+            "«${bundled.name}» ora vale come tratto permanente."
+        } else {
+            "«${bundled.name}» torna fra le capacità da spendere nel turno."
+        }
+        return guard(message) {
+            val updatedLibrary = library.copy(passiveOverrides = updated)
+            store.save(updatedLibrary)
+            library = updatedLibrary
+            onAbilitiesChanged?.invoke()
+        }
+    }
+
+    /** Vero quando la classificazione di una capacità SRD e' stata cambiata qui. */
+    fun abilityPassiveIsOverridden(abilityId: String): Boolean =
+        abilityId in library.passiveOverrides
 
     /** Numero di schede persistite o in modifica che usano la capacità. */
     fun abilityUsageCount(id: String): Int {

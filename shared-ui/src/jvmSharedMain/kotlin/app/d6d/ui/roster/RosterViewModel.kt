@@ -103,6 +103,15 @@ class RosterViewModel(
     }
 
     /**
+     * Dice se una capacita' vale come tratto permanente, secondo il Compendio.
+     *
+     * Null quando l'identificatore non e' in catalogo — per esempio le armi
+     * derivate dalla scheda — cosi' chi la usa puo' ricadere sulla definizione.
+     */
+    fun abilityIsPassive(abilityId: String): Boolean? =
+        sheets.abilityCatalog.firstOrNull { it.id == abilityId }?.passive
+
+    /**
      * Assicura che il contenuto di un template incluso sia nel Compendio.
      *
      * I template nominano schede del roster invece di portarne una copia: se

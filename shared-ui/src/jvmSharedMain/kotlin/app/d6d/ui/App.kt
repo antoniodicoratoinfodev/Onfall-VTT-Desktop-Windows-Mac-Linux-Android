@@ -131,6 +131,7 @@ fun AppRoot(
                 BattleViewModel(
                     session,
                     footprintProvider = { definitionId -> roster.footprintFor(definitionId) },
+                    passiveProvider = { abilityId -> roster.abilityIsPassive(abilityId) },
                 )
             }
         }
