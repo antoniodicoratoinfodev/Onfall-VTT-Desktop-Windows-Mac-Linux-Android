@@ -1,5 +1,6 @@
 package app.d6d.ui.content
 
+import app.d6d.content.srd521it.Srd521ItContent
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ExperienceProgression
 import app.d6d.sheet.Ability
@@ -70,6 +71,27 @@ class SessionTemplatesTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun `le abilita dei personaggi inclusi esistono tutte nel catalogo`() {
+        val catalogIds = Srd521ItContent.catalog.mapTo(mutableSetOf()) { it.id }
+        val missingByCharacter = templates
+            .flatMap { it.party }
+            .mapNotNull { sheet ->
+                sheet.abilityIds
+                    .filterNot { it in catalogIds }
+                    .distinct()
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { sheet.characterName to it }
+            }
+
+        assertTrue(
+            missingByCharacter.isEmpty(),
+            missingByCharacter.joinToString("\n") { (name, ids) ->
+                "«$name»: ${ids.joinToString()}"
+            },
+        )
     }
 
     @Test

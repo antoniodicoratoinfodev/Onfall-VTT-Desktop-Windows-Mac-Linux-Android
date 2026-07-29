@@ -1,5 +1,6 @@
 package app.d6d.ui.sheet
 
+import app.d6d.content.srd521it.Srd521ItContent
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.SheetStore
@@ -127,6 +128,46 @@ class SheetViewModelTest {
         assertTrue(sibilla.abilityIds.any { it.startsWith("srd521-it:spell:") })
         assertTrue(nerea.abilityIds.any { it.startsWith("srd521-it:spell:") })
         assertTrue(model.abilityCatalog.map { it.id }.containsAll(nerea.abilityIds))
+    }
+
+    @Test
+    fun `le vecchie scelte strutturali escono dalle abilita senza perdere riferimenti manuali`() {
+        val file = directory.resolve("schede.json")
+        val model = model(file)
+        val catalogIds = Srd521ItContent.catalog.mapTo(mutableSetOf()) { it.id }
+        val manualMissingId = "abilita-personale-rimossa"
+        val legacyCharacters = model.library.characters.map { sheet ->
+            val structuralChoiceIds = sheet.progression.selectedFeatureIds
+                .filterNot { it in catalogIds }
+            sheet.copy(
+                abilityIds = (
+                    sheet.abilityIds +
+                        structuralChoiceIds +
+                        if (sheet.id == "pg-tarvos") listOf(manualMissingId) else emptyList()
+                    ).distinct(),
+            )
+        }
+        SheetStore(file).save(model.library.copy(characters = legacyCharacters))
+
+        val reopened = model(file)
+        reopened.library.characters.forEach { sheet ->
+            assertTrue(
+                sheet.abilityIds.none {
+                    it in sheet.progression.selectedFeatureIds && it !in catalogIds
+                },
+                sheet.characterName,
+            )
+        }
+        assertTrue(
+            manualMissingId in reopened.library.characters
+                .first { it.id == "pg-tarvos" }
+                .abilityIds,
+        )
+        assertTrue(
+            manualMissingId in SheetStore(file).load().characters
+                .first { it.id == "pg-tarvos" }
+                .abilityIds,
+        )
     }
 
     @Test

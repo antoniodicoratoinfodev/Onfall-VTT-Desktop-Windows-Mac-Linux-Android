@@ -145,8 +145,27 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         abilityCatalog: List<CatalogAbility> = emptyList(),
     ): CharacterSheet {
         val catalogById = abilityCatalog.associateBy { it.id }
-        val baseline = if (sheet.progression.configured) {
-            progressionEngine.deriveEffects(sheet.progression)
+        /*
+         * Alcune scelte della progressione sono dati, non capacità: per esempio
+         * l'arma di cui si usa la Padronanza, una forma bestiale conosciuta o il
+         * tipo di danno di Resilienza immonda. Le vecchie versioni le copiavano
+         * anche in abilityIds, dove l'editor le segnalava come voci di catalogo
+         * scomparse. Il registro della progressione resta intatto; si elimina
+         * soltanto il collegamento improprio alla sezione Abilità.
+         */
+        val nonCatalogProgressionIds = sheet.progression.selectedFeatureIds
+            .filterTo(mutableSetOf()) { id ->
+                pack.element(id) == null && id !in catalogById
+            }
+        val normalizedSheet = if (nonCatalogProgressionIds.isEmpty()) {
+            sheet
+        } else {
+            sheet.copy(
+                abilityIds = sheet.abilityIds.filterNot { it in nonCatalogProgressionIds },
+            )
+        }
+        val baseline = if (normalizedSheet.progression.configured) {
+            progressionEngine.deriveEffects(normalizedSheet.progression)
         } else {
             emptyList()
         }
@@ -157,9 +176,9 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         fun effectsOf(id: String): List<RuleEffect> =
             catalogById[id]?.effects ?: pack.element(id)?.effects.orEmpty()
 
-        val excludedEffects = sheet.excludedTraitIds.flatMap(::effectsOf)
+        val excludedEffects = normalizedSheet.excludedTraitIds.flatMap(::effectsOf)
         val excludedSources = buildSet {
-            sheet.excludedTraitIds.mapNotNullTo(this) { nameOf(it)?.effectKey() }
+            normalizedSheet.excludedTraitIds.mapNotNullTo(this) { nameOf(it)?.effectKey() }
             excludedEffects.mapTo(this) { it.source.effectKey() }
         }
         val excludedGroups = excludedEffects
@@ -170,12 +189,12 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         }
 
         val activeTraitIds = (
-            sheet.progression.selectedFeatureIds +
-                sheet.progression.featIds +
-                sheet.abilityIds
+            normalizedSheet.progression.selectedFeatureIds +
+                normalizedSheet.progression.featIds +
+                normalizedSheet.abilityIds
             )
             .distinct()
-            .filterNot { it in sheet.excludedTraitIds }
+            .filterNot { it in normalizedSheet.excludedTraitIds }
             .filter { id ->
                 val kind = catalogById[id]?.category ?: pack.element(id)?.kind
                 kind in editableTraitKinds
@@ -183,8 +202,10 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         val refreshed = mergeEffects(
             retainedBaseline + activeTraitIds.flatMap(::effectsOf),
         )
-        if (refreshed == sheet.progression.effects) return sheet
-        return sheet.copy(progression = sheet.progression.copy(effects = refreshed))
+        if (refreshed == normalizedSheet.progression.effects) return normalizedSheet
+        return normalizedSheet.copy(
+            progression = normalizedSheet.progression.copy(effects = refreshed),
+        )
     }
 
     /**
@@ -372,14 +393,18 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         // Capacità e tratti aggiunti a mano dalla scheda non devono sparire al
         // passaggio di livello: si sostituisce soltanto la parte generata.
         val manuallyLinkedAbilityIds = sheet.abilityIds.filterNot { it in previouslyGeneratedIds }
-        val selectedAbilityIds = (
-            commonActions +
-                manuallyLinkedAbilityIds +
-                progressed.selectedFeatureIds +
+        val progressedCatalogAbilityIds = (
+            progressed.selectedFeatureIds +
                 progressed.featIds +
                 progressed.knownCantripIds +
                 progressed.preparedSpellIds +
                 progressed.alwaysPreparedSpellIds
+            )
+            .filter { pack.element(it) != null }
+        val selectedAbilityIds = (
+            commonActions +
+                manuallyLinkedAbilityIds +
+                progressedCatalogAbilityIds
             )
             .distinct()
             .filterNot { it in sheet.excludedTraitIds }
