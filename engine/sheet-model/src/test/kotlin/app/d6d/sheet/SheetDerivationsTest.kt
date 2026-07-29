@@ -50,6 +50,33 @@ class SheetDerivationsTest {
     }
 
     @Test
+    fun `escludere o aggiungere Attacco extra dalla scheda aggiorna gli attacchi`() {
+        val extraAttackId = "srd521-it:feature:guerriero:attacco-extra"
+        val fighter = CharacterSheet(
+            progression = CharacterProgression(
+                classLevels = listOf(ClassLevelState(CharacterClassId.FIGHTER, 5)),
+                selectedFeatureIds = listOf(extraAttackId),
+            ),
+            abilityIds = listOf(extraAttackId),
+        )
+
+        assertEquals(2, fighter.attacksPerAction)
+        assertEquals(
+            1,
+            fighter.copy(
+                abilityIds = emptyList(),
+                excludedTraitIds = setOf(extraAttackId),
+            ).attacksPerAction,
+        )
+        assertEquals(
+            2,
+            CharacterSheet(
+                abilityIds = listOf("srd521-it:feature:barbaro:attacco-extra"),
+            ).attacksPerAction,
+        )
+    }
+
+    @Test
     fun `il modificatore si arrotonda per difetto anche sotto dieci`() {
         // La divisione intera di Kotlin tronca verso lo zero e darebbe -1 per 7.
         assertEquals(-2, abilityModifier(7))

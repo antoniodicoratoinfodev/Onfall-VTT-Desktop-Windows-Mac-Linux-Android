@@ -110,6 +110,22 @@ class SessionTemplatesTest {
     }
 
     @Test
+    fun `i privilegi con un effetto numerico arrivano fino alla scheda inclusa`() {
+        val tarvos = SessionTemplates.ruins.party.first { it.characterName.startsWith("Tarvos") }
+        assertTrue(
+            tarvos.progression.selections.flatMap { it.optionIds }.any { it.endsWith(":difesa") },
+            "Tarvos non ha lo Stile Difesa: l'esempio non verifica piu' nulla",
+        )
+        assertEquals(1, tarvos.armorClassEffectBonus)
+        // Cotta di maglia 16, scudo +2, piu' il punto dello stile.
+        assertEquals(19, tarvos.effectiveArmorClass)
+
+        val shen = SessionTemplates.crown.party.first { it.characterName.startsWith("Shen") }
+        // Monaco di 20º senza armatura: 30 piedi piu' i 30 del Movimento senza armatura.
+        assertEquals(60, shen.effectiveSpeedFeet)
+    }
+
+    @Test
     fun `gli stat block sono costruiti come li descrive il documento`() {
         templates.flatMap { it.monsters }.forEach { creature ->
             assertEquals(hitDieFor(creature.size), creature.hitDiceSides, creature.name)
@@ -255,5 +271,4 @@ class SessionTemplatesTest {
         else -> error("Grado di sfida non previsto dal test: $challengeRating")
     }
 
-    private fun CharacterSheet.score(ability: Ability): Int = abilityScores[ability] ?: 10
 }

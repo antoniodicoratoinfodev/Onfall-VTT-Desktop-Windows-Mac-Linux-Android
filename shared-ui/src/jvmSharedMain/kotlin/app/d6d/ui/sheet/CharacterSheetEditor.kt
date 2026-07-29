@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,8 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.ActivationCost
+import app.d6d.rules.character.EffectTarget
+import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.Ability
 import app.d6d.sheet.ArmorClassAdjustment
 import app.d6d.sheet.ArmorClassDexterity
@@ -94,6 +99,7 @@ fun CharacterSheetEditor(
             if (compact) {
                 AbilitiesColumn(sheet, update, Modifier.fillMaxWidth())
                 CombatColumn(
+                    viewModel,
                     sheet,
                     update,
                     availableAbilities = viewModel.abilityCatalog,
@@ -104,6 +110,7 @@ fun CharacterSheetEditor(
                 Row(horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                     AbilitiesColumn(sheet, update, Modifier.width(292.dp))
                     CombatColumn(
+                        viewModel,
                         sheet,
                         update,
                         availableAbilities = viewModel.abilityCatalog,
@@ -843,6 +850,16 @@ private fun ArmorClassAdjustmentsEditor(
             )
         }
 
+        // I bonus che arrivano dai privilegi non sono modificabili qui: si
+        // mostrano perche' chi legge la CA possa risalire a chi la produce.
+        sheet.activeEffects(EffectTarget.ARMOR_CLASS).forEach { effect ->
+            Text(
+                text = "◆ ${effect.source} · ${effect.readableText()}",
+                color = Palette.Heal,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
         if (sheet.armorClassAdjustments.isEmpty()) {
             Text(
                 "Nessun altro modificatore. Puoi aggiungere oggetti magici, privilegi, " +
@@ -1159,6 +1176,7 @@ private fun ProficiencyLine(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CombatColumn(
+    viewModel: SheetViewModel,
     sheet: CharacterSheet,
     update: (CharacterSheet) -> Unit,
     availableAbilities: List<CatalogAbility>,
@@ -1166,6 +1184,9 @@ private fun CombatColumn(
     modifier: Modifier = Modifier,
 ) {
     var abilityPickerOpen by remember(sheet.id) { mutableStateOf(false) }
+    var traitPickerSection by remember(sheet.id) {
+        mutableStateOf<CharacterTraitSection?>(null)
+    }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(9.dp)) {
         AdaptiveFormRow(
@@ -1217,18 +1238,25 @@ private fun CombatColumn(
                     )
                 }
             }
-            sheet.abilityIds.distinct().forEach { abilityId ->
-                val ability = availableAbilities.firstOrNull { it.id == abilityId }
-                if (ability != null) {
-                    CharacterAbilityRow(ability) {
-                        update(sheet.copy(abilityIds = sheet.abilityIds.filterNot { it == abilityId }))
-                    }
-                } else {
-                    MissingAbilityRow(abilityId) {
-                        update(sheet.copy(abilityIds = sheet.abilityIds.filterNot { it == abilityId }))
+            val traitKinds = CharacterTraitSection.entries
+                .flatMapTo(mutableSetOf()) { it.catalogKinds }
+            sheet.abilityIds
+                .distinct()
+                .filter { abilityId ->
+                    availableAbilities.firstOrNull { it.id == abilityId }?.category !in traitKinds
+                }
+                .forEach { abilityId ->
+                    val ability = availableAbilities.firstOrNull { it.id == abilityId }
+                    if (ability != null) {
+                        CharacterAbilityRow(ability) {
+                            update(sheet.copy(abilityIds = sheet.abilityIds.filterNot { it == abilityId }))
+                        }
+                    } else {
+                        MissingAbilityRow(abilityId) {
+                            update(sheet.copy(abilityIds = sheet.abilityIds.filterNot { it == abilityId }))
+                        }
                     }
                 }
-            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 GameButton("+ Aggiungi arma", accent = Palette.Party, onClick = {
                     update(sheet.copy(weapons = sheet.weapons + WeaponEntry()))
@@ -1240,7 +1268,21 @@ private fun CombatColumn(
         }
 
         SheetBox("Privilegi di classe") {
-            SheetTextArea(sheet.classFeatures, minLines = 6) { update(sheet.copy(classFeatures = it)) }
+            ProgressionEntries(
+                ids = viewModel.characterTraitIds(CharacterTraitSection.FEATURE),
+                catalog = availableAbilities,
+                emptyNote = "Nessun privilegio registrato: questa scheda non usa la progressione guidata.",
+                onRemove = { id ->
+                    viewModel.setCharacterTraitSelected(CharacterTraitSection.FEATURE, id, false)
+                },
+            )
+            GameButton(
+                "+ Gestisci privilegi",
+                accent = Palette.Gold,
+                onClick = { traitPickerSection = CharacterTraitSection.FEATURE },
+            )
+            Text("NOTE TUE", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+            SheetTextArea(sheet.classFeatures, minLines = 3) { update(sheet.copy(classFeatures = it)) }
         }
 
         AdaptiveFormRow(
@@ -1253,6 +1295,20 @@ private fun CombatColumn(
                 },
                 adaptiveFormItem { itemModifier ->
                     SheetBox("Talenti", itemModifier) {
+                        ProgressionEntries(
+                            ids = viewModel.characterTraitIds(CharacterTraitSection.FEAT),
+                            catalog = availableAbilities,
+                            emptyNote = "Nessun talento registrato.",
+                            onRemove = { id ->
+                                viewModel.setCharacterTraitSelected(CharacterTraitSection.FEAT, id, false)
+                            },
+                        )
+                        GameButton(
+                            "+ Gestisci talenti",
+                            accent = Palette.Gold,
+                            onClick = { traitPickerSection = CharacterTraitSection.FEAT },
+                        )
+                        Text("NOTE TUE", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                         SheetTextArea(sheet.feats) { update(sheet.copy(feats = it)) }
                     }
                 },
@@ -1268,7 +1324,10 @@ private fun CombatColumn(
             addAll(sheet.progression.preparedSpellIds)
         }
         val pickerAbilities = availableAbilities.filter { ability ->
-            if (!sheet.progression.configured) {
+            val isTrait = CharacterTraitSection.entries.any { ability.category in it.catalogKinds }
+            if (isTrait) {
+                false
+            } else if (!sheet.progression.configured) {
                 true
             } else {
                 ability.category == app.d6d.rules.character.RuleElementKind.CUSTOM ||
@@ -1284,6 +1343,20 @@ private fun CombatColumn(
                 abilityPickerOpen = false
             },
             onDismiss = { abilityPickerOpen = false },
+        )
+    }
+
+    traitPickerSection?.let { section ->
+        TraitPickerDialog(
+            section = section,
+            sheet = sheet,
+            abilities = viewModel.characterTraitCandidates(section),
+            selectedIds = viewModel.characterTraitIds(section).toSet(),
+            isCompatible = viewModel::characterTraitIsCompatible,
+            onToggle = { ability, selected ->
+                viewModel.setCharacterTraitSelected(section, ability.id, selected)
+            },
+            onDismiss = { traitPickerSection = null },
         )
     }
 }
@@ -1553,6 +1626,203 @@ private fun AbilityPickerDialog(
     )
 }
 
+/**
+ * Selettore multi-voce per talenti e privilegi.
+ *
+ * Il filtro di compatibilità aiuta a trovare le scelte ordinarie, ma può essere
+ * disattivato: la scheda resta utilizzabile anche per concessioni del GM,
+ * conversioni da altri regolamenti e personaggi manuali.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TraitPickerDialog(
+    section: CharacterTraitSection,
+    sheet: CharacterSheet,
+    abilities: List<CatalogAbility>,
+    selectedIds: Set<String>,
+    isCompatible: (CatalogAbility) -> Boolean,
+    onToggle: (CatalogAbility, Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var query by remember(section, sheet.id) { mutableStateOf("") }
+    var categoryFilter by remember(section, sheet.id) {
+        mutableStateOf<RuleElementKind?>(null)
+    }
+    var onlyCompatible by remember(section, sheet.id) {
+        mutableStateOf(sheet.progression.configured)
+    }
+    val categories = abilities.map { it.category }.distinct()
+    val normalizedQuery = query.trim().lowercase()
+    val filtered = abilities.filter { ability ->
+        val matchesQuery =
+            normalizedQuery.isBlank() ||
+                normalizedQuery in ability.name.lowercase() ||
+                normalizedQuery in ability.rulesText.lowercase() ||
+                normalizedQuery in ability.prerequisite.lowercase()
+        val matchesCategory = categoryFilter == null || ability.category == categoryFilter
+        val matchesCompatibility = !onlyCompatible || isCompatible(ability)
+        matchesQuery && matchesCategory && matchesCompatibility
+    }
+    val title = when (section) {
+        CharacterTraitSection.FEATURE -> "Gestisci privilegi"
+        CharacterTraitSection.FEAT -> "Gestisci talenti"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Palette.Surface,
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, color = Palette.Text)
+                Text(
+                    "Scegli dal Compendio · ${filtered.size} risultati",
+                    color = Palette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        text = {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 540.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SheetField("Cerca per nome, regola o prerequisito", query) { query = it }
+                Text("CATEGORIA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    GameButton(
+                        "Tutte",
+                        accent = if (categoryFilter == null) Palette.Gold else Palette.TextMuted,
+                        selected = categoryFilter == null,
+                        dense = true,
+                        onClick = { categoryFilter = null },
+                    )
+                    categories.forEach { category ->
+                        GameButton(
+                            category.italianLabel,
+                            accent = if (categoryFilter == category) Palette.Gold else Palette.TextMuted,
+                            selected = categoryFilter == category,
+                            dense = true,
+                            onClick = { categoryFilter = category },
+                        )
+                    }
+                }
+                if (sheet.progression.configured) {
+                    SheetCheck("Solo compatibili con classe e livello", onlyCompatible) {
+                        onlyCompatible = it
+                    }
+                }
+
+                if (filtered.isEmpty()) {
+                    Text(
+                        "Nessuna voce corrisponde ai filtri.",
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                if (filtered.isNotEmpty()) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 180.dp, max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        items(filtered, key = { it.id }) { ability ->
+                            val selected = ability.id in selectedIds
+                            val compatible = isCompatible(ability)
+                            val shape = RoundedCornerShape(7.dp)
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (selected) Palette.Gold.copy(alpha = 0.10f) else Palette.Night,
+                                        shape,
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (selected) Palette.Gold else Palette.Line,
+                                        shape,
+                                    )
+                                    .padding(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(
+                                            ability.name,
+                                            color = Palette.Text,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Chip(ability.category.italianLabel, Palette.Crit)
+                                            if (!compatible) Chip("Fuori requisiti", Palette.Enemy)
+                                            if (ability.sourcePage > 0) {
+                                                Chip("pag. ${ability.sourcePage}", Palette.TextMuted)
+                                            }
+                                        }
+                                    }
+                                    GameButton(
+                                        label = if (selected) "Rimuovi" else "Aggiungi",
+                                        accent = if (selected) Palette.Enemy else Palette.Party,
+                                        dense = true,
+                                        selected = selected,
+                                        onClick = { onToggle(ability, !selected) },
+                                    )
+                                }
+                                if (ability.classEligibility.isNotEmpty()) {
+                                    Text(
+                                        ability.classEligibility.joinToString(" · ") {
+                                            "${it.classId.italianLabel} ${it.minimumLevel}+"
+                                        },
+                                        color = Palette.TextMuted,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                                if (ability.prerequisite.isNotBlank()) {
+                                    Text(
+                                        "Prerequisito: ${ability.prerequisite}",
+                                        color = Palette.GoldBright,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                                if (ability.rulesText.isNotBlank()) {
+                                    Text(
+                                        ability.rulesText,
+                                        color = Palette.TextMuted,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
+        },
+    )
+}
+
 private val ActivationCost.characterLabel: String
     get() = when (this) {
         ActivationCost.ACTION -> "Azione"
@@ -1739,6 +2009,85 @@ private fun PactSlotBlock(slot: SpellSlot, onChange: (SpellSlot) -> Unit) {
         Text("Riposo breve o lungo", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         PipRow(slot.total, slot.spent, color = Palette.Gold) {
             onChange(slot.copy(spent = it.coerceIn(0, slot.total)))
+        }
+    }
+}
+
+/**
+ * Privilegi e talenti che il personaggio ha davvero, col testo del documento.
+ *
+ * Non c'e' niente da ricopiare a mano: la progressione guidata sa quali sono, e
+ * il Compendio sa cosa dicono. Le padronanze d'arme finiscono nello stesso
+ * elenco della progressione ma non sono privilegi: restano a parte, come
+ * targhette, per non spezzare la lettura.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProgressionEntries(
+    ids: List<String>,
+    catalog: List<CatalogAbility>,
+    emptyNote: String,
+    onRemove: (String) -> Unit,
+) {
+    val byId = catalog.associateBy { it.id }
+    val entries = ids.mapNotNull { byId[it] }
+    // Le padronanze d'arme sono armi, non voci di catalogo: si riconoscono
+    // dall'identificatore. Tutto cio' che non e' ne' l'una ne' l'altra cosa e'
+    // un riferimento che il pacchetto non conosce piu', e non si inventa.
+    val masteries = ids
+        .filter { it !in byId && it.contains(":weapon:") }
+        .map { it.substringAfterLast(':').replace('-', ' ') }
+
+    if (entries.isEmpty() && masteries.isEmpty()) {
+        Text(emptyNote, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+    }
+    entries.forEach { entry ->
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = entry.name,
+                        color = Palette.GoldBright,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (entry.sourcePage > 0) {
+                        Text(
+                            text = "pag. ${entry.sourcePage}",
+                            color = Palette.TextFaint,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+                if (entry.rulesText.isNotBlank()) {
+                    Text(
+                        text = entry.rulesText,
+                        color = Palette.Text,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            GameButton(
+                "Rimuovi",
+                accent = Palette.Enemy,
+                dense = true,
+                onClick = { onRemove(entry.id) },
+            )
+        }
+    }
+    if (masteries.isNotEmpty()) {
+        Text("PADRONANZE D'ARME", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            masteries.forEach { Chip(it.replaceFirstChar { first -> first.uppercase() }, Palette.Party) }
         }
     }
 }

@@ -1,5 +1,8 @@
 package app.d6d.content.srd521it
 
+import app.d6d.rules.character.EffectCondition
+import app.d6d.rules.character.EffectTarget
+import app.d6d.rules.character.RuleEffect
 import app.d6d.rules.character.RuleElementDefinition
 import app.d6d.rules.character.RuleElementKind
 
@@ -155,6 +158,14 @@ object SrdFeatsAndActions {
             prerequisite = "Privilegio Stile di combattimento",
             sourcePage = 99,
             activation = "Passiva",
+            effects = listOf(
+                RuleEffect(
+                    target = EffectTarget.ARMOR_CLASS,
+                    amount = 1,
+                    condition = EffectCondition.WEARING_ARMOR,
+                    source = "Difesa",
+                ),
+            ),
         ),
         RuleElementDefinition(
             id = "srd521-it:feat:fighting-style:tiro",
@@ -164,6 +175,13 @@ object SrdFeatsAndActions {
             prerequisite = "Privilegio Stile di combattimento",
             sourcePage = 99,
             activation = "Passiva",
+            effects = listOf(
+                RuleEffect(
+                    target = EffectTarget.RANGED_ATTACK,
+                    amount = 2,
+                    source = "Tiro",
+                ),
+            ),
         ),
         RuleElementDefinition(
             id = "srd521-it:feat:epic-boon:dono-fato",

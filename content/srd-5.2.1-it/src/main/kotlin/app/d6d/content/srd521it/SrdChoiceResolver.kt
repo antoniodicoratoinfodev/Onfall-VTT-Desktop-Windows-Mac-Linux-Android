@@ -4,18 +4,22 @@ import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.ChoiceKind
 import app.d6d.rules.character.ChoiceSelection
+import app.d6d.rules.character.RuleEffect
 import app.d6d.rules.character.RuleElementDefinition
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.Skill
 import app.d6d.rules.character.WeaponDefinition
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.Proficiency
+import app.d6d.sheet.reflowRulesText
 
 data class SrdChoiceOption(
     val id: String,
     val label: String,
     val description: String = "",
     val secondaryLabel: String = "",
+    /** Effetti numerici che scegliere questa opzione applica alle statistiche. */
+    val effects: List<RuleEffect> = emptyList(),
 )
 
 object SrdChoiceResolver {
@@ -54,7 +58,8 @@ object SrdChoiceResolver {
                                 .mapTo(mutableSetOf()) { it.toContentSlug() } &&
                                 id !in otherProvisionalIds
                         ChoiceKind.FEAT, ChoiceKind.EPIC_BOON ->
-                            id !in sheet.progression.featIds || id in repeatableIds
+                            id !in otherProvisionalIds &&
+                                (id !in sheet.progression.featIds || id in repeatableIds)
                         ChoiceKind.CLASS_OPTION,
                         ChoiceKind.FIGHTING_STYLE,
                         ChoiceKind.METAMAGIC,
@@ -323,6 +328,18 @@ object SrdChoiceResolver {
                     it.id !in alreadySelected ||
                     it.id in repeatableIds
             }
+            // I talenti ripetibili possono essere acquisiti di nuovo in un
+            // avanzamento successivo. Nello stesso request, invece, i dati figli
+            // di Abile, Iniziato alla magia e ASI non sono ancora namespaced per
+            // acquisizione: offrire due volte lo stesso talento produrrebbe una
+            // richiesta non rappresentabile senza ambiguita'.
+            .filter {
+                (
+                    choice.kind != ChoiceKind.FEAT &&
+                        choice.kind != ChoiceKind.EPIC_BOON
+                ) ||
+                    it.id !in otherProvisionalIds
+            }
             .filter { element ->
                 acquisitionBucket(choice.kind, element)?.let { bucket ->
                     bucket to element.id !in provisionalAcquisitions
@@ -349,10 +366,14 @@ object SrdChoiceResolver {
             return SrdChoiceOption(
                 id = id,
                 label = element.name,
-                description = element.description,
+                // Il testo del pacchetto e' spezzato a mano sulla larghezza del
+                // sorgente: senza ricomporlo la finestra guidata mostrerebbe gli
+                // a capo dove finisce la riga di codice, non dove finisce la frase.
+                description = element.description.reflowRulesText(),
                 secondaryLabel = element.spell?.let {
                     if (it.level == 0) "Trucchetto · ${it.school}" else "${it.level}º · ${it.school}"
                 } ?: element.prerequisite,
+                effects = element.effects,
             )
         }
         val skill = Skill.entries.firstOrNull { skillId(it) == id }
@@ -515,4 +536,3 @@ private val otherTools = listOf(
     "Sostanze da avvelenatore", "Strumenti da navigatore", "Trucchi per il camuffamento",
     "Gioco di dadi", "Scacchi dei draghi", "Carte da gioco", "Tre draghi al buio",
 )
-

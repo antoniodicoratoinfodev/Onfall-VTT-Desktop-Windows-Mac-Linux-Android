@@ -149,6 +149,13 @@ fun AppRoot(
                 battleFactory = battleFactory,
             )
         }
+        // Il Compendio deve contenere tutto cio' che l'app distribuisce, non solo
+        // quello che l'utente ha aperto: l'archivio viene popolato alla prima
+        // installazione, quindi su uno gia' esistente le partite incluse
+        // nominerebbero schede che non ci sono. Si rimettono solo le mancanti.
+        LaunchedEffect(roster) {
+            roster.installIncludedContent()
+        }
         val activeSession = workspace.activeSession
         val battleViewModel = activeSession.battle
         val sessions = activeSession.manager

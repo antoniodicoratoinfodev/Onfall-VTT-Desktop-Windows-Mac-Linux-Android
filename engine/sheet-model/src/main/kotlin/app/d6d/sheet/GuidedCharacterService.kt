@@ -8,6 +8,7 @@ import app.d6d.rules.character.ChoiceKind
 import app.d6d.rules.character.ClassDefinition
 import app.d6d.rules.character.LevelUpRequest
 import app.d6d.rules.character.ProgressionIssue
+import app.d6d.rules.character.RuleEffect
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.RulesContentPack
 import app.d6d.rules.character.SpellcastingKind
@@ -129,6 +130,85 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         } else {
             (definition.fixedHitPointsPerLevel + constitution).coerceAtLeast(1)
         }
+    }
+
+    /**
+     * Ricalcola gli effetti dei privilegi ottenuti e delle personalizzazioni.
+     *
+     * La progressione resta la fonte storica, mentre [CharacterSheet.excludedTraitIds]
+     * e i collegamenti manuali nel Compendio fanno da overlay. In questo modo
+     * togliere uno stile dalla scheda toglie anche il suo bonus, senza cancellare
+     * la scelta dal registro del livello in cui era stata fatta.
+     */
+    fun withRefreshedEffects(
+        sheet: CharacterSheet,
+        abilityCatalog: List<CatalogAbility> = emptyList(),
+    ): CharacterSheet {
+        val catalogById = abilityCatalog.associateBy { it.id }
+        val baseline = if (sheet.progression.configured) {
+            progressionEngine.deriveEffects(sheet.progression)
+        } else {
+            emptyList()
+        }
+
+        fun nameOf(id: String): String? =
+            catalogById[id]?.name ?: pack.element(id)?.name
+
+        fun effectsOf(id: String): List<RuleEffect> =
+            catalogById[id]?.effects ?: pack.element(id)?.effects.orEmpty()
+
+        val excludedEffects = sheet.excludedTraitIds.flatMap(::effectsOf)
+        val excludedSources = buildSet {
+            sheet.excludedTraitIds.mapNotNullTo(this) { nameOf(it)?.effectKey() }
+            excludedEffects.mapTo(this) { it.source.effectKey() }
+        }
+        val excludedGroups = excludedEffects
+            .mapNotNullTo(mutableSetOf()) { it.group.takeIf(String::isNotBlank) }
+        val retainedBaseline = baseline.filterNot { effect ->
+            effect.source.effectKey() in excludedSources ||
+                effect.group.isNotBlank() && effect.group in excludedGroups
+        }
+
+        val activeTraitIds = (
+            sheet.progression.selectedFeatureIds +
+                sheet.progression.featIds +
+                sheet.abilityIds
+            )
+            .distinct()
+            .filterNot { it in sheet.excludedTraitIds }
+            .filter { id ->
+                val kind = catalogById[id]?.category ?: pack.element(id)?.kind
+                kind in editableTraitKinds
+            }
+        val refreshed = mergeEffects(
+            retainedBaseline + activeTraitIds.flatMap(::effectsOf),
+        )
+        if (refreshed == sheet.progression.effects) return sheet
+        return sheet.copy(progression = sheet.progression.copy(effects = refreshed))
+    }
+
+    /**
+     * Toglie l'elenco di nomi che le versioni precedenti scrivevano nei campi di
+     * testo di privilegi e talenti.
+     *
+     * Quei campi ora ospitano le note di chi gioca, mentre l'elenco arriva dalla
+     * progressione: lasciarcelo mostrerebbe due volte le stesse voci. Si cancella
+     * soltanto se il contenuto e' esattamente quello generato allora — una nota
+     * scritta a mano, anche solo aggiunta in fondo, resta intatta.
+     */
+    fun withoutGeneratedFeatureText(sheet: CharacterSheet): CharacterSheet {
+        if (!sheet.progression.configured) return sheet
+        fun generated(ids: List<String>) = ids.joinToString("\n") {
+            "• ${pack.element(it)?.name ?: optionLabel(it)}"
+        }
+        return sheet.copy(
+            classFeatures = sheet.classFeatures
+                .takeIf { it.trim() != generated(sheet.progression.selectedFeatureIds).trim() }
+                .orEmpty(),
+            feats = sheet.feats
+                .takeIf { it.trim() != generated(sheet.progression.featIds).trim() }
+                .orEmpty(),
+        )
     }
 
     fun advance(sheet: CharacterSheet, request: LevelUpRequest): CharacterSheet {
@@ -281,14 +361,28 @@ class GuidedCharacterService(val pack: RulesContentPack) {
             .filter { it.kind == RuleElementKind.COMMON_ACTION }
             .filterNot { it.id == MAGIC_ACTION_ID && spellcasting == null }
             .map { it.id }
+        val previouslyGeneratedIds = buildSet {
+            addAll(pack.elements.filter { it.kind == RuleElementKind.COMMON_ACTION }.map { it.id })
+            addAll(sheet.progression.selectedFeatureIds)
+            addAll(sheet.progression.featIds)
+            addAll(sheet.progression.knownCantripIds)
+            addAll(sheet.progression.preparedSpellIds)
+            addAll(sheet.progression.alwaysPreparedSpellIds)
+        }
+        // Capacità e tratti aggiunti a mano dalla scheda non devono sparire al
+        // passaggio di livello: si sostituisce soltanto la parte generata.
+        val manuallyLinkedAbilityIds = sheet.abilityIds.filterNot { it in previouslyGeneratedIds }
         val selectedAbilityIds = (
             commonActions +
+                manuallyLinkedAbilityIds +
                 progressed.selectedFeatureIds +
                 progressed.featIds +
                 progressed.knownCantripIds +
                 progressed.preparedSpellIds +
                 progressed.alwaysPreparedSpellIds
-            ).distinct()
+            )
+            .distinct()
+            .filterNot { it in sheet.excludedTraitIds }
         val hitDicePools = deriveHitDicePools(sheet, progressed)
         val newClassLevel = progressed.levelIn(request.classId)
         val draconicResilienceActive =
@@ -335,40 +429,40 @@ class GuidedCharacterService(val pack: RulesContentPack) {
             ?.substringAfterLast(':')
             ?.toDamageTypeOrNull()
 
-        return sheet.copy(
-            className = classNames,
-            subclass = subclassNames,
-            level = progressed.totalLevel,
-            progression = progressed,
-            maxHitPoints = newMaximum,
-            currentHitPoints = if (isFirstCharacterLevel) {
-                newMaximum
-            } else {
-                (sheet.currentHitPoints + maximumDelta).coerceIn(0, newMaximum)
-            },
-            hitDiceMax = progressed.totalLevel,
-            hitDiceSpent = hitDicePools.sumOf { it.spent },
-            hitDieSides = definition.hitDieSides,
-            hitDicePools = hitDicePools,
-            weapons = weapons,
-            abilityScores = abilityScores,
-            saveProficiencies = saves,
-            skillProficiencies = skills,
-            armorTraining = armor,
-            armorClassMethod = armorClassMethod,
-            fiendishResilienceDamageType =
-                fiendResistance ?: sheet.fiendishResilienceDamageType,
-            weaponProficiencies = weaponTraining,
-            toolProficiencies = toolTraining,
-            languages = languages,
-            abilityIds = selectedAbilityIds,
-            classFeatures = progressed.selectedFeatureIds.joinToString("\n") {
-                "• ${pack.element(it)?.name ?: optionLabel(it)}"
-            },
-            feats = progressed.featIds.joinToString("\n") {
-                "• ${pack.element(it)?.name ?: optionLabel(it)}"
-            },
-            spellcasting = spellcasting,
+        return withRefreshedEffects(
+            sheet.copy(
+                className = classNames,
+                subclass = subclassNames,
+                level = progressed.totalLevel,
+                progression = progressed,
+                maxHitPoints = newMaximum,
+                currentHitPoints = if (isFirstCharacterLevel) {
+                    newMaximum
+                } else {
+                    (sheet.currentHitPoints + maximumDelta).coerceIn(0, newMaximum)
+                },
+                hitDiceMax = progressed.totalLevel,
+                hitDiceSpent = hitDicePools.sumOf { it.spent },
+                hitDieSides = definition.hitDieSides,
+                hitDicePools = hitDicePools,
+                weapons = weapons,
+                abilityScores = abilityScores,
+                saveProficiencies = saves,
+                skillProficiencies = skills,
+                armorTraining = armor,
+                armorClassMethod = armorClassMethod,
+                fiendishResilienceDamageType =
+                    fiendResistance ?: sheet.fiendishResilienceDamageType,
+                weaponProficiencies = weaponTraining,
+                toolProficiencies = toolTraining,
+                languages = languages,
+                abilityIds = selectedAbilityIds,
+                // Privilegi e talenti non vengono piu' riscritti come elenco di nomi:
+                // la progressione li conosce gia' e la scheda li mostra da li', con il
+                // testo del documento. Quei campi restano all'utente per le sue note,
+                // che un passaggio di livello non deve cancellare.
+                spellcasting = spellcasting,
+            ),
         )
     }
 
@@ -572,6 +666,29 @@ private fun appendDistinctText(existing: String, addition: String): String =
 
 private fun String.containsListedEntry(label: String): Boolean =
     split(',', ';', '\n').any { it.trim().equals(label, ignoreCase = true) }
+
+private val editableTraitKinds = setOf(
+    RuleElementKind.CLASS_FEATURE,
+    RuleElementKind.SUBCLASS_FEATURE,
+    RuleElementKind.CLASS_OPTION,
+    RuleElementKind.METAMAGIC,
+    RuleElementKind.ELDRITCH_INVOCATION,
+    RuleElementKind.ORIGIN_FEAT,
+    RuleElementKind.GENERAL_FEAT,
+    RuleElementKind.FIGHTING_STYLE_FEAT,
+    RuleElementKind.EPIC_BOON_FEAT,
+)
+
+private fun String.effectKey(): String = trim().lowercase()
+
+/** Applica la stessa regola degli effetti progressivi usata dal motore. */
+private fun mergeEffects(effects: List<RuleEffect>): List<RuleEffect> {
+    val distinct = effects.distinct()
+    val (grouped, single) = distinct.partition { it.group.isNotBlank() }
+    return single + grouped
+        .groupBy { it.group }
+        .map { (_, sameGroup) -> sameGroup.maxBy { it.amount } }
+}
 
 /** Tabella Incantatore multiclasse SRD 5.2.1, livelli effettivi 1–20. */
 private val MULTICLASS_SLOTS = listOf(

@@ -6,8 +6,32 @@ import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.rules.character.ContentPackManifest
 import app.d6d.rules.character.RuleElementDefinition
 import app.d6d.rules.character.RuleElementKind
+import app.d6d.rules.character.RulesContentPack
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.reflowRulesText
+
+/**
+ * Proiezione completa di una voce del pacchetto nel Compendio.
+ *
+ * Alcuni effetti appartengono alla riga di livello, perche' il motore deve
+ * applicarli automaticamente salendo di livello. Quando lo stesso privilegio
+ * viene collegato a mano dalla scheda, pero', serve anche sulla sua voce di
+ * catalogo. Si importa soltanto l'effetto del livello in cui il privilegio viene
+ * acquisito e la cui sorgente coincide col suo nome: gli altri privilegi della
+ * stessa riga non ricevono cosi' un bonus che non appartiene loro.
+ */
+fun RuleElementDefinition.toCatalogAbility(pack: RulesContentPack): CatalogAbility {
+    val inheritedEffects = pack.classes
+        .asSequence()
+        .flatMap { it.levels.asSequence() }
+        .filter { id in it.featureIds }
+        .flatMap { it.effects.asSequence() }
+        .filter { it.source.effectSourceKey() == name.effectSourceKey() }
+        .toList()
+    return toCatalogAbility(pack.manifest).copy(
+        effects = (effects + inheritedEffects).distinct(),
+    )
+}
 
 /** Proiezione leggibile dal Compendio e selezionabile dalle schede/battaglia. */
 fun RuleElementDefinition.toCatalogAbility(manifest: ContentPackManifest): CatalogAbility =
@@ -36,6 +60,7 @@ fun RuleElementDefinition.toCatalogAbility(manifest: ContentPackManifest): Catal
         resourceId = resourceId,
         resourceCost = resourceCost,
         immutable = true,
+        effects = effects,
     )
 
 /**
@@ -75,6 +100,9 @@ private val markerActionIds = setOf(
     "srd521-it:action:magia",
     "srd521-it:action:attacco",
 )
+
+private fun String.effectSourceKey(): String =
+    lowercase().filter(Char::isLetterOrDigit)
 
 /**
  * Lo SRD descrive l'attivazione a parole. Le voci che iniziano con "Passiva" o

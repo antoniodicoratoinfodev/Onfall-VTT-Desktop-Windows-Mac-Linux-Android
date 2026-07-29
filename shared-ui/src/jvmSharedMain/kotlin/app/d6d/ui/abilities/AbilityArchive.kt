@@ -54,6 +54,7 @@ import app.d6d.ui.sheet.SheetFeetField
 import app.d6d.ui.sheet.SheetNumberField
 import app.d6d.ui.sheet.SheetTextArea
 import app.d6d.ui.sheet.SheetViewModel
+import app.d6d.ui.sheet.readableText
 import app.d6d.ui.theme.Palette
 
 /**
@@ -585,6 +586,21 @@ private fun ReadOnlyAbilityDetails(
                     overridden = overridden,
                     onChange = onPassiveChange,
                 )
+                if (ability.effects.isNotEmpty()) {
+                    Text(
+                        "APPLICATO DALL'APP",
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        ability.effects.forEach { effect ->
+                            Chip(effect.readableText(), Palette.Heal)
+                        }
+                    }
+                }
                 if (ability.resourceId != null || ability.resourceCost > 0) {
                     Text(
                         text = buildString {

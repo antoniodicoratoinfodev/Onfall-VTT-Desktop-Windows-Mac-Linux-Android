@@ -97,6 +97,14 @@ data class CharacterProgression(
     val alwaysPreparedSpellIds: List<String> = emptyList(),
     val spellbookSpellIds: List<String> = emptyList(),
     val resourcePools: List<ResourcePoolState> = emptyList(),
+    /**
+     * Effetti numerici che i privilegi ottenuti producono sulle statistiche.
+     *
+     * Sono derivati dal pacchetto, come le riserve di risorse, e vengono
+     * ricalcolati a ogni avanzamento. Restano nella progressione perche' la
+     * scheda deve poterli applicare da sola: non conosce il content pack.
+     */
+    val effects: List<RuleEffect> = emptyList(),
     val advancementHistory: List<LevelAdvancementRecord> = emptyList(),
 ) {
     val configured: Boolean get() = classLevels.isNotEmpty()
@@ -519,6 +527,9 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         val acquisitions = requirements.flatMap { choice ->
             selectionsById[choice.id]?.optionIds.orEmpty().mapNotNull { optionId ->
                 val bucket = when (choice.kind) {
+                    ChoiceKind.FEAT,
+                    ChoiceKind.EPIC_BOON,
+                    -> "feat"
                     ChoiceKind.CANTRIP -> "cantrip"
                     ChoiceKind.PREPARED_SPELL,
                     ChoiceKind.ALWAYS_PREPARED_SPELL,
@@ -813,7 +824,37 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         }
         return updated.copy(
             resourcePools = deriveResourcePools(updated, scoresAfterAdvancement),
+            effects = deriveEffects(updated),
         )
+    }
+
+    /**
+     * Raccoglie gli effetti numerici di tutto cio' che il personaggio ha ottenuto.
+     *
+     * Le due sorgenti sono i livelli di classe — che li portano automaticamente —
+     * e gli elementi scelti: privilegi, talenti, sottoclassi. Gli effetti
+     * progressivi dichiarano un gruppo e non si sommano fra loro: vale il piu'
+     * alto, cosi' il Movimento senza armatura passa da +10 a +30 invece di
+     * accumularli tutti.
+     */
+    fun deriveEffects(progression: CharacterProgression): List<RuleEffect> {
+        val fromLevels = progression.classLevels.flatMap { classLevel ->
+            pack.classDefinition(classLevel.classId)
+                .levels
+                .take(classLevel.level)
+                .flatMap { it.effects }
+        }
+        val chosenIds = buildSet {
+            addAll(progression.selectedFeatureIds)
+            addAll(progression.featIds)
+            addAll(progression.subclasses.map { it.subclassId })
+            progression.selections.forEach { addAll(it.optionIds) }
+        }
+        val fromElements = chosenIds.mapNotNull(pack::element).flatMap { it.effects }
+        val (grouped, single) = (fromLevels + fromElements).partition { it.group.isNotBlank() }
+        return single + grouped
+            .groupBy { it.group }
+            .map { (_, sameGroup) -> sameGroup.maxBy { it.amount } }
     }
 
     private fun deriveResourcePools(

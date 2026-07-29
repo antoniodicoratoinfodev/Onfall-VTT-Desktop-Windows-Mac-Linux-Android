@@ -29,7 +29,11 @@ import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.ChoiceKind
 import app.d6d.rules.character.ChoiceSelection
+import app.d6d.rules.character.EffectCondition
+import app.d6d.rules.character.EffectTarget
 import app.d6d.rules.character.LevelUpRequest
+import app.d6d.rules.character.RuleEffect
+import app.d6d.sheet.formatModifier
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.theme.Palette
@@ -55,19 +59,22 @@ fun SrdProgressionDialog(
     var rolledHitPoints by remember(sheet.id, sheet.effectiveLevel, selectedClass) {
         mutableStateOf(viewModel.fixedHitPointIncrease(selectedClass))
     }
-    val provisionalSelections = selected.map { (choiceId, optionIds) ->
-        ChoiceSelection(choiceId, optionIds)
-    }
-    val requirements = runCatching {
-        viewModel.progressionRequirements(selectedClass, provisionalSelections)
-    }.getOrDefault(emptyList())
-    val complete = requirements.all { selected[it.id].orEmpty().size == it.count }
-    val hasAbilityScoreIncrease = selected.values.flatten().any {
+    fun requirementsFor(provisional: List<ChoiceSelection>): List<ChoiceDefinition> =
+        runCatching {
+            viewModel.progressionRequirements(selectedClass, provisional)
+        }.getOrDefault(emptyList())
+
+    val draft = stabilizeProgressionDraft(selected, ::requirementsFor)
+    val activeSelections = draft.selections
+    val provisionalSelections = activeSelections.toChoiceSelections()
+    val requirements = draft.requirements
+    val complete = requirements.all { activeSelections[it.id].orEmpty().size == it.count }
+    val hasAbilityScoreIncrease = activeSelections.values.flatten().any {
         it.endsWith(":aumento-punteggi-caratteristica")
     }
     val conditionalAbilityIncreases = requirements
         .filter { it.kind == ChoiceKind.ABILITY_SCORE_INCREASE }
-        .flatMap { selected[it.id].orEmpty() }
+        .flatMap { activeSelections[it.id].orEmpty() }
         .mapNotNull(::abilityFromChoiceOption)
         .groupingBy { it }
         .eachCount()
@@ -146,8 +153,14 @@ fun SrdProgressionDialog(
                             selectedClass,
                             provisionalSelections,
                         ),
-                        selectedIds = selected[choice.id].orEmpty(),
-                        onChange = { ids -> selected = selected + (choice.id to ids) },
+                        selectedIds = activeSelections[choice.id].orEmpty(),
+                        onChange = { ids ->
+                            val changed = activeSelections + (choice.id to ids)
+                            selected = stabilizeProgressionDraft(
+                                changed,
+                                ::requirementsFor,
+                            ).selections
+                        },
                     )
                 }
 
@@ -216,11 +229,13 @@ fun SrdProgressionDialog(
                             },
                             usedFixedHitPoints = firstLevel || useFixedHitPoints,
                             selections = requirements.map {
-                                ChoiceSelection(it.id, selected[it.id].orEmpty())
+                                ChoiceSelection(it.id, activeSelections[it.id].orEmpty())
                             },
-                            abilityScoreIncreases = conditionalAbilityIncreases
-                                .takeIf { it.isNotEmpty() }
-                                ?: abilityIncreases,
+                            abilityScoreIncreases = resolvedAbilityScoreIncreases(
+                                hasExplicitIncreaseFeat = hasAbilityScoreIncrease,
+                                explicitIncreases = abilityIncreases,
+                                conditionalIncreases = conditionalAbilityIncreases,
+                            ),
                         ),
                     )
                     if (applied) onDismiss()
@@ -232,6 +247,53 @@ fun SrdProgressionDialog(
         },
     )
 }
+
+internal data class StabilizedProgressionDraft(
+    val selections: Map<String, List<String>>,
+    val requirements: List<ChoiceDefinition>,
+)
+
+/**
+ * Elimina le scelte figlie che non sono più richieste dopo il cambio di
+ * un'opzione padre.
+ *
+ * Una figlia obsoleta può a sua volta tenere viva una nipote (per esempio il
+ * talento Iniziato alla magia e le sue scelte di incantesimo), quindi si
+ * ricalcolano i requisiti finché non viene più rimossa alcuna chiave.
+ */
+internal fun stabilizeProgressionDraft(
+    selections: Map<String, List<String>>,
+    requirementsFor: (List<ChoiceSelection>) -> List<ChoiceDefinition>,
+): StabilizedProgressionDraft {
+    var active = selections
+    while (true) {
+        val requirements = requirementsFor(active.toChoiceSelections())
+        val activeChoiceIds = requirements.mapTo(mutableSetOf()) { it.id }
+        val filtered = active.filterKeys { it in activeChoiceIds }
+        if (filtered.size == active.size) {
+            return StabilizedProgressionDraft(filtered, requirements)
+        }
+        active = filtered
+    }
+}
+
+/**
+ * Gli aumenti inseriti nel picker valgono soltanto finché è selezionato il
+ * talento Aumento dei punteggi di caratteristica. I +1 richiesti da talenti
+ * come Lottatore o dai Doni epici arrivano invece dalle scelte condizionali.
+ */
+internal fun resolvedAbilityScoreIncreases(
+    hasExplicitIncreaseFeat: Boolean,
+    explicitIncreases: Map<Ability, Int>,
+    conditionalIncreases: Map<Ability, Int>,
+): Map<Ability, Int> = when {
+    conditionalIncreases.isNotEmpty() -> conditionalIncreases
+    hasExplicitIncreaseFeat -> explicitIncreases
+    else -> emptyMap()
+}
+
+private fun Map<String, List<String>>.toChoiceSelections(): List<ChoiceSelection> =
+    map { (choiceId, optionIds) -> ChoiceSelection(choiceId, optionIds) }
 
 private fun abilityFromChoiceOption(optionId: String): Ability? {
     val slug = optionId.substringAfterLast(':')
@@ -247,6 +309,7 @@ private fun ChoicePicker(
     onChange: (List<String>) -> Unit,
 ) {
     var search by remember(choice.id) { mutableStateOf("") }
+    var previewed by remember(choice.id) { mutableStateOf<String?>(null) }
     val visible = options.filter {
         search.isBlank() ||
             it.label.contains(search, ignoreCase = true) ||
@@ -297,9 +360,18 @@ private fun ChoicePicker(
                             },
                         )
                     },
+                    onHoverChange = { hovered ->
+                        previewed = if (hovered) option.id else previewed.takeIf { it != option.id }
+                    },
                 )
             }
         }
+        // Senza il testo si sceglie fra nomi. Stamparle tutte renderebbe pero'
+        // la finestra illeggibile quanto non averne nessuna: si legge quella
+        // sotto il puntatore e, quando il puntatore e' altrove, quelle prese.
+        val detailed = visible.filter { it.id == previewed }
+            .ifEmpty { visible.filter { it.id in selectedIds } }
+        detailed.forEach { option -> OptionDetails(option) }
         if (visible.isEmpty()) {
             Text(
                 "Nessuna opzione disponibile per classe e livello correnti.",
@@ -308,6 +380,53 @@ private fun ChoicePicker(
             )
         }
     }
+}
+
+/**
+ * Testo di una singola opzione: cosa fa, cosa richiede, cosa cambia nei numeri.
+ *
+ * Gli effetti compaiono come riga a parte perche' sono la differenza fra un
+ * privilegio che l'app applica da sola e uno che resta da applicare al tavolo.
+ */
+@Composable
+private fun OptionDetails(option: SrdChoiceOption) {
+    if (option.description.isBlank() && option.effects.isEmpty()) return
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.Surface, RoundedCornerShape(6.dp))
+            .padding(horizontal = 9.dp, vertical = 7.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(option.label, color = Palette.GoldBright, style = MaterialTheme.typography.labelSmall)
+        if (option.description.isNotBlank()) {
+            Text(
+                text = option.description,
+                color = Palette.Text,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        option.effects.forEach { effect ->
+            Text(
+                text = "Applicato: ${effect.readableText()}",
+                color = Palette.Heal,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
+/** Come si legge un effetto: "+1 alla Classe Armatura con un'armatura indossata". */
+internal fun RuleEffect.readableText(): String = buildString {
+    append(formatModifier(amount)).append(" ")
+    append(
+        when (target) {
+            EffectTarget.ARMOR_CLASS -> "alla ${target.italianLabel}"
+            EffectTarget.SPEED_FEET -> "piedi di ${target.italianLabel.lowercase()}"
+            else -> "ai ${target.italianLabel.lowercase()}"
+        },
+    )
+    if (condition != EffectCondition.ALWAYS) append(" ").append(condition.italianLabel)
 }
 
 @OptIn(ExperimentalLayoutApi::class)

@@ -257,6 +257,17 @@ class GuidedCharacterServiceTest {
             experiencePoints = ExperienceProgression.thresholdForLevel(4),
         )
         val fourthLevelSelections = selectionsFor(sorcerer, CharacterClassId.SORCERER)
+            .filterNot { it.choiceId.contains(":origin:abile:") }
+            .map { selection ->
+                if (selection.choiceId.endsWith(":4:aumento-o-talento")) {
+                    ChoiceSelection(
+                        selection.choiceId,
+                        listOf("srd521-it:feat:general:aumento-punteggi-caratteristica"),
+                    )
+                } else {
+                    selection
+                }
+            }
         sorcerer = service.advance(
             sorcerer,
             LevelUpRequest(

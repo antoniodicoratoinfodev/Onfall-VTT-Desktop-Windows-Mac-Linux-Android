@@ -8,6 +8,7 @@ import app.d6d.domain.combat.CombatantSnapshot
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.SheetStore
 import app.d6d.ui.content.SessionTemplate
+import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.sheet.SheetKind
 import app.d6d.ui.sheet.SheetViewModel
 
@@ -120,6 +121,21 @@ class RosterViewModel(
      */
     internal fun installTemplateContent(template: SessionTemplate) {
         sheets.restoreMissing(template.party, template.monsters)
+    }
+
+    /**
+     * Mette nel Compendio tutto il contenuto distribuito con l'app.
+     *
+     * L'archivio viene popolato solo alla prima installazione: chi usava l'app
+     * da prima non vedrebbe mai le partite incluse, e aprirne una direbbe che le
+     * schede non ci sono. Qui si rimettono in una sola scrittura, e solo quelle
+     * che mancano: le schede dell'utente, anche se modificate, restano intatte.
+     */
+    internal fun installIncludedContent() {
+        sheets.restoreMissing(
+            SessionTemplates.all.flatMap { it.party },
+            SessionTemplates.all.flatMap { it.monsters },
+        )
     }
 
     /** Quale editor e' aperto, dedotto dal tipo di scheda in modifica. */

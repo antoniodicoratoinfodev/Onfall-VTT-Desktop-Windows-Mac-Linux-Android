@@ -7,6 +7,7 @@ import app.d6d.rules.character.ChoiceKind
 import app.d6d.rules.character.ChoiceSelection
 import app.d6d.rules.character.ExperienceProgression
 import app.d6d.rules.character.LevelUpRequest
+import app.d6d.rules.character.RecoveryPeriod
 import app.d6d.rules.character.ResourceFormula
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.CharacterSheet
@@ -18,9 +19,9 @@ import org.junit.jupiter.api.Test
 
 /**
  * Regressione end-to-end del contratto tra tabelle SRD, resolver delle scelte e
- * applicazione alla scheda. Il chooser usa sempre la prima opzione disponibile,
- * salvo soddisfare prima le dipendenze esplicite (competenze/maestria e
- * libro/preparazione del mago).
+ * applicazione alla scheda. Il chooser usa opzioni deterministiche, preferisce
+ * Suppliche non ancora possedute e soddisfa prima le dipendenze esplicite
+ * (competenze/maestria e libro/preparazione del mago).
  */
 class SrdGuidedProgressionMatrixTest {
     private val pack = Srd521ItContent.pack
@@ -153,6 +154,18 @@ class SrdGuidedProgressionMatrixTest {
                             "${classId.italianLabel} $classLevel: il pool Origini non contiene Abile."
                         }.id)
                     }
+                    choice.kind == ChoiceKind.ELDRITCH_INVOCATION -> {
+                        (
+                            options.filter {
+                                it.id !in sheet.progression.selectedFeatureIds
+                            } +
+                                options.filter {
+                                    it.id in sheet.progression.selectedFeatureIds
+                                }
+                            )
+                            .take(choice.count)
+                            .map { it.id }
+                    }
                     choice.kind == ChoiceKind.FEAT -> {
                         val grappler = options.firstOrNull {
                             it.id == "srd521-it:feat:general:lottatore"
@@ -230,8 +243,20 @@ class SrdGuidedProgressionMatrixTest {
             classLevel >= it.availableFromClassLevel &&
                 (it.requiredOptionId == null || it.requiredOptionId in selectedOptionIds)
         }
+        val magicInitiateResources = sheet.progression.selections
+            .filter { it.choiceId.endsWith(":magic-initiate:list") }
+            .flatMap { it.optionIds }
+            .distinct()
+            .associate { listId ->
+                val listName = listId.substringAfterLast(':')
+                    .replaceFirstChar { it.uppercase() }
+                "${pack.manifest.id}:resource:magic-initiate:$listName" to listName
+            }
+        val expectedResourceIds = activeResources
+            .mapTo(linkedSetOf()) { it.id }
+            .apply { addAll(magicInitiateResources.keys) }
         assertEquals(
-            activeResources.mapTo(linkedSetOf()) { it.id },
+            expectedResourceIds,
             poolsById.keys,
             "${definition.name} $classLevel: insieme delle risorse errato.",
         )
@@ -284,6 +309,37 @@ class SrdGuidedProgressionMatrixTest {
                 "${definition.name} $classLevel: recupero breve parziale errato per ${resource.name}.",
             )
         }
+
+        magicInitiateResources.forEach { (resourceId, listName) ->
+            val pool = requireNotNull(poolsById[resourceId]) {
+                "${definition.name} $classLevel: risorsa assente $resourceId."
+            }
+            assertEquals(
+                "Iniziato alla magia ($listName): lancio gratuito",
+                pool.name,
+                "${definition.name} $classLevel: nome errato per $resourceId.",
+            )
+            assertEquals(
+                1,
+                pool.maximum,
+                "${definition.name} $classLevel: massimo errato per $resourceId.",
+            )
+            assertEquals(
+                0,
+                pool.dieSides,
+                "${definition.name} $classLevel: dado errato per $resourceId.",
+            )
+            assertEquals(
+                RecoveryPeriod.LONG_REST,
+                pool.recovery,
+                "${definition.name} $classLevel: recupero errato per $resourceId.",
+            )
+            assertEquals(
+                0,
+                pool.shortRestRecovery,
+                "${definition.name} $classLevel: recupero breve errato per $resourceId.",
+            )
+        }
     }
 
     private fun abilityScoreIncreases(
@@ -319,7 +375,7 @@ class SrdGuidedProgressionMatrixTest {
     }
 
     private fun isInitialOriginFeat(choice: ChoiceDefinition): Boolean =
-        choice.poolId?.endsWith("feats:origin") == true
+        choice.id == "${pack.manifest.id}:choice:origin:feat"
 
     private fun isWizardLevelTwentySpellbook(
         classId: CharacterClassId,

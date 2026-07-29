@@ -7,7 +7,10 @@ import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.ChoiceKind
 import app.d6d.rules.character.ClassDefinition
 import app.d6d.rules.character.ClassLevelDefinition
+import app.d6d.rules.character.EffectCondition
+import app.d6d.rules.character.EffectTarget
 import app.d6d.rules.character.RecoveryPeriod
+import app.d6d.rules.character.RuleEffect
 import app.d6d.rules.character.ResourceDefinition
 import app.d6d.rules.character.ResourceFormula
 import app.d6d.rules.character.ResourceMaximum
@@ -193,6 +196,21 @@ private fun barbarian(): ClassDefinition {
             ),
             resourcesAtLevel = { level ->
                 listOf(ResourceMaximum(rage, rageMaximums[level - 1]))
+            },
+            effectsAtLevel = { level ->
+                if (level < 5) {
+                    emptyList()
+                } else {
+                    listOf(
+                        RuleEffect(
+                            target = EffectTarget.SPEED_FEET,
+                            amount = 10,
+                            condition = EffectCondition.NOT_WEARING_HEAVY_ARMOR,
+                            source = "Movimento veloce",
+                            group = "$PREFIX:effect:barbaro:movimento-veloce",
+                        ),
+                    )
+                }
             },
         ),
         resources = listOf(
@@ -1162,6 +1180,21 @@ private fun monk(): ClassDefinition {
             savingThrowGrantsAtLevel = { level ->
                 if (level == 14) Ability.entries.toSet() else emptySet()
             },
+            // Il Movimento senza armatura cresce a scaglioni e non si somma: gli
+            // scalini condividono il gruppo, quindi vale sempre il piu' alto.
+            effectsAtLevel = { level ->
+                unarmoredMovementBonus(level)?.let { bonus ->
+                    listOf(
+                        RuleEffect(
+                            target = EffectTarget.SPEED_FEET,
+                            amount = bonus,
+                            condition = EffectCondition.UNARMORED_WITHOUT_SHIELD,
+                            source = "Movimento senza armatura",
+                            group = "$PREFIX:effect:monaco:movimento-senza-armatura",
+                        ),
+                    )
+                }.orEmpty()
+            },
         ),
         resources = listOf(
             ResourceDefinition(
@@ -1915,6 +1948,7 @@ private fun classLevels(
     resourcesAtLevel: (Int) -> List<ResourceMaximum> = { emptyList() },
     savingThrowGrantsAtLevel: (Int) -> Set<Ability> = { emptySet() },
     languageGrantsAtLevel: (Int) -> List<String> = { emptyList() },
+    effectsAtLevel: (Int) -> List<RuleEffect> = { emptyList() },
 ): List<ClassLevelDefinition> {
     require(featureRows.size == 20) { "$classSlug deve avere esattamente 20 righe di privilegi." }
     require(cantrips.size == 20) { "$classSlug deve avere 20 valori di trucchetti." }
@@ -1944,6 +1978,7 @@ private fun classLevels(
             resourceMaximums = resourcesAtLevel(level),
             savingThrowProficiencyGrants = savingThrowGrantsAtLevel(level),
             languageProficiencyGrants = languageGrantsAtLevel(level),
+            effects = effectsAtLevel(level),
         )
     }
 }
@@ -2180,6 +2215,22 @@ private fun martialArtsDie(level: Int): Int = when (level) {
     in 5..10 -> 8
     in 11..16 -> 10
     else -> 12
+}
+
+/**
+ * Colonna Movimento senza armatura della tabella Privilegi del monaco, in piedi.
+ *
+ * Il documento la scrive in metri (+3 m, +4,5 m, +6 m, +7,5 m, +9 m); qui restano
+ * piedi perche' e' l'unita' con cui il motore misura la griglia, e l'interfaccia
+ * riporta comunque entrambe. Nullo prima del 2º livello: non c'e' ancora bonus.
+ */
+private fun unarmoredMovementBonus(level: Int): Int? = when (level) {
+    in 1..1 -> null
+    in 2..5 -> 10
+    in 6..9 -> 15
+    in 10..13 -> 20
+    in 14..17 -> 25
+    else -> 30
 }
 
 private fun rows(vararg rows: String): List<String> = rows.toList()

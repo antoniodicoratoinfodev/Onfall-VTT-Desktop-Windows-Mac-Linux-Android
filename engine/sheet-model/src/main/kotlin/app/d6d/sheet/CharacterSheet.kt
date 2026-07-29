@@ -13,7 +13,10 @@ import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import app.d6d.rules.character.CharacterProgression
+import app.d6d.rules.character.EffectCondition
+import app.d6d.rules.character.EffectTarget
 import app.d6d.rules.character.ExperienceProgression
+import app.d6d.rules.character.RuleEffect
 import kotlinx.serialization.Serializable
 
 /** Quanto il modificatore di Destrezza contribuisce a un calcolo della CA base. */
@@ -83,6 +86,25 @@ enum class ArmorClassMethod(
 
     /** Base scritta dall'utente, con una regola di Destrezza configurabile. */
     CUSTOM_BASE("Base personalizzata", 0, ArmorClassDexterity.NONE),
+    ;
+
+    /**
+     * Vero quando il metodo descrive un'armatura davvero indossata.
+     *
+     * Le difese senza armatura e l'Armatura magica non contano: privilegi come lo
+     * Stile Difesa chiedono un'armatura addosso, non una CA alta comunque ottenuta.
+     */
+    val isWornArmor: Boolean get() = this in WORN_ARMOR
+
+    val isHeavyArmor: Boolean get() = this in HEAVY_ARMOR
+
+    private companion object {
+        val HEAVY_ARMOR = setOf(RING_MAIL, CHAIN_MAIL, SPLINT, PLATE)
+        val WORN_ARMOR = setOf(
+            PADDED, LEATHER, STUDDED_LEATHER, HIDE, CHAIN_SHIRT, SCALE_MAIL,
+            BREASTPLATE, HALF_PLATE,
+        ) + HEAVY_ARMOR
+    }
 }
 
 /** Bonus o penalita' applicato dopo il calcolo della CA base. */
@@ -261,6 +283,15 @@ data class CharacterSheet(
     val weapons: List<WeaponEntry> = emptyList(),
     /** Identificatori delle capacità scelte dal catalogo del Compendio. */
     val abilityIds: List<String> = emptyList(),
+    /**
+     * Talenti e privilegi della progressione che il tavolo ha escluso manualmente.
+     *
+     * La progressione e la sua cronologia restano intatte: questo overlay consente
+     * di correggere o personalizzare la scheda senza riscrivere retroattivamente i
+     * passaggi di livello. Le aggiunte manuali sono normali riferimenti in
+     * [abilityIds], così continuano a usare la fonte unica del Compendio.
+     */
+    val excludedTraitIds: Set<String> = emptySet(),
     val classFeatures: String = "",
     val speciesTraits: String = "",
     val feats: String = "",
@@ -279,6 +310,18 @@ data class CharacterSheet(
     /** Livello totale SRD; sulle schede legacy conserva il vecchio campo manuale. */
     val effectiveLevel: Int
         get() = progression.totalLevel.takeIf { it > 0 } ?: level.coerceIn(1, 20)
+
+    /**
+     * Riferimenti strutturati attivi dopo le personalizzazioni della scheda.
+     *
+     * Include anche i collegamenti manuali del Compendio; i controlli che cercano
+     * un privilegio per ID possono quindi rispettare sia la progressione guidata
+     * sia le correzioni fatte direttamente dalla scheda.
+     */
+    val activeRuleElementIds: List<String>
+        get() = (progression.selectedFeatureIds + progression.featIds + abilityIds)
+            .distinct()
+            .filterNot { it in excludedTraitIds }
 
     val proficiencyBonus: Int get() = proficiencyBonusForLevel(effectiveLevel)
 
@@ -333,13 +376,43 @@ data class CharacterSheet(
             0
         }
 
+    /**
+     * Effetti dei privilegi che valgono per come e' equipaggiato il personaggio.
+     *
+     * Il pacchetto dice quanto e a quale condizione; qui si guarda soltanto se la
+     * condizione e' soddisfatta. Con la CA finale scritta a mano non si applica
+     * nulla: quel numero e' una dichiarazione dell'utente e va rispettata.
+     */
+    fun activeEffects(target: EffectTarget): List<RuleEffect> =
+        progression.effects.filter { it.target == target && satisfies(it.condition) }
+
+    private fun satisfies(condition: EffectCondition): Boolean = when (condition) {
+        EffectCondition.ALWAYS -> true
+        EffectCondition.WEARING_ARMOR -> armorClassMethod.isWornArmor
+        EffectCondition.NOT_WEARING_HEAVY_ARMOR -> !armorClassMethod.isHeavyArmor
+        EffectCondition.UNARMORED_WITHOUT_SHIELD -> !armorClassMethod.isWornArmor && !shieldEquipped
+    }
+
+    /** Bonus alla CA che arrivano dai privilegi, per esempio lo Stile Difesa. */
+    val armorClassEffectBonus: Int
+        get() = if (armorClassMethod == ArmorClassMethod.MANUAL_TOTAL) {
+            0
+        } else {
+            activeEffects(EffectTarget.ARMOR_CLASS).sumOf { it.amount }
+        }
+
+    /** Velocita' effettiva: quella base piu' i privilegi che la aumentano. */
+    val effectiveSpeedFeet: Int
+        get() = (speedFeet + activeEffects(EffectTarget.SPEED_FEET).sumOf { it.amount }).coerceAtLeast(0)
+
     /** Somma di scudo e bonus o penalita' attivi; la CA manuale e' gia' finale. */
     val armorClassAdjustmentTotal: Int
         get() = if (armorClassMethod == ArmorClassMethod.MANUAL_TOTAL) {
             0
         } else {
             shieldArmorClassBonus +
-                armorClassAdjustments.filter { it.active }.sumOf { it.value }
+                armorClassAdjustments.filter { it.active }.sumOf { it.value } +
+                armorClassEffectBonus
         }
 
     /** Totale prodotto dalla formula, prima di un eventuale override eccezionale. */
@@ -384,28 +457,55 @@ data class CharacterSheet(
     val attacksPerAction: Int
         get() {
             val fighterLevel = progression.levelIn(app.d6d.rules.character.CharacterClassId.FIGHTER)
-            if (fighterLevel >= 20) return 4
-            if (fighterLevel >= 11) return 3
+            val fighterThreeExtra = "srd521-it:feature:guerriero:tre-attacchi-extra"
+            val fighterTwoExtra = "srd521-it:feature:guerriero:due-attacchi-extra"
             if (
-                progression.selectedFeatureIds.any {
+                fighterThreeExtra in activeRuleElementIds ||
+                fighterLevel >= 20 && fighterThreeExtra !in excludedTraitIds
+            ) {
+                return 4
+            }
+            if (
+                fighterTwoExtra in activeRuleElementIds ||
+                fighterLevel >= 11 && fighterTwoExtra !in excludedTraitIds ||
+                activeRuleElementIds.any {
                     it.endsWith(":lama-divoratrice") || it.endsWith(":devouring-blade")
                 }
             ) {
                 return 3
             }
-            val hasExtraAttack =
-                fighterLevel >= 5 ||
-                    listOf(
-                        app.d6d.rules.character.CharacterClassId.BARBARIAN,
-                        app.d6d.rules.character.CharacterClassId.MONK,
-                        app.d6d.rules.character.CharacterClassId.PALADIN,
-                        app.d6d.rules.character.CharacterClassId.RANGER,
-                    ).any { progression.levelIn(it) >= 5 } ||
-                    progression.selectedFeatureIds.any {
-                        it.endsWith(":lama-assetata") || it.endsWith(":thirsting-blade")
-                    }
+            val extraAttackClasses = listOf(
+                app.d6d.rules.character.CharacterClassId.FIGHTER,
+                app.d6d.rules.character.CharacterClassId.BARBARIAN,
+                app.d6d.rules.character.CharacterClassId.MONK,
+                app.d6d.rules.character.CharacterClassId.PALADIN,
+                app.d6d.rules.character.CharacterClassId.RANGER,
+            )
+            val hasExtraAttack = extraAttackClasses.any { classId ->
+                val featureId = "srd521-it:feature:${classId.contentId}:attacco-extra"
+                featureId in activeRuleElementIds ||
+                    progression.levelIn(classId) >= 5 && featureId !in excludedTraitIds
+            } || activeRuleElementIds.any {
+                it.endsWith(":lama-assetata") || it.endsWith(":thirsting-blade")
+            }
             return if (hasExtraAttack) 2 else 1
         }
+
+    /**
+     * Bonus al tiro per colpire che i privilegi aggiungono a una certa arma.
+     *
+     * La distinzione fra mischia e distanza segue la portata della riga: oltre i
+     * 5 piedi si sta tirando, quindi un giavellotto lanciato beneficia dello
+     * Stile Tiro come qualunque altro attacco a distanza.
+     */
+    fun attackEffectBonus(weapon: WeaponEntry): Int {
+        val target = if (weapon.rangeFeet > MELEE_REACH_FEET) {
+            EffectTarget.RANGED_ATTACK
+        } else {
+            EffectTarget.MELEE_ATTACK
+        }
+        return activeEffects(target).sumOf { it.amount }
+    }
 
     /** Un personaggio a 0 PF non e' semplicemente "morto": entra nei tiri contro morte. */
     val unconscious: Boolean get() = currentHitPoints <= 0 && deathSaveFailures < 3
@@ -461,7 +561,7 @@ data class CharacterSheet(
                         weapon.name,
                         cost,
                         ResolutionMethod.ATTACK_ROLL,
-                        weapon.attackBonus,
+                        weapon.attackBonus + attackEffectBonus(weapon),
                         weapon.rangeFeet,
                         1,
                         damage,
@@ -486,7 +586,7 @@ data class CharacterSheet(
             maxHitPoints.coerceAtLeast(1),
             currentHitPoints.coerceIn(0, maxHitPoints.coerceAtLeast(1)),
             temporaryHitPoints.coerceAtLeast(0),
-            speedFeet,
+            effectiveSpeedFeet,
             initiativeModifier,
             initiativeScore,
             saveBonus(Ability.CONSTITUTION),
@@ -499,6 +599,11 @@ data class CharacterSheet(
             spellSaveDc ?: 0,
             attacksPerAction,
         )
+    }
+
+    private companion object {
+        /** Oltre questa portata la riga descrive un attacco a distanza, non in mischia. */
+        const val MELEE_REACH_FEET = 5
     }
 }
 

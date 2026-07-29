@@ -269,6 +269,57 @@ data class ResourceMaximum(
     val dieSides: Int = 0,
 )
 
+/**
+ * Statistica su cui un privilegio incide con un numero.
+ *
+ * Volutamente poche voci: qui entra solo cio' che il tavolo puo' davvero
+ * applicare da solo, senza chiedere una decisione a chi gioca. Un privilegio che
+ * dipende dalla situazione — l'Ira accesa, un Attacco furtivo dichiarato — non ha
+ * un bersaglio qui e resta testo finche' non ci sara' un interruttore al tavolo.
+ */
+@Serializable
+enum class EffectTarget(val italianLabel: String) {
+    ARMOR_CLASS("Classe Armatura"),
+    SPEED_FEET("Velocità"),
+    MELEE_ATTACK("Tiri per colpire in mischia"),
+    RANGED_ATTACK("Tiri per colpire a distanza"),
+}
+
+/** Quando un effetto vale davvero. */
+@Serializable
+enum class EffectCondition(val italianLabel: String) {
+    ALWAYS(""),
+    WEARING_ARMOR("con un'armatura indossata"),
+    NOT_WEARING_HEAVY_ARMOR("senza armatura pesante"),
+    UNARMORED_WITHOUT_SHIELD("senza armatura né scudo"),
+}
+
+/**
+ * Effetto numerico di un privilegio o di un talento.
+ *
+ * E' dato del pacchetto, non codice: aggiungere lo Stile Difesa non richiede di
+ * toccare il calcolo della CA, e chi legge la scheda puo' risalire dal numero al
+ * privilegio che lo produce.
+ */
+@Serializable
+data class RuleEffect(
+    val target: EffectTarget,
+    val amount: Int,
+    val condition: EffectCondition = EffectCondition.ALWAYS,
+    /** Nome da mostrare accanto al numero: e' la risposta a "da dove viene?". */
+    val source: String = "",
+    /**
+     * Effetti progressivi dello stesso gruppo non si sommano: vale il maggiore.
+     * Il Movimento senza armatura del monaco passa da +10 a +30 salendo di
+     * livello, non arriva a +100.
+     */
+    val group: String = "",
+) {
+    init {
+        require(source.isNotBlank()) { "Un effetto deve dire da dove viene." }
+    }
+}
+
 /** Incantesimi concessi automaticamente da un privilegio o da una sottoclasse. */
 @Serializable
 data class SpellGrant(
@@ -303,6 +354,12 @@ data class ClassLevelDefinition(
     val savingThrowProficiencyGrants: Set<Ability> = emptySet(),
     /** Lingue concesse esattamente a questo livello. */
     val languageProficiencyGrants: List<String> = emptyList(),
+    /**
+     * Effetti numerici che il livello porta con se'. Restano validi ai livelli
+     * successivi; quelli progressivi si dichiarano a ogni scalino con lo stesso
+     * gruppo, cosi' il piu' alto sostituisce il precedente.
+     */
+    val effects: List<RuleEffect> = emptyList(),
 ) {
     init {
         require(level in 1..20)
@@ -447,6 +504,11 @@ data class RuleElementDefinition(
     val weaponTrainingGrant: String = "",
     /** Incantesimi resi sempre preparati quando questo elemento è attivo. */
     val grantedSpellIds: List<String> = emptyList(),
+    /**
+     * Effetti numerici dell'elemento, quando sceglierlo cambia una statistica.
+     * Vuoto per tutto cio' che il tavolo applica a mano.
+     */
+    val effects: List<RuleEffect> = emptyList(),
 ) {
     init {
         require(id.isNotBlank())

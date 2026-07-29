@@ -16,6 +16,7 @@ import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ClassEligibility
+import app.d6d.rules.character.RuleEffect
 import app.d6d.rules.character.RuleElementKind
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -88,6 +89,11 @@ data class CatalogAbility(
     val resourceId: String? = null,
     val resourceCost: Int = 0,
     val immutable: Boolean = false,
+    /**
+     * Effetti numerici che la capacità produce sulle statistiche. Li applica la
+     * scheda tramite la progressione; qui servono a mostrarli nel Compendio.
+     */
+    val effects: List<RuleEffect> = emptyList(),
     /**
      * Tratto permanente — padronanza d'armi, Incantesimi, un talento — che non si
      * attiva mai nel turno. Resta fuori dalle capacità giocabili e viene mostrato

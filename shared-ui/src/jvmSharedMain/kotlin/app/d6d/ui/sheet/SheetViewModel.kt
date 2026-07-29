@@ -6,10 +6,13 @@ import androidx.compose.runtime.setValue
 import app.d6d.content.srd521it.Srd521ItContent
 import app.d6d.content.srd521it.SrdChoiceOption
 import app.d6d.content.srd521it.SrdChoiceResolver
+import app.d6d.rules.character.Ability
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.LevelUpRequest
 import app.d6d.rules.character.RecoveryPeriod
+import app.d6d.rules.character.RuleElementKind
+import app.d6d.rules.character.SpellcastingKind
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
@@ -25,6 +28,37 @@ enum class SheetKind(val label: String) {
     PERSONAGGIO("Personaggi"),
     MOSTRO("Mostri"),
 }
+
+/** Sezione strutturata della scheda modificabile dal Compendio. */
+enum class CharacterTraitSection(
+    val label: String,
+    val catalogKinds: Set<RuleElementKind>,
+) {
+    FEATURE(
+        "privilegi",
+        setOf(
+            RuleElementKind.CLASS_FEATURE,
+            RuleElementKind.SUBCLASS_FEATURE,
+            RuleElementKind.CLASS_OPTION,
+            RuleElementKind.METAMAGIC,
+            RuleElementKind.ELDRITCH_INVOCATION,
+        ),
+    ),
+    FEAT(
+        "talenti",
+        setOf(
+            RuleElementKind.ORIGIN_FEAT,
+            RuleElementKind.GENERAL_FEAT,
+            RuleElementKind.FIGHTING_STYLE_FEAT,
+            RuleElementKind.EPIC_BOON_FEAT,
+        ),
+    ),
+}
+
+private val fightingStyleFeatureKinds = setOf(
+    RuleElementKind.CLASS_FEATURE,
+    RuleElementKind.SUBCLASS_FEATURE,
+)
 
 /** Esito di un cambio editor che potrebbe scartare una bozza. */
 enum class SheetNavigationResult {
@@ -131,7 +165,26 @@ class SheetViewModel(private val store: SheetStore) {
     fun load(discardUnsavedChanges: Boolean = false): SheetNavigationResult {
         if (initialized && isDirty && !discardUnsavedChanges) return unsavedResult()
         val loaded = try {
-            if (store.exists()) store.load() else seeded().also { store.save(it) }
+            val fromDisk = if (store.exists()) store.load() else seeded().also { store.save(it) }
+            val refreshCatalog = (fromDisk.abilities + bundledSrdAbilities).distinctBy { it.id }
+            // Gli effetti dei privilegi sono derivati dal pacchetto: una scheda
+            // salvata prima che esistessero, o con un pacchetto piu' vecchio, li
+            // ha vuoti. Si ricalcolano leggendo, e si riscrivono solo se davvero
+            // cambiati, cosi' un archivio gia' allineato non viene toccato.
+            val refreshed = fromDisk.copy(
+                characters = fromDisk.characters
+                    .map { guidedCharacters.withRefreshedEffects(it, refreshCatalog) }
+                    .map(guidedCharacters::withoutGeneratedFeatureText),
+            )
+            // Riscrivere e' un'ottimizzazione, non una condizione: se il disco non
+            // e' scrivibile l'archivio deve aprirsi lo stesso, con gli effetti
+            // ricalcolati in memoria.
+            if (refreshed != fromDisk) {
+                runCatching { store.save(refreshed) }
+                refreshed
+            } else {
+                fromDisk
+            }
         } catch (failure: IOException) {
             status = "Errore su disco: ${failure.message}"
             return SheetNavigationResult.FAILED
@@ -381,11 +434,146 @@ class SheetViewModel(private val store: SheetStore) {
             status = validation.issues.joinToString("\n") { it.message }
             return false
         }
-        character = guidedCharacters.advance(character, request)
+        character = guidedCharacters.withRefreshedEffects(
+            guidedCharacters.advance(character, request),
+            abilityCatalog,
+        )
         status = if (character.effectiveLevel == 1) {
             "Personaggio SRD creato: completa i dettagli narrativi e salva."
         } else {
             "Livello ${character.effectiveLevel} applicato. Controlla e salva la scheda."
+        }
+        return true
+    }
+
+    /** Voci del Compendio proponibili nella sezione richiesta. */
+    fun characterTraitCandidates(section: CharacterTraitSection): List<CatalogAbility> =
+        abilityCatalog
+            .filter { it.category in section.catalogKinds }
+            .sortedWith(
+                compareByDescending<CatalogAbility> { characterTraitIsCompatible(it) }
+                    .thenBy { it.name.lowercase() },
+            )
+
+    /**
+     * Talenti o privilegi effettivamente visibili sulla scheda.
+     *
+     * Le categorie del Compendio decidono in quale riquadro compare una voce:
+     * per esempio uno Stile di combattimento rimane un talento anche se una
+     * progressione precedente lo aveva accumulato fra i privilegi scelti.
+     */
+    fun characterTraitIds(section: CharacterTraitSection): List<String> {
+        val catalogById = abilityCatalog.associateBy { it.id }
+        return (
+            character.progression.selectedFeatureIds +
+                character.progression.featIds +
+                character.abilityIds
+            )
+            .distinct()
+            .filterNot { it in character.excludedTraitIds }
+            .filter { id ->
+                val ability = catalogById[id]
+                ability?.category in section.catalogKinds ||
+                    section == CharacterTraitSection.FEATURE &&
+                    ability == null &&
+                    id.contains(":weapon:")
+            }
+    }
+
+    /**
+     * Vero se la scheda soddisfa i requisiti strutturabili della voce.
+     *
+     * [CatalogAbility.prerequisite] resta testo da mostrare: categoria, livello,
+     * caratteristiche e privilegi attivi permettono invece di applicare qui le
+     * stesse regole sui talenti validate dalla progressione guidata.
+     */
+    fun characterTraitIsCompatible(ability: CatalogAbility): Boolean {
+        if (
+            ability.classEligibility.isNotEmpty() &&
+            ability.classEligibility.none { eligibility ->
+                character.progression.levelIn(eligibility.classId) >= eligibility.minimumLevel
+            }
+        ) {
+            return false
+        }
+
+        return when {
+            ability.category == RuleElementKind.GENERAL_FEAT &&
+                character.effectiveLevel < 4 -> false
+            ability.category == RuleElementKind.EPIC_BOON_FEAT &&
+                character.effectiveLevel < 19 -> false
+            ability.category == RuleElementKind.FIGHTING_STYLE_FEAT &&
+                !hasActiveFightingStyleFeature() -> false
+            ability.id.endsWith(":feat:general:lottatore") &&
+                character.score(Ability.STRENGTH) < 13 &&
+                character.score(Ability.DEXTERITY) < 13 -> false
+            ability.id.endsWith(":feat:epic-boon:dono-richiamo-incantesimi") &&
+                !hasSpellcastingFeature() -> false
+            else -> true
+        }
+    }
+
+    private fun hasActiveFightingStyleFeature(): Boolean {
+        val activeIds = character.activeRuleElementIds.toSet()
+        return abilityCatalog.any { candidate ->
+            candidate.id in activeIds &&
+                candidate.category in fightingStyleFeatureKinds &&
+                candidate.name.startsWith("Stile di combattimento", ignoreCase = true)
+        }
+    }
+
+    private fun hasSpellcastingFeature(): Boolean =
+        character.spellcasting != null ||
+            character.progression.classLevels.any { classLevel ->
+                srdClasses
+                    .firstOrNull { it.id == classLevel.classId }
+                    ?.spellcastingKind
+                    ?.let { it != SpellcastingKind.NONE } == true
+            }
+
+    /**
+     * Collega o esclude un talento/privilegio senza riscrivere la cronologia.
+     *
+     * L'ID operativo, l'elenco leggibile e gli effetti numerici vengono aggiornati
+     * insieme; il salvataggio resta esplicito come per ogni altro campo della
+     * scheda.
+     */
+    fun setCharacterTraitSelected(
+        section: CharacterTraitSection,
+        abilityId: String,
+        selected: Boolean,
+    ): Boolean {
+        val ability = abilityCatalog.firstOrNull { it.id == abilityId }
+        if (ability == null || ability.category !in section.catalogKinds) {
+            status = "La voce scelta non appartiene alla lista dei ${section.label}."
+            return false
+        }
+
+        val progressionIds =
+            character.progression.selectedFeatureIds + character.progression.featIds
+        val excluded = if (selected) {
+            character.excludedTraitIds - abilityId
+        } else if (abilityId in progressionIds) {
+            character.excludedTraitIds + abilityId
+        } else {
+            character.excludedTraitIds - abilityId
+        }
+        val linked = if (selected) {
+            (character.abilityIds + abilityId).distinct()
+        } else {
+            character.abilityIds.filterNot { it == abilityId }
+        }
+        character = guidedCharacters.withRefreshedEffects(
+            character.copy(
+                abilityIds = linked,
+                excludedTraitIds = excluded,
+            ),
+            abilityCatalog,
+        )
+        status = if (selected) {
+            "«${ability.name}» aggiunto alla scheda."
+        } else {
+            "«${ability.name}» rimosso dalla scheda."
         }
         return true
     }

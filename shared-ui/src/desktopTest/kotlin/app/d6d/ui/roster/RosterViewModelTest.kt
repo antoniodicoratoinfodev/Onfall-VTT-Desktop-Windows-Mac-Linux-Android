@@ -9,7 +9,9 @@ import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.Proficiency
+import app.d6d.sheet.SheetLibrary
 import app.d6d.sheet.SheetStore
+import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.sheet.SheetKind
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -224,6 +226,36 @@ class RosterViewModelTest {
         assertEquals(2, app.d6d.sheet.CreatureSize.LARGE.squaresPerSide)
         assertEquals(3, app.d6d.sheet.CreatureSize.HUGE.squaresPerSide)
         assertEquals(4, app.d6d.sheet.CreatureSize.GARGANTUAN.squaresPerSide)
+    }
+
+    @Test
+    fun `un archivio preesistente riceve tutto il contenuto incluso`() {
+        // Chi usava l'app prima dei template ha gia' un archivio, quindi il
+        // contenuto incluso non viene mai installato: il tavolo che si apre
+        // all'avvio nominerebbe schede che nel Compendio non esistono.
+        val store = sheetStore()
+        store.save(
+            SheetLibrary(
+                characters = listOf(CharacterSheet(id = "pg-mio", characterName = "Personaggio mio")),
+                monsters = emptyList(),
+                abilities = emptyList(),
+            ),
+        )
+        val roster = roster()
+        assertTrue(roster.items.none { it.id == SessionTemplates.default.party.first().id })
+
+        roster.installIncludedContent()
+
+        // Non solo la partita che si apre: tutto il contenuto distribuito.
+        val known = roster.items.mapTo(mutableSetOf()) { it.id }
+        SessionTemplates.all.forEach { template ->
+            template.startedSession().currentState().combatants().values.forEach { combatant ->
+                val definitionId = combatant.snapshot().definitionId()
+                assertTrue(definitionId in known, "«${template.name}»: manca la scheda di $definitionId")
+            }
+        }
+        // Le schede che l'utente aveva restano dov'erano.
+        assertTrue(roster.items.any { it.id == "pg-mio" })
     }
 
     @Test

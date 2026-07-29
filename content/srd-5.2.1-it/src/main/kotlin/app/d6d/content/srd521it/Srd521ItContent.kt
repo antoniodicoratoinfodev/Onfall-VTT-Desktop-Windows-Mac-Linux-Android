@@ -36,7 +36,7 @@ object Srd521ItContent {
     }
 
     val catalog: List<CatalogAbility> by lazy {
-        pack.elements.map { it.toCatalogAbility(pack.manifest) }
+        pack.elements.map { it.toCatalogAbility(pack) }
     }
 
     private fun requiredElementIds(): Set<String> = buildSet {
