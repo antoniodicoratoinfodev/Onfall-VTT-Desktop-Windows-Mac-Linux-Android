@@ -6,6 +6,7 @@ import app.d6d.domain.combat.ActorDefinition;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.ResolutionMethod;
+import app.d6d.domain.combat.SaveAbility;
 
 import java.util.List;
 
@@ -13,8 +14,13 @@ final class CombatFixtures {
     private CombatFixtures() { }
 
     static AbilityDefinition sword() {
-        return AbilityDefinition.attack("sword", "Sword", ActivationCost.ACTION, 100,
-                DamageFormula.dice(DamageType.SLASHING, 1, 6, 3));
+        return AbilityDefinition.builder("sword", "Sword")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .attackAbility(SaveAbility.STRENGTH)
+                .attackBonus(100)
+                .damage(List.of(DamageFormula.dice(DamageType.SLASHING, 1, 6, 3)))
+                .build();
     }
 
     static AbilityDefinition fixedStrike() {

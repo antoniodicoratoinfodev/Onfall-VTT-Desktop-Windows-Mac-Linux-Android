@@ -34,6 +34,32 @@ enum class ArmorClassDexterity(val italianLabel: String) {
     }
 }
 
+/** Categoria regolamentare dell'armatura realmente indossata. */
+@Serializable
+enum class ArmorCategory(
+    val italianLabel: String,
+    val donMinutes: Int,
+    val doffMinutes: Int,
+) {
+    LIGHT("armature leggere", donMinutes = 1, doffMinutes = 1),
+    MEDIUM("armature medie", donMinutes = 5, doffMinutes = 1),
+    HEAVY("armature pesanti", donMinutes = 10, doffMinutes = 5),
+}
+
+/**
+ * Eccezioni dell'equipaggiamento magico SRD applicate all'armatura indossata.
+ *
+ * Il giaco elfico può essere una cotta o un giaco di maglia: con una CA manuale
+ * l'utente dichiara esplicitamente la categoria, mentre con i metodi guidati la
+ * compatibilità viene ricavata dall'armatura scelta.
+ */
+@Serializable
+enum class ArmorSpecialRule(val italianLabel: String) {
+    STANDARD("Armatura normale"),
+    MITHRAL("Armatura in mithral"),
+    ELVEN_CHAIN("Giaco di maglia elfico"),
+}
+
 /**
  * Un solo metodo determina la CA base.
  *
@@ -47,6 +73,9 @@ enum class ArmorClassMethod(
     val baseValue: Int,
     val dexterity: ArmorClassDexterity,
     val secondaryAbility: Ability? = null,
+    val armorCategory: ArmorCategory? = null,
+    val minimumStrength: Int = 0,
+    val stealthDisadvantage: Boolean = false,
 ) {
     /** Mantiene esattamente la CA delle schede create prima del calcolo guidato. */
     MANUAL_TOTAL("CA finale manuale", 0, ArmorClassDexterity.NONE),
@@ -70,18 +99,88 @@ enum class ArmorClassMethod(
         ArmorClassDexterity.FULL,
         Ability.CHARISMA,
     ),
-    PADDED("Armatura imbottita", 11, ArmorClassDexterity.FULL),
-    LEATHER("Armatura di cuoio", 11, ArmorClassDexterity.FULL),
-    STUDDED_LEATHER("Cuoio borchiato", 12, ArmorClassDexterity.FULL),
-    HIDE("Armatura di pelle", 12, ArmorClassDexterity.MAX_TWO),
-    CHAIN_SHIRT("Giaco di maglia", 13, ArmorClassDexterity.MAX_TWO),
-    SCALE_MAIL("Corazza a scaglie", 14, ArmorClassDexterity.MAX_TWO),
-    BREASTPLATE("Corazza di piastre", 14, ArmorClassDexterity.MAX_TWO),
-    HALF_PLATE("Mezza armatura", 15, ArmorClassDexterity.MAX_TWO),
-    RING_MAIL("Corazza ad anelli", 14, ArmorClassDexterity.NONE),
-    CHAIN_MAIL("Cotta di maglia", 16, ArmorClassDexterity.NONE),
-    SPLINT("Corazza a strisce", 17, ArmorClassDexterity.NONE),
-    PLATE("Armatura a piastre", 18, ArmorClassDexterity.NONE),
+    PADDED(
+        "Armatura imbottita",
+        11,
+        ArmorClassDexterity.FULL,
+        armorCategory = ArmorCategory.LIGHT,
+        stealthDisadvantage = true,
+    ),
+    LEATHER(
+        "Armatura di cuoio",
+        11,
+        ArmorClassDexterity.FULL,
+        armorCategory = ArmorCategory.LIGHT,
+    ),
+    STUDDED_LEATHER(
+        "Cuoio borchiato",
+        12,
+        ArmorClassDexterity.FULL,
+        armorCategory = ArmorCategory.LIGHT,
+    ),
+    HIDE(
+        "Armatura di pelle",
+        12,
+        ArmorClassDexterity.MAX_TWO,
+        armorCategory = ArmorCategory.MEDIUM,
+    ),
+    CHAIN_SHIRT(
+        "Giaco di maglia",
+        13,
+        ArmorClassDexterity.MAX_TWO,
+        armorCategory = ArmorCategory.MEDIUM,
+    ),
+    SCALE_MAIL(
+        "Corazza a scaglie",
+        14,
+        ArmorClassDexterity.MAX_TWO,
+        armorCategory = ArmorCategory.MEDIUM,
+        stealthDisadvantage = true,
+    ),
+    BREASTPLATE(
+        "Corazza di piastre",
+        14,
+        ArmorClassDexterity.MAX_TWO,
+        armorCategory = ArmorCategory.MEDIUM,
+    ),
+    HALF_PLATE(
+        "Mezza armatura",
+        15,
+        ArmorClassDexterity.MAX_TWO,
+        armorCategory = ArmorCategory.MEDIUM,
+        stealthDisadvantage = true,
+    ),
+    RING_MAIL(
+        "Corazza ad anelli",
+        14,
+        ArmorClassDexterity.NONE,
+        armorCategory = ArmorCategory.HEAVY,
+        stealthDisadvantage = true,
+    ),
+    CHAIN_MAIL(
+        "Cotta di maglia",
+        16,
+        ArmorClassDexterity.NONE,
+        armorCategory = ArmorCategory.HEAVY,
+        minimumStrength = 13,
+        stealthDisadvantage = true,
+    ),
+    SPLINT(
+        "Corazza a strisce",
+        17,
+        ArmorClassDexterity.NONE,
+        armorCategory = ArmorCategory.HEAVY,
+        minimumStrength = 15,
+        stealthDisadvantage = true,
+    ),
+    PLATE(
+        "Armatura a piastre",
+        18,
+        ArmorClassDexterity.NONE,
+        armorCategory = ArmorCategory.HEAVY,
+        minimumStrength = 15,
+        stealthDisadvantage = true,
+    ),
     MAGE_ARMOR("Armatura magica", 13, ArmorClassDexterity.FULL),
 
     /** Base scritta dall'utente, con una regola di Destrezza configurabile. */
@@ -94,17 +193,9 @@ enum class ArmorClassMethod(
      * Le difese senza armatura e l'Armatura magica non contano: privilegi come lo
      * Stile Difesa chiedono un'armatura addosso, non una CA alta comunque ottenuta.
      */
-    val isWornArmor: Boolean get() = this in WORN_ARMOR
+    val isWornArmor: Boolean get() = armorCategory != null
 
-    val isHeavyArmor: Boolean get() = this in HEAVY_ARMOR
-
-    private companion object {
-        val HEAVY_ARMOR = setOf(RING_MAIL, CHAIN_MAIL, SPLINT, PLATE)
-        val WORN_ARMOR = setOf(
-            PADDED, LEATHER, STUDDED_LEATHER, HIDE, CHAIN_SHIRT, SCALE_MAIL,
-            BREASTPLATE, HALF_PLATE,
-        ) + HEAVY_ARMOR
-    }
+    val isHeavyArmor: Boolean get() = armorCategory == ArmorCategory.HEAVY
 }
 
 /** Bonus o penalita' applicato dopo il calcolo della CA base. */
@@ -124,7 +215,13 @@ data class ArmorTraining(
     val medium: Boolean = false,
     val heavy: Boolean = false,
     val shields: Boolean = false,
-)
+) {
+    fun includes(category: ArmorCategory): Boolean = when (category) {
+        ArmorCategory.LIGHT -> light
+        ArmorCategory.MEDIUM -> medium
+        ArmorCategory.HEAVY -> heavy
+    }
+}
 
 /** Riga della tabella "Armi e trucchetti da combattimento". */
 @Serializable
@@ -149,9 +246,21 @@ data class WeaponEntry(
     val saveAbility: Ability? = null,
     /** Con il tiro salvezza superato la creatura subisce metà danni invece di nessuno. */
     val halfOnSave: Boolean = true,
+    /** Caratteristica effettivamente usata dal tiro per colpire. */
+    val attackAbility: Ability? = null,
+    /** Esplicito anche per capacità private e incantesimi non presenti nel Compendio. */
+    val spellOrCantrip: Boolean = false,
+    /**
+     * Una vecchia riga non offriva metadati sufficienti a distinguere un'arma da
+     * un trucchetto d'attacco. Finché non viene riclassificata, non può aggirare
+     * le limitazioni dell'armatura indossata senza competenza.
+     */
+    val legacyClassificationRequired: Boolean = false,
 ) {
     /** Vero quando questa voce descrive un incantesimo ad area anziché un attacco. */
     val isArea: Boolean get() = areaRadiusFeet > 0
+    /** Le vecchie righe ad area erano già definite dall'interfaccia come incantesimi. */
+    val isSpellOrCantrip: Boolean get() = spellOrCantrip || isArea
     /** Colonna "Danno e tipo" nella forma stampata sulla scheda. */
     val damageText: String
         get() = buildString {
@@ -245,6 +354,17 @@ data class CharacterSheet(
     val armorClass: Int = 10,
     val armorClassMethod: ArmorClassMethod = ArmorClassMethod.MANUAL_TOTAL,
     val customArmorClassDexterity: ArmorClassDexterity = ArmorClassDexterity.NONE,
+    /**
+     * Armatura realmente indossata quando la formula non lo può dire da sola.
+     *
+     * Serve soprattutto alle CA manuali e personalizzate: il totale resta libero,
+     * ma competenza, Forza, Furtività e tempi di equipaggiamento non vengono persi.
+     */
+    val manualArmorCategory: ArmorCategory? = null,
+    /** Dettagli dell'armatura quando il metodo di CA è libero e non li può derivare. */
+    val manualArmorMinimumStrength: Int = 0,
+    val manualArmorStealthDisadvantage: Boolean = false,
+    val armorSpecialRule: ArmorSpecialRule = ArmorSpecialRule.STANDARD,
     val armorClassAdjustments: List<ArmorClassAdjustment> = emptyList(),
     /** Correzione eccezionale della CA finale, rimovibile senza perdere la formula. */
     val armorClassOverride: Int? = null,
@@ -388,9 +508,9 @@ data class CharacterSheet(
 
     private fun satisfies(condition: EffectCondition): Boolean = when (condition) {
         EffectCondition.ALWAYS -> true
-        EffectCondition.WEARING_ARMOR -> armorClassMethod.isWornArmor
-        EffectCondition.NOT_WEARING_HEAVY_ARMOR -> !armorClassMethod.isHeavyArmor
-        EffectCondition.UNARMORED_WITHOUT_SHIELD -> !armorClassMethod.isWornArmor && !shieldEquipped
+        EffectCondition.WEARING_ARMOR -> wornArmorCategory != null
+        EffectCondition.NOT_WEARING_HEAVY_ARMOR -> wornArmorCategory != ArmorCategory.HEAVY
+        EffectCondition.UNARMORED_WITHOUT_SHIELD -> wornArmorCategory == null && !shieldEquipped
     }
 
     /** Bonus alla CA che arrivano dai privilegi, per esempio lo Stile Difesa. */
@@ -403,7 +523,22 @@ data class CharacterSheet(
 
     /** Velocita' effettiva: quella base piu' i privilegi che la aumentano. */
     val effectiveSpeedFeet: Int
-        get() = (speedFeet + activeEffects(EffectTarget.SPEED_FEET).sumOf { it.amount }).coerceAtLeast(0)
+        get() = (
+            speedFeet +
+                activeEffects(EffectTarget.SPEED_FEET).sumOf { it.amount } -
+                armorSpeedPenaltyFeet
+            ).coerceAtLeast(0)
+
+    /** Bonus intrinseco del giaco elfico; nella CA manuale è già compreso nel totale. */
+    val armorSpecialArmorClassBonus: Int
+        get() = if (
+            effectiveArmorSpecialRule == ArmorSpecialRule.ELVEN_CHAIN &&
+            armorClassMethod != ArmorClassMethod.MANUAL_TOTAL
+        ) {
+            1
+        } else {
+            0
+        }
 
     /** Somma di scudo e bonus o penalita' attivi; la CA manuale e' gia' finale. */
     val armorClassAdjustmentTotal: Int
@@ -411,6 +546,7 @@ data class CharacterSheet(
             0
         } else {
             shieldArmorClassBonus +
+                armorSpecialArmorClassBonus +
                 armorClassAdjustments.filter { it.active }.sumOf { it.value } +
                 armorClassEffectBonus
         }
@@ -436,6 +572,105 @@ data class CharacterSheet(
     val initiativeScore: Int get() = 10 + initiativeModifier
 
     val passivePerception: Int get() = 10 + skillBonus(Skill.PERCEZIONE)
+
+    /** Categoria effettiva: guidata dal metodo o dichiarata per le CA libere. */
+    val wornArmorCategory: ArmorCategory?
+        get() = when (armorClassMethod) {
+            ArmorClassMethod.MANUAL_TOTAL,
+            ArmorClassMethod.CUSTOM_BASE -> manualArmorCategory
+            else -> armorClassMethod.armorCategory
+        }
+
+    /**
+     * Applica una variante soltanto dove può esistere secondo lo SRD.
+     *
+     * Per le formule libere basta la categoria dichiarata: il nome dell'armatura
+     * non è strutturato e la scelta esplicita dell'utente resta autorevole.
+     */
+    val effectiveArmorSpecialRule: ArmorSpecialRule
+        get() = when (armorSpecialRule) {
+            ArmorSpecialRule.STANDARD -> ArmorSpecialRule.STANDARD
+            ArmorSpecialRule.MITHRAL -> if (
+                wornArmorCategory in setOf(ArmorCategory.MEDIUM, ArmorCategory.HEAVY) &&
+                armorClassMethod != ArmorClassMethod.HIDE
+            ) {
+                ArmorSpecialRule.MITHRAL
+            } else {
+                ArmorSpecialRule.STANDARD
+            }
+            ArmorSpecialRule.ELVEN_CHAIN -> if (
+                armorClassMethod in setOf(ArmorClassMethod.CHAIN_SHIRT, ArmorClassMethod.CHAIN_MAIL) ||
+                (
+                    armorClassMethod in setOf(
+                        ArmorClassMethod.MANUAL_TOTAL,
+                        ArmorClassMethod.CUSTOM_BASE,
+                    ) &&
+                        wornArmorCategory in setOf(ArmorCategory.MEDIUM, ArmorCategory.HEAVY)
+                    )
+            ) {
+                ArmorSpecialRule.ELVEN_CHAIN
+            } else {
+                ArmorSpecialRule.STANDARD
+            }
+        }
+
+    /** Requisito dopo le eccezioni: il mithral lo elimina. */
+    val effectiveArmorMinimumStrength: Int
+        get() = if (
+            wornArmorCategory != ArmorCategory.HEAVY ||
+            effectiveArmorSpecialRule == ArmorSpecialRule.MITHRAL
+        ) {
+            0
+        } else {
+            when (armorClassMethod) {
+                ArmorClassMethod.MANUAL_TOTAL,
+                ArmorClassMethod.CUSTOM_BASE -> manualArmorMinimumStrength.coerceAtLeast(0)
+                else -> armorClassMethod.minimumStrength
+            }
+        }
+
+    /** Svantaggio intrinseco dopo le eccezioni: il mithral lo elimina. */
+    val armorStealthDisadvantage: Boolean
+        get() = wornArmorCategory != null &&
+            when (armorClassMethod) {
+                ArmorClassMethod.MANUAL_TOTAL,
+                ArmorClassMethod.CUSTOM_BASE -> manualArmorStealthDisadvantage
+                else -> armorClassMethod.stealthDisadvantage
+            } &&
+            effectiveArmorSpecialRule != ArmorSpecialRule.MITHRAL
+
+    /** Vero se l'armatura scelta richiede un addestramento che il personaggio non possiede. */
+    val wearingArmorWithoutTraining: Boolean
+        get() = wornArmorCategory?.let { category ->
+            effectiveArmorSpecialRule != ArmorSpecialRule.ELVEN_CHAIN &&
+                !armorTraining.includes(category)
+        } ?: false
+
+    /** La penalità regolamentare coinvolge prove, attacchi e TS basati su Forza o Destrezza. */
+    val strengthDexterityD20Disadvantage: Boolean get() = wearingArmorWithoutTraining
+
+    /** Un'armatura rumorosa impone svantaggio a Furtività anche quando si è addestrati. */
+    fun hasDisadvantageOnSkill(skill: Skill): Boolean =
+        (strengthDexterityD20Disadvantage && skill.ability in STRENGTH_OR_DEXTERITY) ||
+            (armorStealthDisadvantage && skill == Skill.FURTIVITA)
+
+    fun hasDisadvantageOnSave(ability: Ability): Boolean =
+        strengthDexterityD20Disadvantage && ability in STRENGTH_OR_DEXTERITY
+
+    /** Senza addestramento nell'armatura indossata il lancio è vietato, trucchetti compresi. */
+    val spellcastingBlockedByArmor: Boolean get() = wearingArmorWithoutTraining
+
+    /** Requisito di Forza non soddisfatto dall'armatura pesante attualmente indossata. */
+    val armorStrengthRequirementNotMet: Boolean
+        get() = effectiveArmorMinimumStrength > 0 &&
+            score(Ability.STRENGTH) < effectiveArmorMinimumStrength
+
+    /** Lo SRD riduce la velocità di 3 metri, equivalenti a 10 piedi sulla griglia. */
+    val armorSpeedPenaltyFeet: Int get() = if (armorStrengthRequirementNotMet) 10 else 0
+
+    /** Minuti SRD necessari a indossare o togliere l'armatura corrente. */
+    val armorDonMinutes: Int get() = wornArmorCategory?.donMinutes ?: 0
+    val armorDoffMinutes: Int get() = wornArmorCategory?.doffMinutes ?: 0
 
     val hitDiceRemaining: Int
         get() = if (hitDicePools.isEmpty()) {
@@ -523,58 +758,79 @@ data class CharacterSheet(
         rulesetVersion: String = "5.2.1",
         abilityCatalog: List<CatalogAbility> = emptyList(),
     ): ActorDefinition {
-        val combatAbilities = weapons
-            .filter { it.name.isNotBlank() }
-            .mapIndexed { index, weapon ->
-                val damage = listOf(
-                    DamageFormula.dice(
-                        weapon.damageType,
-                        weapon.diceCount.coerceAtLeast(1),
-                        weapon.diceSides.coerceAtLeast(2),
-                        weapon.damageModifier,
-                    ),
-                )
-                val cost = if (weapon.bonusAction) ActivationCost.BONUS_ACTION else ActivationCost.ACTION
-                if (weapon.isArea) {
-                    // Incantesimo ad area: risoluzione con tiro salvezza, non con tiro
-                    // per colpire. Il motore lo riconosce dal raggio.
-                    AbilityDefinition.builder("${id}-arma-$index", weapon.name)
-                        .version("1.0.0")
-                        .source("content-user-private")
-                        .rulesetVersion(rulesetVersion)
-                        .activationCost(cost)
-                        .resolutionMethod(ResolutionMethod.SAVING_THROW)
-                        .rangeFeet(weapon.rangeFeet)
-                        .damage(damage)
-                        .areaRadiusFeet(weapon.areaRadiusFeet)
-                        .saveAbility(weapon.saveAbility?.let { SaveAbility.valueOf(it.name) })
-                        .halfOnSave(weapon.halfOnSave)
-                        .automationStatus(AutomationStatus.AUTOMATED)
-                        .rulesText(weapon.note)
-                        .build()
-                } else {
-                    AbilityDefinition(
-                        "${id}-arma-$index",
-                        "1.0.0",
-                        "content-user-private",
-                        rulesetVersion,
-                        weapon.name,
-                        cost,
-                        ResolutionMethod.ATTACK_ROLL,
-                        weapon.attackBonus + attackEffectBonus(weapon),
-                        weapon.rangeFeet,
-                        1,
-                        damage,
-                        AutomationStatus.AUTOMATED,
-                        weapon.note,
+        val combatAbilities = weapons.mapIndexedNotNull { index, weapon ->
+            if (
+                weapon.name.isBlank() ||
+                (
+                    spellcastingBlockedByArmor &&
+                        (weapon.isSpellOrCantrip || weapon.legacyClassificationRequired)
                     )
-                }
+            ) {
+                return@mapIndexedNotNull null
             }
+            val damage = listOf(
+                DamageFormula.dice(
+                    weapon.damageType,
+                    weapon.diceCount.coerceAtLeast(1),
+                    weapon.diceSides.coerceAtLeast(2),
+                    weapon.damageModifier,
+                ),
+            )
+            val cost = if (weapon.bonusAction) ActivationCost.BONUS_ACTION else ActivationCost.ACTION
+            if (weapon.isArea) {
+                // Incantesimo ad area: risoluzione con tiro salvezza, non con tiro
+                // per colpire. Il motore lo riconosce dal raggio.
+                AbilityDefinition.builder("${id}-arma-$index", weapon.name)
+                    .version("1.0.0")
+                    .source("content-user-private")
+                    .rulesetVersion(rulesetVersion)
+                    .activationCost(cost)
+                    .resolutionMethod(ResolutionMethod.SAVING_THROW)
+                    .spellOrCantrip(weapon.isSpellOrCantrip)
+                    .rangeFeet(weapon.rangeFeet)
+                    .damage(damage)
+                    .areaRadiusFeet(weapon.areaRadiusFeet)
+                    .saveAbility(weapon.saveAbility?.let { SaveAbility.valueOf(it.name) })
+                    .halfOnSave(weapon.halfOnSave)
+                    .automationStatus(AutomationStatus.AUTOMATED)
+                    .rulesText(weapon.note)
+                    .build()
+            } else {
+                val attackAbility = weapon.attackAbility
+                    ?: spellcasting?.ability.takeIf { weapon.isSpellOrCantrip }
+                AbilityDefinition.builder("${id}-arma-$index", weapon.name)
+                    .version("1.0.0")
+                    .source("content-user-private")
+                    .rulesetVersion(rulesetVersion)
+                    .activationCost(cost)
+                    .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                    .attackBonus(weapon.attackBonus + attackEffectBonus(weapon))
+                    .attackAbility(attackAbility?.let { SaveAbility.valueOf(it.name) })
+                    .spellOrCantrip(weapon.isSpellOrCantrip)
+                    .rangeFeet(weapon.rangeFeet)
+                    .damage(damage)
+                    .automationStatus(AutomationStatus.AUTOMATED)
+                    .rulesText(weapon.note)
+                    .build()
+            }
+        }
         val weaponIds = combatAbilities.mapTo(mutableSetOf()) { it.id() }
         val catalogAbilities = abilityIds
             .distinct()
             .mapNotNull { selectedId -> abilityCatalog.firstOrNull { it.id == selectedId } }
-            .map { it.toDefinition(rulesetVersion) }
+            .filterNot { spellcastingBlockedByArmor && it.isSpellOrCantrip }
+            .map { ability ->
+                val resolved = if (
+                    ability.isSpellOrCantrip &&
+                    ability.attackAbility == null &&
+                    ability.resolutionMethod == ResolutionMethod.ATTACK_ROLL
+                ) {
+                    ability.copy(attackAbility = spellcasting?.ability)
+                } else {
+                    ability
+                }
+                resolved.toDefinition(rulesetVersion)
+            }
             .filterNot { it.id() in weaponIds }
 
         return ActorDefinition(
@@ -598,12 +854,14 @@ data class CharacterSheet(
             savingThrowBonusMap(::saveBonus),
             spellSaveDc ?: 0,
             attacksPerAction,
+            strengthDexterityD20Disadvantage,
         )
     }
 
     private companion object {
         /** Oltre questa portata la riga descrive un attacco a distanza, non in mischia. */
         const val MELEE_REACH_FEET = 5
+        val STRENGTH_OR_DEXTERITY = setOf(Ability.STRENGTH, Ability.DEXTERITY)
     }
 }
 

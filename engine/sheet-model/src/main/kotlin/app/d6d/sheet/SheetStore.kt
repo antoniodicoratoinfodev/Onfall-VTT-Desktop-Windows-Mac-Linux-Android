@@ -26,7 +26,7 @@ data class SheetLibrary(
     val passiveOverrides: Map<String, Boolean> = emptyMap(),
 ) {
     companion object {
-        const val SCHEMA_VERSION = 7
+        const val SCHEMA_VERSION = 9
     }
 }
 
@@ -93,15 +93,49 @@ class SheetStore(private val file: Path) {
         val defaults = defaultAbilityCatalog()
         // Migrazione additiva: le voci con lo stesso ID restano quelle dell'utente;
         // vengono inserite soltanto le nuove capacità iniziali che ancora mancano.
-        val abilities = library.abilities +
+        // Lo schema 8 aggiunge due metadati che non esistevano nei documenti
+        // precedenti. Per gli ID incorporati possiamo recuperarli senza euristiche;
+        // nome e numeri eventualmente personalizzati restano invece intatti.
+        val migratedExisting = if (library.schemaVersion < 8) {
+            library.abilities.map { stored ->
+                val builtIn = defaults.firstOrNull { it.id == stored.id }
+                if (builtIn == null) {
+                    stored
+                } else {
+                    stored.copy(
+                        attackAbility = stored.attackAbility ?: builtIn.attackAbility,
+                        spellOrCantrip = stored.spellOrCantrip || builtIn.spellOrCantrip,
+                    )
+                }
+            }
+        } else {
+            library.abilities
+        }
+        val abilities = migratedExisting +
             defaults.filter { builtIn -> library.abilities.none { it.id == builtIn.id } }
+
+        // Lo schema 9 porta la stessa classificazione anche sulle vecchie righe
+        // "Armi e trucchetti". I preset riconoscibili ereditano i metadati del
+        // catalogo; una riga realmente ambigua viene invece marcata per una scelta
+        // esplicita, così non può aggirare le restrizioni dell'armatura.
+        val classifiedCharacters = if (library.schemaVersion < 9) {
+            library.characters.map { sheet ->
+                sheet.copy(
+                    weapons = sheet.weapons.map { weapon ->
+                        weapon.withMigratedClassification(abilities)
+                    },
+                )
+            }
+        } else {
+            library.characters
+        }
 
         // Dalla versione 4 la CA puo' essere calcolata. I nuovi campi hanno come
         // predefinito MANUAL_TOTAL: una scheda precedente conserva quindi il suo
         // identico valore finale finche' l'utente non sceglie un metodo guidato.
         val characters = if (library.schemaVersion < 2) {
             val fireball = abilities.first { it.id == "inc-palla-di-fuoco" }
-            library.characters.map { sheet ->
+            classifiedCharacters.map { sheet ->
                 val presetRows = sheet.weapons.filter { it.matches(fireball) }
                 if (presetRows.isEmpty()) {
                     sheet
@@ -113,7 +147,7 @@ class SheetStore(private val file: Path) {
                 }
             }
         } else {
-            library.characters
+            classifiedCharacters
         }
         return library.copy(
             schemaVersion = SheetLibrary.SCHEMA_VERSION,
@@ -135,4 +169,25 @@ class SheetStore(private val file: Path) {
             areaRadiusFeet == ability.areaRadiusFeet &&
             saveAbility == ability.saveAbility &&
             halfOnSave == ability.halfOnSave
+
+    private fun WeaponEntry.withMigratedClassification(
+        abilities: List<CatalogAbility>,
+    ): WeaponEntry {
+        val matchingAbility = abilities.firstOrNull { ability ->
+            matches(ability) &&
+                (ability.attackAbility != null || ability.isSpellOrCantrip)
+        }
+        return when {
+            name.isBlank() -> copy(legacyClassificationRequired = false)
+            matchingAbility != null -> copy(
+                attackAbility = attackAbility ?: matchingAbility.attackAbility,
+                spellOrCantrip = spellOrCantrip || matchingAbility.isSpellOrCantrip,
+                legacyClassificationRequired = false,
+            )
+            attackAbility != null || isSpellOrCantrip -> copy(
+                legacyClassificationRequired = false,
+            )
+            else -> copy(legacyClassificationRequired = true)
+        }
+    }
 }

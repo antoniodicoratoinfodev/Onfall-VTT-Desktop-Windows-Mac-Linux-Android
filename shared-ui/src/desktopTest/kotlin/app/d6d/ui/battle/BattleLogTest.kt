@@ -75,6 +75,31 @@ class BattleLogTest {
     }
 
     @Test
+    fun `una prova generica mostra caratteristica dadi modificatore e totale`() {
+        val model = model()
+        val actor = model.activeCombatantId!!
+        val description = event(
+            EventType.ABILITY_CHECK_ROLLED,
+            actor,
+            details = mapOf(
+                "ability" to "DEXTERITY",
+                "source" to "DIGITAL",
+                "mode" to "DISADVANTAGE",
+                "dice" to "[14, 6]",
+                "natural" to "6",
+                "modifier" to "-1",
+                "total" to "5",
+            ),
+        ).describeInItalian(model)
+
+        assertEquals(
+            "${model.name(actor)} effettua una prova di Destrezza: " +
+                "d20 [14, 6] (Svantaggio, scelto 6) − 1 = 5",
+            description,
+        )
+    }
+
+    @Test
     fun `condizioni e concentrazione leggono le chiavi registrate dal motore`() {
         val model = model()
         val actor = model.activeCombatantId!!

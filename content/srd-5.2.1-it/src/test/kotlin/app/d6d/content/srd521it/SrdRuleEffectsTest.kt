@@ -145,8 +145,9 @@ class SrdRuleEffectsTest {
         assertEquals(1, monk.progression.effects.count { it.target == EffectTarget.SPEED_FEET })
         assertEquals(60, monk.toActorDefinition().speedFeet())
 
-        // Con l'armatura addosso il bonus decade: la condizione non e' soddisfatta.
-        assertEquals(30, monk.copy(armorClassMethod = ArmorClassMethod.CHAIN_MAIL).effectiveSpeedFeet)
+        // Con l'armatura addosso il bonus decade; Forza 10 non soddisfa inoltre
+        // il requisito 13 della cotta di maglia, quindi la velocità perde 3 metri.
+        assertEquals(20, monk.copy(armorClassMethod = ArmorClassMethod.CHAIN_MAIL).effectiveSpeedFeet)
 
         // Il +10 esposto dal catalogo per l'aggiunta manuale non deve abbassare
         // il +30 che la progressione guidata ha gia' raggiunto.
@@ -224,7 +225,8 @@ class SrdRuleEffectsTest {
 
         assertFalse(withTraits.progression.configured)
         assertEquals(50, withTraits.effectiveSpeedFeet)
-        assertEquals(30, withTraits.copy(armorClassMethod = ArmorClassMethod.PLATE).effectiveSpeedFeet)
+        // La piastra spegne entrambi i bonus e, con Forza 10, riduce di altri 3 metri.
+        assertEquals(20, withTraits.copy(armorClassMethod = ArmorClassMethod.PLATE).effectiveSpeedFeet)
 
         val withoutFastMovement = service.withRefreshedEffects(
             withTraits.copy(abilityIds = withTraits.abilityIds - fastMovementId),

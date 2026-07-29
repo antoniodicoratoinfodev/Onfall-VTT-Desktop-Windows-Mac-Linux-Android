@@ -243,7 +243,12 @@ public final class CombatSession {
         Objects.requireNonNull(mode, "mode");
         beginCommand();
         try {
-            D20RollResult roll = rollD20(D20RollInput.digital(mode), combatant.snapshot.initiativeModifier());
+            D20Mode effectiveMode = imposeDisadvantage(
+                    mode,
+                    combatant.snapshot.strengthDexterityD20Disadvantage());
+            D20RollResult roll = rollD20(
+                    D20RollInput.digital(effectiveMode),
+                    combatant.snapshot.initiativeModifier());
             state.initiativeScores.put(combatantId, roll.total());
             state.initiativeOrder.clear();
             append(EventType.INITIATIVE_ROLLED, combatantId, "", rollDetails(roll));
@@ -254,7 +259,10 @@ public final class CombatSession {
         }
     }
 
-    /** One d20 result is shared, while each combatant still applies its own initiative modifier. */
+    /**
+     * The same dice pool is shared, while each combatant applies its own modifier
+     * and selects the die using its effective advantage/disadvantage state.
+     */
     public synchronized Map<String, D20RollResult> rollSharedInitiative(
             Collection<String> combatantIds, D20Mode mode) {
         requireSetupPhase();
@@ -267,13 +275,21 @@ public final class CombatSession {
         for (String id : ids) combatant(id);
         beginCommand();
         try {
-            List<Integer> rolledDice = dice.rollD20(mode);
-            int natural = selectedD20(rolledDice, mode);
+            boolean anyImposedDisadvantage = ids.stream()
+                    .map(this::combatant)
+                    .anyMatch(it -> it.snapshot.strengthDexterityD20Disadvantage());
+            D20Mode diceMode =
+                    mode == D20Mode.NORMAL && !anyImposedDisadvantage ? D20Mode.NORMAL : D20Mode.DISADVANTAGE;
+            List<Integer> rolledDice = dice.rollD20(diceMode);
             Map<String, D20RollResult> results = new LinkedHashMap<>();
             for (String id : ids) {
-                int modifier = combatant(id).snapshot.initiativeModifier();
+                CombatantSnapshot snapshot = combatant(id).snapshot;
+                D20Mode effectiveMode =
+                        imposeDisadvantage(mode, snapshot.strengthDexterityD20Disadvantage());
+                int natural = selectedD20(rolledDice, effectiveMode);
+                int modifier = snapshot.initiativeModifier();
                 int total = checkedTotal(natural, modifier, "Initiative total");
-                D20RollResult result = new D20RollResult(RollSource.DIGITAL, mode, rolledDice,
+                D20RollResult result = new D20RollResult(RollSource.DIGITAL, effectiveMode, rolledDice,
                         natural, modifier, total);
                 results.put(id, result);
                 state.initiativeScores.put(id, result.total());
@@ -292,13 +308,17 @@ public final class CombatSession {
         requireSetupPhase();
         MutableCombatant combatant = combatant(combatantId);
         Objects.requireNonNull(mode, "mode");
-        int adjustment = mode == D20Mode.ADVANTAGE ? 5 : mode == D20Mode.DISADVANTAGE ? -5 : 0;
+        D20Mode effectiveMode = imposeDisadvantage(
+                mode,
+                combatant.snapshot.strengthDexterityD20Disadvantage());
+        int adjustment =
+                effectiveMode == D20Mode.ADVANTAGE ? 5 : effectiveMode == D20Mode.DISADVANTAGE ? -5 : 0;
         int total = checkedTotal(combatant.snapshot.initiativeScore(), adjustment, "Static initiative total");
         beginCommand();
         state.initiativeScores.put(combatantId, total);
         state.initiativeOrder.clear();
         append(EventType.INITIATIVE_SET, combatantId, "", details(
-                "total", total, "mode", mode, "static", true));
+                "total", total, "mode", effectiveMode, "static", true));
         return total;
     }
 
@@ -378,6 +398,9 @@ public final class CombatSession {
         if (ability.resolutionMethod() != ResolutionMethod.ATTACK_ROLL) {
             throw rule("Ability does not use an attack roll: " + ability.id());
         }
+        if (attacker.snapshot.strengthDexterityD20Disadvantage() && ability.spellOrCantrip()) {
+            throw rule("The combatant cannot cast spells while wearing armor without training");
+        }
         if (ability.automationStatus() == AutomationStatus.MANUAL_REQUIRED
                 && request.attackRoll().source() == RollSource.DIGITAL) {
             throw rule("Ability requires manual resolution: " + ability.id());
@@ -392,7 +415,11 @@ public final class CombatSession {
         beginCommand();
         try {
             consumeAttackActivationCost(request.attackerId(), ability.activationCost());
-            D20RollResult attackRoll = rollD20For(attacker, request.attackRoll(), ability.attackBonus());
+            D20RollInput attackInput = imposeDisadvantage(
+                    request.attackRoll(),
+                    attacker.snapshot.strengthDexterityD20Disadvantage()
+                            && usesStrengthOrDexterityForAttack(ability));
+            D20RollResult attackRoll = rollD20For(attacker, attackInput, ability.attackBonus());
             AttackOutcome outcome = attackOutcome(attackRoll, target.snapshot.armorClass());
             Map<String, String> attackDetails = merge(
                     rollDetails(attackRoll),
@@ -479,6 +506,9 @@ public final class CombatSession {
         if (!ability.isArea()) {
             throw rule("Ability is not an area effect: " + ability.id());
         }
+        if (caster.snapshot.strengthDexterityD20Disadvantage() && ability.spellOrCantrip()) {
+            throw rule("The combatant cannot cast spells while wearing armor without training");
+        }
         if (!state.battleMap.grid().contains(center)) {
             throw rule("The area centre is outside the map");
         }
@@ -533,7 +563,13 @@ public final class CombatSession {
         } else if (ability.hasSavingThrow()) {
             MutableCombatant target = combatant(targetId);
             int bonus = target.snapshot.saveBonus(ability.saveAbility());
-            saveRoll = rollD20For(target, D20RollInput.digital(), bonus);
+            boolean strengthOrDexteritySave =
+                    ability.saveAbility() == SaveAbility.STRENGTH
+                            || ability.saveAbility() == SaveAbility.DEXTERITY;
+            D20RollInput saveInput = imposeDisadvantage(
+                    D20RollInput.digital(),
+                    strengthOrDexteritySave && target.snapshot.strengthDexterityD20Disadvantage());
+            saveRoll = rollD20For(target, saveInput, bonus);
             saved = saveRoll.total() >= saveDc;
         } else {
             saved = false;
@@ -744,6 +780,43 @@ public final class CombatSession {
                 append(EventType.DIED, combatantId, "", details("cause", "three failures"));
             }
             return target.deathSaves;
+        } catch (RuntimeException | Error failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    /**
+     * Effettua una prova di caratteristica generica senza consumare automaticamente
+     * risorse del turno.
+     *
+     * <p>Il modificatore e' quello dichiarato dal tavolo per la prova specifica.
+     * Il motore aggiunge la penalita' di Sfinimento e, soltanto per Forza o
+     * Destrezza, impone lo Svantaggio dell'armatura indossata senza competenza.
+     * Vantaggio e Svantaggio imposti si annullano come per gli altri D20 Test.</p>
+     */
+    public synchronized D20RollResult rollAbilityCheck(
+            String combatantId,
+            SaveAbility ability,
+            int modifier,
+            D20RollInput input) {
+        requireStatus(CombatStatus.ACTIVE);
+        MutableCombatant roller = combatant(combatantId);
+        Objects.requireNonNull(ability, "ability");
+        Objects.requireNonNull(input, "input");
+
+        boolean armorDisadvantage =
+                roller.snapshot.strengthDexterityD20Disadvantage()
+                        && (ability == SaveAbility.STRENGTH || ability == SaveAbility.DEXTERITY);
+        D20RollInput effectiveInput = imposeDisadvantage(input, armorDisadvantage);
+
+        beginCommand();
+        try {
+            D20RollResult roll = rollD20For(roller, effectiveInput, modifier);
+            append(EventType.ABILITY_CHECK_ROLLED, combatantId, "", merge(
+                    rollDetails(roll),
+                    details("ability", ability, "requestedModifier", modifier)));
+            return roll;
         } catch (RuntimeException | Error failure) {
             rollbackFailedCommand();
             throw failure;
@@ -1667,6 +1740,23 @@ public final class CombatSession {
                 : mode == D20Mode.DISADVANTAGE
                         ? dice.stream().mapToInt(Integer::intValue).min().orElseThrow()
                         : dice.get(0);
+    }
+
+    /** Applica uno svantaggio imposto dalle regole, annullando un eventuale vantaggio. */
+    private static D20Mode imposeDisadvantage(D20Mode requested, boolean imposed) {
+        if (!imposed) return requested;
+        return requested == D20Mode.ADVANTAGE ? D20Mode.NORMAL : D20Mode.DISADVANTAGE;
+    }
+
+    private static D20RollInput imposeDisadvantage(D20RollInput input, boolean imposed) {
+        D20Mode effectiveMode = imposeDisadvantage(input.mode(), imposed);
+        if (effectiveMode == input.mode()) return input;
+        return new D20RollInput(input.source(), effectiveMode, input.manualNaturalRoll());
+    }
+
+    private static boolean usesStrengthOrDexterityForAttack(AbilityDefinition ability) {
+        return ability.attackAbility() == SaveAbility.STRENGTH
+                || ability.attackAbility() == SaveAbility.DEXTERITY;
     }
 
     private static AttackOutcome attackOutcome(D20RollResult roll, int armorClass) {

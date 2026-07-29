@@ -140,6 +140,9 @@ public final class ActorCatalogJsonCodec {
         result.put("savingThrowBonuses", savingThrowBonuses);
         result.put("spellSaveDc", definition.spellSaveDc());
         result.put("attacksPerAction", definition.attacksPerAction());
+        result.put(
+                "strengthDexterityD20Disadvantage",
+                definition.strengthDexterityD20Disadvantage());
         result.put("resistances", enumNames(definition.resistances()));
         result.put("vulnerabilities", enumNames(definition.vulnerabilities()));
         result.put("damageImmunities", enumNames(definition.damageImmunities()));
@@ -170,6 +173,10 @@ public final class ActorCatalogJsonCodec {
             result.put("saveAbility", ability.saveAbility().name());
         }
         result.put("halfOnSave", ability.halfOnSave());
+        if (ability.attackAbility() != null) {
+            result.put("attackAbility", ability.attackAbility().name());
+        }
+        result.put("spellOrCantrip", ability.spellOrCantrip());
 
         List<Object> damage = new ArrayList<>(ability.damage().size());
         for (DamageFormula formula : ability.damage()) {
@@ -272,6 +279,11 @@ public final class ActorCatalogJsonCodec {
         int attacksPerAction = value.get("attacksPerAction") == null
                 ? 1
                 : integer(value.get("attacksPerAction"), path + ".attacksPerAction");
+        boolean strengthDexterityD20Disadvantage =
+                value.get("strengthDexterityD20Disadvantage") != null
+                        && bool(
+                                value.get("strengthDexterityD20Disadvantage"),
+                                path + ".strengthDexterityD20Disadvantage");
         Set<DamageType> resistances = damageTypes(
                 required(value, "resistances", path),
                 path + ".resistances");
@@ -313,7 +325,8 @@ public final class ActorCatalogJsonCodec {
                     abilities,
                     savingThrowBonuses,
                     spellSaveDc,
-                    attacksPerAction);
+                    attacksPerAction,
+                    strengthDexterityD20Disadvantage);
         } catch (IllegalArgumentException exception) {
             throw formatError(path, messageOf(exception));
         }
@@ -356,6 +369,12 @@ public final class ActorCatalogJsonCodec {
                 ? null
                 : SaveAbility.valueOf(text(value.get("saveAbility"), path + ".saveAbility"));
         boolean halfOnSave = value.get("halfOnSave") != null && bool(value.get("halfOnSave"), path + ".halfOnSave");
+        SaveAbility attackAbility = value.get("attackAbility") == null
+                ? null
+                : SaveAbility.valueOf(text(value.get("attackAbility"), path + ".attackAbility"));
+        boolean spellOrCantrip =
+                value.get("spellOrCantrip") != null
+                        && bool(value.get("spellOrCantrip"), path + ".spellOrCantrip");
 
         List<?> encodedDamage = array(required(value, "damage", path), path + ".damage");
         List<DamageFormula> damage = new ArrayList<>(encodedDamage.size());
@@ -388,7 +407,9 @@ public final class ActorCatalogJsonCodec {
                     areaRadiusFeet,
                     saveAbility,
                     halfOnSave,
-                    passive);
+                    passive,
+                    attackAbility,
+                    spellOrCantrip);
         } catch (IllegalArgumentException exception) {
             throw formatError(path, messageOf(exception));
         }

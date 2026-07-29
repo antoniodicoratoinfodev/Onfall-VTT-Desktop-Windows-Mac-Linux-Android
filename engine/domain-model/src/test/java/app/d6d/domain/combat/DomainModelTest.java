@@ -8,10 +8,46 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DomainModelTest {
+    @Test
+    void abilityClassificationIsOptionalAndAvailableThroughTheBuilder() {
+        AbilityDefinition classified = AbilityDefinition.builder("ray", "Ray")
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .attackAbility(SaveAbility.CHARISMA)
+                .spellOrCantrip(true)
+                .damage(List.of(DamageFormula.dice(DamageType.FORCE, 1, 10, 0)))
+                .build();
+
+        assertEquals(SaveAbility.CHARISMA, classified.attackAbility());
+        assertTrue(classified.spellOrCantrip());
+
+        AbilityDefinition legacy = new AbilityDefinition(
+                "legacy",
+                "1",
+                "user",
+                "srd-5.2.1",
+                "Legacy attack",
+                ActivationCost.ACTION,
+                ResolutionMethod.ATTACK_ROLL,
+                4,
+                30,
+                1,
+                List.of(DamageFormula.dice(DamageType.FORCE, 1, 6, 0)),
+                AutomationStatus.AUTOMATED,
+                "",
+                0,
+                null,
+                false,
+                false);
+
+        assertNull(legacy.attackAbility());
+        assertFalse(legacy.spellOrCantrip());
+    }
+
     @Test
     void definitionsAndSnapshotsDefensivelyCopyCollections() {
         List<DamageFormula> damage = new ArrayList<>();

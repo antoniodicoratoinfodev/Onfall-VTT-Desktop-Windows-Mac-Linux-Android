@@ -24,6 +24,7 @@ import app.d6d.ui.components.LocalMapDragCursor
 import app.d6d.ui.cursors.CursorPair
 import app.d6d.ui.cursors.CursorPairPreview
 import app.d6d.ui.cursors.CursorPreferences
+import app.d6d.ui.cursors.CursorSize
 import app.d6d.ui.images.FilePicker
 import java.awt.Cursor
 import java.awt.FileDialog
@@ -83,6 +84,7 @@ private fun desktopFilePicker() = FilePicker {
 private fun fantasyCursor(
     imageBytes: ByteArray,
     hotspotAt64Px: Point,
+    scale: Float,
     name: String,
     fallback: Int,
 ): Cursor = runCatching {
@@ -92,26 +94,29 @@ private fun fantasyCursor(
 
     val source = ImageIO.read(ByteArrayInputStream(imageBytes))
     checkNotNull(source) { "Immagine del cursore non valida" }
-    val image = if (source.width == cursorSize.width && source.height == cursorSize.height) {
-        source
-    } else {
-        BufferedImage(cursorSize.width, cursorSize.height, BufferedImage.TYPE_INT_ARGB).also { scaled ->
-            scaled.createGraphics().apply {
-                setRenderingHint(
-                    RenderingHints.KEY_INTERPOLATION,
-                    RenderingHints.VALUE_INTERPOLATION_BICUBIC,
-                )
-                drawImage(source, 0, 0, cursorSize.width, cursorSize.height, null)
-                dispose()
-            }
+    val visualScale = scale.coerceIn(0.5f, 1f)
+    val renderedWidth = (cursorSize.width * visualScale).roundToInt().coerceAtLeast(1)
+    val renderedHeight = (cursorSize.height * visualScale).roundToInt().coerceAtLeast(1)
+    val image = BufferedImage(
+        cursorSize.width,
+        cursorSize.height,
+        BufferedImage.TYPE_INT_ARGB,
+    ).also { canvas ->
+        canvas.createGraphics().apply {
+            setRenderingHint(
+                RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BICUBIC,
+            )
+            drawImage(source, 0, 0, renderedWidth, renderedHeight, null)
+            dispose()
         }
     }
 
     val hotspot = Point(
-        (hotspotAt64Px.x * cursorSize.width / 64f)
+        (hotspotAt64Px.x * renderedWidth / 64f)
             .roundToInt()
             .coerceIn(0, cursorSize.width - 1),
-        (hotspotAt64Px.y * cursorSize.height / 64f)
+        (hotspotAt64Px.y * renderedHeight / 64f)
             .roundToInt()
             .coerceIn(0, cursorSize.height - 1),
     )
@@ -168,6 +173,9 @@ private fun desktopCursorPair(
     pair: CursorPair,
     pointerResource: String,
     grabResource: String,
+    pointerHotspot: Point,
+    grabHotspot: Point,
+    size: CursorSize,
 ): DesktopCursorPair {
     val pointerBytes = cursorResourceBytes(pointerResource)
     val grabBytes = cursorResourceBytes(grabResource)
@@ -175,13 +183,15 @@ private fun desktopCursorPair(
     return DesktopCursorPair(
         pointer = fantasyCursor(
             imageBytes = pointerBytes,
-            hotspotAt64Px = Point(1, 1),
+            hotspotAt64Px = pointerHotspot,
+            scale = size.scale,
             name = "Onfall fantasy pointer $suffix",
             fallback = Cursor.DEFAULT_CURSOR,
         ),
         grab = fantasyCursor(
             imageBytes = grabBytes,
-            hotspotAt64Px = Point(23, 18),
+            hotspotAt64Px = grabHotspot,
+            scale = size.scale,
             name = "Onfall fantasy grab $suffix",
             fallback = Cursor.HAND_CURSOR,
         ),
@@ -206,13 +216,26 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
     val cursorStore = remember(dataDirectory) {
         CursorPairStore(dataDirectory.resolve("cursor-pair.txt"))
     }
+    val cursorSizeStore = remember(dataDirectory) {
+        CursorSizeStore(dataDirectory.resolve("cursor-size.txt"))
+    }
     var selectedCursorPair by remember(cursorStore) { mutableStateOf(cursorStore.load()) }
+    var selectedCursorSize by remember(cursorSizeStore) {
+        mutableStateOf(cursorSizeStore.load())
+    }
     val selectCursorPair = remember(cursorStore) {
         { pair: CursorPair ->
             // Prima aggiorna lo stato: anche se il disco non fosse scrivibile, il
             // cambio nella sessione corrente deve essere immediato.
             selectedCursorPair = pair
             cursorStore.save(pair)
+            Unit
+        }
+    }
+    val selectCursorSize = remember(cursorSizeStore) {
+        { size: CursorSize ->
+            selectedCursorSize = size
+            cursorSizeStore.save(size)
             Unit
         }
     }
@@ -227,25 +250,57 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
         state = rememberWindowState(width = 1480.dp, height = 940.dp),
         icon = windowIcon,
     ) {
-        val cursorPairs = remember {
+        val cursorPairs = remember(selectedCursorSize) {
             mapOf(
                 CursorPair.COLD to desktopCursorPair(
                     pair = CursorPair.COLD,
                     pointerResource = "/cursors/fantasy-pointer-knight-a-cold.png",
                     grabResource = "/cursors/fantasy-grab-knight-a-cold.png",
+                    pointerHotspot = Point(8, 6),
+                    grabHotspot = Point(23, 18),
+                    size = selectedCursorSize,
                 ),
                 CursorPair.WARM to desktopCursorPair(
                     pair = CursorPair.WARM,
                     pointerResource = "/cursors/fantasy-pointer-knight-b-warm.png",
                     grabResource = "/cursors/fantasy-grab-knight-b-warm.png",
+                    pointerHotspot = Point(8, 6),
+                    grabHotspot = Point(23, 18),
+                    size = selectedCursorSize,
+                ),
+                CursorPair.CLASSIC to desktopCursorPair(
+                    pair = CursorPair.CLASSIC,
+                    pointerResource = "/cursors/fantasy-pointer.png",
+                    grabResource = "/cursors/fantasy-grab.png",
+                    pointerHotspot = Point(6, 6),
+                    grabHotspot = Point(20, 17),
+                    size = selectedCursorSize,
+                ),
+                CursorPair.RUNIC to desktopCursorPair(
+                    pair = CursorPair.RUNIC,
+                    pointerResource = "/cursors/fantasy-pointer-alt.png",
+                    grabResource = "/cursors/fantasy-grab-alt.png",
+                    pointerHotspot = Point(6, 6),
+                    grabHotspot = Point(20, 17),
+                    size = selectedCursorSize,
+                ),
+                CursorPair.STEEL to desktopCursorPair(
+                    pair = CursorPair.STEEL,
+                    pointerResource = "/cursors/fantasy-pointer-alt-2.png",
+                    grabResource = "/cursors/fantasy-grab-alt-2.png",
+                    pointerHotspot = Point(6, 6),
+                    grabHotspot = Point(20, 17),
+                    size = selectedCursorSize,
                 ),
             )
         }
         val activeCursors = cursorPairs.getValue(selectedCursorPair)
         val cursorPreferences = CursorPreferences(
             selected = selectedCursorPair,
+            size = selectedCursorSize,
             previews = CursorPair.entries.map { cursorPairs.getValue(it).preview },
             onSelect = selectCursorPair,
+            onSizeChange = selectCursorSize,
         )
         val clickFlames = rememberClickFlameState()
         var grabbingMap by remember { mutableStateOf(false) }

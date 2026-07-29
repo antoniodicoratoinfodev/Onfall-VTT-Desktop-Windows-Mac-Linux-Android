@@ -392,6 +392,9 @@ private fun AbilityCard(
             if (!manual && !ability.isArea) {
                 val bonus = ability.attackBonus()
                 AbilityStat("Colpire", if (bonus >= 0) "+$bonus" else bonus.toString(), enabled)
+                ability.attackAbility()?.let {
+                    AbilityStat("Car.", it.italianAbbreviation, enabled)
+                }
             }
             if (ability.isArea) {
                 AbilityStat("Area", feetWithMetres(ability.areaRadiusFeet()), enabled)

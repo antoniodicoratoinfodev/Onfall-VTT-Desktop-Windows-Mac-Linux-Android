@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -68,11 +69,12 @@ fun CursorArchive(
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                text = "Confronta le due finiture dello stesso guanto da cavaliere. " +
-                    "Ogni coppia include la posa normale e quella che afferra la mappa.",
+                text = "Scegli fra tutte le finiture disponibili. Ogni coppia include " +
+                    "la posa normale e quella che afferra la mappa.",
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
+            CursorSizeSelector(preferences)
         }
         GoldenRule()
 
@@ -95,22 +97,62 @@ fun CursorArchive(
                 }
             }
         } else {
-            Row(
+            Column(
                 Modifier.fillMaxSize()
                     .verticalScroll(scroll)
                     .padding(18.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.Top,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                previews.forEach { preview ->
-                    CursorPairCard(
-                        preview = preview,
-                        selected = preferences.selected == preview.pair,
-                        compact = false,
-                        onSelect = { preferences.onSelect(preview.pair) },
-                        modifier = Modifier.weight(1f),
-                    )
+                previews.chunked(2).forEach { rowPreviews ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        rowPreviews.forEach { preview ->
+                            CursorPairCard(
+                                preview = preview,
+                                selected = preferences.selected == preview.pair,
+                                compact = false,
+                                onSelect = { preferences.onSelect(preview.pair) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (rowPreviews.size == 1) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CursorSizeSelector(preferences: CursorPreferences) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = "DIMENSIONE",
+            color = Palette.TextMuted,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CursorSize.entries.forEach { size ->
+                GameButton(
+                    label = size.label,
+                    subtitle = size.description,
+                    accent = Palette.Gold,
+                    selected = preferences.size == size,
+                    onClick = { preferences.onSizeChange(size) },
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }
@@ -127,14 +169,23 @@ private fun CursorPairCard(
     val accent = when (preview.pair) {
         CursorPair.COLD -> Palette.Party
         CursorPair.WARM -> Palette.RangePreview
+        CursorPair.CLASSIC -> Palette.Bloodied
+        CursorPair.RUNIC -> Palette.Crit
+        CursorPair.STEEL -> Palette.GoldBright
     }
     val title = when (preview.pair) {
         CursorPair.COLD -> "Coppia A · Fredda"
         CursorPair.WARM -> "Coppia B · Calda"
+        CursorPair.CLASSIC -> "Coppia C · Cuoio"
+        CursorPair.RUNIC -> "Coppia D · Runica"
+        CursorPair.STEEL -> "Coppia E · Acciaio"
     }
     val subtitle = when (preview.pair) {
         CursorPair.COLD -> "Acciaio blu e riflessi lunari"
         CursorPair.WARM -> "Bronzo, rame e riflessi d'ambra"
+        CursorPair.CLASSIC -> "Cuoio scuro e piastre brunite"
+        CursorPair.RUNIC -> "Sigillo azzurro su metallo brunito"
+        CursorPair.STEEL -> "Acciaio freddo e bagliori di zaffiro"
     }
     val shape = RoundedCornerShape(10.dp)
 

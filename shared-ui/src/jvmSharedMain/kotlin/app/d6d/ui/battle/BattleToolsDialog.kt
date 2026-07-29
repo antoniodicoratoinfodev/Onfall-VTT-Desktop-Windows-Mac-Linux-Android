@@ -33,7 +33,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.ConditionType
+import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.SaveAbility
 import app.d6d.sheet.italianLabel
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
@@ -73,12 +75,15 @@ fun BattleToolsDialog(
 
     var amountText by remember { mutableStateOf("1") }
     var durationText by remember { mutableStateOf("0") }
+    var abilityCheckModifierText by remember { mutableStateOf("0") }
+    var abilityCheckAbility by remember { mutableStateOf(SaveAbility.STRENGTH) }
     var damageType by remember { mutableStateOf(DamageType.SLASHING) }
     var conditionType by remember { mutableStateOf(ConditionType.PRONE) }
 
     val target = targetId?.let(viewModel::combatant)
     val amount = amountText.toIntOrNull()?.coerceAtLeast(0) ?: 0
     val duration = durationText.toIntOrNull()?.coerceAtLeast(0) ?: 0
+    val abilityCheckModifier = abilityCheckModifierText.toIntOrNull()
     val commandsEnabled = viewModel.status == CombatStatus.ACTIVE && targetId != null
 
     Dialog(
@@ -115,7 +120,7 @@ fun BattleToolsDialog(
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            "Danni, cure e condizioni del combattente scelto.",
+                            "Prove, danni, cure e condizioni del combattente scelto.",
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -159,6 +164,66 @@ fun BattleToolsDialog(
                             combatant.stable() -> Chip("Stabile", Palette.Heal)
                             combatant.unconscious() -> Chip("Privo di sensi", Palette.Bloodied)
                         }
+                    }
+                }
+
+                Eyebrow("Prova di caratteristica")
+                Text(
+                    "Scegli la caratteristica e inserisci il modificatore della prova. " +
+                        "Sfinimento e penalità dell'armatura vengono applicati dal motore.",
+                    color = Palette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    SaveAbility.entries.forEach { ability ->
+                        val selected = ability == abilityCheckAbility
+                        GameButton(
+                            label = ability.italianLabel,
+                            accent = if (selected) Palette.Gold else Palette.TextFaint,
+                            selected = selected,
+                            onClick = { abilityCheckAbility = ability },
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    LabeledNumberField(
+                        label = "Modificatore",
+                        value = abilityCheckModifierText,
+                        onValueChange = { abilityCheckModifierText = signedIntegerInput(it) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalAlignment = Alignment.End,
+                    ) {
+                        Text(
+                            "Modalità dalla barra: ${viewModel.rollMode.italianLabel}",
+                            color = Palette.TextMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        GameButton(
+                            "Tira prova",
+                            accent = Palette.Party,
+                            enabled = commandsEnabled && abilityCheckModifier != null,
+                            onClick = {
+                                val selectedTarget = targetId
+                                val modifier = abilityCheckModifier
+                                if (selectedTarget != null && modifier != null) {
+                                    viewModel.rollAbilityCheck(
+                                        selectedTarget,
+                                        abilityCheckAbility,
+                                        modifier,
+                                    )
+                                }
+                            },
+                        )
                     }
                 }
 
@@ -288,6 +353,29 @@ fun BattleToolsDialog(
         }
     }
 }
+
+private fun signedIntegerInput(value: String): String {
+    val negative = value.startsWith('-')
+    val digits = value.filter(Char::isDigit).take(6)
+    return if (negative) "-$digits" else digits
+}
+
+private val SaveAbility.italianLabel: String
+    get() = when (this) {
+        SaveAbility.STRENGTH -> "Forza"
+        SaveAbility.DEXTERITY -> "Destrezza"
+        SaveAbility.CONSTITUTION -> "Costituzione"
+        SaveAbility.INTELLIGENCE -> "Intelligenza"
+        SaveAbility.WISDOM -> "Saggezza"
+        SaveAbility.CHARISMA -> "Carisma"
+    }
+
+private val D20Mode.italianLabel: String
+    get() = when (this) {
+        D20Mode.NORMAL -> "Normale"
+        D20Mode.ADVANTAGE -> "Vantaggio"
+        D20Mode.DISADVANTAGE -> "Svantaggio"
+    }
 
 @Composable
 private fun LabeledNumberField(

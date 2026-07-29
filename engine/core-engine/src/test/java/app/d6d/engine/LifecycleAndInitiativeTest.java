@@ -1,5 +1,6 @@
 package app.d6d.engine;
 
+import app.d6d.domain.combat.ActorDefinition;
 import app.d6d.domain.combat.CombatStatus;
 import app.d6d.domain.combat.D20Mode;
 import app.d6d.domain.combat.D20RollResult;
@@ -67,6 +68,31 @@ class LifecycleAndInitiativeTest {
 
         int staticTotal = session.useStaticInitiative("hero", D20Mode.ADVANTAGE);
         assertEquals(18, staticTotal);
+    }
+
+    @Test
+    void armorTrainingPenaltyAppliesToRolledSharedAndStaticInitiative() {
+        ActorDefinition penalized = ActorDefinition.builder("penalized", "Penalized")
+                .maxHitPoints(10)
+                .initiativeModifier(3)
+                .strengthDexterityD20Disadvantage(true)
+                .build();
+        CombatSession session = CombatSession.create("armor-initiative", 45L);
+        session.addCombatant("penalized", penalized);
+        session.addCombatant("normal", CombatFixtures.goblin());
+
+        D20RollResult rolled = session.rollInitiative("penalized", D20Mode.NORMAL);
+        assertEquals(D20Mode.DISADVANTAGE, rolled.mode());
+        assertEquals(2, rolled.dice().size());
+
+        Map<String, D20RollResult> shared = session.rollSharedInitiative(
+                List.of("penalized", "normal"), D20Mode.ADVANTAGE);
+        assertEquals(D20Mode.NORMAL, shared.get("penalized").mode());
+        assertEquals(D20Mode.ADVANTAGE, shared.get("normal").mode());
+        assertEquals(2, shared.get("normal").dice().size());
+
+        assertEquals(8, session.useStaticInitiative("penalized", D20Mode.NORMAL));
+        assertEquals(13, session.useStaticInitiative("penalized", D20Mode.ADVANTAGE));
     }
 
     @Test

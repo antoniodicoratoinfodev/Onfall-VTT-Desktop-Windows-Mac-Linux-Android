@@ -18,6 +18,7 @@ import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.D20RollInput
 import app.d6d.domain.combat.DamageComponent
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.SaveAbility
 import app.d6d.domain.combat.TurnBudget
 import app.d6d.domain.space.BattleMap
 import app.d6d.domain.space.GridPosition
@@ -746,6 +747,21 @@ class BattleViewModel(
             else -> "Morte ${result.successes()}/${result.failures()}"
         }
         push(targetId, floatInfo(label))
+    }
+
+    /**
+     * Prova di caratteristica dichiarata dal tavolo.
+     *
+     * Usa la modalità d20 già scelta nella barra dei comandi; il motore aggiunge
+     * Sfinimento e l'eventuale Svantaggio imposto dall'armatura.
+     */
+    fun rollAbilityCheck(combatantId: String, ability: SaveAbility, modifier: Int) = command {
+        session.rollAbilityCheck(
+            combatantId,
+            ability,
+            modifier,
+            D20RollInput.digital(rollMode),
+        )
     }
 
     fun stabilize(targetId: String) = command {

@@ -50,6 +50,8 @@ class SheetStoreTest {
             name = "Tempesta",
             activationCost = ActivationCost.BONUS_ACTION,
             resolutionMethod = ResolutionMethod.SAVING_THROW,
+            attackAbility = Ability.WISDOM,
+            spellOrCantrip = true,
             rangeFeet = 90,
             diceCount = 4,
             diceSides = 8,
@@ -122,6 +124,67 @@ class SheetStoreTest {
     }
 
     @Test
+    fun `schema sette recupera i metadati meccanici delle abilita incorporate`() {
+        val defaults = defaultAbilityCatalog()
+        val builtInSpell = defaults.first { it.id == "inc-dardo-runico" }
+        val builtInWeapon = defaults.first { it.id == "arma-spadone" }
+        val legacySpell = builtInSpell.copy(attackAbility = null, spellOrCantrip = false)
+        val legacyWeapon = builtInWeapon.copy(attackAbility = null)
+        val store = SheetStore(directory.resolve("abilita-schema-7.json"))
+        store.save(
+            SheetLibrary(
+                schemaVersion = 7,
+                abilities = listOf(legacySpell, legacyWeapon),
+            ),
+        )
+
+        val migrated = store.load().abilities
+
+        assertTrue(migrated.first { it.id == legacySpell.id }.isSpellOrCantrip)
+        assertEquals(
+            builtInWeapon.attackAbility,
+            migrated.first { it.id == legacyWeapon.id }.attackAbility,
+        )
+        assertEquals(legacySpell.name, migrated.first { it.id == legacySpell.id }.name)
+    }
+
+    @Test
+    fun `schema otto classifica i preset e segnala soltanto le vecchie righe ambigue`() {
+        val knownSpell = defaultAbilityCatalog().first { it.id == "inc-dardo-runico" }
+        val legacyKnownSpell = knownSpell.toLegacyWeaponEntry()
+        val ambiguous = WeaponEntry(name = "Attacco personale")
+        val explicitMentalAttack = WeaponEntry(
+            name = "Lama mentale",
+            attackAbility = Ability.INTELLIGENCE,
+        )
+        val store = SheetStore(directory.resolve("righe-schema-8.json"))
+        store.save(
+            SheetLibrary(
+                schemaVersion = 8,
+                characters = listOf(
+                    CharacterSheet(
+                        id = "pg-righe-legacy",
+                        weapons = listOf(legacyKnownSpell, ambiguous, explicitMentalAttack),
+                    ),
+                ),
+            ),
+        )
+
+        val migrated = store.load()
+        val weapons = migrated.characters.single().weapons
+
+        assertTrue(weapons[0].isSpellOrCantrip)
+        assertEquals(false, weapons[0].legacyClassificationRequired)
+        assertTrue(weapons[1].legacyClassificationRequired)
+        assertEquals(false, weapons[2].legacyClassificationRequired)
+        assertEquals(Ability.INTELLIGENCE, weapons[2].attackAbility)
+        assertEquals(SheetLibrary.SCHEMA_VERSION, migrated.schemaVersion)
+
+        store.save(migrated)
+        assertTrue(store.load().characters.single().weapons[1].legacyClassificationRequired)
+    }
+
+    @Test
     fun `una scheda precedente conserva la CA finale manuale senza doppi conteggi`() {
         val file = directory.resolve("schede.json")
         Files.writeString(
@@ -175,4 +238,73 @@ class SheetStoreTest {
         assertEquals(20, reloaded.calculatedArmorClass)
         assertEquals(22, reloaded.effectiveArmorClass)
     }
+
+    @Test
+    fun `schema sette senza dettagli armatura usa i default retrocompatibili`() {
+        val file = directory.resolve("schema-7.json")
+        Files.writeString(
+            file,
+            """
+            {
+              "schemaVersion": 7,
+              "characters": [
+                {
+                  "id": "pg-schema-7",
+                  "armorClass": 16,
+                  "armorClassMethod": "MANUAL_TOTAL"
+                }
+              ],
+              "monsters": [],
+              "abilities": []
+            }
+            """.trimIndent(),
+        )
+
+        val loaded = SheetStore(file).load().characters.single()
+
+        assertEquals(null, loaded.manualArmorCategory)
+        assertEquals(0, loaded.manualArmorMinimumStrength)
+        assertEquals(false, loaded.manualArmorStealthDisadvantage)
+        assertEquals(ArmorSpecialRule.STANDARD, loaded.armorSpecialRule)
+        assertEquals(16, loaded.effectiveArmorClass)
+        assertEquals(SheetLibrary.SCHEMA_VERSION, SheetStore(file).load().schemaVersion)
+    }
+
+    @Test
+    fun `armatura libera e variante sopravvivono al salvataggio dello schema corrente`() {
+        val file = directory.resolve("armatura-schema-corrente.json")
+        val expected = CharacterSheet(
+            id = "pg-armatura-libera",
+            armorClass = 16,
+            armorClassMethod = ArmorClassMethod.CUSTOM_BASE,
+            manualArmorCategory = ArmorCategory.HEAVY,
+            manualArmorMinimumStrength = 15,
+            manualArmorStealthDisadvantage = true,
+            armorSpecialRule = ArmorSpecialRule.MITHRAL,
+        )
+        val store = SheetStore(file)
+
+        store.save(SheetLibrary(characters = listOf(expected)))
+        val reloaded = store.load().characters.single()
+
+        assertEquals(expected, reloaded)
+        assertEquals(ArmorCategory.HEAVY, reloaded.wornArmorCategory)
+        assertEquals(0, reloaded.effectiveArmorMinimumStrength)
+        assertEquals(false, reloaded.armorStealthDisadvantage)
+    }
+
+    private fun CatalogAbility.toLegacyWeaponEntry(): WeaponEntry = WeaponEntry(
+        name = name,
+        attackBonus = attackBonus,
+        diceCount = diceCount,
+        diceSides = diceSides,
+        damageModifier = damageModifier,
+        damageType = damageType,
+        rangeFeet = rangeFeet,
+        note = rulesText,
+        bonusAction = activationCost == ActivationCost.BONUS_ACTION,
+        areaRadiusFeet = areaRadiusFeet,
+        saveAbility = saveAbility,
+        halfOnSave = halfOnSave,
+    )
 }

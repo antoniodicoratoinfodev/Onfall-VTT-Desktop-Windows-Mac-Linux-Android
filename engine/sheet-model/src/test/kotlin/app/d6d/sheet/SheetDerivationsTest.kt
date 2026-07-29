@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.CharacterProgression
 import app.d6d.rules.character.ClassLevelState
+import app.d6d.rules.character.RuleElementKind
 
 /**
  * Valori derivati della scheda.
@@ -133,6 +134,104 @@ class SheetDerivationsTest {
 
         // "Massimo +2" limita soltanto il bonus: il −1 continua ad applicarsi.
         assertEquals(14, sheet.baseArmorClass)
+    }
+
+    @Test
+    fun `armatura senza competenza impone le limitazioni regolamentari`() {
+        val sheet = CharacterSheet(
+            armorClassMethod = ArmorClassMethod.PLATE,
+            armorTraining = ArmorTraining(),
+            abilityScores = mapOf(
+                Ability.STRENGTH to 12,
+                Ability.DEXTERITY to 14,
+                Ability.INTELLIGENCE to 16,
+            ),
+            speedFeet = 30,
+            spellcasting = Spellcasting(ability = Ability.INTELLIGENCE),
+        )
+
+        assertTrue(sheet.wearingArmorWithoutTraining)
+        assertTrue(sheet.strengthDexterityD20Disadvantage)
+        assertTrue(sheet.hasDisadvantageOnSave(Ability.STRENGTH))
+        assertTrue(sheet.hasDisadvantageOnSave(Ability.DEXTERITY))
+        assertFalse(sheet.hasDisadvantageOnSave(Ability.INTELLIGENCE))
+        assertTrue(sheet.hasDisadvantageOnSkill(Skill.FURTIVITA))
+        assertTrue(sheet.spellcastingBlockedByArmor)
+        assertTrue(sheet.armorStrengthRequirementNotMet)
+        assertEquals(10, sheet.armorSpeedPenaltyFeet)
+        assertEquals(20, sheet.effectiveSpeedFeet)
+        assertTrue(sheet.toActorDefinition().strengthDexterityD20Disadvantage())
+
+        val trained = sheet.copy(armorTraining = ArmorTraining(heavy = true))
+        assertFalse(trained.wearingArmorWithoutTraining)
+        assertFalse(trained.spellcastingBlockedByArmor)
+        // La competenza elimina le penalità da addestramento, non il requisito di Forza.
+        assertEquals(20, trained.effectiveSpeedFeet)
+        assertTrue(trained.hasDisadvantageOnSkill(Skill.FURTIVITA))
+    }
+
+    @Test
+    fun `le armature applicano categoria requisito di Forza e Furtivita`() {
+        assertEquals(ArmorCategory.LIGHT, ArmorClassMethod.LEATHER.armorCategory)
+        assertEquals(ArmorCategory.MEDIUM, ArmorClassMethod.HALF_PLATE.armorCategory)
+        assertEquals(ArmorCategory.HEAVY, ArmorClassMethod.CHAIN_MAIL.armorCategory)
+        assertEquals(13, ArmorClassMethod.CHAIN_MAIL.minimumStrength)
+        assertEquals(15, ArmorClassMethod.SPLINT.minimumStrength)
+        assertTrue(ArmorClassMethod.PADDED.stealthDisadvantage)
+        assertTrue(ArmorClassMethod.SCALE_MAIL.stealthDisadvantage)
+        assertFalse(ArmorClassMethod.BREASTPLATE.stealthDisadvantage)
+    }
+
+    @Test
+    fun `CA libera conserva categoria requisito Furtivita e tempi dell armatura`() {
+        val sheet = CharacterSheet(
+            armorClass = 17,
+            armorClassMethod = ArmorClassMethod.MANUAL_TOTAL,
+            manualArmorCategory = ArmorCategory.HEAVY,
+            manualArmorMinimumStrength = 15,
+            manualArmorStealthDisadvantage = true,
+            abilityScores = mapOf(Ability.STRENGTH to 12),
+        )
+
+        assertEquals(ArmorCategory.HEAVY, sheet.wornArmorCategory)
+        assertTrue(sheet.wearingArmorWithoutTraining)
+        assertTrue(sheet.armorStrengthRequirementNotMet)
+        assertTrue(sheet.armorStealthDisadvantage)
+        assertEquals(10, sheet.armorDonMinutes)
+        assertEquals(5, sheet.armorDoffMinutes)
+
+        val noArmor = sheet.copy(manualArmorCategory = null)
+        assertFalse(noArmor.wearingArmorWithoutTraining)
+        assertFalse(noArmor.armorStrengthRequirementNotMet)
+        assertFalse(noArmor.armorStealthDisadvantage)
+    }
+
+    @Test
+    fun `mithral e giaco elfico applicano le eccezioni SRD`() {
+        val mithral = CharacterSheet(
+            armorClassMethod = ArmorClassMethod.PLATE,
+            armorSpecialRule = ArmorSpecialRule.MITHRAL,
+            abilityScores = mapOf(Ability.STRENGTH to 8),
+            armorTraining = ArmorTraining(heavy = true),
+        )
+        assertEquals(0, mithral.effectiveArmorMinimumStrength)
+        assertFalse(mithral.armorStrengthRequirementNotMet)
+        assertFalse(mithral.armorStealthDisadvantage)
+        assertEquals(30, mithral.effectiveSpeedFeet)
+
+        val elvenChain = CharacterSheet(
+            armorClassMethod = ArmorClassMethod.CHAIN_SHIRT,
+            armorSpecialRule = ArmorSpecialRule.ELVEN_CHAIN,
+            armorTraining = ArmorTraining(),
+        )
+        assertFalse(elvenChain.wearingArmorWithoutTraining)
+        assertEquals(1, elvenChain.armorSpecialArmorClassBonus)
+        assertEquals(14, elvenChain.calculatedArmorClass)
+
+        val invalid = elvenChain.copy(armorClassMethod = ArmorClassMethod.LEATHER)
+        assertEquals(ArmorSpecialRule.STANDARD, invalid.effectiveArmorSpecialRule)
+        assertTrue(invalid.wearingArmorWithoutTraining)
+        assertEquals(0, invalid.armorSpecialArmorClassBonus)
     }
 
     @Test
@@ -409,6 +508,81 @@ class SheetDerivationsTest {
         assertEquals(8, selected.damage().single().dice().count())
         assertEquals(20, selected.areaRadiusFeet())
         assertEquals(SaveAbility.DEXTERITY, selected.saveAbility())
+    }
+
+    @Test
+    fun `il blocco magico riconosce incantesimi SRD e personalizzati`() {
+        val fireball = defaultAbilityCatalog()
+            .first { it.id == "inc-palla-di-fuoco" }
+            .copy(category = RuleElementKind.SPELL)
+        val customSpell = CatalogAbility(
+            id = "custom-spell",
+            name = "Raggio personale",
+            category = RuleElementKind.CUSTOM,
+            spellOrCantrip = true,
+            attackAbility = Ability.INTELLIGENCE,
+        )
+        val sword = defaultAbilityCatalog().first { it.id == "arma-spadone" }
+        val sheet = CharacterSheet(
+            armorClassMethod = ArmorClassMethod.CHAIN_MAIL,
+            armorTraining = ArmorTraining(),
+            abilityIds = listOf(fireball.id, customSpell.id, sword.id),
+            spellcasting = Spellcasting(ability = Ability.INTELLIGENCE),
+            weapons = listOf(
+                WeaponEntry(
+                    name = "Trucchetto privato",
+                    spellOrCantrip = true,
+                    attackAbility = Ability.CHARISMA,
+                ),
+            ),
+        )
+
+        val catalog = listOf(fireball, customSpell, sword)
+        val blocked = sheet.toActorDefinition(abilityCatalog = catalog)
+        assertEquals(listOf(sword.id), blocked.abilities().map { it.id() })
+
+        val trained = sheet.copy(armorTraining = ArmorTraining(heavy = true))
+            .toActorDefinition(abilityCatalog = catalog)
+        assertEquals(
+            setOf("${sheet.id}-arma-0", fireball.id, customSpell.id, sword.id),
+            trained.abilities().map { it.id() }.toSet(),
+        )
+        assertTrue(trained.ability(customSpell.id).spellOrCantrip())
+        assertEquals(SaveAbility.INTELLIGENCE, trained.ability(customSpell.id).attackAbility())
+        assertEquals(
+            SaveAbility.CHARISMA,
+            trained.ability("${sheet.id}-arma-0").attackAbility(),
+        )
+    }
+
+    @Test
+    fun `una vecchia riga ambigua non aggira le restrizioni dell armatura`() {
+        val legacyWeapon = WeaponEntry(
+            name = "Voce importata",
+            legacyClassificationRequired = true,
+        )
+        val sheet = CharacterSheet(
+            armorClassMethod = ArmorClassMethod.CHAIN_MAIL,
+            armorTraining = ArmorTraining(),
+            weapons = listOf(legacyWeapon),
+        )
+
+        assertTrue(sheet.toActorDefinition().abilities().isEmpty())
+
+        val trained = sheet.copy(armorTraining = ArmorTraining(heavy = true))
+            .toActorDefinition()
+        assertEquals(listOf("${sheet.id}-arma-0"), trained.abilities().map { it.id() })
+
+        val classified = sheet.copy(
+            weapons = listOf(
+                legacyWeapon.copy(
+                    attackAbility = Ability.STRENGTH,
+                    legacyClassificationRequired = false,
+                ),
+            ),
+        ).toActorDefinition()
+        assertEquals(SaveAbility.STRENGTH, classified.abilities().single().attackAbility())
+        assertTrue(classified.strengthDexterityD20Disadvantage())
     }
 
     @Test

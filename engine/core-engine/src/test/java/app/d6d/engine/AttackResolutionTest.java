@@ -13,6 +13,7 @@ import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.EventType;
 import app.d6d.domain.combat.CombatEvent;
 import app.d6d.domain.combat.ResolutionMethod;
+import app.d6d.domain.combat.SaveAbility;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -65,6 +66,82 @@ class AttackResolutionTest {
         assertEquals("sword", session.auditTrail().stream()
                 .filter(event -> event.type() == EventType.DAMAGE_ROLLED).findFirst().orElseThrow()
                 .details().get("abilityId"));
+    }
+
+    @Test
+    void armorTrainingPenaltyImposesDisadvantageAndCancelsAdvantage() {
+        CombatSession disadvantaged = activeWithArmorPenalty(21L);
+
+        AttackResult normalRequest = disadvantaged.attack(
+                AttackRequest.digital("hero", "goblin", "sword", D20Mode.NORMAL));
+
+        assertEquals(D20Mode.DISADVANTAGE, normalRequest.attackRoll().mode());
+        assertEquals(2, normalRequest.attackRoll().dice().size());
+        assertEquals(
+                normalRequest.attackRoll().dice().stream().mapToInt(Integer::intValue).min().orElseThrow(),
+                normalRequest.attackRoll().naturalRoll());
+
+        CombatSession cancelled = activeWithArmorPenalty(22L);
+        AttackResult advantageRequest = cancelled.attack(
+                AttackRequest.digital("hero", "goblin", "sword", D20Mode.ADVANTAGE));
+
+        assertEquals(D20Mode.NORMAL, advantageRequest.attackRoll().mode());
+        assertEquals(1, advantageRequest.attackRoll().dice().size());
+    }
+
+    @Test
+    void armorTrainingPenaltyDoesNotAffectAnAttackBasedOnAnotherAbility() {
+        AbilityDefinition charismaAttack = AbilityDefinition.builder("charisma-ray", "Charisma ray")
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .attackAbility(SaveAbility.CHARISMA)
+                .attackBonus(100)
+                .damage(List.of(DamageFormula.dice(DamageType.FORCE, 1, 6, 0)))
+                .build();
+        CombatSession session = activeWithArmorPenalty(23L, charismaAttack);
+
+        AttackResult result = session.attack(
+                AttackRequest.digital("hero", "goblin", charismaAttack.id(), D20Mode.NORMAL));
+
+        assertEquals(D20Mode.NORMAL, result.attackRoll().mode());
+        assertEquals(1, result.attackRoll().dice().size());
+    }
+
+    @Test
+    void armorTrainingPenaltyBlocksSpellAttacksBeforeSpendingTheAction() {
+        AbilityDefinition spellAttack = AbilityDefinition.builder("spell-ray", "Spell ray")
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .attackAbility(SaveAbility.CHARISMA)
+                .spellOrCantrip(true)
+                .attackBonus(100)
+                .damage(List.of(DamageFormula.dice(DamageType.FORCE, 1, 6, 0)))
+                .build();
+        CombatSession session = activeWithArmorPenalty(24L, spellAttack);
+
+        assertThrows(
+                CombatRuleException.class,
+                () -> session.attack(
+                        AttackRequest.digital("hero", "goblin", spellAttack.id(), D20Mode.NORMAL)));
+        assertTrue(session.currentState().turnBudgets().get("hero").actionAvailable());
+    }
+
+    private static CombatSession activeWithArmorPenalty(long seed) {
+        return activeWithArmorPenalty(seed, CombatFixtures.sword());
+    }
+
+    private static CombatSession activeWithArmorPenalty(long seed, AbilityDefinition ability) {
+        ActorDefinition hero = ActorDefinition.builder("armored-hero", "Armored hero")
+                .maxHitPoints(30)
+                .strengthDexterityD20Disadvantage(true)
+                .abilities(List.of(ability))
+                .build();
+        CombatSession session = CombatSession.create("armor-training", seed);
+        session.addCombatant("hero", hero);
+        session.addCombatant("goblin", CombatFixtures.goblin());
+        session.setInitiative("hero", 20);
+        session.setInitiative("goblin", 10);
+        session.markReady();
+        session.start();
+        return session;
     }
 
     @Test

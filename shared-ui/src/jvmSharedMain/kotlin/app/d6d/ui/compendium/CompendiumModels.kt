@@ -31,6 +31,8 @@ data class AbilityDraft(
     val activationCost: ActivationCost = ActivationCost.ACTION,
     val resolutionMethod: ResolutionMethod = ResolutionMethod.ATTACK_ROLL,
     val attackBonus: Int = 4,
+    val attackAbility: SaveAbility? = null,
+    val spellOrCantrip: Boolean = false,
     val rangeFeet: Int = 5,
     val maxTargets: Int = 1,
     val diceCount: Int = 1,
@@ -40,21 +42,33 @@ data class AbilityDraft(
     val automationStatus: AutomationStatus = AutomationStatus.AUTOMATED,
     val rulesText: String = "",
 ) {
-    fun toDefinition(): AbilityDefinition = AbilityDefinition(
+    fun toDefinition(): AbilityDefinition = AbilityDefinition.builder(
         id.ifBlank { "cap-senza-nome" },
-        VERSION,
-        SOURCE,
-        RULESET,
         name.ifBlank { "Senza nome" },
-        activationCost,
-        resolutionMethod,
-        attackBonus,
-        rangeFeet,
-        maxTargets.coerceAtLeast(1),
-        listOf(DamageFormula.dice(damageType, diceCount.coerceAtLeast(1), diceSides.coerceAtLeast(2), diceModifier)),
-        automationStatus,
-        rulesText,
     )
+        .version(VERSION)
+        .source(SOURCE)
+        .rulesetVersion(RULESET)
+        .activationCost(activationCost)
+        .resolutionMethod(resolutionMethod)
+        .attackBonus(attackBonus)
+        .attackAbility(attackAbility)
+        .spellOrCantrip(spellOrCantrip)
+        .rangeFeet(rangeFeet)
+        .maxTargets(maxTargets.coerceAtLeast(1))
+        .damage(
+            listOf(
+                DamageFormula.dice(
+                    damageType,
+                    diceCount.coerceAtLeast(1),
+                    diceSides.coerceAtLeast(2),
+                    diceModifier,
+                ),
+            ),
+        )
+        .automationStatus(automationStatus)
+        .rulesText(rulesText)
+        .build()
 
     companion object {
         fun from(definition: AbilityDefinition): AbilityDraft {
@@ -66,6 +80,8 @@ data class AbilityDraft(
                 activationCost = definition.activationCost(),
                 resolutionMethod = definition.resolutionMethod(),
                 attackBonus = definition.attackBonus(),
+                attackAbility = definition.attackAbility(),
+                spellOrCantrip = definition.spellOrCantrip(),
                 rangeFeet = definition.rangeFeet(),
                 maxTargets = definition.maxTargets(),
                 diceCount = dice?.count() ?: 1,

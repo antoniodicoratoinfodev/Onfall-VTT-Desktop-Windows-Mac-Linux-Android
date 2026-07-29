@@ -5,9 +5,11 @@ import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.ConditionType
+import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.EventType
+import app.d6d.domain.combat.SaveAbility
 import app.d6d.engine.CombatSession
 import app.d6d.ui.content.SampleEncounter
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -361,6 +363,24 @@ class BattleViewModelTest {
 
         assertNotNull(model.message)
         assertEquals(CombatStatus.ACTIVE, model.status)
+    }
+
+    @Test
+    fun `la prova generica usa la modalita della barra e non consuma azioni`() {
+        val model = viewModel()
+        val actor = model.activeCombatantId!!
+        val budgetBefore = model.budget(actor)
+        model.rollMode = D20Mode.ADVANTAGE
+
+        model.rollAbilityCheck(actor, SaveAbility.WISDOM, 4)
+
+        val event = model.events.last { it.type() == EventType.ABILITY_CHECK_ROLLED }
+        assertEquals(actor, event.actorId())
+        assertEquals("WISDOM", event.details()["ability"])
+        assertEquals("ADVANTAGE", event.details()["mode"])
+        assertEquals("4", event.details()["modifier"])
+        assertEquals(budgetBefore, model.budget(actor))
+        assertNull(model.message)
     }
 
     @Test

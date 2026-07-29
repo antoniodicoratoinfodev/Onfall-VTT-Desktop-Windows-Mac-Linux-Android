@@ -35,38 +35,53 @@ class AreaSpellTest {
                 .areaRadiusFeet(20)
                 .saveAbility(SaveAbility.DEXTERITY)
                 .halfOnSave(true)
+                .spellOrCantrip(true)
                 .build();
     }
 
     private static ActorDefinition caster() {
+        return caster(false);
+    }
+
+    private static ActorDefinition caster(boolean armorPenalty) {
         return ActorDefinition.builder("wizard-def", "Wizard")
                 .armorClass(12)
                 .maxHitPoints(30)
                 .speedFeet(30)
                 .initiativeModifier(2)
                 .spellSaveDc(14)
+                .strengthDexterityD20Disadvantage(armorPenalty)
                 .abilities(List.of(fireball()))
                 .build();
     }
 
     /** Bersaglio robusto con un bonus al TS di Destrezza fissato per rendere l'esito certo. */
     private static ActorDefinition target(String id, int dexteritySaveBonus) {
+        return target(id, dexteritySaveBonus, false);
+    }
+
+    private static ActorDefinition target(String id, int dexteritySaveBonus, boolean armorPenalty) {
         return ActorDefinition.builder(id + "-def", id)
                 .armorClass(10)
                 .maxHitPoints(100)
                 .speedFeet(30)
                 .savingThrowBonuses(Map.of(SaveAbility.DEXTERITY, dexteritySaveBonus))
+                .strengthDexterityD20Disadvantage(armorPenalty)
                 .abilities(List.of())
                 .build();
     }
 
     private static CombatSession scene(long seed) {
+        return scene(seed, false);
+    }
+
+    private static CombatSession scene(long seed, boolean casterArmorPenalty) {
         CombatSession session = CombatSession.create("area", seed);
-        session.addCombatant("wizard", caster());
+        session.addCombatant("wizard", caster(casterArmorPenalty));
         // +100 supera sempre il TS, -100 lo fallisce sempre: gli esiti non dipendono dal d20.
         session.addCombatant("centre", target("centre", -100));
         session.addCombatant("nimble", target("nimble", 100));
-        session.addCombatant("ally", target("ally", -100));
+        session.addCombatant("ally", target("ally", -100, true));
         session.addCombatant("faraway", target("faraway", 0));
         session.setInitiative("wizard", 20);
         session.setInitiative("centre", 15);
@@ -82,6 +97,16 @@ class AreaSpellTest {
         session.placeCombatant("ally", new GridPosition(9, 10), 1);
         session.placeCombatant("faraway", new GridPosition(25, 25), 1);
         return session;
+    }
+
+    @Test
+    void armorTrainingPenaltyBlocksAnAreaSpellBeforeSpendingTheAction() {
+        CombatSession session = scene(35L, true);
+
+        assertThrows(
+                CombatRuleException.class,
+                () -> session.castArea("wizard", new GridPosition(10, 10), "fireball"));
+        assertTrue(session.currentState().turnBudgets().get("wizard").actionAvailable());
     }
 
     private static Map<String, AreaTargetResult> byTarget(AreaSpellResult result) {
@@ -113,6 +138,10 @@ class AreaSpellTest {
         // L'alleato è colpito come tutti gli altri.
         assertFalse(byId.get("ally").saved());
         assertEquals(full, byId.get("ally").damage().get().totalAdjustedDamage());
+        assertEquals(
+                app.d6d.domain.combat.D20Mode.DISADVANTAGE,
+                byId.get("ally").saveRoll().orElseThrow().mode());
+        assertEquals(2, byId.get("ally").saveRoll().orElseThrow().dice().size());
         // Il danno base è nel range di 8d6.
         assertTrue(full >= 8 && full <= 48, "8d6 out of range: " + full);
     }

@@ -26,7 +26,8 @@ public record ActorDefinition(
         List<AbilityDefinition> abilities,
         Map<SaveAbility, Integer> savingThrowBonuses,
         int spellSaveDc,
-        int attacksPerAction) {
+        int attacksPerAction,
+        boolean strengthDexterityD20Disadvantage) {
 
     public ActorDefinition {
         id = requireText(id, "id");
@@ -64,7 +65,8 @@ public record ActorDefinition(
             List<AbilityDefinition> abilities) {
         this(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints, currentHitPoints,
                 temporaryHitPoints, speedFeet, initiativeModifier, initiativeScore, constitutionSaveBonus,
-                resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities, Map.of(), 0, 1);
+                resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities, Map.of(), 0, 1,
+                false);
     }
 
     /** Backward-compatible constructor: one attack for each Attack action. */
@@ -77,7 +79,21 @@ public record ActorDefinition(
         this(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints, currentHitPoints,
                 temporaryHitPoints, speedFeet, initiativeModifier, initiativeScore, constitutionSaveBonus,
                 resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities,
-                savingThrowBonuses, spellSaveDc, 1);
+                savingThrowBonuses, spellSaveDc, 1, false);
+    }
+
+    /** Backward-compatible constructor: no imposed disadvantage on Strength/Dexterity d20 tests. */
+    public ActorDefinition(
+            String id, String definitionVersion, String rulesetVersion, String name, int armorClass,
+            int maxHitPoints, int currentHitPoints, int temporaryHitPoints, int speedFeet, int initiativeModifier,
+            int initiativeScore, int constitutionSaveBonus, Set<DamageType> resistances,
+            Set<DamageType> vulnerabilities, Set<DamageType> damageImmunities, Set<ConditionType> conditionImmunities,
+            List<AbilityDefinition> abilities, Map<SaveAbility, Integer> savingThrowBonuses, int spellSaveDc,
+            int attacksPerAction) {
+        this(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints, currentHitPoints,
+                temporaryHitPoints, speedFeet, initiativeModifier, initiativeScore, constitutionSaveBonus,
+                resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities,
+                savingThrowBonuses, spellSaveDc, attacksPerAction, false);
     }
 
     /** Saving-throw bonus for an ability, or 0 when the actor has no recorded save. */
@@ -122,6 +138,7 @@ public record ActorDefinition(
         private Map<SaveAbility, Integer> savingThrowBonuses = Map.of();
         private int spellSaveDc;
         private int attacksPerAction = 1;
+        private boolean strengthDexterityD20Disadvantage;
 
         private Builder(String id, String name) {
             this.id = id;
@@ -146,6 +163,10 @@ public record ActorDefinition(
         public Builder savingThrowBonuses(Map<SaveAbility, Integer> value) { this.savingThrowBonuses = value; return this; }
         public Builder spellSaveDc(int value) { this.spellSaveDc = value; return this; }
         public Builder attacksPerAction(int value) { this.attacksPerAction = value; return this; }
+        public Builder strengthDexterityD20Disadvantage(boolean value) {
+            this.strengthDexterityD20Disadvantage = value;
+            return this;
+        }
 
         public ActorDefinition build() {
             int resolvedCurrentHitPoints = currentHitPoints == null ? maxHitPoints : currentHitPoints;
@@ -161,7 +182,7 @@ public record ActorDefinition(
                     resolvedCurrentHitPoints, temporaryHitPoints, speedFeet, initiativeModifier,
                     resolvedInitiativeScore, constitutionSaveBonus, resistances, vulnerabilities,
                     damageImmunities, conditionImmunities, abilities, savingThrowBonuses, spellSaveDc,
-                    attacksPerAction);
+                    attacksPerAction, strengthDexterityD20Disadvantage);
         }
     }
 }

@@ -310,6 +310,7 @@ public final class CombatSessionJsonCodec {
                 "savingThrowBonuses", encodeSaveBonuses(snapshot.savingThrowBonuses()),
                 "spellSaveDc", snapshot.spellSaveDc(),
                 "attacksPerAction", snapshot.attacksPerAction(),
+                "strengthDexterityD20Disadvantage", snapshot.strengthDexterityD20Disadvantage(),
                 "resistances", enumNames(snapshot.resistances()),
                 "vulnerabilities", enumNames(snapshot.vulnerabilities()),
                 "damageImmunities", enumNames(snapshot.damageImmunities()),
@@ -347,7 +348,8 @@ public final class CombatSessionJsonCodec {
                 value.get("spellSaveDc") == null ? 0 : asInteger(value.get("spellSaveDc"), member(path, "spellSaveDc")),
                 value.get("attacksPerAction") == null
                         ? 1
-                        : asInteger(value.get("attacksPerAction"), member(path, "attacksPerAction")));
+                        : asInteger(value.get("attacksPerAction"), member(path, "attacksPerAction")),
+                Boolean.TRUE.equals(value.get("strengthDexterityD20Disadvantage")));
     }
 
     private static Map<String, Object> encodeSaveBonuses(Map<SaveAbility, Integer> bonuses) {
@@ -384,6 +386,8 @@ public final class CombatSessionJsonCodec {
                 "areaRadiusFeet", ability.areaRadiusFeet(),
                 "saveAbility", ability.saveAbility() == null ? "" : ability.saveAbility().name(),
                 "halfOnSave", ability.halfOnSave(),
+                "attackAbility", ability.attackAbility() == null ? "" : ability.attackAbility().name(),
+                "spellOrCantrip", ability.spellOrCantrip(),
                 "damage", ability.damage().stream().map(this::encodeDamageFormula).toList(),
                 "automationStatus", ability.automationStatus().name(),
                 "rulesText", ability.rulesText(),
@@ -414,7 +418,9 @@ public final class CombatSessionJsonCodec {
                 value.get("areaRadiusFeet") == null ? 0 : asInteger(value.get("areaRadiusFeet"), member(path, "areaRadiusFeet")),
                 decodeSaveAbility(value.get("saveAbility")),
                 Boolean.TRUE.equals(value.get("halfOnSave")),
-                Boolean.TRUE.equals(value.get("passive")));
+                Boolean.TRUE.equals(value.get("passive")),
+                decodeSaveAbility(value.get("attackAbility")),
+                Boolean.TRUE.equals(value.get("spellOrCantrip")));
     }
 
     /** Nome della caratteristica del TS, o null se assente o vuoto (nessun tiro salvezza). */

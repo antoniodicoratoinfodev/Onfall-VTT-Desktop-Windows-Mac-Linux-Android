@@ -840,6 +840,41 @@ private fun AbilityEditor(
                 }
 
                 SheetCheck(
+                    "Incantesimo o trucchetto",
+                    draft.isSpellOrCantrip,
+                ) { spell ->
+                    onChange(draft.copy(spellOrCantrip = spell))
+                }
+                if (draft.resolutionMethod == ResolutionMethod.ATTACK_ROLL) {
+                    Text(
+                        "CARATTERISTICA DEL TIRO PER COLPIRE",
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        GameButton(
+                            label = "Non specificata",
+                            accent = if (draft.attackAbility == null) Palette.Gold else Palette.TextMuted,
+                            selected = draft.attackAbility == null,
+                            dense = true,
+                            onClick = { onChange(draft.copy(attackAbility = null)) },
+                        )
+                        Ability.entries.forEach { ability ->
+                            GameButton(
+                                label = ability.abbreviation,
+                                accent = if (draft.attackAbility == ability) Palette.Gold else Palette.TextMuted,
+                                selected = draft.attackAbility == ability,
+                                dense = true,
+                                onClick = { onChange(draft.copy(attackAbility = ability)) },
+                            )
+                        }
+                    }
+                }
+
+                SheetCheck(
                     "Risoluzione manuale al tavolo",
                     draft.automationStatus == AutomationStatus.MANUAL_REQUIRED,
                 ) { manual ->
@@ -992,11 +1027,13 @@ private fun AbilityEditor(
 private fun newAbility(): CatalogAbility = CatalogAbility(
     id = "abilita-${System.currentTimeMillis()}",
     name = "Nuova abilità",
+    attackAbility = Ability.STRENGTH,
 )
 
 private fun CatalogAbility.asCustomCopy(): CatalogAbility = copy(
     id = "abilita-${System.currentTimeMillis()}",
     name = "$name (copia)",
+    spellOrCantrip = isSpellOrCantrip,
     category = RuleElementKind.CUSTOM,
     classEligibility = emptyList(),
     sourcePackId = null,

@@ -8,6 +8,7 @@ import app.d6d.rules.character.ChoiceSelection
 import app.d6d.rules.character.ClassLevelState
 import app.d6d.rules.character.ExperienceProgression
 import app.d6d.rules.character.LevelUpRequest
+import app.d6d.sheet.ArmorCategory
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.GuidedCharacterService
@@ -212,6 +213,23 @@ class GuidedCharacterServiceTest {
 
         assertEquals(ArmorClassMethod.MONK_UNARMORED, monk.armorClassMethod)
         assertEquals(17, monk.effectiveArmorClass)
+    }
+
+    @Test
+    fun `la creazione non sostituisce una CA manuale che dichiara un armatura`() {
+        val draft = CharacterSheet(
+            armorClass = 10,
+            armorClassMethod = ArmorClassMethod.MANUAL_TOTAL,
+            manualArmorCategory = ArmorCategory.LIGHT,
+        )
+
+        val barbarian = service.advance(
+            draft,
+            requestFor(draft, CharacterClassId.BARBARIAN),
+        )
+
+        assertEquals(ArmorClassMethod.MANUAL_TOTAL, barbarian.armorClassMethod)
+        assertEquals(ArmorCategory.LIGHT, barbarian.wornArmorCategory)
     }
 
     @Test

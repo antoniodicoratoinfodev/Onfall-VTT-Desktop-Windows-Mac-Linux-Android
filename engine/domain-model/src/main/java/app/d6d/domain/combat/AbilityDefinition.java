@@ -33,7 +33,9 @@ public record AbilityDefinition(
         int areaRadiusFeet,
         SaveAbility saveAbility,
         boolean halfOnSave,
-        boolean passive) {
+        boolean passive,
+        SaveAbility attackAbility,
+        boolean spellOrCantrip) {
 
     public AbilityDefinition {
         id = requireText(id, "id");
@@ -66,7 +68,7 @@ public record AbilityDefinition(
             ActivationCost activationCost, ResolutionMethod resolutionMethod, int attackBonus, int rangeFeet,
             int maxTargets, List<DamageFormula> damage, AutomationStatus automationStatus, String rulesText) {
         this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
-                maxTargets, damage, automationStatus, rulesText, 0, null, false, false);
+                maxTargets, damage, automationStatus, rulesText, 0, null, false, false, null, false);
     }
 
     /** Backward-compatible constructor: an ability the player activates, never a passive trait. */
@@ -76,7 +78,21 @@ public record AbilityDefinition(
             int maxTargets, List<DamageFormula> damage, AutomationStatus automationStatus, String rulesText,
             int areaRadiusFeet, SaveAbility saveAbility, boolean halfOnSave) {
         this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
-                maxTargets, damage, automationStatus, rulesText, areaRadiusFeet, saveAbility, halfOnSave, false);
+                maxTargets, damage, automationStatus, rulesText, areaRadiusFeet, saveAbility, halfOnSave, false,
+                null, false);
+    }
+
+    /**
+     * Backward-compatible constructor: no recorded attack ability and no spell classification.
+     */
+    public AbilityDefinition(
+            String id, String version, String source, String rulesetVersion, String name,
+            ActivationCost activationCost, ResolutionMethod resolutionMethod, int attackBonus, int rangeFeet,
+            int maxTargets, List<DamageFormula> damage, AutomationStatus automationStatus, String rulesText,
+            int areaRadiusFeet, SaveAbility saveAbility, boolean halfOnSave, boolean passive) {
+        this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
+                maxTargets, damage, automationStatus, rulesText, areaRadiusFeet, saveAbility, halfOnSave, passive,
+                null, false);
     }
 
     /** True when the ability affects a spherical area rather than a single target. */
@@ -128,6 +144,8 @@ public record AbilityDefinition(
         private SaveAbility saveAbility;
         private boolean halfOnSave;
         private boolean passive;
+        private SaveAbility attackAbility;
+        private boolean spellOrCantrip;
 
         private Builder(String id, String name) {
             this.id = id;
@@ -149,11 +167,13 @@ public record AbilityDefinition(
         public Builder saveAbility(SaveAbility value) { this.saveAbility = value; return this; }
         public Builder halfOnSave(boolean value) { this.halfOnSave = value; return this; }
         public Builder passive(boolean value) { this.passive = value; return this; }
+        public Builder attackAbility(SaveAbility value) { this.attackAbility = value; return this; }
+        public Builder spellOrCantrip(boolean value) { this.spellOrCantrip = value; return this; }
 
         public AbilityDefinition build() {
             return new AbilityDefinition(id, version, source, rulesetVersion, name, activationCost,
                     resolutionMethod, attackBonus, rangeFeet, maxTargets, damage, automationStatus, rulesText,
-                    areaRadiusFeet, saveAbility, halfOnSave, passive);
+                    areaRadiusFeet, saveAbility, halfOnSave, passive, attackAbility, spellOrCantrip);
         }
     }
 }

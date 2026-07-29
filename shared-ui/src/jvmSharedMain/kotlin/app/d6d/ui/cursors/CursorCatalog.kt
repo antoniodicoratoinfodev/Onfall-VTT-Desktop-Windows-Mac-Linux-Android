@@ -2,10 +2,29 @@ package app.d6d.ui.cursors
 
 import androidx.compose.ui.graphics.ImageBitmap
 
-/** Le due finiture disponibili per il guanto-cursore del desktop. */
+/** Le finiture disponibili per il guanto-cursore del desktop. */
 enum class CursorPair {
     COLD,
     WARM,
+    CLASSIC,
+    RUNIC,
+    STEEL,
+}
+
+/**
+ * Dimensione visiva del cursore dentro il canvas nativo del sistema.
+ *
+ * Il canvas non cambia: a scalare sono guanto e hotspot, così il punto attivo
+ * resta sulla stessa parte del dito a qualunque dimensione.
+ */
+enum class CursorSize(
+    val scale: Float,
+    val label: String,
+    val description: String,
+) {
+    SMALL(0.65f, "Piccolo", "65% · più discreto"),
+    MEDIUM(0.82f, "Medio", "82% · compatto"),
+    ORIGINAL(1f, "Originale", "100% · massima presenza"),
 }
 
 /**
@@ -28,6 +47,8 @@ data class CursorPairPreview(
  */
 data class CursorPreferences(
     val selected: CursorPair,
+    val size: CursorSize,
     val previews: List<CursorPairPreview>,
     val onSelect: (CursorPair) -> Unit,
+    val onSizeChange: (CursorSize) -> Unit,
 )

@@ -407,7 +407,8 @@ class GuidedCharacterService(val pack: RulesContentPack) {
                 (
                     sheet.armorClassMethod == ArmorClassMethod.MANUAL_TOTAL &&
                         sheet.armorClass == 10 &&
-                        sheet.armorClassOverride == null
+                        sheet.armorClassOverride == null &&
+                        sheet.wornArmorCategory == null
                     )
         val armorClassMethod = if (mayAdoptClassArmorFormula) {
             when {
@@ -590,14 +591,16 @@ fun WeaponDefinition.toWeaponEntry(
     fun modifierOf(ability: Ability) = abilityModifier(abilityScores[ability] ?: 10)
     val strength = modifierOf(Ability.STRENGTH)
     val dexterity = modifierOf(Ability.DEXTERITY)
-    val modifier = when {
-        reach == WeaponReach.RANGED -> dexterity
-        WeaponProperty.FINESSE in properties -> maxOf(strength, dexterity)
-        else -> strength
+    val attackAbility = when {
+        reach == WeaponReach.RANGED -> Ability.DEXTERITY
+        WeaponProperty.FINESSE in properties && dexterity > strength -> Ability.DEXTERITY
+        else -> Ability.STRENGTH
     }
+    val modifier = modifierOf(attackAbility)
     return WeaponEntry(
         name = name,
         attackBonus = proficiencyBonus + modifier,
+        attackAbility = attackAbility,
         diceCount = diceCount,
         diceSides = diceSides,
         damageModifier = modifier,

@@ -14,6 +14,7 @@ import app.d6d.domain.combat.D20Mode;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.ResolutionMethod;
+import app.d6d.domain.combat.SaveAbility;
 import app.d6d.engine.CombatSession;
 import app.d6d.persistence.json.Json;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,13 @@ class CombatSessionPersistenceTest {
 
         assertEquals(savedState, restored.currentState());
         assertEquals(2, restored.currentState().combatant("hero").snapshot().attacksPerAction());
+        assertTrue(restored.currentState().combatant("hero").snapshot().strengthDexterityD20Disadvantage());
+        AbilityDefinition restoredBlade =
+                restored.currentState().combatant("hero").snapshot().ability("blade");
+        assertEquals(SaveAbility.DEXTERITY, restoredBlade.attackAbility());
+        assertFalse(restoredBlade.spellOrCantrip());
+        assertTrue(restored.currentState().combatant("hero").snapshot()
+                .ability("focus").spellOrCantrip());
         assertEquals(Set.of("hero"), restored.currentState().partyCombatantIds());
         assertEquals(savedAudit, restored.auditTrail());
         assertFalse(restored.canUndo());
@@ -132,12 +140,27 @@ class CombatSessionPersistenceTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> snapshot = (Map<String, Object>) combatant.get("snapshot");
             snapshot.remove("attacksPerAction");
+            snapshot.remove("strengthDexterityD20Disadvantage");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> abilities = (List<Map<String, Object>>) snapshot.get("abilities");
+            for (Map<String, Object> ability : abilities) {
+                ability.remove("attackAbility");
+                ability.remove("spellOrCantrip");
+            }
         }
 
         CombatSession restored = codec.decode(Json.parseObject(Json.encode(encoded)));
 
         assertEquals(1, restored.currentState().combatant("hero").snapshot().attacksPerAction());
         assertEquals(1, restored.currentState().combatant("goblin").snapshot().attacksPerAction());
+        assertFalse(restored.currentState().combatant("hero").snapshot().strengthDexterityD20Disadvantage());
+        assertFalse(restored.currentState().combatant("goblin").snapshot().strengthDexterityD20Disadvantage());
+        AbilityDefinition legacyBlade =
+                restored.currentState().combatant("hero").snapshot().ability("blade");
+        assertEquals(null, legacyBlade.attackAbility());
+        assertFalse(legacyBlade.spellOrCantrip());
+        assertFalse(restored.currentState().combatant("hero").snapshot()
+                .ability("focus").spellOrCantrip());
     }
 
     private static CombatSession populatedActiveSession(long seed) {
@@ -147,6 +170,7 @@ class CombatSessionPersistenceTest {
                 .rulesetVersion("rules-7")
                 .activationCost(ActivationCost.ACTION)
                 .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .attackAbility(SaveAbility.DEXTERITY)
                 .attackBonus(8)
                 .rangeFeet(10)
                 .maxTargets(1)
@@ -158,6 +182,7 @@ class CombatSessionPersistenceTest {
         AbilityDefinition focus = AbilityDefinition.builder("focus", "Arcane focus")
                 .activationCost(ActivationCost.NONE)
                 .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .spellOrCantrip(true)
                 .build();
         ActorDefinition hero = ActorDefinition.builder("hero-definition", "Hero")
                 .definitionVersion("5")
@@ -171,6 +196,7 @@ class CombatSessionPersistenceTest {
                 .initiativeScore(14)
                 .constitutionSaveBonus(6)
                 .attacksPerAction(2)
+                .strengthDexterityD20Disadvantage(true)
                 .resistances(Set.of(DamageType.FIRE, DamageType.COLD))
                 .vulnerabilities(Set.of(DamageType.PSYCHIC))
                 .damageImmunities(Set.of(DamageType.POISON))

@@ -171,32 +171,37 @@ data class MonsterStatBlock(
         val abilities = sections.flatMap { (entries, cost) ->
             entries.filter { it.name.isNotBlank() }.mapIndexed { index, entry ->
                 val attack = entry.attack
-                AbilityDefinition(
-                    "$id-${cost.name.lowercase()}-$index",
-                    "1.0.0",
-                    "content-user-private",
-                    rulesetVersion,
-                    entry.name,
-                    cost,
-                    if (attack != null) ResolutionMethod.ATTACK_ROLL else ResolutionMethod.MANUAL,
-                    attack?.attackBonus ?: 0,
-                    attack?.rangeFeet ?: 5,
-                    1,
-                    if (attack != null) {
-                        listOf(
-                            DamageFormula.dice(
-                                attack.damageType,
-                                attack.diceCount.coerceAtLeast(1),
-                                attack.diceSides.coerceAtLeast(2),
-                                attack.damageModifier,
-                            ),
-                        )
-                    } else {
-                        emptyList()
-                    },
-                    if (attack != null) AutomationStatus.AUTOMATED else AutomationStatus.MANUAL_REQUIRED,
-                    entry.text,
-                )
+                AbilityDefinition.builder("$id-${cost.name.lowercase()}-$index", entry.name)
+                    .version("1.0.0")
+                    .source("content-user-private")
+                    .rulesetVersion(rulesetVersion)
+                    .activationCost(cost)
+                    .resolutionMethod(
+                        if (attack != null) ResolutionMethod.ATTACK_ROLL else ResolutionMethod.MANUAL,
+                    )
+                    .attackBonus(attack?.attackBonus ?: 0)
+                    .attackAbility(attack?.attackAbility?.let { SaveAbility.valueOf(it.name) })
+                    .spellOrCantrip(attack?.isSpellOrCantrip == true)
+                    .rangeFeet(attack?.rangeFeet ?: 5)
+                    .damage(
+                        if (attack != null) {
+                            listOf(
+                                DamageFormula.dice(
+                                    attack.damageType,
+                                    attack.diceCount.coerceAtLeast(1),
+                                    attack.diceSides.coerceAtLeast(2),
+                                    attack.damageModifier,
+                                ),
+                            )
+                        } else {
+                            emptyList()
+                        },
+                    )
+                    .automationStatus(
+                        if (attack != null) AutomationStatus.AUTOMATED else AutomationStatus.MANUAL_REQUIRED,
+                    )
+                    .rulesText(entry.text)
+                    .build()
             }
         }
 

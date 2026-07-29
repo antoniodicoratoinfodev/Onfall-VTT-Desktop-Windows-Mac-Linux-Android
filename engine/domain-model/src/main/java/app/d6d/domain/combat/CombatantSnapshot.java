@@ -27,7 +27,8 @@ public record CombatantSnapshot(
         List<AbilityDefinition> abilities,
         Map<SaveAbility, Integer> savingThrowBonuses,
         int spellSaveDc,
-        int attacksPerAction) {
+        int attacksPerAction,
+        boolean strengthDexterityD20Disadvantage) {
 
     public CombatantSnapshot {
         if (instanceId == null || instanceId.isBlank()) {
@@ -68,7 +69,7 @@ public record CombatantSnapshot(
         this(instanceId, definitionId, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints,
                 initialHitPoints, initialTemporaryHitPoints, speedFeet, initiativeModifier, initiativeScore,
                 constitutionSaveBonus, resistances, vulnerabilities, damageImmunities, conditionImmunities,
-                abilities, Map.of(), 0, 1);
+                abilities, Map.of(), 0, 1, false);
     }
 
     /** Backward-compatible constructor: one attack for each Attack action. */
@@ -81,7 +82,21 @@ public record CombatantSnapshot(
         this(instanceId, definitionId, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints,
                 initialHitPoints, initialTemporaryHitPoints, speedFeet, initiativeModifier, initiativeScore,
                 constitutionSaveBonus, resistances, vulnerabilities, damageImmunities, conditionImmunities,
-                abilities, savingThrowBonuses, spellSaveDc, 1);
+                abilities, savingThrowBonuses, spellSaveDc, 1, false);
+    }
+
+    /** Backward-compatible constructor: no imposed disadvantage on Strength/Dexterity d20 tests. */
+    public CombatantSnapshot(
+            String instanceId, String definitionId, String definitionVersion, String rulesetVersion, String name,
+            int armorClass, int maxHitPoints, int initialHitPoints, int initialTemporaryHitPoints, int speedFeet,
+            int initiativeModifier, int initiativeScore, int constitutionSaveBonus, Set<DamageType> resistances,
+            Set<DamageType> vulnerabilities, Set<DamageType> damageImmunities, Set<ConditionType> conditionImmunities,
+            List<AbilityDefinition> abilities, Map<SaveAbility, Integer> savingThrowBonuses, int spellSaveDc,
+            int attacksPerAction) {
+        this(instanceId, definitionId, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints,
+                initialHitPoints, initialTemporaryHitPoints, speedFeet, initiativeModifier, initiativeScore,
+                constitutionSaveBonus, resistances, vulnerabilities, damageImmunities, conditionImmunities,
+                abilities, savingThrowBonuses, spellSaveDc, attacksPerAction, false);
     }
 
     public static CombatantSnapshot from(String instanceId, ActorDefinition actor) {
@@ -91,7 +106,7 @@ public record CombatantSnapshot(
                 actor.temporaryHitPoints(), actor.speedFeet(), actor.initiativeModifier(), actor.initiativeScore(),
                 actor.constitutionSaveBonus(), actor.resistances(), actor.vulnerabilities(), actor.damageImmunities(),
                 actor.conditionImmunities(), actor.abilities(), actor.savingThrowBonuses(), actor.spellSaveDc(),
-                actor.attacksPerAction());
+                actor.attacksPerAction(), actor.strengthDexterityD20Disadvantage());
     }
 
     public AbilityDefinition ability(String abilityId) {
@@ -154,7 +169,8 @@ public record CombatantSnapshot(
                 abilities,
                 savingThrowBonuses,
                 spellSaveDc,
-                attacksPerAction);
+                attacksPerAction,
+                strengthDexterityD20Disadvantage);
     }
 
     /**

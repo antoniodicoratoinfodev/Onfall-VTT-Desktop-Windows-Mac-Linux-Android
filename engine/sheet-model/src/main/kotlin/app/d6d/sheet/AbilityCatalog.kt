@@ -100,8 +100,16 @@ data class CatalogAbility(
      * accanto al nome di chi ha il turno.
      */
     val passive: Boolean = false,
+    /** Caratteristica coinvolta nel tiro per colpire; null per dati legacy o non applicabili. */
+    val attackAbility: Ability? = null,
+    /** Marcatura esplicita per capacità private che rappresentano magia. */
+    val spellOrCantrip: Boolean = false,
 ) {
     val isArea: Boolean get() = areaRadiusFeet > 0
+    val isSpellOrCantrip: Boolean
+        get() = spellOrCantrip ||
+            category in setOf(RuleElementKind.CANTRIP, RuleElementKind.SPELL) ||
+            spellLevel != null
 
     val damageText: String
         get() = if (!dealsDamage) {
@@ -149,6 +157,8 @@ data class CatalogAbility(
             .activationCost(activationCost)
             .resolutionMethod(resolutionMethod)
             .attackBonus(attackBonus)
+            .attackAbility(attackAbility?.let { SaveAbility.valueOf(it.name) })
+            .spellOrCantrip(isSpellOrCantrip)
             .rangeFeet(rangeFeet)
             .maxTargets(maxTargets)
             .damage(damage)
@@ -182,10 +192,13 @@ fun defaultAbilityCatalog(): List<CatalogAbility> = listOf(
     catalogAttack(
         "arma-giavellotto", "Giavellotto", 5, 30, 1, 6, 3, DamageType.PIERCING,
         "Attacco a distanza. Gittata 30/120 piedi.",
+        attackAbility = Ability.STRENGTH,
     ),
     catalogAttack(
         "inc-dardo-runico", "Dardo Runico", 6, 60, 2, 6, 0, DamageType.FORCE,
         "Trucchetto d'attacco a distanza. Non consuma slot.",
+        attackAbility = null,
+        spellOrCantrip = true,
     ),
     CatalogAbility(
         id = "inc-palla-di-fuoco",
@@ -197,6 +210,7 @@ fun defaultAbilityCatalog(): List<CatalogAbility> = listOf(
         diceCount = 8,
         diceSides = 6,
         damageType = DamageType.FIRE,
+        spellOrCantrip = true,
         areaRadiusFeet = 20,
         saveAbility = Ability.DEXTERITY,
         halfOnSave = true,
@@ -220,6 +234,7 @@ fun defaultAbilityCatalog(): List<CatalogAbility> = listOf(
         "arma-pugnale", "Pugnale", 6, 5, 1, 4, 4, DamageType.PIERCING,
         "Arma Leggera: attacco come Azione Bonus dopo l'Azione Attacco.",
         cost = ActivationCost.BONUS_ACTION,
+        attackAbility = Ability.DEXTERITY,
     ),
     catalogAttack(
         "nem-scimitarra", "Scimitarra", 4, 5, 1, 6, 2, DamageType.SLASHING,
@@ -286,12 +301,16 @@ private fun catalogAttack(
     rulesText: String,
     cost: ActivationCost = ActivationCost.ACTION,
     additionalDamage: List<CatalogDamage> = emptyList(),
+    attackAbility: Ability? = if (rangeFeet > 5) Ability.DEXTERITY else Ability.STRENGTH,
+    spellOrCantrip: Boolean = false,
 ): CatalogAbility = CatalogAbility(
     id = id,
     name = name,
     activationCost = cost,
     resolutionMethod = ResolutionMethod.ATTACK_ROLL,
     attackBonus = attackBonus,
+    attackAbility = attackAbility,
+    spellOrCantrip = spellOrCantrip,
     rangeFeet = rangeFeet,
     diceCount = diceCount,
     diceSides = diceSides,

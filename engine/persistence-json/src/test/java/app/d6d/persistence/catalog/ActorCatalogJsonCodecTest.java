@@ -16,6 +16,7 @@ import app.d6d.domain.combat.ConditionType;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.ResolutionMethod;
+import app.d6d.domain.combat.SaveAbility;
 import app.d6d.persistence.json.Json;
 
 import java.math.BigDecimal;
@@ -166,6 +167,43 @@ class ActorCatalogJsonCodecTest {
     }
 
     @Test
+    void persistsAbilityClassificationAndDefaultsLegacyCatalogsToUnknownNonSpells() {
+        AbilityDefinition spellAttack = AbilityDefinition.builder("spell-ray", "Spell ray")
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .attackAbility(SaveAbility.CHARISMA)
+                .spellOrCantrip(true)
+                .damage(List.of(DamageFormula.dice(DamageType.FORCE, 1, 10, 0)))
+                .build();
+        ActorTemplate template = new ActorTemplate(
+                "caster",
+                "Caster",
+                ActorKind.PLAYER_CHARACTER,
+                1,
+                Map.of());
+        ActorDefinition definition = ActorDefinition.builder("caster", "Caster")
+                .maxHitPoints(8)
+                .abilities(List.of(spellAttack))
+                .build();
+        ActorCatalogEntry character = ActorCatalogEntry.character(template, definition, true);
+
+        Map<String, Object> document = mutableDocument(character);
+        AbilityDefinition decoded = ActorCatalogJsonCodec.decode(document)
+                .get(0).combatDefinition().abilities().get(0);
+        assertEquals(SaveAbility.CHARISMA, decoded.attackAbility());
+        assertTrue(decoded.spellOrCantrip());
+
+        Map<String, Object> encodedEntry = object(array(document.get("entries")).get(0));
+        Map<String, Object> encodedDefinition = object(encodedEntry.get("combatDefinition"));
+        Map<String, Object> encodedAbility = object(array(encodedDefinition.get("abilities")).get(0));
+        encodedAbility.remove("attackAbility");
+        encodedAbility.remove("spellOrCantrip");
+        AbilityDefinition legacy = ActorCatalogJsonCodec.decode(document)
+                .get(0).combatDefinition().abilities().get(0);
+        assertEquals(null, legacy.attackAbility());
+        assertFalse(legacy.spellOrCantrip());
+    }
+
+    @Test
     void persistsExtraAttackAndDefaultsLegacyCatalogsToOneAttack() {
         ActorTemplate template = new ActorTemplate(
                 "fighter",
@@ -176,18 +214,22 @@ class ActorCatalogJsonCodecTest {
         ActorDefinition definition = ActorDefinition.builder("fighter", "Fighter")
                 .maxHitPoints(40)
                 .attacksPerAction(2)
+                .strengthDexterityD20Disadvantage(true)
                 .build();
         ActorCatalogEntry character = ActorCatalogEntry.character(template, definition, true);
 
         Map<String, Object> document = mutableDocument(character);
         List<ActorCatalogEntry> decoded = ActorCatalogJsonCodec.decode(document);
         assertEquals(2, decoded.get(0).combatDefinition().attacksPerAction());
+        assertTrue(decoded.get(0).combatDefinition().strengthDexterityD20Disadvantage());
 
         Map<String, Object> encodedEntry = object(array(document.get("entries")).get(0));
         Map<String, Object> encodedDefinition = object(encodedEntry.get("combatDefinition"));
         encodedDefinition.remove("attacksPerAction");
+        encodedDefinition.remove("strengthDexterityD20Disadvantage");
         List<ActorCatalogEntry> legacy = ActorCatalogJsonCodec.decode(document);
         assertEquals(1, legacy.get(0).combatDefinition().attacksPerAction());
+        assertFalse(legacy.get(0).combatDefinition().strengthDexterityD20Disadvantage());
     }
 
     @Test

@@ -160,6 +160,8 @@ private fun AbilityDefinition.toWeaponEntry(): WeaponEntry {
     return WeaponEntry(
         name = name(),
         attackBonus = attackBonus(),
+        attackAbility = attackAbility()?.let { Ability.valueOf(it.name) },
+        spellOrCantrip = spellOrCantrip(),
         diceCount = dice?.count() ?: 1,
         diceSides = dice?.sides() ?: 6,
         damageModifier = dice?.modifier() ?: (formula?.fixedAmount() ?: 0),

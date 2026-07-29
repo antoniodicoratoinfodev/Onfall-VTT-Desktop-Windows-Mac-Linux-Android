@@ -38,9 +38,11 @@ import app.d6d.domain.combat.ActivationCost
 import app.d6d.rules.character.EffectTarget
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.Ability
+import app.d6d.sheet.ArmorCategory
 import app.d6d.sheet.ArmorClassAdjustment
 import app.d6d.sheet.ArmorClassDexterity
 import app.d6d.sheet.ArmorClassMethod
+import app.d6d.sheet.ArmorSpecialRule
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.CreatureSize
@@ -603,6 +605,8 @@ private fun ArmorClassSection(
             }
         }
 
+        ArmorRuleWarnings(sheet)
+
         AdaptiveFormRow(
             compact = compact,
             items = arrayOf(
@@ -637,6 +641,50 @@ private fun ArmorClassSection(
 }
 
 @Composable
+private fun ArmorRuleWarnings(sheet: CharacterSheet) {
+    val missingTraining = sheet.wearingArmorWithoutTraining
+    val insufficientStrength = sheet.armorStrengthRequirementNotMet
+    val stealthDisadvantage = sheet.armorStealthDisadvantage
+    if (!missingTraining && !insufficientStrength && !stealthDisadvantage) return
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.Bloodied.copy(alpha = 0.10f), RoundedCornerShape(7.dp))
+            .border(1.dp, Palette.Bloodied.copy(alpha = 0.55f), RoundedCornerShape(7.dp))
+            .padding(9.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        if (missingTraining) {
+            Text(
+                "Manca la competenza in ${sheet.wornArmorCategory?.italianLabel}. " +
+                    "Svantaggio a tutte le prove d20 relative a Forza o Destrezza; " +
+                    "il lancio degli incantesimi è bloccato.",
+                color = Palette.Bloodied,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (insufficientStrength) {
+            Text(
+                "Forza ${sheet.score(Ability.STRENGTH)} inferiore al requisito " +
+                    "${sheet.effectiveArmorMinimumStrength}: velocità ridotta di 3 m " +
+                    "(${sheet.armorSpeedPenaltyFeet} piedi).",
+                color = Palette.Bloodied,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (stealthDisadvantage) {
+            Text(
+                "Questa armatura impone svantaggio alle prove di Destrezza (Furtività).",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
 private fun ArmorClassBaseEditor(
     sheet: CharacterSheet,
     compact: Boolean,
@@ -655,27 +703,50 @@ private fun ArmorClassBaseEditor(
             selected = sheet.armorClassMethod,
             compact = compact,
         ) { method ->
+            val previousCategory = sheet.wornArmorCategory
+            val previousMinimumStrength = when (sheet.armorClassMethod) {
+                ArmorClassMethod.MANUAL_TOTAL,
+                ArmorClassMethod.CUSTOM_BASE -> sheet.manualArmorMinimumStrength
+                else -> sheet.armorClassMethod.minimumStrength
+            }
+            val previousStealthDisadvantage = when (sheet.armorClassMethod) {
+                ArmorClassMethod.MANUAL_TOTAL,
+                ArmorClassMethod.CUSTOM_BASE -> sheet.manualArmorStealthDisadvantage
+                else -> sheet.armorClassMethod.stealthDisadvantage
+            }
             val updated = when {
                 method == ArmorClassMethod.MANUAL_TOTAL &&
                     sheet.armorClassMethod != ArmorClassMethod.MANUAL_TOTAL ->
                     sheet.copy(
                         armorClass = sheet.effectiveArmorClass,
                         armorClassMethod = method,
+                        manualArmorCategory = previousCategory,
+                        manualArmorMinimumStrength = previousMinimumStrength,
+                        manualArmorStealthDisadvantage = previousStealthDisadvantage,
                         armorClassOverride = null,
                     )
 
                 method == ArmorClassMethod.CUSTOM_BASE &&
-                    sheet.armorClassMethod != ArmorClassMethod.CUSTOM_BASE ->
-                    sheet.copy(
-                        armorClass = sheet.baseArmorClass,
+                    sheet.armorClassMethod != ArmorClassMethod.CUSTOM_BASE -> {
+                    val candidate = sheet.copy(
+                        armorClass = 0,
                         armorClassMethod = method,
                         customArmorClassDexterity = ArmorClassDexterity.NONE,
+                        manualArmorCategory = previousCategory,
+                        manualArmorMinimumStrength = previousMinimumStrength,
+                        manualArmorStealthDisadvantage = previousStealthDisadvantage,
                         armorClassOverride = null,
+                    ).withApplicableArmorSpecialRule()
+                    candidate.copy(
+                        armorClass = (
+                            sheet.effectiveArmorClass - candidate.armorClassAdjustmentTotal
+                            ).coerceAtLeast(0),
                     )
+                }
 
                 else -> sheet.copy(armorClassMethod = method, armorClassOverride = null)
             }
-            update(updated)
+            update(updated.withApplicableArmorSpecialRule())
         }
 
         when (sheet.armorClassMethod) {
@@ -690,7 +761,12 @@ private fun ArmorClassBaseEditor(
                 }
                 Text(
                     "Il valore viene usato esattamente com'è: scudo e altri modificatori " +
-                        "non vengono sommati una seconda volta.",
+                        "non vengono sommati una seconda volta." +
+                        if (sheet.effectiveArmorSpecialRule == ArmorSpecialRule.ELVEN_CHAIN) {
+                            " Deve quindi comprendere anche il +1 del giaco elfico."
+                        } else {
+                            ""
+                        },
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -719,6 +795,84 @@ private fun ArmorClassBaseEditor(
             }
 
             else -> Unit
+        }
+
+        if (
+            sheet.armorClassMethod == ArmorClassMethod.MANUAL_TOTAL ||
+            sheet.armorClassMethod == ArmorClassMethod.CUSTOM_BASE
+        ) {
+            ArmorCategorySelector(
+                selected = sheet.manualArmorCategory,
+                compact = compact,
+            ) { category ->
+                update(
+                    sheet.copy(
+                        manualArmorCategory = category,
+                        manualArmorMinimumStrength = if (category == ArmorCategory.HEAVY) {
+                            sheet.manualArmorMinimumStrength
+                        } else {
+                            0
+                        },
+                        manualArmorStealthDisadvantage = if (category == null) {
+                            false
+                        } else {
+                            sheet.manualArmorStealthDisadvantage
+                        },
+                        armorClassOverride = null,
+                    ).withApplicableArmorSpecialRule(),
+                )
+            }
+            sheet.manualArmorCategory?.let {
+                if (sheet.manualArmorCategory == ArmorCategory.HEAVY) {
+                    SheetNumberField(
+                        "Requisito di Forza dell'armatura (0 = nessuno)",
+                        sheet.manualArmorMinimumStrength,
+                    ) {
+                        update(
+                            sheet.copy(
+                                manualArmorMinimumStrength = it.coerceIn(0, 30),
+                                armorClassOverride = null,
+                            ),
+                        )
+                    }
+                }
+                SheetCheck(
+                    "Svantaggio a Destrezza (Furtività)",
+                    sheet.manualArmorStealthDisadvantage,
+                ) {
+                    update(
+                        sheet.copy(
+                            manualArmorStealthDisadvantage = it,
+                            armorClassOverride = null,
+                        ),
+                    )
+                }
+            }
+        }
+
+        sheet.wornArmorCategory?.let {
+            ArmorSpecialRuleSelector(sheet, compact) { specialRule ->
+                update(sheet.copy(armorSpecialRule = specialRule, armorClassOverride = null))
+            }
+            Text(
+                "Equipaggiamento SRD: ${sheet.armorDonMinutes} min per indossare, " +
+                    "${sheet.armorDoffMinutes} min per togliere.",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            when (sheet.effectiveArmorSpecialRule) {
+                ArmorSpecialRule.MITHRAL -> Text(
+                    "Mithral: nessun requisito di Forza e nessuno svantaggio a Furtività.",
+                    color = Palette.Heal,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                ArmorSpecialRule.ELVEN_CHAIN -> Text(
+                    "Giaco elfico: +1 alla CA e competenza garantita in questa armatura.",
+                    color = Palette.Heal,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                ArmorSpecialRule.STANDARD -> Unit
+            }
         }
 
         Text(
@@ -807,6 +961,91 @@ private fun ArmorClassDexteritySelector(
 }
 
 @Composable
+private fun ArmorCategorySelector(
+    selected: ArmorCategory?,
+    compact: Boolean,
+    onSelect: (ArmorCategory?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("ARMATURA REALMENTE INDOSSATA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Box {
+            GameButton(
+                label = selected?.italianLabel?.replaceFirstChar { it.uppercase() } ?: "Nessuna armatura",
+                accent = Palette.Party,
+                dense = !compact,
+                onClick = { expanded = true },
+            )
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.background(Palette.SurfaceHigh),
+            ) {
+                (listOf<ArmorCategory?>(null) + ArmorCategory.entries).forEach { category ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                category?.italianLabel?.replaceFirstChar { it.uppercase() } ?: "Nessuna armatura",
+                                color = Palette.Text,
+                            )
+                        },
+                        onClick = {
+                            expanded = false
+                            onSelect(category)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArmorSpecialRuleSelector(
+    sheet: CharacterSheet,
+    compact: Boolean,
+    onSelect: (ArmorSpecialRule) -> Unit,
+) {
+    val choices = ArmorSpecialRule.entries.filter { rule ->
+        sheet.copy(armorSpecialRule = rule).effectiveArmorSpecialRule == rule
+    }
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("VARIANTE DELL'ARMATURA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Box {
+            GameButton(
+                label = sheet.effectiveArmorSpecialRule.italianLabel,
+                accent = Palette.Heal,
+                dense = !compact,
+                onClick = { expanded = true },
+            )
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.background(Palette.SurfaceHigh),
+            ) {
+                choices.forEach { rule ->
+                    DropdownMenuItem(
+                        text = { Text(rule.italianLabel, color = Palette.Text) },
+                        onClick = {
+                            expanded = false
+                            onSelect(rule)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun CharacterSheet.withApplicableArmorSpecialRule(): CharacterSheet =
+    if (effectiveArmorSpecialRule == armorSpecialRule) {
+        this
+    } else {
+        copy(armorSpecialRule = ArmorSpecialRule.STANDARD)
+    }
+
+@Composable
 private fun ArmorClassAdjustmentsEditor(
     sheet: CharacterSheet,
     compact: Boolean,
@@ -822,6 +1061,31 @@ private fun ArmorClassAdjustmentsEditor(
     ) {
         Text("MODIFICATORI ALLA CA", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
 
+        SheetCheck(
+            label = when {
+                !sheet.shieldEquipped -> "Scudo non equipaggiato"
+                sheet.armorClassMethod == ArmorClassMethod.MANUAL_TOTAL ->
+                    "Scudo equipaggiato · già compreso nella CA manuale"
+                sheet.armorTraining.shields -> "Scudo equipaggiato · +2"
+                else -> "Scudo equipaggiato · +0 (manca competenza)"
+            },
+            checked = sheet.shieldEquipped,
+        ) {
+            update(sheet.copy(shieldEquipped = it, armorClassOverride = null))
+        }
+        Text(
+            "Indossare o togliere lo scudo richiede un'azione di Utilizzo.",
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        if (sheet.shieldEquipped && !sheet.armorTraining.shields) {
+            Text(
+                "Il bonus dello scudo richiede competenza negli scudi.",
+                color = Palette.Bloodied,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+
         if (sheet.armorClassMethod == ArmorClassMethod.MANUAL_TOTAL) {
             Text(
                 "La CA manuale è già il totale finale. Scegli un altro metodo base per " +
@@ -830,24 +1094,6 @@ private fun ArmorClassAdjustmentsEditor(
                 style = MaterialTheme.typography.bodySmall,
             )
             return@Column
-        }
-
-        SheetCheck(
-            label = when {
-                !sheet.shieldEquipped -> "Scudo non equipaggiato"
-                sheet.armorTraining.shields -> "Scudo equipaggiato · +2"
-                else -> "Scudo equipaggiato · +0 (manca competenza)"
-            },
-            checked = sheet.shieldEquipped,
-        ) {
-            update(sheet.copy(shieldEquipped = it, armorClassOverride = null))
-        }
-        if (sheet.shieldEquipped && !sheet.armorTraining.shields) {
-            Text(
-                "Il bonus dello scudo richiede competenza negli scudi.",
-                color = Palette.Bloodied,
-                style = MaterialTheme.typography.labelSmall,
-            )
         }
 
         // I bonus che arrivano dai privilegi non sono modificabili qui: si
@@ -1017,6 +1263,9 @@ private fun armorClassFormula(sheet: CharacterSheet): String {
     val pieces = buildList {
         add("CA base ${sheet.baseArmorClass}")
         if (sheet.shieldArmorClassBonus != 0) add("scudo ${signed(sheet.shieldArmorClassBonus)}")
+        if (sheet.armorSpecialArmorClassBonus != 0) {
+            add("${sheet.effectiveArmorSpecialRule.italianLabel} ${signed(sheet.armorSpecialArmorClassBonus)}")
+        }
         sheet.armorClassAdjustments
             .filter { it.active && it.value != 0 }
             .forEach { add("${it.source.ifBlank { "Modificatore" }} ${signed(it.value)}") }
@@ -1111,6 +1360,7 @@ private fun AbilityBlock(
             bonus = sheet.saveBonus(ability),
             level = sheet.saveProficiencies[ability] ?: Proficiency.NONE,
             bold = true,
+            disadvantage = sheet.hasDisadvantageOnSave(ability),
         ) { next ->
             update(sheet.copy(saveProficiencies = sheet.saveProficiencies + (ability to next)))
         }
@@ -1120,6 +1370,7 @@ private fun AbilityBlock(
                 label = skill.italianLabel,
                 bonus = sheet.skillBonus(skill),
                 level = sheet.skillProficiencies[skill] ?: Proficiency.NONE,
+                disadvantage = sheet.hasDisadvantageOnSkill(skill),
             ) { next ->
                 update(sheet.copy(skillProficiencies = sheet.skillProficiencies + (skill to next)))
             }
@@ -1134,6 +1385,7 @@ private fun ProficiencyLine(
     bonus: Int,
     level: Proficiency,
     bold: Boolean = false,
+    disadvantage: Boolean = false,
     onCycle: (Proficiency) -> Unit,
 ) {
     Row(
@@ -1168,6 +1420,14 @@ private fun ProficiencyLine(
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
             style = MaterialTheme.typography.bodySmall,
         )
+        if (disadvantage) {
+            Text(
+                text = "SVANT.",
+                color = Palette.Bloodied,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
     }
 }
 
@@ -1194,12 +1454,24 @@ private fun CombatColumn(
             compactColumns = 2,
             items = arrayOf(
                 adaptiveFormItem { itemModifier ->
-                    DerivedValue("Iniziativa", signed(sheet.initiativeModifier), itemModifier)
+                    DerivedValue(
+                        "Iniziativa",
+                        signed(sheet.initiativeModifier) +
+                            if (sheet.strengthDexterityD20Disadvantage) " · svant." else "",
+                        itemModifier,
+                    )
                 },
                 adaptiveFormItem { itemModifier ->
                     SheetBox("Velocita'", itemModifier) {
                         SheetFeetField("Piedi", sheet.speedFeet) {
                             update(sheet.copy(speedFeet = it.coerceAtLeast(0)))
+                        }
+                        if (sheet.armorSpeedPenaltyFeet > 0) {
+                            Text(
+                                "Effettiva: ${sheet.effectiveSpeedFeet} piedi",
+                                color = Palette.Bloodied,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
                         }
                     }
                 },
@@ -1259,7 +1531,11 @@ private fun CombatColumn(
                 }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 GameButton("+ Aggiungi arma", accent = Palette.Party, onClick = {
-                    update(sheet.copy(weapons = sheet.weapons + WeaponEntry()))
+                    update(
+                        sheet.copy(
+                            weapons = sheet.weapons + WeaponEntry(attackAbility = Ability.STRENGTH),
+                        ),
+                    )
                 })
                 GameButton("+ Aggiungi abilità", accent = Palette.Gold, onClick = {
                     abilityPickerOpen = true
@@ -1382,6 +1658,7 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             SheetField("Nome", weapon.name) { onChange(weapon.copy(name = it)) }
+            LegacyWeaponClassificationWarning(weapon)
             AdaptiveFormRow(
                 compact = true,
                 compactColumns = 2,
@@ -1412,12 +1689,19 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
             SheetCheck("Azione bonus", weapon.bonusAction) {
                 onChange(weapon.copy(bonusAction = it))
             }
+            if (!weapon.isArea) {
+                WeaponAttackAbilitySelector(weapon, onChange)
+            }
+            SheetCheck("Incantesimo o trucchetto", weapon.isSpellOrCantrip) {
+                onChange(weapon.withSpellClassification(it))
+            }
             WeaponAreaSection(weapon, onChange)
         }
         return
     }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        LegacyWeaponClassificationWarning(weapon)
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1443,9 +1727,87 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
         SheetCheck("Azione bonus", weapon.bonusAction) {
             onChange(weapon.copy(bonusAction = it))
         }
+        if (!weapon.isArea) {
+            WeaponAttackAbilitySelector(weapon, onChange)
+        }
+        SheetCheck("Incantesimo o trucchetto", weapon.isSpellOrCantrip) {
+            onChange(weapon.withSpellClassification(it))
+        }
         WeaponAreaSection(weapon, onChange)
     }
 }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WeaponAttackAbilitySelector(
+    weapon: WeaponEntry,
+    onChange: (WeaponEntry) -> Unit,
+) {
+    Text(
+        "CARATTERISTICA DEL TIRO PER COLPIRE",
+        color = Palette.TextMuted,
+        style = MaterialTheme.typography.labelSmall,
+    )
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        GameButton(
+            label = if (weapon.isSpellOrCantrip) "Caratteristica da incantatore" else "Da classificare",
+            accent = if (weapon.attackAbility == null) Palette.Gold else Palette.TextMuted,
+            selected = weapon.attackAbility == null,
+            dense = true,
+            onClick = {
+                onChange(
+                    weapon.copy(
+                        attackAbility = null,
+                        legacyClassificationRequired = !weapon.isSpellOrCantrip,
+                    ),
+                )
+            },
+        )
+        Ability.entries.forEach { ability ->
+            GameButton(
+                label = ability.abbreviation,
+                accent = if (weapon.attackAbility == ability) Palette.Gold else Palette.TextMuted,
+                selected = weapon.attackAbility == ability,
+                dense = true,
+                onClick = {
+                    onChange(
+                        weapon.copy(
+                            attackAbility = ability,
+                            legacyClassificationRequired = false,
+                        ),
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LegacyWeaponClassificationWarning(weapon: WeaponEntry) {
+    if (!weapon.legacyClassificationRequired || weapon.name.isBlank()) return
+    Text(
+        "Voce importata da classificare: se è un'arma scegli la caratteristica " +
+            "del tiro per colpire; altrimenti attiva “Incantesimo o trucchetto”. " +
+            "Con un'armatura non competente resta esclusa dalla battaglia.",
+        color = Palette.Bloodied,
+        fontWeight = FontWeight.Bold,
+        style = MaterialTheme.typography.bodySmall,
+    )
+}
+
+private fun WeaponEntry.withSpellClassification(isSpellOrCantrip: Boolean): WeaponEntry =
+    copy(
+        spellOrCantrip = isSpellOrCantrip,
+        attackAbility = if (!isSpellOrCantrip && attackAbility == null) {
+            Ability.STRENGTH
+        } else {
+            attackAbility
+        },
+        legacyClassificationRequired = false,
+    )
 
 /**
  * Sezione «danno ad area» di una capacità: la trasforma in incantesimo con tiro
@@ -1459,6 +1821,8 @@ private fun WeaponAreaSection(weapon: WeaponEntry, onChange: (WeaponEntry) -> Un
             weapon.copy(
                 areaRadiusFeet = if (on) weapon.areaRadiusFeet.takeIf { it > 0 } ?: 20 else 0,
                 saveAbility = if (on) weapon.saveAbility ?: Ability.DEXTERITY else null,
+                spellOrCantrip = weapon.spellOrCantrip || on,
+                legacyClassificationRequired = if (on) false else weapon.legacyClassificationRequired,
             ),
         )
     }
@@ -1849,6 +2213,21 @@ private fun SpellcastingSection(
                 update(sheet.copy(spellcasting = Spellcasting()))
             })
             return@SheetBox
+        }
+
+        if (sheet.spellcastingBlockedByArmor) {
+            Text(
+                "Lancio bloccato: manca la competenza nell'armatura indossata. " +
+                    "Gli incantesimi non saranno disponibili in combattimento.",
+                color = Palette.Bloodied,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Palette.Bloodied.copy(alpha = 0.10f), RoundedCornerShape(7.dp))
+                    .border(1.dp, Palette.Bloodied.copy(alpha = 0.50f), RoundedCornerShape(7.dp))
+                    .padding(8.dp),
+            )
         }
 
         AdaptiveFormRow(

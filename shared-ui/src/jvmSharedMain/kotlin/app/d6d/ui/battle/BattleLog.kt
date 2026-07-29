@@ -185,6 +185,7 @@ private val EventType.tint: Color
         EventType.CONCENTRATION_STARTED, EventType.CONCENTRATION_CHECKED,
         EventType.CONCENTRATION_ENDED -> Palette.Temporary
         EventType.ROUND_STARTED, EventType.TURN_STARTED -> Palette.Gold
+        EventType.ABILITY_CHECK_ROLLED -> Palette.Party
         EventType.DEATH_SAVE_ROLLED -> Palette.Bloodied
         EventType.STABILIZED, EventType.KNOCKED_OUT -> Palette.Heal
         EventType.DIED -> Palette.Critical
@@ -233,6 +234,8 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
             }
         }
         EventType.INITIATIVE_ROLLED -> "$actor tira iniziativa: $d20"
+        EventType.ABILITY_CHECK_ROLLED ->
+            "$actor effettua una prova di ${detail("ability").saveAbilityInItalian()}: $d20"
         EventType.INITIATIVE_ORDER_SET -> {
             val order = detail("order")
                 .split(',')
