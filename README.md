@@ -7,9 +7,10 @@ Its attribution and licence notice are in [`NOTICE-SRD.md`](NOTICE-SRD.md). The 
 interface and bundled encounter examples are original, and desktop and Android share the same
 engine, data, and screens.
 
-> **Read only repository.** This code is published solely for review and technical evaluation, that
-> is, for analysis of the code and of the author's technical ability. It is not meant to be used, run
-> as a game, forked, or reused in any part. See [`LICENSE.md`](LICENSE.md).
+> **Source-available repository.** The application may be downloaded, compiled, installed, and used
+> to play games for personal, non-commercial purposes. The source may also be reviewed for technical
+> evaluation, but it may not be modified, forked, redistributed, or reused in other projects. See
+> [`LICENSE.md`](LICENSE.md).
 
 ## What it is
 
@@ -281,6 +282,7 @@ reached by `check`, not by `test`.
 
 ## License
 
-**All rights reserved.** The code may be consulted **only for analysis and technical evaluation**. It
-may not be run for use, forked, redistributed, or reused in part, not even single fragments, in other
-projects. The full terms are in [`LICENSE.md`](LICENSE.md).
+**All rights reserved.** The application may be downloaded, compiled, installed, and used to play
+games for personal, non-commercial purposes. Modification, redistribution, forks, and reuse in other
+projects are not permitted. The Italian SRD content pack remains separately available under CC BY
+4.0. The full terms are in [`LICENSE.md`](LICENSE.md).
