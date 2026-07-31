@@ -18,7 +18,7 @@ You may:
   exercise the permissions granted by this license;
 - compile, install, and run the application for personal, non-commercial use;
 - use the application to play games, including at a private game table with
-  other players; and
+  other players;
 - run the test suite to verify that the code works correctly.
 
 ## Restrictions
