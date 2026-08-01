@@ -1,6 +1,7 @@
 package app.d6d.engine;
 
 import app.d6d.domain.combat.AbilityDefinition;
+import app.d6d.domain.combat.AbilityEffect;
 import app.d6d.domain.combat.ActivationCost;
 import app.d6d.domain.combat.ActorDefinition;
 import app.d6d.domain.combat.AreaSpellResult;
@@ -16,6 +17,7 @@ import app.d6d.domain.combat.CombatStatus;
 import app.d6d.domain.combat.CombatantSetup;
 import app.d6d.domain.combat.CombatantSnapshot;
 import app.d6d.domain.combat.CombatantState;
+import app.d6d.domain.combat.CombatResourceState;
 import app.d6d.domain.combat.ConcentrationCheckResult;
 import app.d6d.domain.combat.ConcentrationState;
 import app.d6d.domain.combat.ConditionDuration;
@@ -513,11 +515,11 @@ public final class CombatSession {
             throw rule("The area centre is outside the map");
         }
         validateAreaRange(casterId, center, ability);
-        validateActivationCost(casterId, ability.activationCost());
+        validateActivationCost(casterId, ability.activationCost(), ability.spellOrCantrip());
 
         beginCommand();
         try {
-            consumeActivationCost(casterId, ability.activationCost());
+            consumeActivationCost(casterId, ability.activationCost(), ability.spellOrCantrip());
             // Un solo tiro di danno per tutta l'area; i critici non toccano i tiri
             // salvezza, quindi i dadi non si raddoppiano mai qui.
             List<DamageComponent> rolled = resolveAttackDamage(ability, List.of(), false, casterId, "");
@@ -1207,10 +1209,56 @@ public final class CombatSession {
     public synchronized void spendAction(String combatantId, ActivationCost cost) {
         requireStatus(CombatStatus.ACTIVE);
         Objects.requireNonNull(cost, "cost");
-        validateActivationCost(combatantId, cost);
+        validateActivationCost(combatantId, cost, false);
         if (cost == ActivationCost.NONE) throw rule("NONE does not spend a turn resource");
         beginCommand();
-        consumeActivationCost(combatantId, cost);
+        consumeActivationCost(combatantId, cost, false);
+    }
+
+    /** Applica una capacità automatica priva di bersaglio, consumandone costo e risorsa in un solo comando. */
+    public synchronized void activateAbility(String combatantId, String abilityId) {
+        requireStatus(CombatStatus.ACTIVE);
+        MutableCombatant combatant = combatant(combatantId);
+        AbilityDefinition ability = ability(combatant, abilityId);
+        if (ability.passive()) {
+            throw rule("A passive trait cannot be activated: " + ability.id());
+        }
+        if (ability.effect() == AbilityEffect.NONE) {
+            throw rule("Ability has no automatic effect: " + ability.id());
+        }
+        if (ability.automationStatus() != AutomationStatus.AUTOMATED
+                || ability.resolutionMethod() != ResolutionMethod.AUTOMATIC) {
+            throw rule("Ability requires a different resolution: " + ability.id());
+        }
+        validateActivationCost(combatantId, ability.activationCost(), ability.spellOrCantrip());
+        validateAbilityResource(combatant, ability);
+        if (ability.effect() == AbilityEffect.GRANT_NON_MAGIC_ACTION) {
+            requireCurrentCombatant(combatantId);
+            if (budget(combatantId).actionSurgeUsedThisTurn()) {
+                throw rule("Action Surge can be used only once in the same turn");
+            }
+        }
+
+        beginCommand();
+        try {
+            consumeActivationCost(combatantId, ability.activationCost(), ability.spellOrCantrip());
+            consumeAbilityResource(combatantId, combatant, ability);
+            switch (ability.effect()) {
+                case GRANT_NON_MAGIC_ACTION -> {
+                    state.turnBudgets.put(combatantId, budget(combatantId).grantNonMagicAction());
+                    append(EventType.ACTION_GRANTED, combatantId, "", details(
+                            "abilityId", ability.id(),
+                            "abilityName", ability.name(),
+                            "restriction", "NON_MAGIC"));
+                }
+                case NONE -> throw new IllegalStateException("Validated effect unexpectedly disappeared");
+            }
+            append(EventType.ABILITY_ACTIVATED, combatantId, "", details(
+                    "abilityId", ability.id(), "abilityName", ability.name()));
+        } catch (RuntimeException | Error failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
     }
 
     public synchronized void markSpellSlotSpent(String combatantId) {
@@ -1627,6 +1675,10 @@ public final class CombatSession {
     }
 
     private void validateActivationCost(String combatantId, ActivationCost cost) {
+        validateActivationCost(combatantId, cost, false);
+    }
+
+    private void validateActivationCost(String combatantId, ActivationCost cost, boolean magicAction) {
         Objects.requireNonNull(cost, "cost");
         if (combatant(combatantId).currentHitPoints == 0) {
             throw rule("A combatant at zero hit points cannot act");
@@ -1635,7 +1687,7 @@ public final class CombatSession {
         switch (cost) {
             case ACTION -> {
                 requireCurrentCombatant(combatantId);
-                if (!budget.actionAvailable()) throw rule("Action already spent");
+                if (!budget.canUseAction(magicAction)) throw rule("Action already spent");
             }
             case BONUS_ACTION -> {
                 requireCurrentCombatant(combatantId);
@@ -1655,7 +1707,7 @@ public final class CombatSession {
      */
     private void validateAttackActivationCost(String combatantId, ActivationCost cost) {
         if (cost != ActivationCost.ACTION) {
-            validateActivationCost(combatantId, cost);
+            validateActivationCost(combatantId, cost, false);
             return;
         }
         MutableCombatant combatant = combatant(combatantId);
@@ -1664,33 +1716,39 @@ public final class CombatSession {
         }
         requireCurrentCombatant(combatantId);
         TurnBudget budget = budget(combatantId);
-        if (budget.attacksRemaining() == 0) {
-            throw rule("No attacks remain in the Attack action");
-        }
-        if (!budget.actionAvailable()
-                && budget.attacksRemaining() >= combatant.snapshot.attacksPerAction()) {
+        if (budget.attackActionInProgress()) {
+            if (budget.attacksRemaining() == 0) {
+                throw rule("No attacks remain in the Attack action");
+            }
+        } else if (!budget.canUseAction(false)) {
             throw rule("Action already spent");
         }
     }
 
     private void consumeAttackActivationCost(String combatantId, ActivationCost cost) {
         if (cost != ActivationCost.ACTION) {
-            consumeActivationCost(combatantId, cost);
+            consumeActivationCost(combatantId, cost, false);
             return;
         }
         TurnBudget current = budget(combatantId);
-        boolean startsAttackAction = current.actionAvailable();
-        TurnBudget updated = startsAttackAction ? current.useAction() : current;
-        state.turnBudgets.put(combatantId, updated.useAttack());
+        boolean startsAttackAction = !current.attackActionInProgress();
+        TurnBudget updated = startsAttackAction
+                ? current.startAttackAction(combatant(combatantId).snapshot.attacksPerAction())
+                : current.useAttack();
+        state.turnBudgets.put(combatantId, updated);
         if (startsAttackAction) {
             append(EventType.ACTION_SPENT, combatantId, "", details("cost", cost));
         }
     }
 
     private void consumeActivationCost(String combatantId, ActivationCost cost) {
+        consumeActivationCost(combatantId, cost, false);
+    }
+
+    private void consumeActivationCost(String combatantId, ActivationCost cost, boolean magicAction) {
         TurnBudget budget = budget(combatantId);
         TurnBudget updated = switch (cost) {
-            case ACTION -> budget.useAction();
+            case ACTION -> budget.useAction(magicAction);
             case BONUS_ACTION -> budget.useBonusAction();
             case REACTION -> budget.useReaction();
             case NONE -> budget;
@@ -1700,6 +1758,33 @@ public final class CombatSession {
         if (cost != ActivationCost.NONE) {
             append(EventType.ACTION_SPENT, combatantId, "", details("cost", cost));
         }
+    }
+
+    private void validateAbilityResource(MutableCombatant combatant, AbilityDefinition ability) {
+        if (ability.resourceCost() == 0) return;
+        CombatResourceState resource = combatant.resources.get(ability.resourceId());
+        if (resource == null) {
+            throw rule("Ability resource is missing: " + ability.resourceId());
+        }
+        if (resource.remaining() < ability.resourceCost()) {
+            throw rule("Not enough uses of " + resource.name());
+        }
+    }
+
+    private void consumeAbilityResource(
+            String combatantId, MutableCombatant combatant, AbilityDefinition ability) {
+        if (ability.resourceCost() == 0) return;
+        CombatResourceState resource = combatant.resources.get(ability.resourceId());
+        CombatResourceState updated = resource.spend(ability.resourceCost());
+        combatant.resources.put(updated.id(), updated);
+        append(EventType.RESOURCE_SPENT, combatantId, "", details(
+                "abilityId", ability.id(),
+                "abilityName", ability.name(),
+                "resourceId", updated.id(),
+                "resourceName", updated.name(),
+                "cost", ability.resourceCost(),
+                "remaining", updated.remaining(),
+                "maximum", updated.maximum()));
     }
 
     private D20RollResult rollD20(D20RollInput input, int modifier) {
@@ -2010,6 +2095,7 @@ public final class CombatSession {
         private ConcentrationState concentration;
         private DeathSaveState deathSaves = DeathSaveState.none();
         private int exhaustionLevel;
+        private final LinkedHashMap<String, CombatResourceState> resources;
 
         private MutableCombatant(
                 CombatantSnapshot snapshot,
@@ -2022,6 +2108,8 @@ public final class CombatSession {
             this.temporaryHitPoints = temporaryHitPoints;
             this.conditions = new ArrayList<>(conditions);
             this.concentration = concentration;
+            this.resources = new LinkedHashMap<>();
+            snapshot.resources().forEach(resource -> this.resources.put(resource.id(), resource));
         }
 
         private static MutableCombatant from(CombatantSnapshot snapshot) {
@@ -2034,6 +2122,8 @@ public final class CombatSession {
                     state.temporaryHitPoints(), state.conditions(), state.concentration());
             restored.deathSaves = state.deathSaves();
             restored.exhaustionLevel = state.exhaustionLevel();
+            restored.resources.clear();
+            state.resources().forEach(resource -> restored.resources.put(resource.id(), resource));
             return restored;
         }
 
@@ -2042,12 +2132,14 @@ public final class CombatSession {
                     new MutableCombatant(snapshot, currentHitPoints, temporaryHitPoints, conditions, concentration);
             duplicate.deathSaves = deathSaves;
             duplicate.exhaustionLevel = exhaustionLevel;
+            duplicate.resources.clear();
+            duplicate.resources.putAll(resources);
             return duplicate;
         }
 
         private CombatantState toDomain() {
             return new CombatantState(snapshot, currentHitPoints, temporaryHitPoints, conditions, concentration,
-                    deathSaves, exhaustionLevel);
+                    deathSaves, exhaustionLevel, List.copyOf(resources.values()));
         }
     }
 

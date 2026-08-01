@@ -11,7 +11,8 @@ public record CombatantState(
         List<ConditionInstance> conditions,
         ConcentrationState concentration,
         DeathSaveState deathSaves,
-        int exhaustionLevel) {
+        int exhaustionLevel,
+        List<CombatResourceState> resources) {
 
     /** Exhaustion arriva a sei: al sesto livello la creatura muore. */
     public static final int MAX_EXHAUSTION = 6;
@@ -22,10 +23,24 @@ public record CombatantState(
             throw new IllegalArgumentException("Invalid hit point state");
         }
         conditions = List.copyOf(Objects.requireNonNull(conditions, "conditions"));
+        resources = List.copyOf(Objects.requireNonNull(resources, "resources"));
         deathSaves = deathSaves == null ? DeathSaveState.none() : deathSaves;
         if (exhaustionLevel < 0 || exhaustionLevel > MAX_EXHAUSTION) {
             throw new IllegalArgumentException("Exhaustion must be between 0 and " + MAX_EXHAUSTION);
         }
+    }
+
+    /** Backward-compatible full constructor: uses the resources captured by the snapshot. */
+    public CombatantState(
+            CombatantSnapshot snapshot,
+            int currentHitPoints,
+            int temporaryHitPoints,
+            List<ConditionInstance> conditions,
+            ConcentrationState concentration,
+            DeathSaveState deathSaves,
+            int exhaustionLevel) {
+        this(snapshot, currentHitPoints, temporaryHitPoints, conditions, concentration, deathSaves,
+                exhaustionLevel, snapshot.resources());
     }
 
     /**
@@ -40,7 +55,8 @@ public record CombatantState(
             int temporaryHitPoints,
             List<ConditionInstance> conditions,
             ConcentrationState concentration) {
-        this(snapshot, currentHitPoints, temporaryHitPoints, conditions, concentration, DeathSaveState.none(), 0);
+        this(snapshot, currentHitPoints, temporaryHitPoints, conditions, concentration, DeathSaveState.none(), 0,
+                snapshot.resources());
     }
 
     /** A 0 punti ferita. Non implica la morte: i tiri contro morte decidono l'esito. */
@@ -77,5 +93,9 @@ public record CombatantState(
 
     public Optional<ConcentrationState> activeConcentration() {
         return Optional.ofNullable(concentration);
+    }
+
+    public Optional<CombatResourceState> resource(String resourceId) {
+        return resources.stream().filter(resource -> resource.id().equals(resourceId)).findFirst();
     }
 }

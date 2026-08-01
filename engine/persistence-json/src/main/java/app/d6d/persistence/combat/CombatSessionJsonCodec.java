@@ -1,6 +1,7 @@
 package app.d6d.persistence.combat;
 
 import app.d6d.domain.combat.AbilityDefinition;
+import app.d6d.domain.combat.AbilityEffect;
 import app.d6d.domain.combat.ActivationCost;
 import app.d6d.domain.combat.AutomationStatus;
 import app.d6d.domain.combat.CombatEvent;
@@ -8,6 +9,7 @@ import app.d6d.domain.combat.CombatState;
 import app.d6d.domain.combat.CombatStatus;
 import app.d6d.domain.combat.CombatantSnapshot;
 import app.d6d.domain.combat.CombatantState;
+import app.d6d.domain.combat.CombatResourceState;
 import app.d6d.domain.combat.ConcentrationState;
 import app.d6d.domain.combat.ConditionDuration;
 import app.d6d.domain.combat.ConditionExpiry;
@@ -244,7 +246,8 @@ public final class CombatSessionJsonCodec {
                         ? null
                         : encodeConcentration(combatant.concentration()),
                 "deathSaves", encodeDeathSaves(combatant.deathSaves()),
-                "exhaustionLevel", combatant.exhaustionLevel());
+                "exhaustionLevel", combatant.exhaustionLevel(),
+                "resources", combatant.resources().stream().map(this::encodeResource).toList());
     }
 
     private Map<String, Object> encodeDeathSaves(DeathSaveState deathSaves) {
@@ -275,14 +278,19 @@ public final class CombatSessionJsonCodec {
                 ? integer(value, "exhaustionLevel", path)
                 : 0;
 
+        CombatantSnapshot snapshot = decodeSnapshot(objectValue(value, "snapshot", path), path + ".snapshot");
+        List<CombatResourceState> resources = value.containsKey("resources")
+                ? decodeResources(list(value, "resources", path), path + ".resources")
+                : snapshot.resources();
         return new CombatantState(
-                decodeSnapshot(objectValue(value, "snapshot", path), path + ".snapshot"),
+                snapshot,
                 integer(value, "currentHitPoints", path),
                 integer(value, "temporaryHitPoints", path),
                 conditions,
                 concentration,
                 deathSaves,
-                exhaustionLevel);
+                exhaustionLevel,
+                resources);
     }
 
     private DeathSaveState decodeDeathSaves(Map<?, ?> value, String path) {
@@ -315,7 +323,8 @@ public final class CombatSessionJsonCodec {
                 "vulnerabilities", enumNames(snapshot.vulnerabilities()),
                 "damageImmunities", enumNames(snapshot.damageImmunities()),
                 "conditionImmunities", enumNames(snapshot.conditionImmunities()),
-                "abilities", snapshot.abilities().stream().map(this::encodeAbility).toList());
+                "abilities", snapshot.abilities().stream().map(this::encodeAbility).toList(),
+                "resources", snapshot.resources().stream().map(this::encodeResource).toList());
     }
 
     private CombatantSnapshot decodeSnapshot(Map<?, ?> value, String path) {
@@ -349,7 +358,10 @@ public final class CombatSessionJsonCodec {
                 value.get("attacksPerAction") == null
                         ? 1
                         : asInteger(value.get("attacksPerAction"), member(path, "attacksPerAction")),
-                Boolean.TRUE.equals(value.get("strengthDexterityD20Disadvantage")));
+                Boolean.TRUE.equals(value.get("strengthDexterityD20Disadvantage")),
+                value.containsKey("resources")
+                        ? decodeResources(list(value, "resources", path), path + ".resources")
+                        : List.of());
     }
 
     private static Map<String, Object> encodeSaveBonuses(Map<SaveAbility, Integer> bonuses) {
@@ -391,7 +403,10 @@ public final class CombatSessionJsonCodec {
                 "damage", ability.damage().stream().map(this::encodeDamageFormula).toList(),
                 "automationStatus", ability.automationStatus().name(),
                 "rulesText", ability.rulesText(),
-                "passive", ability.passive());
+                "passive", ability.passive(),
+                "effect", ability.effect().name(),
+                "resourceId", ability.resourceId(),
+                "resourceCost", ability.resourceCost());
     }
 
     private AbilityDefinition decodeAbility(Map<?, ?> value, String path) {
@@ -420,7 +435,36 @@ public final class CombatSessionJsonCodec {
                 Boolean.TRUE.equals(value.get("halfOnSave")),
                 Boolean.TRUE.equals(value.get("passive")),
                 decodeSaveAbility(value.get("attackAbility")),
-                Boolean.TRUE.equals(value.get("spellOrCantrip")));
+                Boolean.TRUE.equals(value.get("spellOrCantrip")),
+                value.get("effect") == null
+                        ? AbilityEffect.NONE
+                        : AbilityEffect.valueOf((String) value.get("effect")),
+                value.get("resourceId") == null ? "" : (String) value.get("resourceId"),
+                value.get("resourceCost") == null
+                        ? 0
+                        : asInteger(value.get("resourceCost"), member(path, "resourceCost")));
+    }
+
+    private Map<String, Object> encodeResource(CombatResourceState resource) {
+        return object(
+                "id", resource.id(),
+                "name", resource.name(),
+                "maximum", resource.maximum(),
+                "spent", resource.spent());
+    }
+
+    private List<CombatResourceState> decodeResources(List<?> values, String path) {
+        List<CombatResourceState> resources = new ArrayList<>(values.size());
+        for (int index = 0; index < values.size(); index++) {
+            String resourcePath = path + '[' + index + ']';
+            Map<?, ?> value = asObject(values.get(index), resourcePath);
+            resources.add(new CombatResourceState(
+                    string(value, "id", resourcePath),
+                    string(value, "name", resourcePath),
+                    integer(value, "maximum", resourcePath),
+                    integer(value, "spent", resourcePath)));
+        }
+        return List.copyOf(resources);
     }
 
     /** Nome della caratteristica del TS, o null se assente o vuoto (nessun tiro salvezza). */
@@ -517,7 +561,11 @@ public final class CombatSessionJsonCodec {
                 "reactionAvailable", budget.reactionAvailable(),
                 "objectInteractionAvailable", budget.objectInteractionAvailable(),
                 "attacksRemaining", budget.attacksRemaining(),
-                "spellSlotSpentThisTurn", budget.spellSlotSpentThisTurn());
+                "spellSlotSpentThisTurn", budget.spellSlotSpentThisTurn(),
+                "additionalActionAvailable", budget.additionalActionAvailable(),
+                "additionalActionMagicRestricted", budget.additionalActionMagicRestricted(),
+                "actionSurgeUsedThisTurn", budget.actionSurgeUsedThisTurn(),
+                "attackActionInProgress", budget.attackActionInProgress());
     }
 
     private TurnBudget decodeTurnBudget(Map<?, ?> value, String path) {
@@ -529,7 +577,11 @@ public final class CombatSessionJsonCodec {
                 bool(value, "reactionAvailable", path),
                 bool(value, "objectInteractionAvailable", path),
                 integer(value, "attacksRemaining", path),
-                bool(value, "spellSlotSpentThisTurn", path));
+                bool(value, "spellSlotSpentThisTurn", path),
+                Boolean.TRUE.equals(value.get("additionalActionAvailable")),
+                Boolean.TRUE.equals(value.get("additionalActionMagicRestricted")),
+                Boolean.TRUE.equals(value.get("actionSurgeUsedThisTurn")),
+                Boolean.TRUE.equals(value.get("attackActionInProgress")));
     }
 
     private Map<String, Object> encodeEvent(CombatEvent event) {

@@ -35,7 +35,10 @@ public record AbilityDefinition(
         boolean halfOnSave,
         boolean passive,
         SaveAbility attackAbility,
-        boolean spellOrCantrip) {
+        boolean spellOrCantrip,
+        AbilityEffect effect,
+        String resourceId,
+        int resourceCost) {
 
     public AbilityDefinition {
         id = requireText(id, "id");
@@ -56,6 +59,14 @@ public record AbilityDefinition(
         }
         damage = List.copyOf(Objects.requireNonNull(damage, "damage"));
         Objects.requireNonNull(automationStatus, "automationStatus");
+        effect = effect == null ? AbilityEffect.NONE : effect;
+        resourceId = resourceId == null ? "" : resourceId;
+        if (resourceCost < 0) {
+            throw new IllegalArgumentException("resourceCost cannot be negative");
+        }
+        if (resourceCost > 0 && resourceId.isBlank()) {
+            throw new IllegalArgumentException("A resource cost needs a resource id");
+        }
         rulesText = rulesText == null ? "" : rulesText;
         if (resolutionMethod == ResolutionMethod.ATTACK_ROLL && damage.isEmpty()) {
             throw new IllegalArgumentException("An attack needs at least one damage component");
@@ -68,7 +79,8 @@ public record AbilityDefinition(
             ActivationCost activationCost, ResolutionMethod resolutionMethod, int attackBonus, int rangeFeet,
             int maxTargets, List<DamageFormula> damage, AutomationStatus automationStatus, String rulesText) {
         this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
-                maxTargets, damage, automationStatus, rulesText, 0, null, false, false, null, false);
+                maxTargets, damage, automationStatus, rulesText, 0, null, false, false, null, false,
+                AbilityEffect.NONE, "", 0);
     }
 
     /** Backward-compatible constructor: an ability the player activates, never a passive trait. */
@@ -79,7 +91,7 @@ public record AbilityDefinition(
             int areaRadiusFeet, SaveAbility saveAbility, boolean halfOnSave) {
         this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
                 maxTargets, damage, automationStatus, rulesText, areaRadiusFeet, saveAbility, halfOnSave, false,
-                null, false);
+                null, false, AbilityEffect.NONE, "", 0);
     }
 
     /**
@@ -92,7 +104,7 @@ public record AbilityDefinition(
             int areaRadiusFeet, SaveAbility saveAbility, boolean halfOnSave, boolean passive) {
         this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
                 maxTargets, damage, automationStatus, rulesText, areaRadiusFeet, saveAbility, halfOnSave, passive,
-                null, false);
+                null, false, AbilityEffect.NONE, "", 0);
     }
 
     /** True when the ability affects a spherical area rather than a single target. */
@@ -146,6 +158,9 @@ public record AbilityDefinition(
         private boolean passive;
         private SaveAbility attackAbility;
         private boolean spellOrCantrip;
+        private AbilityEffect effect = AbilityEffect.NONE;
+        private String resourceId = "";
+        private int resourceCost;
 
         private Builder(String id, String name) {
             this.id = id;
@@ -169,11 +184,18 @@ public record AbilityDefinition(
         public Builder passive(boolean value) { this.passive = value; return this; }
         public Builder attackAbility(SaveAbility value) { this.attackAbility = value; return this; }
         public Builder spellOrCantrip(boolean value) { this.spellOrCantrip = value; return this; }
+        public Builder effect(AbilityEffect value) { this.effect = value; return this; }
+        public Builder resource(String id, int cost) {
+            this.resourceId = id;
+            this.resourceCost = cost;
+            return this;
+        }
 
         public AbilityDefinition build() {
             return new AbilityDefinition(id, version, source, rulesetVersion, name, activationCost,
                     resolutionMethod, attackBonus, rangeFeet, maxTargets, damage, automationStatus, rulesText,
-                    areaRadiusFeet, saveAbility, halfOnSave, passive, attackAbility, spellOrCantrip);
+                    areaRadiusFeet, saveAbility, halfOnSave, passive, attackAbility, spellOrCantrip,
+                    effect, resourceId, resourceCost);
         }
     }
 }

@@ -27,7 +27,8 @@ public record ActorDefinition(
         Map<SaveAbility, Integer> savingThrowBonuses,
         int spellSaveDc,
         int attacksPerAction,
-        boolean strengthDexterityD20Disadvantage) {
+        boolean strengthDexterityD20Disadvantage,
+        List<CombatResourceState> resources) {
 
     public ActorDefinition {
         id = requireText(id, "id");
@@ -49,11 +50,30 @@ public record ActorDefinition(
         damageImmunities = Set.copyOf(Objects.requireNonNull(damageImmunities, "damageImmunities"));
         conditionImmunities = Set.copyOf(Objects.requireNonNull(conditionImmunities, "conditionImmunities"));
         abilities = List.copyOf(Objects.requireNonNull(abilities, "abilities"));
+        resources = List.copyOf(Objects.requireNonNull(resources, "resources"));
         savingThrowBonuses = Map.copyOf(Objects.requireNonNull(savingThrowBonuses, "savingThrowBonuses"));
         long uniqueAbilityIds = abilities.stream().map(AbilityDefinition::id).distinct().count();
         if (uniqueAbilityIds != abilities.size()) {
             throw new IllegalArgumentException("Ability ids must be unique inside an actor definition");
         }
+        long uniqueResourceIds = resources.stream().map(CombatResourceState::id).distinct().count();
+        if (uniqueResourceIds != resources.size()) {
+            throw new IllegalArgumentException("Resource ids must be unique inside an actor definition");
+        }
+    }
+
+    /** Backward-compatible full constructor: no encounter resources. */
+    public ActorDefinition(
+            String id, String definitionVersion, String rulesetVersion, String name, int armorClass,
+            int maxHitPoints, int currentHitPoints, int temporaryHitPoints, int speedFeet, int initiativeModifier,
+            int initiativeScore, int constitutionSaveBonus, Set<DamageType> resistances,
+            Set<DamageType> vulnerabilities, Set<DamageType> damageImmunities, Set<ConditionType> conditionImmunities,
+            List<AbilityDefinition> abilities, Map<SaveAbility, Integer> savingThrowBonuses, int spellSaveDc,
+            int attacksPerAction, boolean strengthDexterityD20Disadvantage) {
+        this(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints, currentHitPoints,
+                temporaryHitPoints, speedFeet, initiativeModifier, initiativeScore, constitutionSaveBonus,
+                resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities,
+                savingThrowBonuses, spellSaveDc, attacksPerAction, strengthDexterityD20Disadvantage, List.of());
     }
 
     /** Backward-compatible constructor: no per-ability save bonuses and not a spellcaster. */
@@ -66,7 +86,7 @@ public record ActorDefinition(
         this(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints, currentHitPoints,
                 temporaryHitPoints, speedFeet, initiativeModifier, initiativeScore, constitutionSaveBonus,
                 resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities, Map.of(), 0, 1,
-                false);
+                false, List.of());
     }
 
     /** Backward-compatible constructor: one attack for each Attack action. */
@@ -79,7 +99,7 @@ public record ActorDefinition(
         this(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints, currentHitPoints,
                 temporaryHitPoints, speedFeet, initiativeModifier, initiativeScore, constitutionSaveBonus,
                 resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities,
-                savingThrowBonuses, spellSaveDc, 1, false);
+                savingThrowBonuses, spellSaveDc, 1, false, List.of());
     }
 
     /** Backward-compatible constructor: no imposed disadvantage on Strength/Dexterity d20 tests. */
@@ -93,7 +113,7 @@ public record ActorDefinition(
         this(id, definitionVersion, rulesetVersion, name, armorClass, maxHitPoints, currentHitPoints,
                 temporaryHitPoints, speedFeet, initiativeModifier, initiativeScore, constitutionSaveBonus,
                 resistances, vulnerabilities, damageImmunities, conditionImmunities, abilities,
-                savingThrowBonuses, spellSaveDc, attacksPerAction, false);
+                savingThrowBonuses, spellSaveDc, attacksPerAction, false, List.of());
     }
 
     /** Saving-throw bonus for an ability, or 0 when the actor has no recorded save. */
@@ -139,6 +159,7 @@ public record ActorDefinition(
         private int spellSaveDc;
         private int attacksPerAction = 1;
         private boolean strengthDexterityD20Disadvantage;
+        private List<CombatResourceState> resources = List.of();
 
         private Builder(String id, String name) {
             this.id = id;
@@ -167,6 +188,7 @@ public record ActorDefinition(
             this.strengthDexterityD20Disadvantage = value;
             return this;
         }
+        public Builder resources(List<CombatResourceState> value) { this.resources = value; return this; }
 
         public ActorDefinition build() {
             int resolvedCurrentHitPoints = currentHitPoints == null ? maxHitPoints : currentHitPoints;
@@ -182,7 +204,7 @@ public record ActorDefinition(
                     resolvedCurrentHitPoints, temporaryHitPoints, speedFeet, initiativeModifier,
                     resolvedInitiativeScore, constitutionSaveBonus, resistances, vulnerabilities,
                     damageImmunities, conditionImmunities, abilities, savingThrowBonuses, spellSaveDc,
-                    attacksPerAction, strengthDexterityD20Disadvantage);
+                    attacksPerAction, strengthDexterityD20Disadvantage, resources);
         }
     }
 }
