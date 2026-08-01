@@ -47,11 +47,11 @@ own map, turn order, dice state, event log and undo history.
 <table>
 <tr>
 <td align="center">
-<img src="sample/session-start.png" width="420"/><br/>
+<img src="sample/session-start.png" width="480"/><br/>
 <sub>Starting a session — bundled encounters, saved templates, or a saved session</sub>
 </td>
 <td align="center">
-<img src="sample/session-grid.png" width="420"/><br/>
+<img src="sample/session-grid.png" width="480"/><br/>
 <sub>Encounter builder — grid size and the distance each square represents</sub>
 </td>
 </tr>
@@ -90,17 +90,17 @@ would have followed anyway.
 <table>
 <tr>
 <td align="center">
-<img src="sample/battle-screen.png" width="420"/><br/>
+<img src="sample/battle-screen.png" width="480"/><br/>
 <sub>Battle screen — party, tactical map, enemies, turn order, event log</sub>
 </td>
 <td align="center">
-<img src="sample/battle-edit-mode.png" width="420"/><br/>
+<img src="sample/battle-edit-mode.png" width="480"/><br/>
 <sub>Edit mode — name, AC, HP and initiative corrected on the cards, tokens moved freely</sub>
 </td>
 </tr>
 <tr>
 <td align="center" colspan="2">
-<img src="sample/battle-table-tools.png" width="420"/><br/>
+<img src="sample/battle-table-tools.png" width="720"/><br/>
 <sub>Table tools — ability checks, damage, healing, temporary HP and conditions by hand</sub>
 </td>
 </tr>
@@ -134,17 +134,17 @@ a live preview of the finished block at the top of the editor.
 <table>
 <tr>
 <td align="center">
-<img src="sample/sheet-progression.png" width="420"/><br/>
+<img src="sample/sheet-progression.png" width="480"/><br/>
 <sub>Character sheet — class, SRD progression, class resources, AC calculation</sub>
 </td>
 <td align="center">
-<img src="sample/sheet-guided-creation.png" width="420"/><br/>
+<img src="sample/sheet-guided-creation.png" width="480"/><br/>
 <sub>Guided SRD creation — class, background feat, skills and starting weapons</sub>
 </td>
 </tr>
 <tr>
 <td align="center" colspan="2">
-<img src="sample/creature-stat-block.png" width="420"/><br/>
+<img src="sample/creature-stat-block.png" width="720"/><br/>
 <sub>Compendium, creature — 2025 stat block with its live preview on top</sub>
 </td>
 </tr>
@@ -166,7 +166,7 @@ to play them as active or passive. Anything else can be written from scratch, or
 <table>
 <tr>
 <td align="center">
-<img src="sample/ability-archive.png" width="420"/><br/>
+<img src="sample/ability-archive.png" width="720"/><br/>
 <sub>Ability archive — entries filtered by category and class, spell detail on the right</sub>
 </td>
 </tr>
@@ -185,11 +185,11 @@ across runs.
 <table>
 <tr>
 <td align="center">
-<img src="sample/map-archive.png" width="420"/><br/>
+<img src="sample/map-archive.png" width="480"/><br/>
 <sub>Map archive — backgrounds uploaded once and reused in every session</sub>
 </td>
 <td align="center">
-<img src="sample/cursors.png" width="420"/><br/>
+<img src="sample/cursors.png" width="480"/><br/>
 <sub>Desktop cursors — five pairs, each with a pointing and a map-grabbing pose</sub>
 </td>
 </tr>
