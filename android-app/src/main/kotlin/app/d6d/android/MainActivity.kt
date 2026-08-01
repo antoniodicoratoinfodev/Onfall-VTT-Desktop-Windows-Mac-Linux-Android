@@ -98,9 +98,8 @@ class MainActivity : ComponentActivity() {
                         try {
                             request.onPicked(temporary)
                         } catch (failure: Throwable) {
-                            request.onError(failure)
-                        } finally {
                             runCatching { Files.deleteIfExists(temporary) }
+                            request.onError(failure)
                         }
                     }
                 },
@@ -125,6 +124,10 @@ class MainActivity : ComponentActivity() {
                         pending.request = null
                         onError(failure)
                     }
+                }
+
+                override fun release(path: Path) {
+                    runCatching { Files.deleteIfExists(path) }
                 }
             }
         }

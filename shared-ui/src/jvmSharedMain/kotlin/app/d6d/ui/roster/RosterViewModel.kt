@@ -42,10 +42,11 @@ data class RosterItem(
 class RosterViewModel(
     private val catalogStore: ActorCatalogStore,
     sheetStore: SheetStore,
+    loadOnCreate: Boolean = true,
 ) {
 
     /** Editor delle schede, passato agli editor esistenti senza modificarli. */
-    val sheets = SheetViewModel(sheetStore)
+    val sheets = SheetViewModel(sheetStore, loadOnCreate)
 
     var status by mutableStateOf<String?>(null)
 
@@ -54,6 +55,12 @@ class RosterViewModel(
         sheets.onSaved = { reconcileCatalog() }
         sheets.onDeleted = { _, _ -> reconcileCatalog() }
         sheets.onAbilitiesChanged = { reconcileCatalog() }
+        if (loadOnCreate) reconcileCatalog()
+    }
+
+    /** Completa il caricamento quando la shell lo ha deliberatamente rinviato al dispatcher I/O. */
+    internal fun initialize() {
+        if (!sheets.initialized) sheets.load()
         reconcileCatalog()
     }
 

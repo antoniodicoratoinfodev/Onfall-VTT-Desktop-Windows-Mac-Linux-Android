@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,10 +43,12 @@ import app.d6d.sheet.suggestedProficiencyBonus
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.images.PortraitPicker
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.runDiskIo
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.italianLabel as conditionLabel
 import app.d6d.ui.compendium.italianLabel as damageLabel
 import app.d6d.ui.theme.Palette
+import kotlinx.coroutines.launch
 
 /**
  * Stat block del mostro nel formato 2024/2025.
@@ -63,6 +66,7 @@ fun MonsterStatBlockEditor(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
     val block = viewModel.monster
     val update: (MonsterStatBlock) -> Unit = { viewModel.monster = it }
     var deleteId by remember(viewModel.selectedId) { mutableStateOf<String?>(null) }
@@ -441,7 +445,9 @@ fun MonsterStatBlockEditor(
             horizontalArrangement = Arrangement.spacedBy(9.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            GameButton("Salva stat block", accent = Palette.Heal, onClick = { viewModel.save() })
+            GameButton("Salva stat block", accent = Palette.Heal, onClick = {
+                scope.launch { runDiskIo { viewModel.save() } }
+            })
             viewModel.selectedId?.let { id ->
                 GameButton("Elimina", accent = Palette.Enemy, onClick = { deleteId = id })
             }
@@ -469,8 +475,10 @@ fun MonsterStatBlockEditor(
             },
             confirmButton = {
                 GameButton("Elimina", accent = Palette.Enemy, onClick = {
-                    viewModel.delete(id)
-                    deleteId = null
+                    scope.launch {
+                        runDiskIo { viewModel.delete(id) }
+                        deleteId = null
+                    }
                 })
             },
             dismissButton = {

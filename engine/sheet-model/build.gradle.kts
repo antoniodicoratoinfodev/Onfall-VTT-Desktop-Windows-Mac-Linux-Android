@@ -19,6 +19,7 @@ dependencies {
     api(project(":engine:domain-model"))
     api(project(":engine:character-rules"))
     api(libs.kotlinx.serialization.json)
+    implementation(project(":engine:persistence-json"))
 
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

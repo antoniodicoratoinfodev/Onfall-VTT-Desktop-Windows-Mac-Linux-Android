@@ -1,14 +1,11 @@
 package app.d6d.persistence.json;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -94,19 +91,19 @@ public final class AtomicJsonStore {
             throw new IOException("JSON data path is not a regular file: " + dataFile);
         }
 
-        Path temporaryFile = createTemporaryFile(dataDirectory, fileStem);
+        Path temporaryFile = AtomicFiles.createTemporaryFile(dataDirectory, fileStem);
         try {
-            writeUtf8(temporaryFile, json);
+            AtomicFiles.writeUtf8AndForce(temporaryFile, json);
 
             if (Files.isRegularFile(dataFile) && maxBackups > 0) {
                 createVersionedBackup();
             }
             pruneBackups();
 
-            moveReplacing(temporaryFile, dataFile);
-            forceDirectoryBestEffort(dataDirectory);
+            AtomicFiles.moveReplacing(temporaryFile, dataFile);
+            AtomicFiles.forceDirectoryBestEffort(dataDirectory);
         } finally {
-            deleteTemporaryBestEffort(temporaryFile);
+            AtomicFiles.deleteTemporaryBestEffort(temporaryFile);
         }
     }
 
@@ -128,7 +125,7 @@ public final class AtomicJsonStore {
         }
 
         Map<String, Object> value = loadObject();
-        writeAtomically(normalizedDestination, Json.encode(value));
+        AtomicFiles.writeUtf8(normalizedDestination, Json.encode(value));
     }
 
     /**
@@ -145,18 +142,18 @@ public final class AtomicJsonStore {
     private void createVersionedBackup() throws IOException {
         Files.createDirectories(backupDirectory);
         Path destination = nextBackupPath();
-        Path temporaryBackup = createTemporaryFile(backupDirectory, fileStem + "-backup");
+        Path temporaryBackup = AtomicFiles.createTemporaryFile(backupDirectory, fileStem + "-backup");
         try {
             Files.copy(
                     dataFile,
                     temporaryBackup,
                     StandardCopyOption.REPLACE_EXISTING,
                     StandardCopyOption.COPY_ATTRIBUTES);
-            forceFileBestEffort(temporaryBackup);
-            moveReplacing(temporaryBackup, destination);
-            forceDirectoryBestEffort(backupDirectory);
+            AtomicFiles.forceFileBestEffort(temporaryBackup);
+            AtomicFiles.moveReplacing(temporaryBackup, destination);
+            AtomicFiles.forceDirectoryBestEffort(backupDirectory);
         } finally {
-            deleteTemporaryBestEffort(temporaryBackup);
+            AtomicFiles.deleteTemporaryBestEffort(temporaryBackup);
         }
     }
 
@@ -198,83 +195,7 @@ public final class AtomicJsonStore {
         for (int index = maxBackups; index < backups.size(); index++) {
             Files.deleteIfExists(backups.get(index));
         }
-        forceDirectoryBestEffort(backupDirectory);
-    }
-
-    private static void writeAtomically(Path destination, String json) throws IOException {
-        Path parent = destination.getParent();
-        if (parent == null) {
-            throw new IOException("Destination has no parent directory: " + destination);
-        }
-        Files.createDirectories(parent);
-        if (Files.exists(destination) && !Files.isRegularFile(destination)) {
-            throw new IOException("Destination is not a regular file: " + destination);
-        }
-
-        String destinationName = destination.getFileName().toString();
-        Path temporaryFile = createTemporaryFile(parent, destinationName);
-        try {
-            writeUtf8(temporaryFile, json);
-            moveReplacing(temporaryFile, destination);
-            forceDirectoryBestEffort(parent);
-        } finally {
-            deleteTemporaryBestEffort(temporaryFile);
-        }
-    }
-
-    private static Path createTemporaryFile(Path directory, String hint) throws IOException {
-        String safeHint = hint.replaceAll("[^A-Za-z0-9._-]", "_");
-        String prefix = '.' + safeHint + '-';
-        if (prefix.length() < 3) {
-            prefix = ".d6d-";
-        }
-        return Files.createTempFile(directory, prefix, ".tmp");
-    }
-
-    private static void writeUtf8(Path file, String json) throws IOException {
-        Files.writeString(
-                file,
-                json,
-                StandardCharsets.UTF_8,
-                StandardOpenOption.TRUNCATE_EXISTING,
-                StandardOpenOption.WRITE);
-        forceFileBestEffort(file);
-    }
-
-    private static void moveReplacing(Path source, Path destination) throws IOException {
-        try {
-            Files.move(
-                    source,
-                    destination,
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException exception) {
-            Files.move(source, destination, StandardCopyOption.REPLACE_EXISTING);
-        }
-    }
-
-    private static void forceFileBestEffort(Path file) {
-        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
-            channel.force(true);
-        } catch (IOException | UnsupportedOperationException ignored) {
-            // Some filesystems/providers do not expose fsync. Rename still works.
-        }
-    }
-
-    private static void forceDirectoryBestEffort(Path directory) {
-        try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
-            channel.force(true);
-        } catch (IOException | UnsupportedOperationException ignored) {
-            // Directory channels are not available on every supported platform.
-        }
-    }
-
-    private static void deleteTemporaryBestEffort(Path temporaryFile) {
-        try {
-            Files.deleteIfExists(temporaryFile);
-        } catch (IOException ignored) {
-            // A stale temp file is safer than masking the original write error.
-        }
+        AtomicFiles.forceDirectoryBestEffort(backupDirectory);
     }
 
     private static void validateBaseName(String baseName) {

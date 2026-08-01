@@ -293,6 +293,37 @@ class SheetStoreTest {
         assertEquals(false, reloaded.armorStealthDisadvantage)
     }
 
+    @Test
+    fun `un archivio principale corrotto viene recuperato dal backup`() {
+        val file = directory.resolve("recupero.json")
+        val store = SheetStore(file)
+        val recoverable = SheetLibrary(characters = listOf(CharacterSheet(id = "pg-recuperabile")))
+        store.save(recoverable)
+        store.save(SheetLibrary(characters = listOf(CharacterSheet(id = "pg-piu-recente"))))
+        Files.writeString(file, "{ archivio interrotto")
+
+        val recoveringStore = SheetStore(file)
+        val loaded = recoveringStore.load()
+
+        assertEquals("pg-recuperabile", loaded.characters.single().id)
+        assertEquals(true, recoveringStore.recoveredFromBackup)
+    }
+
+    @Test
+    fun `un archivio principale mancante viene recuperato dal backup`() {
+        val file = directory.resolve("recupero-mancante.json")
+        val store = SheetStore(file)
+        store.save(SheetLibrary(characters = listOf(CharacterSheet(id = "pg-recuperabile"))))
+        store.save(SheetLibrary(characters = listOf(CharacterSheet(id = "pg-piu-recente"))))
+        Files.delete(file)
+
+        val recoveringStore = SheetStore(file)
+
+        assertTrue(recoveringStore.exists())
+        assertEquals("pg-recuperabile", recoveringStore.load().characters.single().id)
+        assertTrue(recoveringStore.recoveredFromBackup)
+    }
+
     private fun CatalogAbility.toLegacyWeaponEntry(): WeaponEntry = WeaponEntry(
         name = name,
         attackBonus = attackBonus,

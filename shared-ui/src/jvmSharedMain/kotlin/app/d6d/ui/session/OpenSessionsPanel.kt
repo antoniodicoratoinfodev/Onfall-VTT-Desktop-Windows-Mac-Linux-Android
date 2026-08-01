@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -33,7 +34,9 @@ import androidx.compose.ui.unit.dp
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.runDiskIo
 import app.d6d.ui.theme.Palette
+import kotlinx.coroutines.launch
 
 /**
  * Pannello delle partite mantenute vive contemporaneamente.
@@ -51,6 +54,7 @@ fun OpenSessionsPanel(
     compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
     var closeCandidate by remember { mutableStateOf<OpenGameSession?>(null) }
     var compactMenuOpen by remember { mutableStateOf(false) }
     var closeAfterSaveId by remember { mutableStateOf<String?>(null) }
@@ -141,8 +145,8 @@ fun OpenSessionsPanel(
             ) {
                 GameButton("Vai alla mappa", accent = Palette.Party, dense = true, onClick = onOpenBattle)
                 GameButton("Salva / gestisci", accent = Palette.Heal, dense = true, onClick = {
-                    active.manager.refresh()
                     active.manager.menuOpen = true
+                    scope.launch { runDiskIo { active.manager.refresh() } }
                 })
                 GameButton(
                     label = "Chiudi scheda",
@@ -224,8 +228,8 @@ fun OpenSessionsPanel(
                         })
                         GameButton("Salva / gestisci", accent = Palette.Heal, onClick = {
                             compactMenuOpen = false
-                            active.manager.refresh()
                             active.manager.menuOpen = true
+                            scope.launch { runDiskIo { active.manager.refresh() } }
                         })
                         GameButton(
                             label = "Chiudi scheda",
@@ -301,8 +305,8 @@ fun OpenSessionsPanel(
             confirmButton = {
                 GameButton("Salva prima", accent = Palette.Heal, onClick = {
                     workspace.activate(opened.id)
-                    opened.manager.refresh()
                     opened.manager.menuOpen = true
+                    scope.launch { runDiskIo { opened.manager.refresh() } }
                     closeAfterSaveId = opened.id
                     closeCandidate = null
                 })

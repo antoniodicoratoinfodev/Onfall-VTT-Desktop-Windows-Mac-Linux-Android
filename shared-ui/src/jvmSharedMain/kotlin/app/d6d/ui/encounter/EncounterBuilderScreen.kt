@@ -24,6 +24,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -37,6 +38,7 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.roster.RosterKind
+import app.d6d.ui.runDiskIo
 import app.d6d.ui.session.OpenSessionsPanel
 import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.SessionMenuDialog
@@ -44,6 +46,7 @@ import app.d6d.ui.session.SessionWorkspace
 import app.d6d.ui.session.WorkspaceOpenResult
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
+import kotlinx.coroutines.launch
 
 /** Configuratore del prossimo combattimento, alimentato dal Compendio. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -57,6 +60,7 @@ fun EncounterBuilderScreen(
     onOpenCompendium: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
     val sessions = workspace.activeSession.manager
     // Fondo trasparente: lascia trasparire il fondale atmosferico condiviso di
     // AppRoot. Intestazione e pannelli hanno superfici proprie e restano leggibili.
@@ -87,13 +91,15 @@ fun EncounterBuilderScreen(
             manager = sessions,
             workspace = workspace,
             onOpenInNewTab = { summary ->
-                when (workspace.openSaved(summary)) {
-                    WorkspaceOpenResult.OPENED,
-                    WorkspaceOpenResult.ALREADY_OPEN -> {
-                        viewModel.restartWizard()
-                        onOpenBattle()
+                scope.launch {
+                    when (runDiskIo { workspace.openSaved(summary) }) {
+                        WorkspaceOpenResult.OPENED,
+                        WorkspaceOpenResult.ALREADY_OPEN -> {
+                            viewModel.restartWizard()
+                            onOpenBattle()
+                        }
+                        WorkspaceOpenResult.FAILED -> Unit
                     }
-                    WorkspaceOpenResult.FAILED -> Unit
                 }
             },
         )

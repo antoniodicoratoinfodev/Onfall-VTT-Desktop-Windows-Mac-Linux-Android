@@ -72,6 +72,29 @@ class UiLayoutState(
         lastSaved = current
     }
 
+    /** Applica una disposizione caricata in background senza risalvarla. */
+    fun restore(loaded: UiLayout) {
+        val value = loaded.sanitized()
+        railWidth = value.railWidthDp.dp
+        railOpen = value.railOpen
+        squadWidth = value.squadWidthDp.dp
+        enemyWidth = value.enemyWidthDp.dp
+        logHeight = value.logHeightDp.dp
+        logCollapsed = value.logCollapsed
+        turnsCollapsed = value.turnsCollapsed
+        topBarHeight = value.topBarHeightDp.dp
+        commandBarHeight = value.commandBarHeightDp.dp
+        commandsCollapsed = value.commandsCollapsed
+        mapCellSize = value.mapCellSizeDp.dp
+        mapShowGrid = value.mapShowGrid
+        mapGridBrightness = value.mapGridBrightness
+        targetPlate = value.targetPlate?.toOffset()
+        activePlate = value.activePlate?.toOffset()
+        targetPlateScale = value.targetPlateScale
+        activePlateScale = value.activePlateScale
+        lastSaved = value
+    }
+
     private fun PlateFraction.toOffset() = Offset(x, y)
 
     private fun Offset.toFraction() = PlateFraction(x, y)

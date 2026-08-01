@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,12 +42,14 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.d6d.persistence.session.SessionSummary
 import app.d6d.ui.battle.GameButton
+import app.d6d.ui.runDiskIo
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
+import kotlinx.coroutines.launch
 
 /** Pulsante che apre il menù delle sessioni, da mettere nell'intestazione. */
 @Composable
@@ -57,6 +60,7 @@ fun SessionMenuButton(
     openSessionCount: Int = 1,
     autosaveWarning: Boolean = false,
 ) {
+    val scope = rememberCoroutineScope()
     val subtitle = when {
         autosaveWarning && openSessionCount > 1 -> "Autosave da controllare · $openSessionCount aperte"
         autosaveWarning -> "Autosave da controllare"
@@ -71,8 +75,8 @@ fun SessionMenuButton(
         accent = Palette.Gold,
         dense = dense,
         onClick = {
-            manager.refresh()
             manager.menuOpen = true
+            scope.launch { runDiskIo { manager.refresh() } }
         },
         modifier = modifier,
     )
@@ -97,12 +101,15 @@ fun SessionMenuDialog(
     var overwriteName by remember { mutableStateOf<String?>(null) }
     var discardForSession by remember { mutableStateOf<SessionSummary?>(null) }
     var deleteSession by remember { mutableStateOf<SessionSummary?>(null) }
+    val scope = rememberCoroutineScope()
 
     val saveSession: (String) -> Unit = { requestedName ->
-        val result = manager.save(requestedName)
-        workspace?.reconcileAutosaveWarning()
-        if (result == SessionSaveResult.NAME_COLLISION) {
-            overwriteName = requestedName
+        scope.launch {
+            val result = runDiskIo { manager.save(requestedName) }
+            workspace?.reconcileAutosaveWarning()
+            if (result == SessionSaveResult.NAME_COLLISION) {
+                overwriteName = requestedName
+            }
         }
     }
     val openSession: (SessionSummary) -> Unit = { summary ->
@@ -110,10 +117,12 @@ fun SessionMenuDialog(
             manager.menuOpen = false
             onOpenInNewTab(summary)
         } else {
-            when (manager.requestLoad(summary)) {
-                SessionLoadResult.LOADED -> onLoaded()
-                SessionLoadResult.UNSAVED_CHANGES -> discardForSession = summary
-                SessionLoadResult.FAILED -> Unit
+            scope.launch {
+                when (runDiskIo { manager.requestLoad(summary) }) {
+                    SessionLoadResult.LOADED -> onLoaded()
+                    SessionLoadResult.UNSAVED_CHANGES -> discardForSession = summary
+                    SessionLoadResult.FAILED -> Unit
+                }
             }
         }
     }
@@ -322,9 +331,11 @@ fun SessionMenuDialog(
             },
             confirmButton = {
                 GameButton("Sostituisci", accent = Palette.Enemy, onClick = {
-                    manager.save(requestedName, overwriteExisting = true)
-                    workspace?.reconcileAutosaveWarning()
-                    overwriteName = null
+                    scope.launch {
+                        runDiskIo { manager.save(requestedName, overwriteExisting = true) }
+                        workspace?.reconcileAutosaveWarning()
+                        overwriteName = null
+                    }
                 })
             },
             dismissButton = {
@@ -346,13 +357,15 @@ fun SessionMenuDialog(
             },
             confirmButton = {
                 GameButton("Scarta e apri", accent = Palette.Enemy, onClick = {
-                    if (
-                        manager.requestLoad(summary, discardUnsavedChanges = true) ==
-                        SessionLoadResult.LOADED
-                    ) {
-                        onLoaded()
+                    scope.launch {
+                        if (
+                            runDiskIo { manager.requestLoad(summary, discardUnsavedChanges = true) } ==
+                            SessionLoadResult.LOADED
+                        ) {
+                            onLoaded()
+                        }
+                        discardForSession = null
                     }
-                    discardForSession = null
                 })
             },
             dismissButton = {
@@ -374,9 +387,11 @@ fun SessionMenuDialog(
             },
             confirmButton = {
                 GameButton("Elimina", accent = Palette.Enemy, onClick = {
-                    manager.delete(summary)
-                    workspace?.reconcileAutosaveWarning()
-                    deleteSession = null
+                    scope.launch {
+                        runDiskIo { manager.delete(summary) }
+                        workspace?.reconcileAutosaveWarning()
+                        deleteSession = null
+                    }
                 })
             },
             dismissButton = {

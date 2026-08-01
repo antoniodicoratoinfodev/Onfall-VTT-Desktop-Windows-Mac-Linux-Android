@@ -41,6 +41,7 @@ class SessionManager(
      * diventino proprietarie dello stesso file e si sovrascrivano via autosave.
      */
     private val slugOwnedByAnotherTab: (String) -> Boolean = { false },
+    refreshOnCreate: Boolean = true,
 ) {
 
     var sessions by mutableStateOf<List<SessionSummary>>(emptyList())
@@ -81,7 +82,7 @@ class SessionManager(
     var menuOpen by mutableStateOf(false)
 
     init {
-        refresh()
+        if (refreshOnCreate) refresh()
     }
 
     fun refresh() = guard(null) {
@@ -223,6 +224,22 @@ class SessionManager(
         } else {
             null
         }
+    }
+
+    /**
+     * Ricollega una scheda recuperata al suo eventuale file senza dichiararla
+     * già salvata: il contenuto della bozza può essere più recente dell'archivio.
+     */
+    internal fun attachRecovered(currentSlug: String?, displayName: String) {
+        this.currentSlug = currentSlug
+        currentName = displayName.trim()
+        savedState = null
+        savedPresentation = null
+        savedDisplayName = currentName
+        // Mantiene attivo l'autosave per le sessioni che possedevano già un file.
+        savedGeneration = battle.sessionGeneration
+        menuOpen = false
+        status = null
     }
 
     private fun persist(

@@ -19,12 +19,20 @@ class ImageStoreTest {
 
     private fun store() = ImageStore(dataDirectory)
 
-    /** Un PNG minimo valido: bastano i byte, non serve una vera immagine. */
+    /** Un PNG minimo con intestazione IHDR e dimensioni 1×1. */
     private fun sampleImage(name: String): Path {
         val source = Files.createTempDirectory("sorgente").resolve(name)
-        Files.write(source, byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
+        Files.write(source, pngHeader(1, 1))
         return source
     }
+
+    private fun pngHeader(width: Int, height: Int): ByteArray = byteArrayOf(
+        0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        (width ushr 24).toByte(), (width ushr 16).toByte(), (width ushr 8).toByte(), width.toByte(),
+        (height ushr 24).toByte(), (height ushr 16).toByte(), (height ushr 8).toByte(), height.toByte(),
+        0x08, 0x06, 0x00, 0x00, 0x00,
+    )
 
     @Test
     fun `l'immagine viene copiata nell'archivio`() {
@@ -90,12 +98,29 @@ class ImageStoreTest {
     @Test
     fun `un jpeg reale viene accettato`() {
         val jpeg = Files.createTempDirectory("foto").resolve("scatto.jpg")
-        // Firma JPEG (SOI + marker) seguita da qualche byte qualsiasi.
-        Files.write(jpeg, byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0x00, 0x10))
+        // SOI e segmento SOF0 da 1×1 pixel.
+        Files.write(
+            jpeg,
+            byteArrayOf(
+                0xFF.toByte(), 0xD8.toByte(),
+                0xFF.toByte(), 0xC0.toByte(), 0x00, 0x0B, 0x08, 0x00, 0x01, 0x00, 0x01,
+                0x01, 0x01, 0x11, 0x00,
+            ),
+        )
 
         val stored = store().importImage(jpeg)
 
         assertEquals("scatto.jpg", stored)
+    }
+
+    @Test
+    fun `un'immagine con troppi pixel viene rifiutata prima della copia`() {
+        val huge = Files.createTempDirectory("pixel").resolve("enorme.png")
+        Files.write(huge, pngHeader(8_000, 8_000))
+
+        val error = assertThrows(IllegalArgumentException::class.java) { store().importImage(huge) }
+
+        assertTrue(error.message!!.contains(ImageStore.maxPixelSizeLabel))
     }
 
     @Test
@@ -138,6 +163,30 @@ class ImageStoreTest {
         val reloaded = ImageStore(dataDirectory).loadLibrary()
 
         assertEquals("kaelen.png", reloaded.portraits["pg-kaelen"])
+    }
+
+    @Test
+    fun `una libreria ritratti corrotta ricade sul backup valido`() {
+        val store = store()
+        store.saveLibrary(PortraitLibrary(portraits = mapOf("prima" to "prima.png")))
+        store.saveLibrary(PortraitLibrary(portraits = mapOf("dopo" to "dopo.png")))
+        Files.writeString(dataDirectory.resolve("ritratti.json"), "{ non valido")
+
+        val recovered = ImageStore(dataDirectory).loadLibrary()
+
+        assertEquals(mapOf("prima" to "prima.png"), recovered.portraits)
+    }
+
+    @Test
+    fun `una libreria ritratti mancante ricade sul backup valido`() {
+        val store = store()
+        store.saveLibrary(PortraitLibrary(portraits = mapOf("prima" to "prima.png")))
+        store.saveLibrary(PortraitLibrary(portraits = mapOf("dopo" to "dopo.png")))
+        Files.delete(dataDirectory.resolve("ritratti.json"))
+
+        val recovered = ImageStore(dataDirectory).loadLibrary()
+
+        assertEquals(mapOf("prima" to "prima.png"), recovered.portraits)
     }
 
     @Test

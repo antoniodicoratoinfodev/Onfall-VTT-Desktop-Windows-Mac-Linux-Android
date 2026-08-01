@@ -1,5 +1,6 @@
 package app.d6d.sheet
 
+import app.d6d.persistence.json.AtomicFiles
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.intOrNull
@@ -7,7 +8,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 
 /** Contenuto salvato: schede, stat block e catalogo delle capacità riusabili. */
 @Serializable
@@ -39,6 +39,11 @@ data class SheetLibrary(
  */
 class SheetStore(private val file: Path) {
 
+    private val backup: Path get() = file.resolveSibling("${file.fileName}.bak")
+
+    var recoveredFromBackup: Boolean = false
+        private set
+
     private val json = Json {
         prettyPrint = true
         // Un campo aggiunto in futuro non deve impedire di leggere un file vecchio.
@@ -46,20 +51,39 @@ class SheetStore(private val file: Path) {
         encodeDefaults = true
     }
 
-    fun exists(): Boolean = Files.exists(file)
+    fun exists(): Boolean = Files.exists(file) || Files.exists(backup)
 
     fun load(): SheetLibrary {
-        if (!Files.exists(file)) return SheetLibrary()
-        val text = Files.readString(file)
+        recoveredFromBackup = false
+        if (!Files.exists(file)) {
+            if (!Files.isRegularFile(backup)) return SheetLibrary()
+            return decode(Files.readString(backup)).also { recoveredFromBackup = true }
+        }
+        return try {
+            decode(Files.readString(file))
+        } catch (failure: Exception) {
+            if (failure is UnsupportedSheetSchemaException || !Files.isRegularFile(backup)) throw failure
+            try {
+                decode(Files.readString(backup)).also { recoveredFromBackup = true }
+            } catch (backupFailure: Exception) {
+                failure.addSuppressed(backupFailure)
+                throw failure
+            }
+        }
+    }
+
+    private fun decode(text: String): SheetLibrary {
         if (text.isBlank()) return SheetLibrary()
         val storedVersion = json.parseToJsonElement(text)
             .jsonObject["schemaVersion"]
             ?.jsonPrimitive
             ?.intOrNull
             ?: 1
-        require(storedVersion <= SheetLibrary.SCHEMA_VERSION) {
-            "Il file usa lo schema $storedVersion, ma questa versione dell'app supporta " +
-                "fino allo schema ${SheetLibrary.SCHEMA_VERSION}. Aggiorna l'app prima di salvarlo."
+        if (storedVersion > SheetLibrary.SCHEMA_VERSION) {
+            throw UnsupportedSheetSchemaException(
+                "Il file usa lo schema $storedVersion, ma questa versione dell'app supporta " +
+                    "fino allo schema ${SheetLibrary.SCHEMA_VERSION}. Aggiorna l'app prima di salvarlo.",
+            )
         }
         val decoded = json.decodeFromString(SheetLibrary.serializer(), text)
             .copy(schemaVersion = storedVersion)
@@ -71,16 +95,12 @@ class SheetStore(private val file: Path) {
     }
 
     fun save(library: SheetLibrary) {
-        file.parent?.let { Files.createDirectories(it) }
-
-        if (Files.exists(file)) {
-            val backup = file.resolveSibling("${file.fileName}.bak")
-            Files.copy(file, backup, StandardCopyOption.REPLACE_EXISTING)
-        }
-
-        val temporary = file.resolveSibling("${file.fileName}.tmp")
-        Files.writeString(temporary, json.encodeToString(SheetLibrary.serializer(), library))
-        Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING)
+        AtomicFiles.writeUtf8WithBackup(
+            file,
+            backup,
+            json.encodeToString(SheetLibrary.serializer(), library),
+        )
+        recoveredFromBackup = false
     }
 
     /**
@@ -191,3 +211,5 @@ class SheetStore(private val file: Path) {
         }
     }
 }
+
+private class UnsupportedSheetSchemaException(message: String) : IllegalArgumentException(message)

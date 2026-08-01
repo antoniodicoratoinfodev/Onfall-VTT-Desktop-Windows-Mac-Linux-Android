@@ -7,19 +7,20 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.awt.image.BufferedImage
 import java.io.IOException
-import java.nio.file.Files
 import java.nio.file.Path
+import javax.imageio.ImageIO
 
 class PortraitRepositoryTest {
 
     @TempDir
     lateinit var directory: Path
 
-    private fun sampleImage(): Path = directory.resolve("sorgente.png").also { source ->
-        // Firma PNG completa (8 byte): l'archivio verifica il contenuto, non la sola
-        // estensione, quindi una firma troncata verrebbe — giustamente — rifiutata.
-        Files.write(source, byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
+    private fun sampleImage(name: String = "sorgente.png"): Path = directory.resolve(name).also { source ->
+        // PNG completo 1×1: oltre ai controlli dell'archivio può essere decodificato
+        // davvero dai test della cache Compose.
+        ImageIO.write(BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB), "png", source.toFile())
     }
 
     @Test
@@ -132,10 +133,74 @@ class PortraitRepositoryTest {
         assertEquals(null, store.resolve(map.image))
     }
 
+    @Test
+    fun `sostituire e poi togliere un ritratto elimina i file non piu referenziati`() {
+        var source = sampleImage("primo.png")
+        val picker = object : FilePicker {
+            override fun pick(): Path? = source
+            override fun pickAsync(onPicked: (Path?) -> Unit, onError: (Throwable) -> Unit) {
+                onPicked(source)
+            }
+        }
+        val store = ImageStore(directory.resolve("dati"))
+        val repository = PortraitRepository(store, picker)
+        repository.assignPortraitAsync("eroe")
+        val firstStored = requireNotNull(repository.portraitName("eroe"))
+        assertNotNull(store.resolve(firstStored))
+
+        source = sampleImage("secondo.png")
+        repository.assignPortraitAsync("eroe")
+        val secondStored = requireNotNull(repository.portraitName("eroe"))
+
+        assertEquals(null, store.resolve(firstStored))
+        assertNotNull(store.resolve(secondStored))
+        repository.clearPortrait("eroe")
+        assertEquals(null, store.resolve(secondStored))
+    }
+
+    @Test
+    fun `il file temporaneo del picker viene rilasciato dopo l'importazione`() {
+        val source = sampleImage()
+        var released: Path? = null
+        val repository = PortraitRepository(
+            ImageStore(directory.resolve("dati")),
+            object : FilePicker {
+                override fun pick(): Path? = source
+                override fun pickAsync(onPicked: (Path?) -> Unit, onError: (Throwable) -> Unit) {
+                    onPicked(source)
+                }
+
+                override fun release(path: Path) {
+                    released = path
+                }
+            },
+        )
+
+        repository.assignPortraitAsync("eroe")
+
+        assertEquals(source, released)
+        assertNotNull(repository.portraitName("eroe"))
+    }
+
+    @Test
+    fun `la cache decodificata rimuove la voce meno recente oltre il limite`() {
+        val store = ImageStore(directory.resolve("dati"))
+        val first = store.importImage(sampleImage("uno.png"))
+        val second = store.importImage(sampleImage("due.png"))
+        val repository = PortraitRepository(store, maxDecodedEntries = 1)
+
+        repository.bitmap(first)
+        repository.bitmap(second)
+
+        assertEquals(1, repository.decodedCacheSize)
+        assertTrue(repository.decodedCacheBytes <= 4L)
+    }
+
     private fun pickerReturning(source: Path) = object : FilePicker {
         override fun pick(): Path? = source
         override fun pickAsync(onPicked: (Path?) -> Unit, onError: (Throwable) -> Unit) {
             onPicked(source)
         }
     }
+
 }

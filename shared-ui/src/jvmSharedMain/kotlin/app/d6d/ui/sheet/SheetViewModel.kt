@@ -74,7 +74,10 @@ enum class SheetNavigationResult {
  * Personaggi e mostri condividono l'archivio ma non il modulo: la scheda del
  * personaggio e' completa, lo stat block del mostro e' la versione ridotta.
  */
-class SheetViewModel(private val store: SheetStore) {
+class SheetViewModel(
+    private val store: SheetStore,
+    loadOnCreate: Boolean = true,
+) {
     private val guidedCharacters by lazy { GuidedCharacterService(Srd521ItContent.pack) }
 
     val srdClasses get() = Srd521ItContent.pack.classes
@@ -142,7 +145,8 @@ class SheetViewModel(private val store: SheetStore) {
 
     val hasUnsavedChanges: Boolean get() = isDirty
 
-    private var initialized = false
+    var initialized by mutableStateOf(false)
+        private set
 
     /**
      * Notificato dopo un salvataggio riuscito.
@@ -159,7 +163,7 @@ class SheetViewModel(private val store: SheetStore) {
     var onAbilitiesChanged: (() -> Unit)? = null
 
     init {
-        load()
+        if (loadOnCreate) load()
     }
 
     fun load(discardUnsavedChanges: Boolean = false): SheetNavigationResult {

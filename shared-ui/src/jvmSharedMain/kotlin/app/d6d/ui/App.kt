@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -64,6 +65,7 @@ import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.layout.UiLayoutState
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.ui.session.SessionWorkspace
+import app.d6d.ui.session.WorkspaceRecoveryStore
 import app.d6d.ui.session.WorkspaceOpenResult
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.AppTheme
@@ -73,6 +75,7 @@ import app.d6d.ui.theme.Palette
 import java.nio.file.Path
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 enum class Destination(val label: String, val icon: AppGlyph) {
     BATTAGLIA("Battaglia", AppGlyph.SWORDS),
@@ -110,6 +113,7 @@ fun AppRoot(
     onExitConfirmed: () -> Unit = {},
 ) {
     AppTheme {
+        val uiScope = rememberCoroutineScope()
         var destination by remember { mutableStateOf(Destination.BATTAGLIA) }
         var requestedCompendiumItemId by remember { mutableStateOf<String?>(null) }
         var requestedCompendiumNewKind by remember { mutableStateOf<RosterKind?>(null) }
@@ -120,6 +124,7 @@ fun AppRoot(
             RosterViewModel(
                 ActorCatalogStore(dataDirectory),
                 SheetStore(dataDirectory.resolve("schede.json")),
+                loadOnCreate = false,
             )
         }
         // Ogni scheda aperta riceve un BattleViewModel distinto. La taglia iniziale
@@ -136,7 +141,9 @@ fun AppRoot(
             }
         }
         val encounterBuilder = remember { EncounterBuilderViewModel(roster) }
-        val portraits = remember { PortraitRepository(ImageStore(dataDirectory), filePicker) }
+        val portraits = remember {
+            PortraitRepository(ImageStore(dataDirectory), filePicker, uiScope, loadOnCreate = false)
+        }
         // All'avvio si apre il template piu' semplice: un tavolo nuovo trova una
         // partita giocabile invece di una mappa vuota, e le altre due si scelgono
         // dalla procedura Nuova partita.
@@ -147,14 +154,37 @@ fun AppRoot(
                 initialSession = opening.startedSession(),
                 initialDisplayName = opening.name,
                 battleFactory = battleFactory,
+                refreshManagersOnCreate = false,
             )
         }
+        val recoveryStore = remember { WorkspaceRecoveryStore(dataDirectory) }
+        var recoveryReady by remember { mutableStateOf(false) }
         // Il Compendio deve contenere tutto cio' che l'app distribuisce, non solo
         // quello che l'utente ha aperto: l'archivio viene popolato alla prima
         // installazione, quindi su uno gia' esistente le partite incluse
         // nominerebbero schede che non ci sono. Si rimettono solo le mancanti.
         LaunchedEffect(roster) {
-            roster.installIncludedContent()
+            runCatching {
+                runDiskIo {
+                    roster.initialize()
+                    roster.installIncludedContent()
+                    portraits.reload()
+                }
+            }
+            val recovered = runCatching { runDiskIo { recoveryStore.load() } }.getOrNull()
+            if (recovered != null) workspace.restoreRecovery(recovered)
+            runCatching { runDiskIo { workspace.refreshSessionLists() } }
+            recoveryReady = true
+        }
+        // La bozza segue ogni scheda aperta, ma aspetta che l'avvio abbia finito:
+        // il tavolo predefinito non deve sovrascrivere un recupero ancora da leggere.
+        LaunchedEffect(workspace, recoveryReady) {
+            if (!recoveryReady) return@LaunchedEffect
+            snapshotFlow { workspace.recoveryKey() }.collectLatest {
+                delay(500)
+                val snapshot = workspace.recoverySnapshot()
+                runDiskIo { runCatching { recoveryStore.save(snapshot) } }
+            }
         }
         val activeSession = workspace.activeSession
         val battleViewModel = activeSession.battle
@@ -165,8 +195,9 @@ fun AppRoot(
             if (exitRequested) {
                 // Prima prova a chiudere pulitamente gli autosave nominati. Se
                 // restano bozze o errori, la decisione torna all'utente.
-                workspace.flushAutosaves()
+                runDiskIo { workspace.flushAutosaves() }
                 if (workspace.openSessions.none { it.manager.hasUnsavedChanges }) {
+                    runDiskIo { runCatching { recoveryStore.clear() } }
                     onExitConfirmed()
                 } else {
                     exitWarningOpen = true
@@ -178,9 +209,10 @@ fun AppRoot(
         // Disposizione dei pannelli: larghezze, collassi, zoom e posizione delle
         // targhe. Si carica all'avvio dallo stesso file trasportabile e vi torna a
         // ogni modifica, cosi' l'interfaccia riapre com'era stata lasciata.
-        val layout = remember {
-            val store = LayoutStore(dataDirectory.resolve("layout.json"))
-            UiLayoutState(store.load(), store)
+        val layoutStore = remember { LayoutStore(dataDirectory.resolve("layout.json")) }
+        val layout = remember { UiLayoutState(store = layoutStore) }
+        LaunchedEffect(layout) {
+            layout.restore(runDiskIo { layoutStore.load() })
         }
         // `snapshotFlow` osserva i valori senza ricomporre la radice a ogni frame
         // di trascinamento; `collectLatest` annulla l'attesa precedente, quindi si
@@ -188,7 +220,7 @@ fun AppRoot(
         LaunchedEffect(layout) {
             snapshotFlow { layout.snapshot() }.collectLatest {
                 delay(600)
-                layout.persist()
+                runDiskIo { runCatching { layout.persist() } }
             }
         }
 
@@ -203,7 +235,7 @@ fun AppRoot(
                 ) {
                     if (opened.manager.currentSlug != null && opened.manager.hasUnsavedChanges) {
                         delay(1_200)
-                        workspace.flushAutosave(opened)
+                        runDiskIo { workspace.flushAutosave(opened) }
                     }
                 }
             }
@@ -222,15 +254,17 @@ fun AppRoot(
         }
 
         val openSavedSession: (app.d6d.persistence.session.SessionSummary) -> Unit = { summary ->
-            when (workspace.openSaved(summary)) {
-                WorkspaceOpenResult.OPENED,
-                WorkspaceOpenResult.ALREADY_OPEN -> {
-                    encounterBuilder.restartWizard()
-                    destination = Destination.BATTAGLIA
-                }
-                WorkspaceOpenResult.FAILED -> {
-                    sessions.status = workspace.status
-                    sessions.menuOpen = true
+            uiScope.launch {
+                when (runDiskIo { workspace.openSaved(summary) }) {
+                    WorkspaceOpenResult.OPENED,
+                    WorkspaceOpenResult.ALREADY_OPEN -> {
+                        encounterBuilder.restartWizard()
+                        destination = Destination.BATTAGLIA
+                    }
+                    WorkspaceOpenResult.FAILED -> {
+                        sessions.status = workspace.status
+                        sessions.menuOpen = true
+                    }
                 }
             }
         }
@@ -398,7 +432,10 @@ fun AppRoot(
                     dismissButton = {
                         GameButton("Esci senza salvare", accent = Palette.Enemy, onClick = {
                             exitWarningOpen = false
-                            onExitConfirmed()
+                            uiScope.launch {
+                                runDiskIo { runCatching { recoveryStore.clear() } }
+                                onExitConfirmed()
+                            }
                         })
                     },
                 )

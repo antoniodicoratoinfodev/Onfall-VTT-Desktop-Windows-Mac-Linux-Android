@@ -25,6 +25,21 @@ enum class WorkspaceCloseResult {
     NOT_FOUND,
 }
 
+internal data class WorkspaceRecoveryKey(
+    val activeId: String?,
+    val sessions: List<WorkspaceSessionRecoveryKey>,
+)
+
+internal data class WorkspaceSessionRecoveryKey(
+    val id: String,
+    val displayName: String,
+    val currentSlug: String?,
+    val stateRevision: Long,
+    val eventCount: Int,
+    val sessionGeneration: Long,
+    val presentation: Map<String, String>,
+)
+
 /**
  * Una partita realmente aperta.
  *
@@ -52,6 +67,7 @@ class SessionWorkspace(
     initialSession: CombatSession,
     initialDisplayName: String,
     private val battleFactory: (CombatSession) -> BattleViewModel = { BattleViewModel(it) },
+    private val refreshManagersOnCreate: Boolean = true,
 ) {
     private val entries = mutableStateListOf<OpenGameSession>()
     private var nextId = 1L
@@ -196,6 +212,71 @@ class SessionWorkspace(
         }
     }
 
+    /** Aggiorna gli elenchi archivio di tutte le schede aperte. */
+    fun refreshSessionLists() {
+        entries.forEach { it.manager.refresh() }
+    }
+
+    /** Chiave leggera osservabile da Compose per ritardare la scrittura della bozza. */
+    internal fun recoveryKey(): WorkspaceRecoveryKey = WorkspaceRecoveryKey(
+        activeId = activeId,
+        sessions = entries.map { opened ->
+            WorkspaceSessionRecoveryKey(
+                id = opened.id,
+                displayName = opened.manager.currentName,
+                currentSlug = opened.manager.currentSlug,
+                stateRevision = opened.battle.state.revision(),
+                eventCount = opened.battle.events.size,
+                sessionGeneration = opened.battle.sessionGeneration,
+                presentation = opened.battle.presentationState(),
+            )
+        },
+    )
+
+    /** Cattura tutti i documenti aperti, comprese le bozze mai salvate. */
+    internal fun recoverySnapshot(): WorkspaceRecovery {
+        val activeIndex = entries.indexOfFirst { it.id == activeId }.coerceAtLeast(0)
+        return WorkspaceRecovery(
+            activeIndex = activeIndex,
+            sessions = entries.map { opened ->
+                RecoveredGameSession(
+                    displayName = opened.manager.currentName.ifBlank { opened.displayName },
+                    currentSlug = opened.manager.currentSlug,
+                    session = opened.battle.session,
+                    presentation = opened.battle.presentationState(),
+                )
+            },
+        )
+    }
+
+    /** Sostituisce il tavolo iniziale con una bozza lasciata da un arresto anomalo. */
+    internal fun restoreRecovery(recovery: WorkspaceRecovery): Boolean {
+        if (recovery.sessions.isEmpty()) return false
+        val slugs = recovery.sessions.mapNotNull { it.currentSlug }
+        if (slugs.size != slugs.toSet().size) return false
+
+        val restored = recovery.sessions.map { recovered ->
+            val id = newId()
+            val battle = battleFactory(recovered.session)
+            battle.adopt(recovered.session, recovered.presentation)
+            freezeUnplacedFootprints(battle)
+            val manager = managerFor(id, battle).also {
+                it.attachRecovered(recovered.currentSlug, recovered.displayName)
+            }
+            OpenGameSession(id, battle, manager)
+        }
+        entries.clear()
+        entries.addAll(restored)
+        autosaveWarnings = emptyMap()
+        activeId = restored[recovery.activeIndex.coerceIn(0, restored.lastIndex)].id
+        status = if (restored.size == 1) {
+            "Bozza della sessione precedente recuperata."
+        } else {
+            "Recuperate ${restored.size} sessioni dalla chiusura precedente."
+        }
+        return true
+    }
+
     /**
      * Esegue l'autosave di una scheda e porta l'eventuale errore anche a livello
      * workspace: in questo modo resta visibile mentre l'utente sta lavorando su
@@ -245,6 +326,7 @@ class SessionWorkspace(
             slugOwnedByAnotherTab = { slug ->
                 entries.any { it.id != id && it.manager.currentSlug == slug }
             },
+            refreshOnCreate = refreshManagersOnCreate,
         )
 
     private fun freezeUnplacedFootprints(battle: BattleViewModel) {

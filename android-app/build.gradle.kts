@@ -9,15 +9,13 @@ android {
     namespace = "app.d6d.android"
 
     compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
+        version = release(37)
     }
 
     defaultConfig {
         applicationId = "app.d6d.onfall"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
     }
@@ -38,14 +36,14 @@ android {
 }
 
 dependencies {
-    implementation(project(":shared-ui"))
+    implementation(project.dependencies.project(":shared-ui"))
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
     implementation(libs.androidx.activity.compose)
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3")
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.material3)
 
     coreLibraryDesugaring(libs.android.desugar.jdk.libs)
 }

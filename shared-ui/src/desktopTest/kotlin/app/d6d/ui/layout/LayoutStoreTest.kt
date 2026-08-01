@@ -63,6 +63,30 @@ class LayoutStoreTest {
     }
 
     @Test
+    fun `un file danneggiato recupera l'ultima disposizione dal backup`() {
+        val file = directory.resolve("layout.json")
+        val store = store()
+        val recoverable = UiLayout(railWidthDp = 144f, logCollapsed = true)
+        store.save(recoverable)
+        store.save(UiLayout(railWidthDp = 180f))
+        Files.writeString(file, "{ preferenze interrotte")
+
+        assertEquals(recoverable, store.load())
+    }
+
+    @Test
+    fun `un file principale mancante recupera l'ultima disposizione dal backup`() {
+        val file = directory.resolve("layout.json")
+        val store = store()
+        val recoverable = UiLayout(railWidthDp = 144f, logCollapsed = true)
+        store.save(recoverable)
+        store.save(UiLayout(railWidthDp = 180f))
+        Files.delete(file)
+
+        assertEquals(recoverable, store.load())
+    }
+
+    @Test
     fun `i valori fuori scala vengono riportati entro i limiti`() {
         val store = store()
         store.save(

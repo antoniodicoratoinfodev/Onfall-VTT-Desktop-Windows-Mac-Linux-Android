@@ -9,9 +9,9 @@ plugins {
 }
 
 kotlin {
-    androidLibrary {
+    android {
         namespace = "app.d6d.ui"
-        compileSdk = 36
+        compileSdk = 37
         minSdk = 26
     }
 
@@ -34,12 +34,12 @@ kotlin {
                 api(project(":engine:sheet-model"))
                 implementation(project(":content:srd-5.2.1-it"))
 
-                implementation(compose.runtime)
-                implementation(compose.foundation)
-                implementation(compose.material3)
-                implementation(compose.ui)
-                implementation(compose.materialIconsExtended)
-                implementation(compose.components.resources)
+                implementation(libs.jetbrains.compose.runtime)
+                implementation(libs.jetbrains.compose.foundation)
+                implementation(libs.jetbrains.compose.material3)
+                implementation(libs.jetbrains.compose.ui)
+                implementation(libs.jetbrains.compose.material.icons.extended)
+                implementation(libs.jetbrains.compose.components.resources)
             }
         }
         named("androidMain") { dependsOn(jvmSharedMain) }

@@ -1,12 +1,13 @@
 package app.d6d.ui.layout
 
+import app.d6d.persistence.json.AtomicFiles
 import app.d6d.ui.battle.MAX_CELL_DP
 import app.d6d.ui.battle.MIN_CELL_DP
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
+import java.nio.charset.StandardCharsets
 
 /**
  * Posizione di una targa flottante, espressa come frazione dello spazio libero.
@@ -100,6 +101,8 @@ data class UiLayout(
  */
 class LayoutStore(private val file: Path) {
 
+    private val backup: Path get() = file.resolveSibling("${file.fileName}.bak")
+
     private val json = Json {
         prettyPrint = true
         // Un campo aggiunto in futuro non deve impedire di leggere un file vecchio.
@@ -108,27 +111,30 @@ class LayoutStore(private val file: Path) {
     }
 
     fun load(): UiLayout {
-        if (!Files.exists(file)) return UiLayout()
         // `Files.readAllBytes`/`write` invece di `readString`/`writeString`: questi
         // ultimi sono Java 11 e non esistono nell'SDK Android che compila lo stesso
         // sorgente condiviso.
-        val text = runCatching { String(Files.readAllBytes(file)) }.getOrNull()
-        if (text.isNullOrBlank()) return UiLayout()
-        return runCatching { json.decodeFromString(UiLayout.serializer(), text) }
-            .getOrDefault(UiLayout())
-            .sanitized()
+        return decode(file)
+            ?: decode(backup)
+            ?: UiLayout()
     }
 
     fun save(layout: UiLayout) {
-        file.parent?.let { Files.createDirectories(it) }
+        AtomicFiles.writeUtf8WithBackup(
+            file,
+            backup,
+            json.encodeToString(UiLayout.serializer(), layout.sanitized()),
+        )
+    }
 
-        if (Files.exists(file)) {
-            val backup = file.resolveSibling("${file.fileName}.bak")
-            Files.copy(file, backup, StandardCopyOption.REPLACE_EXISTING)
-        }
-
-        val temporary = file.resolveSibling("${file.fileName}.tmp")
-        Files.write(temporary, json.encodeToString(UiLayout.serializer(), layout.sanitized()).toByteArray())
-        Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING)
+    private fun decode(candidate: Path): UiLayout? {
+        if (!Files.isRegularFile(candidate)) return null
+        val text = runCatching {
+            String(Files.readAllBytes(candidate), StandardCharsets.UTF_8)
+        }.getOrNull()
+        if (text.isNullOrBlank()) return null
+        return runCatching { json.decodeFromString(UiLayout.serializer(), text) }
+            .getOrNull()
+            ?.sanitized()
     }
 }
