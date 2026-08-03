@@ -2146,7 +2146,7 @@
       "subclass": null,
       "description": "Il guerriero può spingersi oltre i suoi normali limiti per un istante. Nel suo turno, può effettuare un'azione aggiuntiva, fatta eccezione per l'azione di Magia.\nDopo aver usato questo privilegio, il personaggio non può riutilizzarlo prima di aver completato un riposo breve o lungo. A partire dal 17º livello, il guerriero può utilizzare questo privilegio due volte prima di un riposo, ma soltanto una volta nello stesso turno.",
       "page": 54,
-      "activation": "azione di Magia",
+      "activation": null,
       "resource": {
         "name": "utilizzo del privilegio",
         "recovery": [

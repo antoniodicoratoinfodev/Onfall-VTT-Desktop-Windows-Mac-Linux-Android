@@ -31,9 +31,19 @@ object SrdChoiceResolver {
         provisionalSelections: List<ChoiceSelection> = emptyList(),
     ): List<SrdChoiceOption> {
         val pack = Srd521ItContent.pack
-        val otherProvisionalIds = provisionalSelections
-            .filterNot { it.choiceId == choice.id }
-            .flatMapTo(mutableSetOf()) { it.optionIds }
+        val provisionalBackground = provisionalSelections
+            .asSequence()
+            .flatMap { it.optionIds.asSequence() }
+            .mapNotNull(pack::background)
+            .firstOrNull()
+        val otherProvisionalIds = buildSet {
+            provisionalSelections
+                .filterNot { it.choiceId == choice.id }
+                .forEach { addAll(it.optionIds) }
+            provisionalBackground?.skillProficiencies?.forEach { add(skillId(it)) }
+            provisionalBackground?.toolChoice?.optionIds?.let(::addAll)
+            provisionalBackground?.featId?.let(::add)
+        }
         if (choice.optionIds.isNotEmpty()) {
             return choice.optionIds
                 .filter { id ->
@@ -128,6 +138,18 @@ object SrdChoiceResolver {
                         it.id !in otherProvisionalIds &&
                             !sheet.toolProficiencies.containsListedEntry(it.label)
                     }
+            semantic == "tools:any" -> return (artisanTools + musicalInstruments + otherTools)
+                .map(::toolOption)
+                .filter {
+                    it.id !in otherProvisionalIds &&
+                        !sheet.toolProficiencies.containsListedEntry(it.label)
+                }
+            semantic == "tools:gaming-set" -> return gamingSets
+                .map(::toolOption)
+                .filter {
+                    it.id !in otherProvisionalIds &&
+                        !sheet.toolProficiencies.containsListedEntry(it.label)
+                }
             semantic.startsWith("weapons:mastery:") -> return SrdWeapons.all
                 .map(::weaponOption)
                 .filter { it.id !in sheet.progression.selectedFeatureIds }
@@ -216,18 +238,15 @@ object SrdChoiceResolver {
                     }
                 }
             }
-            semantic.startsWith("beasts:") -> return listOf(
-                WildShapeOption("topo", "Topo", "GS 0 · senza volo", 2),
-                WildShapeOption("cavallo-da-galoppo", "Cavallo da galoppo", "GS 1/4 · senza volo", 2),
-                WildShapeOption("ragno", "Ragno", "GS 0 · senza volo", 2),
-                WildShapeOption("lupo", "Lupo", "GS 1/4 · senza volo", 2),
-                WildShapeOption("coccodrillo", "Coccodrillo", "GS 1/2 · senza volo", 4),
-                WildShapeOption("cavallo-da-guerra", "Cavallo da guerra", "GS 1/2 · senza volo", 4),
-                WildShapeOption("aquila-gigante", "Aquila gigante", "GS 1 · volo", 8),
-                WildShapeOption("gufo-gigante", "Gufo gigante", "GS 1/4 · volo", 8),
-            )
-                .filter { classLevel >= it.minimumDruidLevel }
-                .map { SrdChoiceOption(it.id, it.label, it.description) }
+            semantic.startsWith("beasts:") -> return SrdBeasts.availableAt(classLevel)
+                .map { form ->
+                    SrdChoiceOption(
+                        id = form.id,
+                        label = form.name,
+                        description = form.summary,
+                        secondaryLabel = "SRD p. ${form.sourcePage}",
+                    )
+                }
                 .filter { it.id !in sheet.progression.selectedFeatureIds }
             semantic.startsWith("known-cantrips:warlock:") -> {
                 val knownIds = sheet.progression.knownCantripIds +
@@ -362,6 +381,22 @@ object SrdChoiceResolver {
     }
 
     private fun optionForId(id: String, element: RuleElementDefinition?): SrdChoiceOption {
+        Srd521ItContent.pack.background(id)?.let { background ->
+            return SrdChoiceOption(
+                id = id,
+                label = background.name,
+                description = background.description,
+                secondaryLabel = "Background SRD · p. ${background.sourcePage}",
+            )
+        }
+        Srd521ItContent.pack.equipmentPackage(id)?.let { equipment ->
+            return SrdChoiceOption(
+                id = id,
+                label = equipment.name,
+                description = equipment.description,
+                secondaryLabel = if (equipment.goldPieces > 0) "${equipment.goldPieces} mo" else "Dotazione",
+            )
+        }
         if (element != null) {
             return SrdChoiceOption(
                 id = id,
@@ -437,15 +472,6 @@ private fun provisionalAcquisitionBucket(choiceId: String, optionId: String): St
     }
 }
 
-private data class WildShapeOption(
-    val slug: String,
-    val label: String,
-    val description: String,
-    val minimumDruidLevel: Int,
-) {
-    val id: String get() = "srd521-it:beast:$slug"
-}
-
 private fun skillId(skill: Skill): String =
     "srd521-it:skill:${skill.name.lowercase().replace('_', '-')}"
 
@@ -518,11 +544,11 @@ private val repeatableIds = setOf(
 )
 
 private val artisanTools = listOf(
-    "Strumenti da alchimista", "Scorte da birraio", "Strumenti da calligrafo",
-    "Strumenti da carpentiere", "Strumenti da cartografo", "Strumenti da ciabattino",
-    "Utensili da cuoco", "Strumenti da soffiatore di vetro", "Strumenti da gioielliere",
+    "Scorte da alchimista", "Scorte da birraio", "Scorte da calligrafo",
+    "Strumenti da falegname", "Strumenti da cartografo", "Strumenti da calzolaio",
+    "Utensili da cuoco", "Strumenti da soffiatore", "Strumenti da gioielliere",
     "Strumenti da conciatore", "Strumenti da muratore", "Strumenti da pittore",
-    "Strumenti da vasaio", "Strumenti da fabbro", "Strumenti da stagnino",
+    "Strumenti da vasaio", "Strumenti da fabbro", "Strumenti da inventore",
     "Strumenti da tessitore", "Strumenti da intagliatore",
 )
 
@@ -534,5 +560,9 @@ private val musicalInstruments = listOf(
 private val otherTools = listOf(
     "Arnesi da scasso", "Arnesi da falsario", "Borsa da erborista",
     "Sostanze da avvelenatore", "Strumenti da navigatore", "Trucchi per il camuffamento",
-    "Gioco di dadi", "Scacchi dei draghi", "Carte da gioco", "Tre draghi al buio",
+    "Dadi", "Scacchi dei draghi", "Carte da gioco", "Tre draghi al buio",
+)
+
+private val gamingSets = listOf(
+    "Dadi", "Scacchi dei draghi", "Carte da gioco", "Tre draghi al buio",
 )

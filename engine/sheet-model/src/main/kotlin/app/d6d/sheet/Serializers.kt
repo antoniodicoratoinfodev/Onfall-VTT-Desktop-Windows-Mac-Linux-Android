@@ -1,5 +1,6 @@
 package app.d6d.sheet
 
+import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.ConditionType
@@ -44,6 +45,15 @@ object ActivationCostSerializer : KSerializer<ActivationCost> {
     override fun serialize(encoder: Encoder, value: ActivationCost) = encoder.encodeString(value.name)
 
     override fun deserialize(decoder: Decoder): ActivationCost = ActivationCost.valueOf(decoder.decodeString())
+}
+
+object AbilityEffectSerializer : KSerializer<AbilityEffect> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("app.d6d.domain.combat.AbilityEffect", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: AbilityEffect) = encoder.encodeString(value.name)
+
+    override fun deserialize(decoder: Decoder): AbilityEffect = AbilityEffect.valueOf(decoder.decodeString())
 }
 
 object ResolutionMethodSerializer : KSerializer<ResolutionMethod> {

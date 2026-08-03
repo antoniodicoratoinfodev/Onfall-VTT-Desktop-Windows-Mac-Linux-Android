@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.d6d.content.srd521it.SrdChoiceOption
 import app.d6d.rules.character.Ability
+import app.d6d.rules.character.BackgroundDefinition
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.ChoiceKind
@@ -54,6 +55,9 @@ fun SrdProgressionDialog(
     var abilityIncreases by remember(sheet.id, sheet.effectiveLevel) {
         mutableStateOf<Map<Ability, Int>>(emptyMap())
     }
+    var backgroundIncreases by remember(sheet.id, sheet.effectiveLevel) {
+        mutableStateOf<Map<Ability, Int>>(emptyMap())
+    }
     var useFixedHitPoints by remember(sheet.id, sheet.effectiveLevel) { mutableStateOf(true) }
     var attemptedApply by remember(sheet.id, sheet.effectiveLevel) { mutableStateOf(false) }
     var rolledHitPoints by remember(sheet.id, sheet.effectiveLevel, selectedClass) {
@@ -68,6 +72,12 @@ fun SrdProgressionDialog(
     val activeSelections = draft.selections
     val provisionalSelections = activeSelections.toChoiceSelections()
     val requirements = draft.requirements
+    val firstLevel = !sheet.progression.configured
+    val selectedBackground = activeSelections.values
+        .asSequence()
+        .flatten()
+        .mapNotNull(viewModel::backgroundDefinition)
+        .firstOrNull()
     val complete = requirements.all { activeSelections[it.id].orEmpty().size == it.count }
     val hasAbilityScoreIncrease = activeSelections.values.flatten().any {
         it.endsWith(":aumento-punteggi-caratteristica")
@@ -79,7 +89,14 @@ fun SrdProgressionDialog(
         .groupingBy { it }
         .eachCount()
     val abilityAllocationValid = !hasAbilityScoreIncrease || abilityIncreases.values.sum() == 2
-    val firstLevel = !sheet.progression.configured
+    val backgroundAllocationValid = !firstLevel || selectedBackground?.let { background ->
+        val distribution = backgroundIncreases.filterValues { it > 0 }.values.sorted()
+        (distribution == listOf(1, 2) || distribution == listOf(1, 1, 1)) &&
+            backgroundIncreases.keys.all { it in background.abilityOptions } &&
+            backgroundIncreases.all { (ability, amount) ->
+                (sheet.abilityScores[ability] ?: 10) + amount <= 20
+            }
+    } == true
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -131,6 +148,7 @@ fun SrdProgressionDialog(
                                     selectedClass = definition.id
                                     selected = emptyMap()
                                     abilityIncreases = emptyMap()
+                                    backgroundIncreases = emptyMap()
                                     rolledHitPoints = viewModel.fixedHitPointIncrease(definition.id)
                                 },
                             )
@@ -155,12 +173,24 @@ fun SrdProgressionDialog(
                         ),
                         selectedIds = activeSelections[choice.id].orEmpty(),
                         onChange = { ids ->
+                            if (choice.kind == ChoiceKind.BACKGROUND) {
+                                backgroundIncreases = emptyMap()
+                            }
                             val changed = activeSelections + (choice.id to ids)
                             selected = stabilizeProgressionDraft(
                                 changed,
                                 ::requirementsFor,
                             ).selections
                         },
+                    )
+                }
+
+                selectedBackground?.let { background ->
+                    BackgroundAbilityScorePicker(
+                        background = background,
+                        sheetScores = sheet.abilityScores,
+                        increases = backgroundIncreases,
+                        onChange = { backgroundIncreases = it },
                     )
                 }
 
@@ -215,9 +245,13 @@ fun SrdProgressionDialog(
         confirmButton = {
             GameButton(
                 label = if (firstLevel) "Crea personaggio" else "Applica livello",
-                accent = if (complete && abilityAllocationValid) Palette.Heal else Palette.TextFaint,
+                accent = if (complete && abilityAllocationValid && backgroundAllocationValid) {
+                    Palette.Heal
+                } else {
+                    Palette.TextFaint
+                },
                 onClick = {
-                    if (!complete || !abilityAllocationValid) return@GameButton
+                    if (!complete || !abilityAllocationValid || !backgroundAllocationValid) return@GameButton
                     attemptedApply = true
                     val applied = viewModel.advanceCharacter(
                         LevelUpRequest(
@@ -236,6 +270,7 @@ fun SrdProgressionDialog(
                                 explicitIncreases = abilityIncreases,
                                 conditionalIncreases = conditionalAbilityIncreases,
                             ),
+                            backgroundAbilityScoreIncreases = backgroundIncreases,
                         ),
                     )
                     if (applied) onDismiss()
@@ -427,6 +462,54 @@ internal fun RuleEffect.readableText(): String = buildString {
         },
     )
     if (condition != EffectCondition.ALWAYS) append(" ").append(condition.italianLabel)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BackgroundAbilityScorePicker(
+    background: BackgroundDefinition,
+    sheetScores: Map<Ability, Int>,
+    increases: Map<Ability, Int>,
+    onChange: (Map<Ability, Int>) -> Unit,
+) {
+    SheetBox("Punteggi di caratteristica · ${background.name}") {
+        Text(
+            "Assegna +2 e +1 a due caratteristiche, oppure +1 a tutte e tre (massimo 20).",
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            background.abilityOptions.sortedBy { it.ordinal }.forEach { ability ->
+                val current = sheetScores[ability] ?: 10
+                val value = increases[ability] ?: 0
+                GameButton(
+                    "${ability.abbreviation} $current${if (value > 0) " +$value" else ""}",
+                    accent = if (value > 0) Palette.Gold else Palette.TextMuted,
+                    selected = value > 0,
+                    dense = true,
+                    onClick = {
+                        val totalWithout = increases.values.sum() - value
+                        val next = when {
+                            value == 0 && totalWithout < 3 && current < 20 -> 1
+                            value == 1 && totalWithout <= 1 && current <= 18 -> 2
+                            else -> 0
+                        }
+                        onChange((increases + (ability to next)).filterValues { it > 0 })
+                    },
+                )
+            }
+        }
+        val distribution = increases.values.sorted()
+        val valid = distribution == listOf(1, 2) || distribution == listOf(1, 1, 1)
+        Text(
+            "Assegnati ${increases.values.sum()}/3",
+            color = if (valid) Palette.Heal else Palette.Gold,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

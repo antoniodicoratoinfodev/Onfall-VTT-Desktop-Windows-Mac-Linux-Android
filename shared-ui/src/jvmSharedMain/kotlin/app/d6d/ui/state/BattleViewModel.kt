@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.d6d.domain.combat.AbilityDefinition
+import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.AreaSpellResult
 import app.d6d.domain.combat.AttackRequest
 import app.d6d.domain.combat.ActorDefinition
@@ -12,12 +13,14 @@ import app.d6d.domain.combat.CombatState
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.CombatantSnapshot
 import app.d6d.domain.combat.CombatantState
+import app.d6d.domain.combat.CombatResourceState
 import app.d6d.domain.combat.ConditionDuration
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.D20RollInput
 import app.d6d.domain.combat.DamageComponent
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import app.d6d.domain.combat.TurnBudget
 import app.d6d.domain.space.BattleMap
@@ -48,6 +51,11 @@ fun interface CombatantEditSink {
     }
 }
 
+/** Propaga alla scheda gli usi di risorsa consumati o ripristinati in battaglia. */
+fun interface CombatResourceSink {
+    fun onChanged(definitionId: String, resources: List<CombatResourceState>)
+}
+
 /**
  * Stato di presentazione del combattimento.
  *
@@ -71,6 +79,7 @@ class BattleViewModel(
      * subito, anche a tavolo aperto.
      */
     private val passiveProvider: (String) -> Boolean? = { null },
+    private val resourceSink: CombatResourceSink = CombatResourceSink { _, _ -> },
     private val editSink: CombatantEditSink = CombatantEditSink { _, _ -> },
 ) {
 
@@ -362,6 +371,47 @@ class BattleViewModel(
     fun passiveAbilities(id: String): List<AbilityDefinition> =
         abilities(id).filter { it.isPassiveNow() }
 
+    /** Disponibilità effettiva: budget del turno, risorsa limitata e vincoli dell'effetto. */
+    fun canAffordAbility(combatantId: String, ability: AbilityDefinition): Boolean {
+        if (!canUseAbilitiesOf(combatantId)) return false
+        val budget = budget(combatantId) ?: return false
+        val turnCostAvailable = when (ability.activationCost()) {
+            app.d6d.domain.combat.ActivationCost.ACTION ->
+                if (
+                    !ability.spellOrCantrip() &&
+                    ability.resolutionMethod() == ResolutionMethod.ATTACK_ROLL &&
+                    budget.attackActionInProgress()
+                ) {
+                    budget.attacksRemaining() > 0
+                } else {
+                    budget.canUseAction(ability.spellOrCantrip())
+                }
+            app.d6d.domain.combat.ActivationCost.BONUS_ACTION -> budget.bonusActionAvailable()
+            app.d6d.domain.combat.ActivationCost.REACTION -> budget.reactionAvailable()
+            app.d6d.domain.combat.ActivationCost.NONE -> true
+            app.d6d.domain.combat.ActivationCost.LEGENDARY_ACTION -> false
+        }
+        if (!turnCostAvailable) return false
+        if (
+            ability.effect() == AbilityEffect.GRANT_NON_MAGIC_ACTION &&
+            budget.actionSurgeUsedThisTurn()
+        ) return false
+        if (ability.resourceCost() == 0) return true
+        return combatant(combatantId)?.resources()
+            ?.firstOrNull { it.id() == ability.resourceId() }
+            ?.remaining()
+            ?.let { it >= ability.resourceCost() }
+            ?: false
+    }
+
+    fun abilityResourceLabel(combatantId: String, ability: AbilityDefinition): String? {
+        if (ability.resourceCost() == 0) return null
+        val resource = combatant(combatantId)?.resources()
+            ?.firstOrNull { it.id() == ability.resourceId() }
+            ?: return "0/?"
+        return "${resource.remaining()}/${resource.maximum()}"
+    }
+
     fun isParty(id: String): Boolean = id in state.partyCombatantIds()
 
     fun initiativeScore(id: String): Int? = state.initiativeScores()[id]
@@ -493,6 +543,10 @@ class BattleViewModel(
             message = "Capacità non trovata."
             return
         }
+        if (ability.effect() != AbilityEffect.NONE) {
+            activateAbility(attacker, ability)
+            return
+        }
         if (singleTargeting?.let { it.abilityId == abilityId && it.attackerId == attacker } == true) {
             cancelSingleTargeting()
             return
@@ -513,6 +567,32 @@ class BattleViewModel(
         pendingArea = null
         targetSelection = null
         singleTargeting = SingleTargeting(ability.id(), attacker, ability.name())
+    }
+
+    /** Attiva una capacità automatica che non richiede bersaglio, come Azione Impetuosa. */
+    private fun activateAbility(combatantId: String, ability: AbilityDefinition) {
+        val definitionId = combatant(combatantId)?.snapshot()?.definitionId() ?: return
+        var activated = false
+        command(UndoEffect.ResourceChange(combatantId, definitionId)) {
+            session.activateAbility(combatantId, ability.id())
+            try {
+                val resources = session.currentState().combatant(combatantId).resources()
+                resourceSink.onChanged(definitionId, resources)
+            } catch (failure: Exception) {
+                session.undo()
+                throw IllegalStateException(
+                    failure.message ?: "Il consumo della risorsa non è stato salvato nella scheda.",
+                    failure,
+                )
+            }
+            activated = true
+        }
+        if (activated) {
+            actionResolution = ActionResolution(
+                text = "«${ability.name()}» attivata: hai un'azione aggiuntiva, non utilizzabile per Magia.",
+                isHit = true,
+            )
+        }
     }
 
     /** Annulla la scelta del bersaglio di una capacita' singola. */
@@ -706,10 +786,18 @@ class BattleViewModel(
             }
             if (undoEffects.isNotEmpty()) undoEffects.removeLast()
             sync()
-            if (effect is UndoEffect.CombatantEdit) {
-                combatant(effect.combatantId)?.snapshot()?.let { restored ->
-                    editSink.onResynced(effect.definitionId, restored)
+            when (effect) {
+                is UndoEffect.CombatantEdit -> {
+                    combatant(effect.combatantId)?.snapshot()?.let { restored ->
+                        editSink.onResynced(effect.definitionId, restored)
+                    }
                 }
+                is UndoEffect.ResourceChange -> {
+                    combatant(effect.combatantId)?.resources()?.let { restored ->
+                        resourceSink.onChanged(effect.definitionId, restored)
+                    }
+                }
+                UndoEffect.None -> Unit
             }
         } catch (failure: CombatRuleException) {
             message = failure.message
@@ -1193,10 +1281,12 @@ class BattleViewModel(
         block: () -> Unit,
     ) {
         val revisionBefore = state.revision()
+        var completed = false
         try {
             message = null
             actionResolution = null
             block()
+            completed = true
         } catch (failure: CombatRuleException) {
             message = failure.message
         } catch (failure: IllegalArgumentException) {
@@ -1205,7 +1295,7 @@ class BattleViewModel(
             message = failure.message
         } finally {
             sync()
-            if (state.revision() != revisionBefore) undoEffects.addLast(undoEffect)
+            if (completed && state.revision() != revisionBefore) undoEffects.addLast(undoEffect)
         }
     }
 
@@ -1283,11 +1373,14 @@ class BattleViewModel(
         savingThrowBonuses(),
         spellSaveDc(),
         attacksPerAction(),
+        strengthDexterityD20Disadvantage(),
+        resources(),
     )
 
     private sealed interface UndoEffect {
         data object None : UndoEffect
         data class CombatantEdit(val combatantId: String, val definitionId: String) : UndoEffect
+        data class ResourceChange(val combatantId: String, val definitionId: String) : UndoEffect
     }
 
     private val undoEffects = ArrayDeque<UndoEffect>()

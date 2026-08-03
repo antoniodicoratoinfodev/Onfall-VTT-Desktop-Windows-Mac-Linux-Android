@@ -4,13 +4,20 @@ import app.d6d.rules.character.Ability
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceKind
 import app.d6d.rules.character.ChoiceSelection
+import app.d6d.rules.character.ExperienceProgression
 import app.d6d.rules.character.LevelUpRequest
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.WeaponCategory
 import app.d6d.rules.character.WeaponProperty
 import app.d6d.rules.character.WeaponReach
+import app.d6d.domain.combat.AbilityEffect
+import app.d6d.domain.combat.ActivationCost
+import app.d6d.domain.combat.AutomationStatus
+import app.d6d.domain.combat.ResolutionMethod
+import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.GuidedCharacterService
+import app.d6d.sheet.toWeaponEntry
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -53,6 +60,31 @@ class SrdWeaponsAndPassivesTest {
         assertEquals(setOf(WeaponProperty.VERSATILE), warhammer.properties)
         assertEquals(10, warhammer.versatileDiceSides)
         assertEquals(5, warhammer.attackRangeFeet)
+    }
+
+    @Test
+    fun `la cerbottana usa davvero un danno fisso e non un dado inesistente`() {
+        val blowgun = requireNotNull(SrdWeapons.byId("srd521-it:weapon:cerbottana"))
+        assertEquals(1, blowgun.fixedDamage)
+        assertEquals("1 perforante", blowgun.damageText)
+
+        val entry = blowgun.toWeaponEntry(
+            abilityScores = Ability.entries.associateWith {
+                if (it == Ability.DEXTERITY) 16 else 10
+            },
+            proficiencyBonus = 2,
+        )
+        assertEquals(1, entry.fixedDamage)
+        assertEquals("1+3 perforante", entry.damageText)
+
+        val formula = CharacterSheet(weapons = listOf(entry))
+            .toActorDefinition()
+            .abilities()
+            .single()
+            .damage()
+            .single()
+        assertFalse(formula.usesDice())
+        assertEquals(4, formula.fixedAmount())
     }
 
     @Test
@@ -134,9 +166,55 @@ class SrdWeaponsAndPassivesTest {
     }
 
     @Test
-    fun `la creazione guidata equipaggia le armi scelte e le rende capacita' da combattimento`() {
-        val longsword = "srd521-it:weapon:spada-lunga"
-        val handaxe = "srd521-it:weapon:ascia"
+    fun `Azione impetuosa e una capacita attiva automatica legata alla propria risorsa`() {
+        val surge = requireNotNull(catalog["srd521-it:feature:guerriero:azione-impetuosa"])
+
+        assertFalse(surge.passive)
+        assertEquals(ActivationCost.NONE, surge.activationCost)
+        assertEquals(ResolutionMethod.AUTOMATIC, surge.resolutionMethod)
+        assertEquals(AutomationStatus.AUTOMATED, surge.automationStatus)
+        assertEquals(AbilityEffect.GRANT_NON_MAGIC_ACTION, surge.effect)
+        assertEquals("srd521-it:resource:guerriero:azione-impetuosa", surge.resourceId)
+        assertEquals(1, surge.resourceCost)
+    }
+
+    @Test
+    fun `Azione impetuosa arriva dalla progressione alla definizione di combattimento`() {
+        val draft = CharacterSheet(abilityScores = Ability.entries.associateWith { 12 })
+        val firstLevel = service.advance(
+            draft,
+            LevelUpRequest(
+                CharacterClassId.FIGHTER,
+                service.fixedHitPointIncrease(draft, CharacterClassId.FIGHTER),
+                true,
+                selectionsFor(draft, CharacterClassId.FIGHTER),
+            ),
+        ).copy(experiencePoints = ExperienceProgression.thresholdForLevel(2))
+        val secondLevel = service.advance(
+            firstLevel,
+            LevelUpRequest(
+                CharacterClassId.FIGHTER,
+                service.fixedHitPointIncrease(firstLevel, CharacterClassId.FIGHTER),
+                true,
+                selectionsFor(firstLevel, CharacterClassId.FIGHTER),
+            ),
+        )
+
+        val actor = secondLevel.toActorDefinition(abilityCatalog = Srd521ItContent.catalog)
+        val surge = actor.ability("srd521-it:feature:guerriero:azione-impetuosa")
+        val resource = actor.resources().single {
+            it.id() == "srd521-it:resource:guerriero:azione-impetuosa"
+        }
+
+        assertEquals(AbilityEffect.GRANT_NON_MAGIC_ACTION, surge.effect())
+        assertEquals(resource.id(), surge.resourceId())
+        assertEquals(1, surge.resourceCost())
+        assertEquals(1, resource.maximum())
+        assertEquals(0, resource.spent())
+    }
+
+    @Test
+    fun `la creazione guidata applica la dotazione ufficiale e rende le armi capacita' da combattimento`() {
         val draft = CharacterSheet(
             abilityScores = Ability.entries.associateWith {
                 if (it == Ability.STRENGTH) 16 else 10
@@ -144,8 +222,11 @@ class SrdWeaponsAndPassivesTest {
         )
         val selections = selectionsFor(draft, CharacterClassId.FIGHTER)
             .map { selection ->
-                if (selection.choiceId.endsWith(":armi-iniziali")) {
-                    ChoiceSelection(selection.choiceId, listOf(longsword, handaxe))
+                if (selection.choiceId == "srd521-it:choice:class:guerriero:equipment") {
+                    ChoiceSelection(
+                        selection.choiceId,
+                        listOf("srd521-it:equipment:class:guerriero:a"),
+                    )
                 } else {
                     selection
                 }
@@ -174,25 +255,27 @@ class SrdWeaponsAndPassivesTest {
             ),
         )
 
-        val sword = fighter.weapons.single { it.name == "Spada lunga" }
+        val sword = fighter.weapons.single { it.name == "Spadone" }
         // Forza 16 da +3, il 1º livello da +2 di competenza.
         assertEquals(5, sword.attackBonus)
         assertEquals(3, sword.damageModifier)
-        assertEquals(1, sword.diceCount)
-        assertEquals(8, sword.diceSides)
+        assertEquals(2, sword.diceCount)
+        assertEquals(6, sword.diceSides)
         assertEquals(5, sword.rangeFeet)
-        assertTrue(sword.note.contains("Fiaccare"), "La nota riporta la Padronanza.")
+        assertTrue(sword.note.contains("Colpo di striscio"), "La nota riporta la Padronanza.")
 
-        // L'ascia si usa in mischia: la gittata di lancio resta annotata, non
+        // Il giavellotto si usa in mischia: la gittata di lancio resta annotata, non
         // diventa la portata dell'attacco.
-        val axe = fighter.weapons.single { it.name == "Ascia" }
-        assertEquals(5, axe.rangeFeet)
-        assertTrue(axe.note.contains("gittata 20/60"), "L'arma da lancio riporta la gittata.")
+        val javelin = fighter.weapons.single { it.name == "Giavellotto" }
+        assertEquals(5, javelin.rangeFeet)
+        assertTrue(javelin.note.contains("gittata 30/120"), "L'arma da lancio riporta la gittata.")
+        assertEquals(ArmorClassMethod.CHAIN_MAIL, fighter.armorClassMethod)
+        assertEquals(18, fighter.money.gold)
 
         val combat = fighter.toActorDefinition(abilityCatalog = Srd521ItContent.catalog)
         val playable = combat.abilities().filterNot { it.passive() }
         assertTrue(
-            playable.any { it.name() == "Spada lunga" } && playable.any { it.name() == "Ascia" },
+            playable.any { it.name() == "Spadone" } && playable.any { it.name() == "Giavellotto" },
             "Le armi equipaggiate devono comparire fra le capacità giocabili.",
         )
         assertTrue(
@@ -250,8 +333,8 @@ class SrdWeaponsAndPassivesTest {
                     sheet,
                     selected.map { ChoiceSelection(it.key, it.value) },
                 )
-                selected[choice.id] = if (choice.kind == ChoiceKind.FEAT) {
-                    listOf("srd521-it:feat:origin:aggressore-selvaggio")
+                selected[choice.id] = if (choice.kind == ChoiceKind.BACKGROUND) {
+                    listOf("srd521-it:background:soldato")
                 } else {
                     options.take(choice.count).map { it.id }
                 }

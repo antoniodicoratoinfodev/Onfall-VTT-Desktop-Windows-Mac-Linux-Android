@@ -45,6 +45,7 @@ import app.d6d.sheet.SpellSlot
 import app.d6d.sheet.Spellcasting
 import app.d6d.sheet.WeaponEntry
 import app.d6d.sheet.abilityModifier
+import app.d6d.sheet.italianLabel
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.images.PortraitPicker
@@ -835,13 +836,25 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Dadi", weapon.diceCount, fieldModifier) {
-                            onChange(weapon.copy(diceCount = it.coerceAtLeast(1)))
+                        if (weapon.fixedDamage > 0) {
+                            SheetNumberField("Danno fisso", weapon.fixedDamage, fieldModifier) {
+                                onChange(weapon.copy(fixedDamage = it.coerceAtLeast(0)))
+                            }
+                        } else {
+                            SheetNumberField("Dadi", weapon.diceCount, fieldModifier) {
+                                onChange(weapon.copy(diceCount = it.coerceAtLeast(1)))
+                            }
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Facce", weapon.diceSides, fieldModifier) {
-                            onChange(weapon.copy(diceSides = it.coerceAtLeast(2)))
+                        if (weapon.fixedDamage > 0) {
+                            SheetBox("Tipo", fieldModifier) {
+                                Text(weapon.damageType.italianLabel, color = Palette.Text)
+                            }
+                        } else {
+                            SheetNumberField("Facce", weapon.diceSides, fieldModifier) {
+                                onChange(weapon.copy(diceSides = it.coerceAtLeast(2)))
+                            }
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
@@ -878,11 +891,17 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
                 onChange(weapon.copy(attackBonus = it))
             }
             Row(Modifier.weight(1.6f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                SheetNumberField("d", weapon.diceCount, Modifier.weight(1f)) {
-                    onChange(weapon.copy(diceCount = it.coerceAtLeast(1)))
-                }
-                SheetNumberField("facce", weapon.diceSides, Modifier.weight(1f)) {
-                    onChange(weapon.copy(diceSides = it.coerceAtLeast(2)))
+                if (weapon.fixedDamage > 0) {
+                    SheetNumberField("fisso", weapon.fixedDamage, Modifier.weight(2f)) {
+                        onChange(weapon.copy(fixedDamage = it.coerceAtLeast(0)))
+                    }
+                } else {
+                    SheetNumberField("d", weapon.diceCount, Modifier.weight(1f)) {
+                        onChange(weapon.copy(diceCount = it.coerceAtLeast(1)))
+                    }
+                    SheetNumberField("facce", weapon.diceSides, Modifier.weight(1f)) {
+                        onChange(weapon.copy(diceSides = it.coerceAtLeast(2)))
+                    }
                 }
                 SheetNumberField("mod", weapon.damageModifier, Modifier.weight(1f)) {
                     onChange(weapon.copy(damageModifier = it))

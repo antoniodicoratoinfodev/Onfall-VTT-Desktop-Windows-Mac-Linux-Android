@@ -39,6 +39,7 @@ import app.d6d.sheet.Skill
 import app.d6d.sheet.StatBlockEntry
 import app.d6d.sheet.WeaponEntry
 import app.d6d.sheet.abilityModifier
+import app.d6d.sheet.italianLabel as sheetDamageLabel
 import app.d6d.sheet.suggestedProficiencyBonus
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.images.PortraitPicker
@@ -591,25 +592,43 @@ private fun EntrySection(
                                 }
                             },
                             adaptiveFormItem { fieldModifier ->
-                                SheetNumberField("Dadi", attack.diceCount, fieldModifier) {
-                                    onChange(
-                                        entries.toMutableList().also { l ->
-                                            l[index] = entry.copy(
-                                                attack = attack.copy(diceCount = it.coerceAtLeast(1)),
-                                            )
-                                        },
-                                    )
+                                if (attack.fixedDamage > 0) {
+                                    SheetNumberField("Danno fisso", attack.fixedDamage, fieldModifier) {
+                                        onChange(
+                                            entries.toMutableList().also { l ->
+                                                l[index] = entry.copy(
+                                                    attack = attack.copy(fixedDamage = it.coerceAtLeast(0)),
+                                                )
+                                            },
+                                        )
+                                    }
+                                } else {
+                                    SheetNumberField("Dadi", attack.diceCount, fieldModifier) {
+                                        onChange(
+                                            entries.toMutableList().also { l ->
+                                                l[index] = entry.copy(
+                                                    attack = attack.copy(diceCount = it.coerceAtLeast(1)),
+                                                )
+                                            },
+                                        )
+                                    }
                                 }
                             },
                             adaptiveFormItem { fieldModifier ->
-                                SheetNumberField("Facce", attack.diceSides, fieldModifier) {
-                                    onChange(
-                                        entries.toMutableList().also { l ->
-                                            l[index] = entry.copy(
-                                                attack = attack.copy(diceSides = it.coerceAtLeast(2)),
-                                            )
-                                        },
-                                    )
+                                if (attack.fixedDamage > 0) {
+                                    SheetBox("Tipo", fieldModifier) {
+                                        Text(attack.damageType.sheetDamageLabel, color = Palette.Text)
+                                    }
+                                } else {
+                                    SheetNumberField("Facce", attack.diceSides, fieldModifier) {
+                                        onChange(
+                                            entries.toMutableList().also { l ->
+                                                l[index] = entry.copy(
+                                                    attack = attack.copy(diceSides = it.coerceAtLeast(2)),
+                                                )
+                                            },
+                                        )
+                                    }
                                 }
                             },
                             adaptiveFormItem { fieldModifier ->

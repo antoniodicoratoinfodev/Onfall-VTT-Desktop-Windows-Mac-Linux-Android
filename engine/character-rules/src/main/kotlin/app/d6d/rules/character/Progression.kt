@@ -75,6 +75,7 @@ data class LevelAdvancementRecord(
     val usedFixedHitPoints: Boolean,
     val selections: List<ChoiceSelection> = emptyList(),
     val abilityScoreIncreases: Map<Ability, Int> = emptyMap(),
+    val backgroundAbilityScoreIncreases: Map<Ability, Int> = emptyMap(),
 )
 
 /**
@@ -87,6 +88,7 @@ data class LevelAdvancementRecord(
 data class CharacterProgression(
     val contentPackId: String = "",
     val contentPackVersion: String = "",
+    val backgroundId: String = "",
     val classLevels: List<ClassLevelState> = emptyList(),
     val subclasses: List<SubclassSelection> = emptyList(),
     val selections: List<ChoiceSelection> = emptyList(),
@@ -124,6 +126,8 @@ data class LevelUpRequest(
     val selections: List<ChoiceSelection> = emptyList(),
     /** Allocazione del talento Aumento dei punteggi di caratteristica. */
     val abilityScoreIncreases: Map<Ability, Int> = emptyMap(),
+    /** Tre punti concessi dal background alla creazione (2+1 oppure 1+1+1). */
+    val backgroundAbilityScoreIncreases: Map<Ability, Int> = emptyMap(),
 )
 
 data class ProgressionIssue(
@@ -197,29 +201,68 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         require(nextClassLevel in 1..20) { "${definition.name} è già al 20º livello." }
         val level = definition.level(nextClassLevel)
         val previous = if (nextClassLevel == 1) null else definition.level(nextClassLevel - 1)
+        val provisionalBackground = provisionalSelections
+            .asSequence()
+            .flatMap { it.optionIds.asSequence() }
+            .mapNotNull(pack::background)
+            .firstOrNull()
+        fun replaceDuplicateFixedTool(choice: ChoiceDefinition): ChoiceDefinition {
+            if (choice.kind != ChoiceKind.TOOL_PROFICIENCY || choice.optionIds.size != 1) return choice
+            val fixedToolId = choice.optionIds.single()
+            val alreadyGranted = buildSet {
+                progression.selections
+                    .filterNot { it.choiceId == choice.id }
+                    .forEach { addAll(it.optionIds) }
+                provisionalSelections
+                    .filterNot { it.choiceId == choice.id }
+                    .forEach { addAll(it.optionIds) }
+                provisionalBackground?.toolChoice?.optionIds?.let(::addAll)
+            }
+            if (fixedToolId !in alreadyGranted) return choice
+            return choice.copy(
+                id = "${choice.id}:sostitutiva",
+                title = "${choice.title}: scegli una competenza sostitutiva negli strumenti",
+                optionIds = emptyList(),
+                poolId = "${pack.manifest.id}:pool:tools:any",
+            )
+        }
         return buildList {
-            if (
-                !progression.configured &&
-                pack.elements.any { it.kind == RuleElementKind.ORIGIN_FEAT }
-            ) {
-                add(
-                    ChoiceDefinition(
-                        id = "${pack.manifest.id}:choice:origin:feat",
-                        title = "Scegli il talento Origini concesso dal background",
-                        kind = ChoiceKind.FEAT,
-                        count = 1,
-                        poolId = "${pack.manifest.id}:pool:feats:origin",
-                    ),
-                )
+            if (!progression.configured) {
+                if (pack.backgrounds.isNotEmpty()) {
+                    add(
+                        ChoiceDefinition(
+                            id = "${pack.manifest.id}:choice:origin:background",
+                            title = "Scegli il background",
+                            kind = ChoiceKind.BACKGROUND,
+                            count = 1,
+                            optionIds = pack.backgrounds.map { it.id },
+                        ),
+                    )
+                    provisionalBackground?.let { background ->
+                        add(background.toolChoice)
+                        add(background.equipmentChoice)
+                    }
+                } else if (pack.elements.any { it.kind == RuleElementKind.ORIGIN_FEAT }) {
+                    add(
+                        ChoiceDefinition(
+                            id = "${pack.manifest.id}:choice:origin:feat",
+                            title = "Scegli il talento Origini concesso dal background",
+                            kind = ChoiceKind.FEAT,
+                            count = 1,
+                            poolId = "${pack.manifest.id}:pool:feats:origin",
+                        ),
+                    )
+                }
             }
             if (nextClassLevel == 1) {
                 if (progression.configured) {
                     definition.multiclassSkillChoice?.let(::add)
-                    definition.multiclassToolChoice?.let(::add)
+                    definition.multiclassToolChoice?.let { add(replaceDuplicateFixedTool(it)) }
                 } else {
                     add(definition.skillChoice)
-                    definition.toolChoice?.let(::add)
-                    definition.startingWeaponChoice?.let(::add)
+                    definition.toolChoice?.let { add(replaceDuplicateFixedTool(it)) }
+                    definition.startingEquipmentChoice?.let(::add)
+                        ?: definition.startingWeaponChoice?.let(::add)
                 }
             }
             addAll(level.choices)
@@ -261,7 +304,8 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                     ),
                 )
             }
-            val provisionalOptions = provisionalSelections.flatMap { it.optionIds }
+            val provisionalOptions = provisionalSelections.flatMap { it.optionIds } +
+                listOfNotNull(provisionalBackground?.featId)
             if (provisionalOptions.any { it.endsWith(":feat:origin:abile") }) {
                 add(
                     ChoiceDefinition(
@@ -274,7 +318,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 )
             }
             if (provisionalOptions.any { it.endsWith(":feat:origin:iniziato-alla-magia") }) {
-                addAll(magicInitiateRequirements())
+                addAll(magicInitiateRequirements(provisionalBackground?.magicInitiateListId))
             }
             provisionalOptions
                 .mapNotNull(pack::element)
@@ -524,6 +568,50 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 }
             }
         }
+        val selectedBackground = requirements
+            .firstOrNull { it.kind == ChoiceKind.BACKGROUND }
+            ?.let { selectionsById[it.id]?.optionIds?.singleOrNull() }
+            ?.let(pack::background)
+        val backgroundIncreases = selectedBackground?.let {
+            resolvedBackgroundIncreases(it, request.backgroundAbilityScoreIncreases)
+        }.orEmpty()
+        if (selectedBackground != null) {
+            val distribution = backgroundIncreases.values.sorted()
+            val validDistribution = distribution == listOf(1, 2) || distribution == listOf(1, 1, 1)
+            if (
+                !validDistribution ||
+                backgroundIncreases.keys.any { it !in selectedBackground.abilityOptions } ||
+                backgroundIncreases.any { (ability, amount) ->
+                    amount < 1 || (abilityScores[ability] ?: 10) + amount > 20
+                }
+            ) {
+                issues += ProgressionIssue(
+                    "BACKGROUND_ABILITY_SCORE_INCREASE",
+                    "Il background richiede +2 e +1 oppure +1 a tutte e tre le caratteristiche indicate, " +
+                        "senza superare 20.",
+                )
+            }
+            val backgroundSkillIds = selectedBackground.skillProficiencies.mapTo(mutableSetOf()) {
+                "${pack.manifest.id}:skill:${it.name.lowercase().replace('_', '-')}"
+            }
+            val chosenSkillIds = requirements
+                .filter {
+                    it.kind == ChoiceKind.SKILL_PROFICIENCY ||
+                        it.kind == ChoiceKind.SKILL_OR_TOOL_PROFICIENCY
+                }
+                .flatMapTo(mutableSetOf()) { selectionsById[it.id]?.optionIds.orEmpty() }
+            if (chosenSkillIds.any { it in backgroundSkillIds }) {
+                issues += ProgressionIssue(
+                    "BACKGROUND_SKILL_DUPLICATE",
+                    "Le competenze di classe devono essere diverse da quelle già concesse dal background.",
+                )
+            }
+        } else if (request.backgroundAbilityScoreIncreases.any { it.value != 0 }) {
+            issues += ProgressionIssue(
+                "UNEXPECTED_BACKGROUND_ABILITY_SCORE_INCREASE",
+                "Gli aumenti del background richiedono un background selezionato.",
+            )
+        }
         val acquisitions = requirements.flatMap { choice ->
             selectionsById[choice.id]?.optionIds.orEmpty().mapNotNull { optionId ->
                 val bucket = when (choice.kind) {
@@ -749,10 +837,18 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 .first { it.id == selection.choiceId }.kind
             selection.optionIds.map { kind to it }
         }
+        val selectedBackgroundId = selectedIdsByKind
+            .firstOrNull { it.first == ChoiceKind.BACKGROUND }
+            ?.second
+        val selectedBackground = selectedBackgroundId?.let(pack::background)
+        val backgroundIncreases = selectedBackground?.let {
+            resolvedBackgroundIncreases(it, request.backgroundAbilityScoreIncreases)
+        }.orEmpty()
 
         val updated = progression.copy(
             contentPackId = pack.manifest.id,
             contentPackVersion = pack.manifest.version,
+            backgroundId = selectedBackgroundId ?: progression.backgroundId,
             classLevels = newClassLevels.sortedBy { it.classId.ordinal },
             subclasses = subclasses,
             selections = allSelections,
@@ -763,6 +859,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 ).distinct(),
             featIds = (
                 progression.featIds +
+                    listOfNotNull(selectedBackground?.featId) +
                     selectedIdsByKind.filter { it.first == ChoiceKind.FEAT || it.first == ChoiceKind.EPIC_BOON }
                         .map { it.second }
                 ).distinct(),
@@ -805,6 +902,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 usedFixedHitPoints = request.usedFixedHitPoints,
                 selections = request.selections,
                 abilityScoreIncreases = request.abilityScoreIncreases,
+                backgroundAbilityScoreIncreases = backgroundIncreases,
             ),
         )
         val abilityCap = if (
@@ -818,6 +916,9 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             20
         }
         val scoresAfterAdvancement = abilityScores.toMutableMap().apply {
+            backgroundIncreases.forEach { (ability, increase) ->
+                this[ability] = (getOrDefault(ability, 10) + increase).coerceAtMost(20)
+            }
             request.abilityScoreIncreases.forEach { (ability, increase) ->
                 this[ability] = (getOrDefault(ability, 10) + increase).coerceAtMost(abilityCap)
             }
@@ -1079,6 +1180,15 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
 
     private fun abilityModifier(score: Int): Int = Math.floorDiv(score - 10, 2)
 
+    private fun resolvedBackgroundIncreases(
+        background: BackgroundDefinition,
+        requested: Map<Ability, Int>,
+    ): Map<Ability, Int> = requested.filterValues { it != 0 }.ifEmpty {
+        // Compatibilità con chiamanti precedenti al picker: +1 a tutte e tre è
+        // una delle due distribuzioni ufficiali e non richiede una decisione arbitraria.
+        background.abilityOptions.associateWith { 1 }
+    }
+
     private fun featAbilityIncreaseRequirement(
         totalLevel: Int,
         featId: String,
@@ -1120,13 +1230,17 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         poolId = "${pack.manifest.id}:pool:spells:$listSlug:cantrip",
     )
 
-    private fun magicInitiateRequirements(): List<ChoiceDefinition> = listOf(
+    private fun magicInitiateRequirements(fixedListId: String? = null): List<ChoiceDefinition> = listOf(
         ChoiceDefinition(
             id = "${pack.manifest.id}:choice:origin:magic-initiate:list",
-            title = "Iniziato alla magia: scegli la lista",
+            title = if (fixedListId == null) {
+                "Iniziato alla magia: scegli la lista"
+            } else {
+                "Iniziato alla magia: lista concessa dal background"
+            },
             kind = ChoiceKind.SPELL_LIST,
             count = 1,
-            optionIds = listOf("chierico", "druido", "mago").map {
+            optionIds = fixedListId?.let(::listOf) ?: listOf("chierico", "druido", "mago").map {
                 "${pack.manifest.id}:spell-list:$it"
             },
         ),

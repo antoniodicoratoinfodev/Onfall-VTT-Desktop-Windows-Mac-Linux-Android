@@ -13,7 +13,7 @@ object Srd521ItContent {
         val sourceElements = SrdFeatsAndActions.all + SrdSpells.all +
             SrdClassFeatures.all.filterNot {
                 it.id.startsWith("srd521-it:feature:warlock:ripetibile")
-            }
+            } + SrdBeasts.elements
         val elementsById = sourceElements.associateBy { it.id }.toMutableMap()
         val requiredIds = requiredElementIds()
         val redirectedSourceIds = mutableSetOf<String>()
@@ -29,9 +29,16 @@ object Srd521ItContent {
             .forEach(elementsById::remove)
         RulesContentPack(
             manifest = Srd521ItManifest.value,
-            classes = SrdClasses.all,
+            classes = SrdClasses.all.map { definition ->
+                definition.copy(
+                    startingWeaponChoice = null,
+                    startingEquipmentChoice = SrdStartingEquipment.choiceFor(definition.id),
+                )
+            },
             elements = elementsById.values.sortedBy { it.id },
             weapons = SrdWeapons.all,
+            backgrounds = SrdBackgrounds.all,
+            equipmentPackages = SrdStartingEquipment.all,
         )
     }
 

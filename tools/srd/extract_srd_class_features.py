@@ -27,7 +27,10 @@ from typing import Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PDF = ROOT / "tmp/pdfs/IT_SRD_CC_v5.2.1.pdf"
-DEFAULT_OUTPUT = ROOT / "tmp/pdfs/srd_class_features.json"
+DEFAULT_OUTPUT = (
+    ROOT
+    / "content/srd-5.2.1-it/src/main/resources/srd/5.2.1-it/class-features.json"
+)
 
 RED = "#88191f"
 BLACK = "#231f20"
@@ -162,6 +165,7 @@ def parse_poppler_xml(pdf: Path) -> dict[tuple[int, str], list[Line]]:
         executable,
         "-xml",
         "-hidden",
+        "-i",
         "-f",
         "32",
         "-l",
@@ -344,6 +348,13 @@ def slugify(value: str) -> str:
 
 def activation_from(description: str) -> str | None:
     lowered = description.lower()
+    # Le eccezioni descrivono ciò che l'azione concessa non può fare, non il
+    # costo di attivazione del privilegio (Azione Impetuosa è il caso SRD).
+    lowered = re.sub(
+        r"(?:fatta eccezione per|tranne|eccetto)\s+l['’]azione di magia",
+        "",
+        lowered,
+    )
     if re.search(r"\b(?:usa(?:re)?|usare la propria|come)\s+(?:la sua |una |un')?reazione\b", lowered):
         return "reazione"
     if "azione bonus" in lowered:

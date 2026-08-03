@@ -94,7 +94,7 @@ public record TurnBudget(
                 attacksRemaining,
                 spellSlotSpentThisTurn,
                 useAdditional ? false : additionalActionAvailable,
-                false,
+                useAdditional ? false : additionalActionMagicRestricted,
                 actionSurgeUsedThisTurn,
                 attackActionInProgress);
     }

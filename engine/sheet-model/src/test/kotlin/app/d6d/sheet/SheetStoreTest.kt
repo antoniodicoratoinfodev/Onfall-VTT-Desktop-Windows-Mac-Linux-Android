@@ -1,6 +1,7 @@
 package app.d6d.sheet
 
 import app.d6d.domain.combat.ActivationCost
+import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -62,11 +63,21 @@ class SheetStoreTest {
             halfOnSave = true,
             rulesText = "Informazioni complete.",
         )
+        val automaticEffect = CatalogAbility(
+            id = "azione-automatica",
+            name = "Azione automatica",
+            activationCost = ActivationCost.NONE,
+            resolutionMethod = ResolutionMethod.AUTOMATIC,
+            dealsDamage = false,
+            resourceId = "risorsa-automatica",
+            resourceCost = 1,
+            effect = AbilityEffect.GRANT_NON_MAGIC_ACTION,
+        )
         val store = SheetStore(file)
 
-        store.save(SheetLibrary(abilities = listOf(ability)))
+        store.save(SheetLibrary(abilities = listOf(ability, automaticEffect)))
 
-        assertEquals(ability, store.load().abilities.single())
+        assertEquals(listOf(ability, automaticEffect), store.load().abilities)
     }
 
     @Test

@@ -362,6 +362,7 @@ class SrdGuidedProgressionMatrixTest {
 
     private fun choicePriority(choice: ChoiceDefinition): Int = when {
         isInitialOriginFeat(choice) -> 0
+        choice.kind == ChoiceKind.BACKGROUND -> 0
         choice.kind == ChoiceKind.SKILL_PROFICIENCY -> 10
         choice.kind == ChoiceKind.TOOL_PROFICIENCY -> 10
         choice.kind == ChoiceKind.SPELLBOOK_SPELL -> 10

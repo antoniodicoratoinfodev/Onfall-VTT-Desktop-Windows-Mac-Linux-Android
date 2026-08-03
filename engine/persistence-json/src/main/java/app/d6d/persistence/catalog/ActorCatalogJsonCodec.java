@@ -4,9 +4,11 @@ import app.d6d.domain.campaign.ActorKind;
 import app.d6d.domain.campaign.ActorTemplate;
 import app.d6d.domain.catalog.ActorCatalogEntry;
 import app.d6d.domain.combat.AbilityDefinition;
+import app.d6d.domain.combat.AbilityEffect;
 import app.d6d.domain.combat.ActivationCost;
 import app.d6d.domain.combat.ActorDefinition;
 import app.d6d.domain.combat.AutomationStatus;
+import app.d6d.domain.combat.CombatResourceState;
 import app.d6d.domain.combat.ConditionType;
 import app.d6d.domain.combat.SaveAbility;
 import app.d6d.domain.combat.DamageFormula;
@@ -153,6 +155,12 @@ public final class ActorCatalogJsonCodec {
             abilities.add(encodeAbility(ability));
         }
         result.put("abilities", abilities);
+
+        List<Object> resources = new ArrayList<>(definition.resources().size());
+        for (CombatResourceState resource : definition.resources()) {
+            resources.add(encodeResource(resource));
+        }
+        result.put("resources", resources);
         return result;
     }
 
@@ -186,6 +194,18 @@ public final class ActorCatalogJsonCodec {
         result.put("automationStatus", ability.automationStatus().name());
         result.put("rulesText", ability.rulesText());
         result.put("passive", ability.passive());
+        result.put("effect", ability.effect().name());
+        result.put("resourceId", ability.resourceId());
+        result.put("resourceCost", ability.resourceCost());
+        return result;
+    }
+
+    private static Map<String, Object> encodeResource(CombatResourceState resource) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", resource.id());
+        result.put("name", resource.name());
+        result.put("maximum", resource.maximum());
+        result.put("spent", resource.spent());
         return result;
     }
 
@@ -304,6 +324,16 @@ public final class ActorCatalogJsonCodec {
             abilities.add(decodeAbility(object(encodedAbilities.get(index), abilityPath), abilityPath));
         }
 
+        List<CombatResourceState> resources = new ArrayList<>();
+        if (value.get("resources") != null) {
+            List<?> encodedResources = array(value.get("resources"), path + ".resources");
+            for (int index = 0; index < encodedResources.size(); index++) {
+                String resourcePath = path + ".resources[" + index + ']';
+                resources.add(decodeResource(
+                        object(encodedResources.get(index), resourcePath), resourcePath));
+            }
+        }
+
         try {
             return new ActorDefinition(
                     id,
@@ -326,7 +356,8 @@ public final class ActorCatalogJsonCodec {
                     savingThrowBonuses,
                     spellSaveDc,
                     attacksPerAction,
-                    strengthDexterityD20Disadvantage);
+                    strengthDexterityD20Disadvantage,
+                    resources);
         } catch (IllegalArgumentException exception) {
             throw formatError(path, messageOf(exception));
         }
@@ -388,6 +419,15 @@ public final class ActorCatalogJsonCodec {
                 path + ".automationStatus");
         String rulesText = text(required(value, "rulesText", path), path + ".rulesText");
         boolean passive = value.get("passive") != null && bool(value.get("passive"), path + ".passive");
+        AbilityEffect effect = value.get("effect") == null
+                ? AbilityEffect.NONE
+                : abilityEffect(value.get("effect"), path + ".effect");
+        String resourceId = value.get("resourceId") == null
+                ? ""
+                : text(value.get("resourceId"), path + ".resourceId");
+        int resourceCost = value.get("resourceCost") == null
+                ? 0
+                : integer(value.get("resourceCost"), path + ".resourceCost");
 
         try {
             return new AbilityDefinition(
@@ -409,8 +449,26 @@ public final class ActorCatalogJsonCodec {
                     halfOnSave,
                     passive,
                     attackAbility,
-                    spellOrCantrip);
+                    spellOrCantrip,
+                    effect,
+                    resourceId,
+                    resourceCost);
         } catch (IllegalArgumentException exception) {
+            throw formatError(path, messageOf(exception));
+        }
+    }
+
+    private static CombatResourceState decodeResource(Map<String, Object> value, String path) {
+        try {
+            return new CombatResourceState(
+                    text(required(value, "id", path), path + ".id"),
+                    text(required(value, "name", path), path + ".name"),
+                    integer(required(value, "maximum", path), path + ".maximum"),
+                    integer(required(value, "spent", path), path + ".spent"));
+        } catch (IllegalArgumentException exception) {
+            if (exception instanceof CatalogFormatException catalogException) {
+                throw catalogException;
+            }
             throw formatError(path, messageOf(exception));
         }
     }
@@ -631,6 +689,15 @@ public final class ActorCatalogJsonCodec {
             return AutomationStatus.valueOf(name);
         } catch (IllegalArgumentException exception) {
             throw unknownEnum(path, "AutomationStatus", name, AutomationStatus.values());
+        }
+    }
+
+    private static AbilityEffect abilityEffect(Object value, String path) {
+        String name = text(value, path);
+        try {
+            return AbilityEffect.valueOf(name);
+        } catch (IllegalArgumentException exception) {
+            throw unknownEnum(path, "AbilityEffect", name, AbilityEffect.values());
         }
     }
 

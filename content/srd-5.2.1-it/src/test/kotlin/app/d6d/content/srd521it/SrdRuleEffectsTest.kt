@@ -50,9 +50,15 @@ class SrdRuleEffectsTest {
                     classId,
                     current.progression.levelIn(classId) + 1,
                     current,
-                    provisional,
+                    chosen.map { ChoiceSelection(it.key, it.value) },
                 )
-                val wanted = preferences.flatMap { fragment -> options.filter { fragment in it.id } }
+                val backgroundPreference = if (choice.kind == ChoiceKind.BACKGROUND) {
+                    options.filter { it.id == "srd521-it:background:soldato" }
+                } else {
+                    emptyList()
+                }
+                val wanted = backgroundPreference +
+                    preferences.flatMap { fragment -> options.filter { fragment in it.id } }
                 chosen[choice.id] = (wanted + options).map { it.id }.distinct().take(choice.count)
             }
         }
@@ -147,7 +153,13 @@ class SrdRuleEffectsTest {
 
         // Con l'armatura addosso il bonus decade; Forza 10 non soddisfa inoltre
         // il requisito 13 della cotta di maglia, quindi la velocità perde 3 metri.
-        assertEquals(20, monk.copy(armorClassMethod = ArmorClassMethod.CHAIN_MAIL).effectiveSpeedFeet)
+        assertEquals(
+            20,
+            monk.copy(
+                armorClassMethod = ArmorClassMethod.CHAIN_MAIL,
+                abilityScores = monk.abilityScores + (Ability.STRENGTH to 10),
+            ).effectiveSpeedFeet,
+        )
 
         // Il +10 esposto dal catalogo per l'aggiunta manuale non deve abbassare
         // il +30 che la progressione guidata ha gia' raggiunto.

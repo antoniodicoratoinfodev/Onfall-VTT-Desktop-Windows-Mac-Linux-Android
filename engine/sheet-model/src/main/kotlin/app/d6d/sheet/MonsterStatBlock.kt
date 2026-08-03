@@ -185,14 +185,7 @@ data class MonsterStatBlock(
                     .rangeFeet(attack?.rangeFeet ?: 5)
                     .damage(
                         if (attack != null) {
-                            listOf(
-                                DamageFormula.dice(
-                                    attack.damageType,
-                                    attack.diceCount.coerceAtLeast(1),
-                                    attack.diceSides.coerceAtLeast(2),
-                                    attack.damageModifier,
-                                ),
-                            )
+                            listOf(attack.toDamageFormula())
                         } else {
                             emptyList()
                         },

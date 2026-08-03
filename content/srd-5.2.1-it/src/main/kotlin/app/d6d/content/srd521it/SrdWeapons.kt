@@ -23,6 +23,7 @@ private fun weapon(
     normalRangeFeet: Int = 0,
     longRangeFeet: Int = 0,
     versatileDiceSides: Int = 0,
+    fixedDamage: Int = 0,
 ) = WeaponDefinition(
     id = "$WEAPON_PREFIX:$slug",
     name = name,
@@ -36,11 +37,12 @@ private fun weapon(
     normalRangeFeet = normalRangeFeet,
     longRangeFeet = longRangeFeet,
     versatileDiceSides = versatileDiceSides,
+    fixedDamage = fixedDamage,
 )
 
 /** Colonna "Danni" come stampata sulla tabella, senza il modificatore. */
 val WeaponDefinition.damageText: String
-    get() = "${diceCount}d$diceSides ${damageType.italianLabel}"
+    get() = "${if (fixedDamage > 0) fixedDamage else "${diceCount}d$diceSides"} ${damageType.italianLabel}"
 
 /** Riga leggibile usata dai selettori: danno, gittata, Padronanza e proprietà. */
 val WeaponDefinition.summary: String
@@ -296,13 +298,13 @@ object SrdWeapons {
             ),
             normalRangeFeet = 100, longRangeFeet = 400,
         ),
-        // Lo SRD assegna alla cerbottana un danno fisso di 1: qui vale 1d1, perché
-        // la proiezione da combattimento ragiona soltanto in dadi.
+        // Lo SRD assegna alla cerbottana un danno fisso di 1, che non raddoppia col critico.
         weapon(
             "cerbottana", "Cerbottana", WeaponCategory.MARTIAL, WeaponReach.RANGED,
             1, 1, DamageType.PIERCING, mastery = "Vessazione",
             properties = setOf(WeaponProperty.AMMUNITION, WeaponProperty.LOADING),
             normalRangeFeet = 25, longRangeFeet = 100,
+            fixedDamage = 1,
         ),
         weapon(
             "moschetto", "Moschetto", WeaponCategory.MARTIAL, WeaponReach.RANGED,

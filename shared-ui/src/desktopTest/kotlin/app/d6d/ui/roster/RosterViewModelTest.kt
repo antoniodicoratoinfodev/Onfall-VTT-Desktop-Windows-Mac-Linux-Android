@@ -3,7 +3,10 @@ package app.d6d.ui.roster
 import app.d6d.domain.campaign.ActorKind
 import app.d6d.domain.catalog.ActorCatalogEntry
 import app.d6d.domain.combat.CombatantSnapshot
+import app.d6d.domain.combat.CombatResourceState
 import app.d6d.persistence.catalog.ActorCatalogStore
+import app.d6d.rules.character.RecoveryPeriod
+import app.d6d.rules.character.ResourcePoolState
 import app.d6d.sheet.Ability
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
@@ -175,7 +178,7 @@ class RosterViewModelTest {
         val before = roster.items.size
         val snapshot = snapshotFor("attore-sconosciuto", "Ignoto", armorClass = 12, maxHitPoints = 10)
 
-        roster.applyCombatEdit("attore-sconosciuto", snapshot)
+        assertTrue(roster.applyCombatEdit("attore-sconosciuto", snapshot))
 
         assertEquals(before, roster.items.size)
         assertNull(catalogEntry("attore-sconosciuto"))
@@ -289,6 +292,44 @@ class RosterViewModelTest {
             4,
             catalogEntry("pg-tarvos")!!.combatDefinition()
                 .ability(ability.id).damage().single().dice().count(),
+        )
+    }
+
+    @Test
+    fun `gli usi consumati in combattimento restano nella scheda e nel catalogo`() {
+        val roster = roster()
+        roster.sheets.kind = SheetKind.PERSONAGGIO
+        roster.sheets.selectCharacter("pg-tarvos")
+        val resourceId = "srd521-it:resource:guerriero:azione-impetuosa"
+        roster.sheets.character = roster.sheets.character.copy(
+            progression = roster.sheets.character.progression.copy(
+                resourcePools = listOf(
+                    ResourcePoolState(
+                        resourceId = resourceId,
+                        name = "Azione impetuosa",
+                        maximum = 2,
+                        spent = 0,
+                        recovery = RecoveryPeriod.SHORT_OR_LONG_REST,
+                    ),
+                ),
+            ),
+        )
+        assertTrue(roster.sheets.save())
+
+        assertTrue(
+            roster.applyCombatResources(
+                "pg-tarvos",
+                listOf(CombatResourceState(resourceId, "Azione impetuosa", 2, 1)),
+            ),
+        )
+
+        val sheetPool = roster.sheets.library.characters
+            .first { it.id == "pg-tarvos" }
+            .progression.resourcePools.single()
+        assertEquals(1, sheetPool.spent)
+        assertEquals(
+            1,
+            catalogEntry("pg-tarvos")!!.combatDefinition().resources().single().spent(),
         )
     }
 

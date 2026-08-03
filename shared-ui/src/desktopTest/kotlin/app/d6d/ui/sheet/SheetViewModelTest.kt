@@ -577,6 +577,16 @@ class SheetViewModelTest {
     }
 
     @Test
+    fun `Azione impetuosa non puo essere trasformata in un tratto passivo`() {
+        val model = model()
+        val surgeId = "srd521-it:feature:guerriero:azione-impetuosa"
+
+        assertFalse(model.setAbilityPassive(surgeId, true))
+        assertFalse(model.abilityCatalog.first { it.id == surgeId }.passive)
+        assertTrue(model.status.orEmpty().contains("effetto automatico"))
+    }
+
+    @Test
     fun `una abilita personale porta la classificazione in se stessa`() {
         val model = model()
         val ability = CatalogAbility(id = "abilita-prova", name = "Colpo di prova")

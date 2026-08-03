@@ -106,6 +106,8 @@ enum class ChoiceKind(val italianLabel: String) {
     STARTING_WEAPON("Arma iniziale"),
     FEATURE_TARGET("Bersaglio del privilegio"),
     ABILITY_SCORE_INCREASE("Aumento dei punteggi di caratteristica"),
+    BACKGROUND("Background"),
+    STARTING_EQUIPMENT("Equipaggiamento iniziale"),
 }
 
 @Serializable
@@ -207,6 +209,8 @@ data class WeaponDefinition(
     val longRangeFeet: Int = 0,
     /** Dado usato impugnandola a due mani; 0 quando non è versatile. */
     val versatileDiceSides: Int = 0,
+    /** Danno base fisso; se positivo sostituisce i dadi (per esempio la cerbottana). */
+    val fixedDamage: Int = 0,
 ) {
     init {
         require(id.isNotBlank())
@@ -214,9 +218,11 @@ data class WeaponDefinition(
         require(mastery.isNotBlank())
         require(diceCount >= 1)
         require(diceSides >= 1)
+        require(fixedDamage >= 0)
         require(normalRangeFeet >= 0)
         require(longRangeFeet >= normalRangeFeet)
         require(versatileDiceSides == 0 || WeaponProperty.VERSATILE in properties)
+        require(fixedDamage == 0 || versatileDiceSides == 0)
         require(reach == WeaponReach.MELEE || normalRangeFeet > 0)
     }
 
@@ -259,6 +265,63 @@ data class ChoiceDefinition(
         require(title.isNotBlank())
         require(count >= 0)
         require(optionIds.isNotEmpty() || !poolId.isNullOrBlank() || count == 0)
+    }
+}
+
+/** Armature presenti nelle dotazioni iniziali SRD e applicabili senza dipendenze dalla UI. */
+@Serializable
+enum class StartingArmor {
+    LEATHER,
+    STUDDED_LEATHER,
+    CHAIN_SHIRT,
+    CHAIN_MAIL,
+}
+
+/** Una delle alternative complete offerte da classe o background alla creazione. */
+@Serializable
+data class EquipmentPackageDefinition(
+    val id: String,
+    val name: String,
+    val description: String,
+    val weaponIds: List<String> = emptyList(),
+    val itemNames: List<String> = emptyList(),
+    val armor: StartingArmor? = null,
+    val shield: Boolean = false,
+    val goldPieces: Int = 0,
+) {
+    init {
+        require(id.isNotBlank())
+        require(name.isNotBlank())
+        require(description.isNotBlank())
+        require(weaponIds.all { it.isNotBlank() })
+        require(itemNames.all { it.isNotBlank() })
+        require(goldPieces >= 0)
+    }
+}
+
+/** Background SRD strutturato: aumenti, talento, competenze e dotazione. */
+@Serializable
+data class BackgroundDefinition(
+    val id: String,
+    val name: String,
+    val abilityOptions: Set<Ability>,
+    val featId: String,
+    val skillProficiencies: Set<Skill>,
+    val toolChoice: ChoiceDefinition,
+    val equipmentChoice: ChoiceDefinition,
+    /** Lista imposta dal background quando il talento è Iniziato alla magia. */
+    val magicInitiateListId: String? = null,
+    val description: String = "",
+    val sourcePage: Int = 0,
+) {
+    init {
+        require(id.isNotBlank())
+        require(name.isNotBlank())
+        require(abilityOptions.size == 3)
+        require(featId.isNotBlank())
+        require(skillProficiencies.size == 2)
+        require(magicInitiateListId == null || magicInitiateListId.isNotBlank())
+        require(sourcePage >= 0)
     }
 }
 
@@ -437,6 +500,8 @@ data class ClassDefinition(
      * in una classe per multiclasse non si ricomincia dall'equipaggiamento.
      */
     val startingWeaponChoice: ChoiceDefinition? = null,
+    /** Alternativa strutturata alla vecchia descrizione testuale della dotazione. */
+    val startingEquipmentChoice: ChoiceDefinition? = null,
     /** Scelte concesse entrando nella classe dopo il 1º livello totale. */
     val multiclassSkillChoice: ChoiceDefinition? = null,
     val multiclassToolChoice: ChoiceDefinition? = null,
@@ -542,11 +607,15 @@ data class RulesContentPack(
     val elements: List<RuleElementDefinition>,
     /** Tabella Armi del pacchetto: alimenta le armi iniziali e le loro capacità. */
     val weapons: List<WeaponDefinition> = emptyList(),
+    val backgrounds: List<BackgroundDefinition> = emptyList(),
+    val equipmentPackages: List<EquipmentPackageDefinition> = emptyList(),
 ) {
     init {
         require(classes.map { it.id }.distinct().size == classes.size)
         require(elements.map { it.id }.distinct().size == elements.size)
         require(weapons.map { it.id }.distinct().size == weapons.size)
+        require(backgrounds.map { it.id }.distinct().size == backgrounds.size)
+        require(equipmentPackages.map { it.id }.distinct().size == equipmentPackages.size)
     }
 
     fun classDefinition(id: CharacterClassId): ClassDefinition =
@@ -557,4 +626,10 @@ data class RulesContentPack(
 
     fun weapon(id: String): WeaponDefinition? =
         weapons.firstOrNull { it.id == id }
+
+    fun background(id: String): BackgroundDefinition? =
+        backgrounds.firstOrNull { it.id == id }
+
+    fun equipmentPackage(id: String): EquipmentPackageDefinition? =
+        equipmentPackages.firstOrNull { it.id == id }
 }

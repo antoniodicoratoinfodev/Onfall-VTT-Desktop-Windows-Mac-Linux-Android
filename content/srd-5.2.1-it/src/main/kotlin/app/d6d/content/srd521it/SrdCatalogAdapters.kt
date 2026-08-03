@@ -1,5 +1,6 @@
 package app.d6d.content.srd521it
 
+import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.ResolutionMethod
@@ -38,11 +39,11 @@ fun RuleElementDefinition.toCatalogAbility(manifest: ContentPackManifest): Catal
     CatalogAbility(
         id = id,
         name = name,
-        passive = isPassiveTrait(activation.toActivationCost()),
+        passive = id != ACTION_SURGE_ID && isPassiveTrait(activation.toActivationCost()),
         activationCost = activation.toActivationCost(),
-        resolutionMethod = ResolutionMethod.MANUAL,
+        resolutionMethod = if (id == ACTION_SURGE_ID) ResolutionMethod.AUTOMATIC else ResolutionMethod.MANUAL,
         dealsDamage = false,
-        automationStatus = AutomationStatus.MANUAL_REQUIRED,
+        automationStatus = if (id == ACTION_SURGE_ID) AutomationStatus.AUTOMATED else AutomationStatus.MANUAL_REQUIRED,
         rulesText = description.reflowRulesText(),
         category = kind,
         classEligibility = classEligibility,
@@ -59,9 +60,12 @@ fun RuleElementDefinition.toCatalogAbility(manifest: ContentPackManifest): Catal
         prerequisite = prerequisite,
         resourceId = resourceId,
         resourceCost = resourceCost,
+        effect = if (id == ACTION_SURGE_ID) AbilityEffect.GRANT_NON_MAGIC_ACTION else AbilityEffect.NONE,
         immutable = true,
         effects = effects,
     )
+
+private const val ACTION_SURGE_ID = "srd521-it:feature:guerriero:azione-impetuosa"
 
 /**
  * Un tratto è passivo quando vale sempre e non c'è nulla da spendere nel turno.

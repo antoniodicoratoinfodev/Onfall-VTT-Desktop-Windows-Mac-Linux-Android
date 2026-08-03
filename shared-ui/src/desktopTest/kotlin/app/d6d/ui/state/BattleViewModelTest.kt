@@ -1,14 +1,18 @@
 package app.d6d.ui.state
 
 import app.d6d.domain.combat.AbilityDefinition
+import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.ActorDefinition
+import app.d6d.domain.combat.AutomationStatus
+import app.d6d.domain.combat.CombatResourceState
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.EventType
+import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import app.d6d.engine.CombatSession
 import app.d6d.ui.content.SampleEncounter
@@ -26,6 +30,11 @@ import org.junit.jupiter.api.Test
  * una violazione delle regole in un crash.
  */
 class BattleViewModelTest {
+
+    private companion object {
+        const val ACTION_SURGE_ID = "srd521-it:feature:guerriero:azione-impetuosa"
+        const val ACTION_SURGE_RESOURCE = "srd521-it:resource:guerriero:azione-impetuosa"
+    }
 
     private fun viewModel() = BattleViewModel(SampleEncounter.startedSession(seed = 4242L))
 
@@ -65,6 +74,131 @@ class BattleViewModelTest {
         session.markReady()
         session.start()
         return BattleViewModel(session)
+    }
+
+    private fun actionSurgeSession(): CombatSession {
+        val surge = AbilityDefinition.builder(ACTION_SURGE_ID, "Azione impetuosa")
+            .activationCost(ActivationCost.NONE)
+            .resolutionMethod(ResolutionMethod.AUTOMATIC)
+            .automationStatus(AutomationStatus.AUTOMATED)
+            .effect(AbilityEffect.GRANT_NON_MAGIC_ACTION)
+            .resource(ACTION_SURGE_RESOURCE, 1)
+            .build()
+        val fighter = ActorDefinition.builder("fighter-def", "Guerriero")
+            .armorClass(18)
+            .maxHitPoints(30)
+            .initiativeScore(20)
+            .abilities(listOf(surge))
+            .resources(listOf(CombatResourceState(ACTION_SURGE_RESOURCE, "Azione impetuosa", 1, 0)))
+            .build()
+        val target = ActorDefinition.builder("target-def", "Bersaglio")
+            .armorClass(12)
+            .maxHitPoints(20)
+            .initiativeScore(10)
+            .build()
+        return CombatSession.create("azione-impetuosa-ui", 4242L).also { session ->
+            session.addCombatant("fighter", fighter)
+            session.addCombatant("target", target)
+            session.setPartyCombatants(listOf("fighter"))
+            session.setInitiative("fighter", 20)
+            session.setInitiative("target", 10)
+            session.setInitiativeOrder(listOf("fighter", "target"))
+            session.markReady()
+            session.start()
+        }
+    }
+
+    private fun extraAttackViewModel(): BattleViewModel {
+        val sword = AbilityDefinition.attack(
+            "sword",
+            "Spada",
+            ActivationCost.ACTION,
+            100,
+            DamageFormula.fixed(DamageType.SLASHING, 1),
+        )
+        val fighter = ActorDefinition.builder("fighter-extra-def", "Guerriero")
+            .armorClass(18)
+            .maxHitPoints(30)
+            .initiativeScore(20)
+            .attacksPerAction(2)
+            .abilities(listOf(sword))
+            .build()
+        val target = ActorDefinition.builder("target-extra-def", "Bersaglio")
+            .armorClass(10)
+            .maxHitPoints(20)
+            .initiativeScore(10)
+            .build()
+        val session = CombatSession.create("attacco-extra-ui", 4242L)
+        session.addCombatant("fighter", fighter)
+        session.addCombatant("target", target)
+        session.setPartyCombatants(listOf("fighter"))
+        session.setInitiative("fighter", 20)
+        session.setInitiative("target", 10)
+        session.setInitiativeOrder(listOf("fighter", "target"))
+        session.markReady()
+        session.start()
+        return BattleViewModel(session)
+    }
+
+    @Test
+    fun `azione impetuosa si attiva direttamente persiste la spesa e undo la ripristina`() {
+        val persistedSpent = mutableListOf<Int>()
+        val model = BattleViewModel(
+            actionSurgeSession(),
+            resourceSink = CombatResourceSink { _, resources ->
+                persistedSpent += resources.single { it.id() == ACTION_SURGE_RESOURCE }.spent()
+            },
+        )
+        val surge = model.abilities("fighter").single()
+
+        assertTrue(model.canAffordAbility("fighter", surge))
+        assertEquals("1/1", model.abilityResourceLabel("fighter", surge))
+
+        model.beginAbilityTargeting(ACTION_SURGE_ID)
+
+        assertTrue(model.budget("fighter")!!.additionalActionAvailable())
+        assertEquals("0/1", model.abilityResourceLabel("fighter", surge))
+        assertEquals(listOf(1), persistedSpent)
+        assertNotNull(model.actionResolution)
+
+        model.undo()
+
+        assertFalse(model.budget("fighter")!!.additionalActionAvailable())
+        assertEquals("1/1", model.abilityResourceLabel("fighter", surge))
+        assertEquals(listOf(1, 0), persistedSpent)
+    }
+
+    @Test
+    fun `se la persistenza della risorsa fallisce azione impetuosa torna allo stato iniziale`() {
+        val model = BattleViewModel(
+            actionSurgeSession(),
+            resourceSink = CombatResourceSink { _, _ -> error("salvataggio non disponibile") },
+        )
+
+        model.beginAbilityTargeting(ACTION_SURGE_ID)
+
+        assertFalse(model.budget("fighter")!!.additionalActionAvailable())
+        assertEquals(0, model.combatant("fighter")!!.resources().single().spent())
+        assertNull(model.actionResolution)
+        assertTrue(model.message.orEmpty().contains("salvataggio non disponibile"))
+    }
+
+    @Test
+    fun `la scheda mantiene utilizzabile l arma finche restano attacchi dell azione`() {
+        val model = extraAttackViewModel()
+        val sword = model.abilities("fighter").single()
+
+        model.beginAbilityTargeting(sword.id())
+        model.onCombatantClicked("target")
+
+        assertEquals(1, model.budget("fighter")!!.attacksRemaining())
+        assertTrue(model.canAffordAbility("fighter", sword))
+
+        model.beginAbilityTargeting(sword.id())
+        model.onCombatantClicked("target")
+
+        assertEquals(0, model.budget("fighter")!!.attacksRemaining())
+        assertFalse(model.canAffordAbility("fighter", sword))
     }
 
     @Test

@@ -68,6 +68,8 @@ import app.d6d.ui.session.SessionWorkspace
 import app.d6d.ui.session.WorkspaceRecoveryStore
 import app.d6d.ui.session.WorkspaceOpenResult
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.state.CombatResourceSink
+import app.d6d.ui.state.CombatantEditSink
 import app.d6d.ui.theme.AppTheme
 import app.d6d.ui.theme.AtmosphericBackground
 import app.d6d.ui.theme.GoldenRule
@@ -128,15 +130,24 @@ fun AppRoot(
             )
         }
         // Ogni scheda aperta riceve un BattleViewModel distinto. La taglia iniziale
-        // arriva dal Compendio e viene fotografata nel documento; le correzioni
-        // fatte in battaglia restano locali. Per cambiare il template condiviso si
-        // apre invece esplicitamente la sua scheda nel Compendio.
+        // arriva dal Compendio e viene fotografata nel documento; le correzioni e
+        // gli usi di risorsa confluiscono nella scheda autorevole quando esiste.
         val battleFactory: (CombatSession) -> BattleViewModel = remember(roster) {
             { session ->
                 BattleViewModel(
                     session,
                     footprintProvider = { definitionId -> roster.footprintFor(definitionId) },
                     passiveProvider = { abilityId -> roster.abilityIsPassive(abilityId) },
+                    resourceSink = CombatResourceSink { definitionId, resources ->
+                        if (!roster.applyCombatResources(definitionId, resources)) {
+                            error(roster.sheets.status ?: "Risorse della scheda non salvate.")
+                        }
+                    },
+                    editSink = CombatantEditSink { definitionId, snapshot ->
+                        if (!roster.applyCombatEdit(definitionId, snapshot)) {
+                            error(roster.sheets.status ?: "Correzione della scheda non salvata.")
+                        }
+                    },
                 )
             }
         }

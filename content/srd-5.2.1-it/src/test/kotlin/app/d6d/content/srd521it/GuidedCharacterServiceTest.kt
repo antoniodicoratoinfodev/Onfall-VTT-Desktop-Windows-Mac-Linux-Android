@@ -37,7 +37,7 @@ class GuidedCharacterServiceTest {
         assertEquals(1, created.progression.totalLevel)
         assertEquals(12, created.maxHitPoints)
         assertEquals(Proficiency.PROFICIENT, created.saveProficiencies[Ability.STRENGTH])
-        assertEquals(2, created.skillProficiencies.values.count { it == Proficiency.PROFICIENT })
+        assertEquals(4, created.skillProficiencies.values.count { it == Proficiency.PROFICIENT })
         assertTrue(created.progression.resourcePools.any { it.name == "Recuperare energie" })
         assertTrue(created.abilityIds.any { it == "srd521-it:action:attacco" })
     }
@@ -406,10 +406,17 @@ class GuidedCharacterServiceTest {
                     sheet,
                     selected.map { ChoiceSelection(it.key, it.value) },
                 )
-                val chosen = if (choice.poolId?.endsWith("feats:origin") == true) {
-                    listOf(originFeatId)
-                } else {
-                    options.take(choice.count).map { it.id }
+                val chosen = when (choice.kind) {
+                    ChoiceKind.BACKGROUND -> listOf(
+                        when {
+                            originFeatId.endsWith(":iniziato-alla-magia") ->
+                                "srd521-it:background:accolito"
+                            originFeatId.endsWith(":allerta") ->
+                                "srd521-it:background:criminale"
+                            else -> "srd521-it:background:soldato"
+                        },
+                    )
+                    else -> options.take(choice.count).map { it.id }
                 }
                 selected[choice.id] = chosen
             }

@@ -1,0 +1,588 @@
+{
+  "schema_version": 1,
+  "source": {
+    "title": "System Reference Document 5.2.1 (italiano)",
+    "pages": "385-405"
+  },
+  "counts": {
+    "records": 64
+  },
+  "records": [
+    {
+      "id": "srd521-it:beast:alce",
+      "name": "Alce",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "15 m",
+      "page": 385,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 10 Iniziativa +0 (10)\nPF 11 (2d10)\nVelocità 15 m\nMOD SALV MOD SALV MOD SALV\nFor 16 +3 +3 Des 10 +0 +0 Cos 11 +0 +0\nInt 2 −4 −4 Sag 10 +0 +0 Car 6 −2 −2\nAbilità Percezione +2\nSensi Percezione passiva 12; scurovisione 18 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nAzioni\nSfondamento. Tiro per colpire in mischia: +5, portata\n1,5 m. Colpito: 6 (1d6 + 3) danni contundenti. Se il bersaglio è una creatura di taglia Grande o inferiore e l'alce\nsi è mosso di 6 metri o più in linea retta verso di esso\nsubito prima del colpo, il bersaglio subisce 3 (1d6)\ndanni contundenti extra e cade a terra prono."
+    },
+    {
+      "id": "srd521-it:beast:aquila",
+      "name": "Aquila",
+      "challenge_rating": "0",
+      "has_fly_speed": true,
+      "speed": "3 m, volo 18 m",
+      "page": 385,
+      "stat_block": "Bestia Piccola, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 4 (1d6 + 1)\nVelocità 3 m, volo 18 m\nMOD SALV MOD SALV MOD SALV\nFor 6 −2 −2 Des 15 +2 +2 Cos 12 +1 +1\nInt 2 −4 −4 Sag 14 +2 +2 Car 7 −2 −2\nAbilità Percezione +6\nSensi Percezione passiva 16\nLingue nessuna\nGS 0 (PE 10; BC +2)\nAzioni\nSperoni. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 4 (1d4 + 2) danni taglienti."
+    },
+    {
+      "id": "srd521-it:beast:avvoltoio",
+      "name": "Avvoltoio",
+      "challenge_rating": "0",
+      "has_fly_speed": true,
+      "speed": "3 m, volo 15 m",
+      "page": 386,
+      "stat_block": "Bestia Media, senza allineamento\nCA 10 Iniziativa +0 (10)\nPF 5 (1d8 + 1)\nVelocità 3 m, volo 15 m\nMOD SALV MOD SALV MOD SALV\nFor 7 −2 −2 Des 10 +0 +0 Cos 13 +1 +1\nInt 2 −4 −4 Sag 12 +1 +1 Car 4 −3 −3\nAbilità Percezione +3\nSensi Percezione passiva 13\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nTattiche del branco. L'avvoltoio dispone di vantaggio\na un tiro per colpire contro una creatura se almeno\nuno dei suoi alleati si trova entro 1,5 metri dalla creatura e non è incapacitato.\nAzioni\nBecco. Tiro per colpire in mischia: +2, portata 1,5 m.\nColpito: 2 (1d4) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:babbuino",
+      "name": "Babbuino",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "9 m, scalata 9 m",
+      "page": 386,
+      "stat_block": "Bestia Piccola, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 3 (1d6)\nVelocità 9 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 8 −1 −1 Des 14 +2 +2 Cos 11 +0 +0\nInt 4 −3 −3 Sag 12 +1 +1 Car 6 −2 −2\nSensi Percezione passiva 11\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nTattiche del branco. Il babbuino dispone di vantaggio\na un tiro per colpire contro una creatura se almeno\nuno dei suoi alleati si trova entro 1,5 metri dalla creatura e non è incapacitato.\nAzioni\nMorso. Tiro per colpire in mischia: +1, portata 1,5 m\nColpito: 1 (1d4 − 1) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:cammello",
+      "name": "Cammello",
+      "challenge_rating": "1/8",
+      "has_fly_speed": false,
+      "speed": "15 m",
+      "page": 387,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 10 Iniziativa –1 (9)\nPF 17 (2d10 + 6)\nVelocità 15 m\nMOD SALV MOD SALV MOD SALV\nFor 15 +2 +2 Des 8 −1 −1 Cos 17 +3 +5\nInt 2 −4 −4 Sag 11 +0 +0 Car 5 −3 −3\nSensi Percezione passiva 10; scurovisione 18 m\nLingue nessuna\nGS 1/8 (PE 25; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 4 (1d4 + 2) danni contundenti."
+    },
+    {
+      "id": "srd521-it:beast:capra",
+      "name": "Capra",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "12 m, scalata 9 m",
+      "page": 387,
+      "stat_block": "Bestia Media, senza allineamento\nCA 10 Iniziativa +0 (10)\nPF 4 (1d8)\nVelocità 12 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 11 +0 +2 Des 10 +0 +0 Cos 11 +0 +0\nInt 2 −4 −4 Sag 10 +0 +0 Car 5 −3 −3\nAbilità Percezione +2\nSensi Percezione passiva 12; scurovisione 18 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nAzioni\nSfondamento. Tiro per colpire in mischia: +2, portata\n1,5 m. Colpito: 1 danno contundente, o 2 (1d4) danni\ncontundenti se la capra si è mossa di 6 metri o più in\nlinea retta verso il bersaglio subito prima del colpo."
+    },
+    {
+      "id": "srd521-it:beast:capra-gigante",
+      "name": "Capra gigante",
+      "challenge_rating": "1/2",
+      "has_fly_speed": false,
+      "speed": "12 m, scalata 9 m",
+      "page": 387,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 19 (3d10 + 3)\nVelocità 12 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 17 +3 +5 Des 13 +1 +1 Cos 12 +1 +1\nInt 3 −4 −4 Sag 12 +1 +1 Car 6 −2 −2\nAbilità Percezione +3\nSensi Percezione passiva 13; scurovisione 18 m\nLingue nessuna\nGS 1/2 (PE 100; BC +2)\nAzioni\nSfondamento. Tiro per colpire in mischia: +5, portata\n1,5 m. Colpito: 6 (1d6 + 3) danni contundenti. Se il bersaglio è una creatura di taglia Grande o inferiore e la\ncapra si è mossa di 6 metri o più in linea retta verso di\nesso subito prima del colpo, il bersaglio subisce 5 (2d4)\ndanni contundenti extra e cade a terra prono."
+    },
+    {
+      "id": "srd521-it:beast:cavallo-da-galoppo",
+      "name": "Cavallo da galoppo",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "18 m",
+      "page": 387,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 13 (2d10 + 2)\nVelocità 18 m\nMOD SALV MOD SALV MOD SALV\nFor 16 +3 +3 Des 13 +1 +1 Cos 12 +1 +1\nInt 2 −4 −4 Sag 11 +0 +0 Car 7 −2 −2\nSensi Percezione passiva 10\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nAzioni\nZoccoli. Tiro per colpire in mischia: +5, portata 1,5 m\nColpito: 7 (1d8 + 3) danni contundenti."
+    },
+    {
+      "id": "srd521-it:beast:cavallo-da-guerra",
+      "name": "Cavallo da guerra",
+      "challenge_rating": "1/2",
+      "has_fly_speed": false,
+      "speed": "18 m",
+      "page": 388,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 19 (3d10 + 3)\nVelocità 18 m\nMOD SALV MOD SALV MOD SALV\nFor 18 +4 +4 Des 12 +1 +1 Cos 13 +1 +1\nInt 2 −4 −4 Sag 12 +1 +3 Car 7 −2 −2\nSensi Percezione passiva 11\nLingue nessuna\nGS 1/2 (PE 100; BC +2)\nAzioni\nZoccoli. Tiro per colpire in mischia: +6, portata 1,5 m.\nColpito: 9 (2d4 + 4) danni contundenti. Se il bersaglio\nè una creatura di taglia Grande o inferiore e il cavallo\nsi è mosso di 6 metri o più in linea retta verso di esso\nsubito prima del colpo, il bersaglio subisce 5 (2d4)\ndanni contundenti extra e cade a terra prono."
+    },
+    {
+      "id": "srd521-it:beast:cavallo-da-tiro",
+      "name": "Cavallo da tiro",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "12 m",
+      "page": 388,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 10 Iniziativa +0 (10)\nPF 15 (2d10 + 4)\nVelocità 12 m\nMOD SALV MOD SALV MOD SALV\nFor 18 +4 +4 Des 10 +0 +0 Cos 15 +2 +2\nInt 2 −4 −4 Sag 11 +0 +0 Car 7 −2 −2\nSensi Percezione passiva 10\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nAzioni\nZoccoli. Tiro per colpire in mischia: +6, portata 1,5 m\nColpito: 6 (1d4 + 4) danni contundenti."
+    },
+    {
+      "id": "srd521-it:beast:cavalluccio-marino",
+      "name": "Cavalluccio marino",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "1,5 m, nuoto 6 m",
+      "page": 388,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 12 Iniziativa +1 (11)\nPF 1 (1d4 − 1)\nVelocità 1,5 m, nuoto 6 m\nMOD SALV MOD SALV MOD SALV\nFor 1 −5 −5 Des 12 +1 +1 Cos 8 −1 −1\nInt 1 −5 −5 Sag 10 +0 +0 Car 2 −4 −4\nAbilità Furtività +5, Percezione +2\nSensi Percezione passiva 12\nLingue nessuna\nGS 0 (PE 0; BC +2)\nTratti\nRespirare sott'acqua. Il cavalluccio marino può respirare solo sott'acqua.\nAzioni\nScatto acquatico. Finché è sott'acqua, il cavalluccio\nmarino può muoversi fino alla sua velocità di nuoto\nmassima senza provocare attacchi di opportunità."
+    },
+    {
+      "id": "srd521-it:beast:cavalluccio-marino-gigante",
+      "name": "Cavalluccio marino gigante",
+      "challenge_rating": "1/2",
+      "has_fly_speed": false,
+      "speed": "1,5 m, nuoto 12 m",
+      "page": 388,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 14 Iniziativa +1 (11)\nPF 16 (3d10)\nVelocità 1,5 m, nuoto 12 m\nMOD SALV MOD SALV MOD SALV\nFor 15 +2 +2 Des 12 +1 +1 Cos 11 +0 +0\nInt 2 −4 −4 Sag 12 +1 +1 Car 5 −3 −3\nSensi Percezione passiva 11\nLingue nessuna\nGS 1/2 (PE 100; BC +2)\nTratti\nRespirare sott'acqua. Il cavalluccio marino può respirare solo sott'acqua.\nAzioni\nSfondamento. Tiro per colpire in mischia: +4, portata 1,5 m Colpito: 9 (2d6 + 2) danni contundenti,\no 11 (2d8 + 2) danni contundenti se il cavalluccio\nmarino si è mosso di 6 metri o più in linea retta verso\nil bersaglio subito prima del colpo.\nAzioni bonus\nScatto acquatico. Finché è sott'acqua, il cavalluccio\nmarino può muoversi fino alla metà della sua velocità\ndi nuoto senza provocare attacchi di opportunità."
+    },
+    {
+      "id": "srd521-it:beast:cinghiale",
+      "name": "Cinghiale",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "12 m",
+      "page": 388,
+      "stat_block": "Bestia Media, senza allineamento\nCA 11 Iniziativa +0 (10)\nPF 13 (2d8 + 4)\nVelocità 12 m\nMOD SALV MOD SALV MOD SALV\nFor 13 +1 +1 Des 11 +0 +0 Cos 14 +2 +2\nInt 2 −4 −4 Sag 9 −1 −1 Car 5 −3 −3\nSensi Percezione passiva 9\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nTratti\nFuria sanguinante. Se il cinghiale è sanguinante, ha\nvantaggio ai tiri per colpire.\nAzioni\nTrafiggere. Tiro per colpire in mischia: +3, portata\n1,5 m Colpito: 4 (1d6 + 1) danni perforanti. Se il\nbersaglio è una creatura di taglia Media o inferiore e il\ncinghiale si è mosso di 6 metri o più in linea retta verso\ndi esso subito prima del colpo, il bersaglio subisce\n3 (1d6) danni perforanti extra e cade a terra prono."
+    },
+    {
+      "id": "srd521-it:beast:coccodrillo",
+      "name": "Coccodrillo",
+      "challenge_rating": "1/2",
+      "has_fly_speed": false,
+      "speed": "6 m, nuoto 9 m",
+      "page": 389,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 12 Iniziativa +0 (10)\nPF 13 (2d10 + 2)\nVelocità 6 m, nuoto 9 m\nMOD SALV MOD SALV MOD SALV\nFor 15 +2 +2 Des 10 +0 +0 Cos 13 +1 +3\nInt 2 −4 −4 Sag 10 +0 +0 Car 5 −3 −3\nAbilità Furtività +2\nSensi Percezione passiva 10\nLingue nessuna\nGS 1/2 (PE 100; BC +2)\nTratti\nApnea. Il coccodrillo può trattenere il respiro per 1 ora.\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 6 (1d8 + 2) danni perforanti. Se il bersaglio\nè una creatura di taglia Media o inferiore, è afferrato\n(CD 12 per sfuggire). Mentre è afferrato, il bersaglio è\nanche trattenuto."
+    },
+    {
+      "id": "srd521-it:beast:corvo",
+      "name": "Corvo",
+      "challenge_rating": "0",
+      "has_fly_speed": true,
+      "speed": "3 m, volo 15 m",
+      "page": 390,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 2 (1d4)\nVelocità 3 m, volo 15 m\nMOD SALV MOD SALV MOD SALV\nFor 2 −4 −4 Des 14 +2 +2 Cos 10 +0 +0\nInt 5 −3 −3 Sag 13 +1 +1 Car 6 −2 −2\nAbilità Percezione +3\nSensi Percezione passiva 13\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nImitare. Il corvo può imitare dei suoni semplici che ha\nsentito, come sussurri o cinguettii. Chi li ascolta può\ncapire che si tratta di imitazioni superando una prova\ndi Saggezza (Intuizione) con CD 10.\nAzioni\nBecco. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 1 danno perforante."
+    },
+    {
+      "id": "srd521-it:beast:daino",
+      "name": "Daino",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "15 m",
+      "page": 390,
+      "stat_block": "Bestia Media, senza allineamento\nCA 13 Iniziativa +3 (13)\nPF 4 (1d8)\nVelocità 15 m\nMOD SALV MOD SALV MOD SALV\nFor 11 +0 +0 Des 16 +3 +3 Cos 11 +0 +0\nInt 2 −4 −4 Sag 14 +2 +2 Car 5 −3 −3\nAbilità Percezione +4\nSensi Percezione passiva 14; scurovisione 18 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nAgile. Il daino non provoca attacchi di opportunità\nquando esce dalla portata di un nemico.\nAzioni\nSfondamento. Tiro per colpire in mischia: +2, portata\n1,5 m. Colpito: 2 (1d4) danni contundenti."
+    },
+    {
+      "id": "srd521-it:beast:faina",
+      "name": "Faina",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "9 m, scalata 9 m",
+      "page": 391,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 13 Iniziativa +3 (13)\nPF 1 (1d4 − 1)\nVelocità 9 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 3 −4 −4 Des 16 +3 +3 Cos 8 −1 −1\nInt 2 −4 −4 Sag 12 +1 +1 Car 3 −4 −4\nAbilità Acrobazia +5, Percezione +3, Furtività +5\nSensi Percezione passiva 13; scurovisione 18 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +5, portata 1,5 m.\nColpito: 1 danno perforante."
+    },
+    {
+      "id": "srd521-it:beast:faina-gigante",
+      "name": "Faina gigante",
+      "challenge_rating": "1/8",
+      "has_fly_speed": false,
+      "speed": "12 m, scalata 9 m",
+      "page": 391,
+      "stat_block": "Bestia Media, senza allineamento\nCA 13 Iniziativa +3 (13)\nPF 9 (2d8)\nVelocità 12 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 11 +0 +0 Des 17 +3 +3 Cos 10 +0 +0\nInt 4 −3 −3 Sag 12 +1 +1 Car 5 −3 −3\nAbilità Acrobazia +5, Percezione +3, Furtività +5\nSensi Percezione passiva 13; scurovisione 18 m\nLingue nessuna\nGS 1/8 (PE 25; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +5, portata 1,5 m.\nColpito: 5 (1d4 + 3) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:falco",
+      "name": "Falco",
+      "challenge_rating": "0",
+      "has_fly_speed": true,
+      "speed": "3 m, volo 18 m",
+      "page": 391,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 13 Iniziativa +3 (13)\nPF 1 (1d4 − 1)\nVelocità 3 m, volo 18 m\nMOD SALV MOD SALV MOD SALV\nFor 5 −3 −3 Des 16 +3 +3 Cos 8 −1 −1\nInt 2 −4 −4 Sag 14 +2 +2 Car 6 −2 −2\nAbilità Percezione +6\nSensi Percezione passiva 16\nLingue nessuna\nGS 0 (PE 10; BC +2)\nAzioni\nSperoni. Tiro per colpire in mischia: +5, portata 1,5 m.\nColpito: 1 danno tagliente."
+    },
+    {
+      "id": "srd521-it:beast:falco-di-sangue",
+      "name": "Falco di sangue",
+      "challenge_rating": "1/8",
+      "has_fly_speed": true,
+      "speed": "3 m, volo 18 m",
+      "page": 391,
+      "stat_block": "Bestia Piccola, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 7 (2d6)\nVelocità 3 m, volo 18 m\nMOD SALV MOD SALV MOD SALV\nFor 6 −2 −2 Des 14 +2 +2 Cos 10 +0 +0\nInt 3 −4 −4 Sag 14 +2 +2 Car 5 −3 −3\nAbilità Percezione +6\nSensi Percezione passiva 16\nLingue nessuna\nGS 1/8 (PE 25; BC +2)\nTratti\nTattiche del branco. Il falco dispone di vantaggio a un\ntiro per colpire contro una creatura se almeno uno dei\nsuoi alleati si trova entro 1,5 metri dalla creatura e non\nè incapacitato.\nAzioni\nBecco. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 4 (1d4 + 2) danni perforanti, o 6 (1d8 + 2)\ndanni perforanti se il bersaglio è sanguinante."
+    },
+    {
+      "id": "srd521-it:beast:gatto",
+      "name": "Gatto",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "12 m, scalata 12 m",
+      "page": 391,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 2 (1d4)\nVelocità 12 m, scalata 12 m\nMOD SALV MOD SALV MOD SALV\nFor 3 −4 −4 Des 15 +2 +4 Cos 10 +0 +0\nInt 3 −4 −4 Sag 12 +1 +1 Car 7 −2 −2\nAbilità Furtività +4, Percezione +3\nSensi Percezione passiva 13; scurovisione 18 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nSaltatore. La distanza dei salti del gatto è determinata\ndalla sua Destrezza piuttosto che dalla Forza.\nAzioni\nGraffio. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 1 danno tagliente."
+    },
+    {
+      "id": "srd521-it:beast:gorilla",
+      "name": "Gorilla",
+      "challenge_rating": "1/2",
+      "has_fly_speed": false,
+      "speed": "9 m, scalata 9 m",
+      "page": 392,
+      "stat_block": "Bestia Media, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 19 (3d8 + 6)\nVelocità 9 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 16 +3 +3 Des 14 +2 +2 Cos 14 +2 +2\nInt 6 −2 −2 Sag 12 +1 +1 Car 7 −2 −2\nAbilità Atletica +5, Percezione +3\nSensi Percezione passiva 13\nLingue nessuna\nGS 1/2 (PE 100; BC +2)\nAzioni\nMultiattacco. Il gorilla effettua due attacchi Pugno.\nPugno. Tiro per colpire in mischia: +5, portata 1,5 m\nColpito: 5 (1d4 + 3) danni contundenti.\nRoccia (ricarica 6). Tiro per colpire a distanza: +5, gittata 7,5/15 m Colpito: 10 (2d6 + 3) danni contundenti."
+    },
+    {
+      "id": "srd521-it:beast:granchio",
+      "name": "Granchio",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "6 m, nuoto 6 m",
+      "page": 392,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 11 Iniziativa +0 (10)\nPF 3 (1d4 + 1)\nVelocità 6 m, nuoto 6 m\nMOD SALV MOD SALV MOD SALV\nFor 6 −2 −2 Des 11 +0 +0 Cos 12 +1 +1\nInt 1 −5 −5 Sag 8 −1 −1 Car 2 −4 −4\nAbilità Furtività +2\nSensi Percezione passiva 9; vista cieca 9 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nAnfibio. Il granchio può respirare in aria e in acqua.\nAzioni\nArtiglio. Tiro per colpire in mischia: +2, portata 1,5 m.\nColpito: 1 danno contundente."
+    },
+    {
+      "id": "srd521-it:beast:granchio-gigante",
+      "name": "Granchio gigante",
+      "challenge_rating": "1/8",
+      "has_fly_speed": false,
+      "speed": "9 m, nuoto 9 m",
+      "page": 392,
+      "stat_block": "Bestia Media, senza allineamento\nCA 15 Iniziativa +1 (11)\nPF 13 (3d8)\nVelocità 9 m, nuoto 9 m\nMOD SALV MOD SALV MOD SALV\nFor 13 +1 +1 Des 13 +1 +1 Cos 11 +0 +0\nInt 1 −5 −5 Sag 9 −1 −1 Car 3 −4 −4\nAbilità Furtività +3\nSensi Percezione passiva 9; vista cieca 9 m\nLingue nessuna\nGS 1/8 (PE 25; BC +2)\nTratti\nAnfibio. Il granchio può respirare in aria e in acqua.\nAzioni\nArtiglio. Tiro per colpire in mischia: +3, portata 1,5 m\nColpito: 4 (1d6 + 1) danni contundenti. Se il bersaglio\nè una creatura di taglia Media o inferiore, è afferrato\n(CD 11 per sfuggire) da una delle due chele."
+    },
+    {
+      "id": "srd521-it:beast:gufo",
+      "name": "Gufo",
+      "challenge_rating": "0",
+      "has_fly_speed": true,
+      "speed": "1,5 m, volo 18 m",
+      "page": 392,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 1 (1d4 − 1)\nVelocità 1,5 m, volo 18 m\nMOD SALV MOD SALV MOD SALV\nFor 3 −4 −4 Des 13 +1 +1 Cos 8 −1 −1\nInt 2 −4 −4 Sag 12 +1 +1 Car 7 −2 −2\nAbilità Furtività +5, Percezione +5\nSensi Percezione passiva 15; scurovisione 36 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nVolo sfuggente. Il gufo non provoca attacchi di opportunità quando vola oltre la portata di un nemico.\nAzioni\nSperoni. Tiro per colpire in mischia: +3, portata 1,5 m.\nColpito: 1 danno tagliente."
+    },
+    {
+      "id": "srd521-it:beast:iena",
+      "name": "Iena",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "15 m",
+      "page": 393,
+      "stat_block": "Bestia Media, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 5 (1d8 + 1)\nVelocità 15 m\nMOD SALV MOD SALV MOD SALV\nFor 11 +0 +0 Des 13 +1 +1 Cos 12 +1 +1\nInt 2 −4 −4 Sag 12 +1 +1 Car 5 −3 −3\nAbilità Percezione +3\nSensi Percezione passiva 13; scurovisione 18 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nTattiche del branco. La iena dispone di vantaggio a un\ntiro per colpire contro una creatura se almeno uno dei\nsuoi alleati si trova entro 1,5 metri dalla creatura e non\nè incapacitato.\nAzioni\nMorso. Tiro per colpire in mischia: +2, portata 1,5 m.\nColpito: 3 (1d6) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:iena-gigante",
+      "name": "Iena gigante",
+      "challenge_rating": "1",
+      "has_fly_speed": false,
+      "speed": "15 m",
+      "page": 393,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 45 (6d10 + 12)\nVelocità 15 m\nMOD SALV MOD SALV MOD SALV\nFor 16 +3 +3 Des 14 +2 +2 Cos 14 +2 +2\nInt 2 −4 −4 Sag 12 +1 +1 Car 7 −2 −2\nAbilità Percezione +3\nSensi Percezione passiva 13; scurovisione 18 m\nLingue nessuna\nGS 1 (PE 200; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +5, portata 1,5 m.\nColpito: 10 (2d6 + 3) danni perforanti.\nAzioni bonus\nFuria (1/giorno). Subito dopo aver inflitto danni a una\ncreatura già sanguinante, la iena si muove fino a metà\ndella sua velocità, ed effettua un attacco Morso."
+    },
+    {
+      "id": "srd521-it:beast:leone",
+      "name": "Leone",
+      "challenge_rating": "1",
+      "has_fly_speed": false,
+      "speed": "15 m",
+      "page": 394,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 22 (4d10)\nVelocità 15 m\nMOD SALV MOD SALV MOD SALV\nFor 17 +3 +3 Des 15 +2 +2 Cos 11 +0 +0\nInt 3 −4 −4 Sag 12 +1 +1 Car 8 −1 −1\nAbilità Furtività +4, Percezione +3\nSensi Percezione passiva 13; scurovisione 18 m\nLingue nessuna\nGS 1 (PE 200; BC +2)\nTratti\nBalzo in corsa. Dopo una rincorsa di 3 metri, il leone\npuò effettuare un salto in lungo di un massimo di\n7,5 metri.\nTattiche del branco. Il leone dispone di vantaggio\na un tiro per colpire contro una creatura se almeno uno\ndegli alleati dell'animale si trova entro 1,5 metri dalla\ncreatura e non ha la condizione incapacitato.\nAzioni\nMultiattacco. Il leone effettua due attacchi Squarcio.\nPuò sostituire un attacco con un utilizzo di Ruggito.\nSquarcio. Tiro per colpire in mischia: +5, portata 1,5 m.\nColpito: 7 (1d8 + 3) danni taglienti.\nRuggito. Tiro salvezza su Saggezza: CD 11, una creatura entro 4,5 metri. Fallimento: il bersaglio è spaventato fino all'inizio del turno successivo del leone."
+    },
+    {
+      "id": "srd521-it:beast:lucertola",
+      "name": "Lucertola",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "6 m, scalata 6 m",
+      "page": 394,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 10 Iniziativa +0 (10)\nPF 2 (1d4)\nVelocità 6 m, scalata 6 m\nMOD SALV MOD SALV MOD SALV\nFor 2 −4 −4 Des 11 +0 +0 Cos 10 +0 +0\nInt 1 −5 −5 Sag 8 −1 −1 Car 3 −4 −4\nSensi Percezione passiva 9; scurovisione 9 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nMovimenti del ragno. La lucertola può scalare le\nsuperfici difficili, compresi i soffitti, senza effettuare\nuna prova di caratteristica.\nAzioni\nMorso. Tiro per colpire in mischia: +2, portata 1,5 m.\nColpito: 1 danno perforante."
+    },
+    {
+      "id": "srd521-it:beast:lucertola-gigante",
+      "name": "Lucertola gigante",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "12 m, scalata 12 m",
+      "page": 394,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 12 Iniziativa +1 (11)\nPF 19 (3d10 + 3)\nVelocità 12 m, scalata 12 m\nMOD SALV MOD SALV MOD SALV\nFor 15 +2 +2 Des 12 +1 +3 Cos 13 +1 +1\nInt 2 −4 −4 Sag 10 +0 +0 Car 5 −3 −3\nSensi Percezione passiva 10; scurovisione 18 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nTratti\nMovimenti del ragno. La lucertola può scalare le\nsuperfici difficili, compresi i soffitti, senza effettuare\nuna prova di caratteristica.\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m\nColpito: 6 (1d8 + 2) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:lupo",
+      "name": "Lupo",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "12 m",
+      "page": 394,
+      "stat_block": "Bestia Media, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 11 (2d8 + 2)\nVelocità 12 m\nMOD SALV MOD SALV MOD SALV\nFor 14 +2 +2 Des 15 +2 +2 Cos 12 +1 +1\nInt 3 −4 −4 Sag 12 +1 +1 Car 6 −2 −2\nAbilità Furtività +4, Percezione +5\nSensi Percezione passiva 15; scurovisione 18 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nTratti\nTattiche del branco. Il lupo dispone di vantaggio ai tiri\nper colpire contro una creatura se almeno uno degli\nalleati dell'animale si trova entro 1,5 metri dalla creatura e non è incapacitato.\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 5 (1d6 + 2) danni perforanti. Se il bersaglio è\nuna creatura di taglia Media o inferiore, cade a terra\nprono."
+    },
+    {
+      "id": "srd521-it:beast:lupo-feroce",
+      "name": "Lupo feroce",
+      "challenge_rating": "1",
+      "has_fly_speed": false,
+      "speed": "15 m",
+      "page": 394,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 14 Iniziativa +2 (12)\nPF 22 (3d10 + 6)\nVelocità 15 m\nMOD SALV MOD SALV MOD SALV\nFor 17 +3 +3 Des 15 +2 +2 Cos 15 +2 +2\nInt 3 −4 −4 Sag 12 +1 +1 Car 7 −2 −2\nAbilità Furtività +4, Percezione +5\nSensi Percezione passiva 15; scurovisione 18 m\nLingue nessuna\nGS 1 (PE 200; BC +2)\nTratti\nTattiche del branco. Il lupo dispone di vantaggio al\ntiro per colpire contro una creatura se almeno uno\ndegli alleati dell'animale si trova entro 1,5 metri dalla\ncreatura e non è incapacitato.\nAzioni\nMorso. Tiro per colpire in mischia: +5, portata 1,5 m\nColpito: 8 (1d10 + 3) danni perforanti. Se il bersaglio è\nuna creatura di taglia Grande o inferiore, cade a terra\nprono."
+    },
+    {
+      "id": "srd521-it:beast:mastino",
+      "name": "Mastino",
+      "challenge_rating": "1/8",
+      "has_fly_speed": false,
+      "speed": "12 m",
+      "page": 395,
+      "stat_block": "Bestia Media, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 5 (1d8 + 1)\nVelocità 12 m\nMOD SALV MOD SALV MOD SALV\nFor 13 +1 +1 Des 14 +2 +2 Cos 12 +1 +1\nInt 3 −4 −4 Sag 12 +1 +3 Car 7 −2 −2\nAbilità Percezione +5\nSensi Percezione passiva 15; scurovisione 18 m\nLingue nessuna\nGS 1/8 (PE 25; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +3, portata 1,5 m.\nColpito: 4 (1d6 + 1) danni perforanti. Se il bersaglio è\nuna creatura di taglia Media o inferiore, cade a terra\nprono."
+    },
+    {
+      "id": "srd521-it:beast:millepiedi-gigante",
+      "name": "Millepiedi gigante",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "9 m, scalata 9 m",
+      "page": 395,
+      "stat_block": "Bestia Piccola, senza allineamento\nCA 14 Iniziativa +2 (12)\nPF 9 (2d6 + 2)\nVelocità 9 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 5 −3 −3 Des 14 +2 +2 Cos 12 +1 +1\nInt 1 −5 −5 Sag 7 −2 −2 Car 3 −4 −4\nSensi Percezione passiva 8; vista cieca 9 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m\nColpito: 4 (1d4 + 2) danni perforanti, e il bersaglio\nè avvelenato fino all'inizio del turno successivo del\nmillepiedi."
+    },
+    {
+      "id": "srd521-it:beast:mulo",
+      "name": "Mulo",
+      "challenge_rating": "1/8",
+      "has_fly_speed": false,
+      "speed": "12 m",
+      "page": 395,
+      "stat_block": "Bestia Media, senza allineamento\nCA 10 Iniziativa +0 (10)\nPF 11 (2d8 + 2)\nVelocità 12 m\nMOD SALV MOD SALV MOD SALV\nFor 14 +2 +4 Des 10 +0 +0 Cos 13 +1 +1\nInt 2 −4 −4 Sag 10 +0 +0 Car 5 −3 −3\nSensi Percezione passiva 10\nLingue nessuna\nGS 1/8 (PE 25; BC +2)\nTratti\nBestia da soma. Per determinare la sua capacità di\ncarico, il mulo è considerato come se fosse di una\ncategoria di taglia superiore.\nAzioni\nZoccoli. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 4 (1d4 + 2) danni contundenti."
+    },
+    {
+      "id": "srd521-it:beast:orso-bruno",
+      "name": "Orso bruno",
+      "challenge_rating": "1",
+      "has_fly_speed": false,
+      "speed": "12 m, scalata 9 m",
+      "page": 396,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 22 (3d10 + 6)\nVelocità 12 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 17 +3 +3 Des 12 +1 +1 Cos 15 +2 +2\nInt 2 −4 −4 Sag 13 +1 +1 Car 7 −2 −2\nAbilità Percezione +3\nSensi Percezione passiva 13; scurovisione 18 m\nLingue nessuna\nGS 1 (PE 200; BC +2)\nAzioni\nMultiattacco. L'orso effettua un attacco Morso e\nun attacco Artiglio.\nArtiglio. Tiro per colpire in mischia: +5, portata 1,5 m\nColpito: 5 (1d4 + 3) danni taglienti. Se il bersaglio è\nuna creatura di taglia Grande o inferiore, cade a terra\nprono.\nMorso. Tiro per colpire in mischia: +5, portata 1,5 m.\nColpito: 7 (1d8 + 3) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:orso-nero",
+      "name": "Orso nero",
+      "challenge_rating": "1/2",
+      "has_fly_speed": false,
+      "speed": "9 m, scalata 9 m, nuoto 9 m",
+      "page": 396,
+      "stat_block": "Bestia Media, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 19 (3d8 + 6)\nVelocità 9 m, scalata 9 m, nuoto 9 m\nMOD SALV MOD SALV MOD SALV\nFor 15 +2 +2 Des 12 +1 +1 Cos 14 +2 +2\nInt 2 −4 −4 Sag 12 +1 +1 Car 7 −2 −2\nAbilità Percezione +5\nSensi Percezione passiva 15; scurovisione 18 m\nLingue nessuna\nGS 1/2 (PE 100; BC +2)\nAzioni\nMultiattacco. L'orso effettua due attacchi Squarcio.\nSquarcio. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 5 (1d6 + 2) danni taglienti."
+    },
+    {
+      "id": "srd521-it:beast:pantera",
+      "name": "Pantera",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "15 m, scalata 12 m",
+      "page": 396,
+      "stat_block": "Bestia Media, senza allineamento\nCA 13 Iniziativa +3 (13)\nPF 13 (3d8)\nVelocità 15 m, scalata 12 m\nMOD SALV MOD SALV MOD SALV\nFor 14 +2 +2 Des 16 +3 +3 Cos 10 +0 +0\nInt 3 −4 −4 Sag 14 +2 +2 Car 7 −2 −2\nAbilità Furtività +7, Percezione +4\nSensi Percezione passiva 14; scurovisione 18 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nAzioni\nSquarcio. Tiro per colpire in mischia: +5, portata 1,5 m\nColpito: 6 (1d6 + 3) danni taglienti.\nAzioni bonus\nFuga agile. La pantera effettua l'azione di Disimpegno\no Nascondersi."
+    },
+    {
+      "id": "srd521-it:beast:piovra",
+      "name": "Piovra",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "1,5 m, nuoto 9 m",
+      "page": 397,
+      "stat_block": "Bestia Piccola, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 3 (1d6)\nVelocità 1,5 m, nuoto 9 m\nMOD SALV MOD SALV MOD SALV\nFor 4 −3 −3 Des 15 +2 +2 Cos 11 +0 +0\nInt 3 −4 −4 Sag 10 +0 +0 Car 4 −3 −3\nAbilità Furtività +6, Percezione +2\nSensi Percezione passiva 12; scurovisione 9 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nCompressione. La piovra può muoversi attraverso uno\nspazio stretto fino a 2,5 centimetri senza consumare\nmovimento extra per farlo.\nRespirare sott'acqua. La piovra può respirare soltanto\nsott'acqua.\nAzioni\nTentacoli. Tiro per colpire in mischia: +4, portata\n1,5 m. Colpito: 1 danno contundente.\nReazioni\nNube di inchiostro (1/Giorno). Attivazione: una\ncreatura termina il suo turno entro 1,5 metri dalla\npiovra sott'acqua. Esito: la piovra rilascia abbastanza\ninchiostro da riempire un cubo con spigolo di 1,5 metri\nintorno a sé e può muoversi fino alla sua velocità di\nnuoto massima. Il cubo è pesantemente oscurato per\n1 minuto, o finché una corrente forte o un altro effetto\nsimile non disperde l'inchiostro."
+    },
+    {
+      "id": "srd521-it:beast:piovra-gigante",
+      "name": "Piovra gigante",
+      "challenge_rating": "1",
+      "has_fly_speed": false,
+      "speed": "3 m, nuoto 18 m",
+      "page": 397,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 45 (7d10 + 7)\nVelocità 3 m, nuoto 18 m\nMOD SALV MOD SALV MOD SALV\nFor 17 +3 +3 Des 13 +1 +1 Cos 13 +1 +1\nInt 5 −3 −3 Sag 10 +0 +0 Car 4 −3 −3\nAbilità Furtività +5, Percezione +4\nSensi Percezione passiva 14; scurovisione 18 m\nLingue nessuna\nGS 1 (PE 200; BC +2)\nTratti\nRespirare sott'acqua. La piovra può respirare soltanto\nsott'acqua e può trattenere il respiro per 1 ora fuori\ndall'acqua.\nAzioni\nTentacoli. Tiro per colpire in mischia: +5, portata 3 m.\nColpito: 10 (2d6 + 3) danni contundenti. Se il bersaglio\nè una creatura di taglia Media o inferiore, è afferrato\n(CD 13 per sfuggire) da tutti e otto i tentacoli. Mentre\nè afferrato, il bersaglio è anche trattenuto.\nReazioni\nNube di inchiostro (1/Giorno). Attivazione: la piovra\nsubisce danni finché si trova sott'acqua. Esito: la piovra\nrilascia abbastanza inchiostro da riempire un cubo con\nspigolo di 3 metri intorno a sé, e può muoversi fino alla\nsua velocità di nuoto massima. Il cubo è pesantemente\noscurato per 1 minuto, o finché una corrente forte o un\naltro effetto simile non disperde l'inchiostro."
+    },
+    {
+      "id": "srd521-it:beast:pipistrello",
+      "name": "Pipistrello",
+      "challenge_rating": "0",
+      "has_fly_speed": true,
+      "speed": "1,5 m, volo 9 m",
+      "page": 397,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 1 (1d4 − 1)\nVelocità 1,5 m, volo 9 m\nMOD SALV MOD SALV MOD SALV\nFor 2 −4 −4 Des 15 +2 +2 Cos 8 −1 −1\nInt 2 −4 −4 Sag 12 +1 +1 Car 4 −3 −3\nSensi Percezione passiva 11; vista cieca 18 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 1 danno perforante."
+    },
+    {
+      "id": "srd521-it:beast:pipistrello-gigante",
+      "name": "Pipistrello gigante",
+      "challenge_rating": "1/4",
+      "has_fly_speed": true,
+      "speed": "3 m, volo 18 m",
+      "page": 397,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 13 Iniziativa +3 (13)\nPF 22 (4d10)\nVelocità 3 m, volo 18 m\nMOD SALV MOD SALV MOD SALV\nFor 15 +2 +2 Des 16 +3 +3 Cos 11 +0 +0\nInt 2 −4 −4 Sag 12 +1 +1 Car 6 −2 −2\nSensi Percezione passiva 11; vista cieca 36 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +5, portata 1,5 m.\nColpito: 6 (1d6 + 3) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:piranha",
+      "name": "Piranha",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "1,5 m, nuoto 12 m",
+      "page": 397,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 13 Iniziativa +3 (13)\nPF 1 (1d4 − 1)\nVelocità 1,5 m, nuoto 12 m\nMOD SALV MOD SALV MOD SALV\nFor 2 −4 −4 Des 16 +3 +3 Cos 9 −1 −1\nInt 1 −5 −5 Sag 7 −2 −2 Car 2 −4 −4\nSensi Percezione passiva 8; scurovisione 18 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nRespirare sott'acqua. Il piranha può respirare soltanto\nsott'acqua.\nAzioni\nMorso. Tiro per colpire in mischia: +5 (con vantaggio\nse il bersaglio non ha tutti i punti ferita), portata 1,5 m.\nColpito: 1 danno perforante."
+    },
+    {
+      "id": "srd521-it:beast:pony",
+      "name": "Pony",
+      "challenge_rating": "1/8",
+      "has_fly_speed": false,
+      "speed": "12 m",
+      "page": 398,
+      "stat_block": "Bestia Media, senza allineamento\nCA 10 Iniziativa +0 (10)\nPF 11 (2d8 + 2)\nVelocità 12 m\nMOD SALV MOD SALV MOD SALV\nFor 15 +2 +4 Des 10 +0 +0 Cos 13 +1 +1\nInt 2 −4 −4 Sag 11 +0 +0 Car 7 −2 −2\nSensi Percezione passiva 10\nLingue nessuna\nGS 1/8 (PE 25; BC +2)\nAzioni\nZoccoli. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 4 (1d4 + 2) danni contundenti."
+    },
+    {
+      "id": "srd521-it:beast:pteranodonte",
+      "name": "Pteranodonte",
+      "challenge_rating": "1/4",
+      "has_fly_speed": true,
+      "speed": "3 m, volo 18 m",
+      "page": 398,
+      "stat_block": "Bestia Media (dinosauro), senza allineamento\nCA 13 Iniziativa +2 (12)\nPF 13 (3d8)\nVelocità 3 m, volo 18 m\nMOD SALV MOD SALV MOD SALV\nFor 12 +1 +1 Des 15 +2 +2 Cos 10 +0 +0\nInt 2 −4 −4 Sag 9 −1 −1 Car 5 −3 −3\nAbilità Percezione +1\nSensi Percezione passiva 11\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nTratti\nVolo sfuggente. Lo pteranodonte non provoca attacchi\ndi opportunità quando vola oltre la portata di un\nnemico.\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m\nColpito: 6 (1d8 + 2) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:ragno",
+      "name": "Ragno",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "6 m, scalata 6 m",
+      "page": 398,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 1 (1d4 − 1)\nVelocità 6 m, scalata 6 m\nMOD SALV MOD SALV MOD SALV\nFor 2 −4 −4 Des 14 +2 +2 Cos 8 −1 −1\nInt 1 −5 −5 Sag 10 +0 +0 Car 2 −4 −4\nAbilità Furtività +4\nSensi Percezione passiva 10; scurovisione 9 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nAndatura sulla ragnatela. Il ragno ignora le restrizioni\ndi movimento causate dalle ragnatele e conosce\nl'ubicazione di qualsiasi altra creatura a contatto con\nla medesima ragnatela.\nMovimenti del ragno. Il ragno può scalare le superfici\ndifficili, compresi i soffitti, senza effettuare una prova di\ncaratteristica.\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m\nColpito: 1 danno perforante più 2 (1d4) danni da\nveleno."
+    },
+    {
+      "id": "srd521-it:beast:ragno-gigante",
+      "name": "Ragno gigante",
+      "challenge_rating": "1",
+      "has_fly_speed": false,
+      "speed": "9 m, scalata 9 m",
+      "page": 399,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 14 Iniziativa +3 (13)\nPF 26 (4d10 + 4)\nVelocità 9 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 14 +2 +2 Des 16 +3 +3 Cos 12 +1 +1\nInt 2 −4 −4 Sag 11 +0 +0 Car 4 −3 −3\nAbilità Furtività +7, Percezione +4\nSensi Percezione passiva 14; scurovisione 18 m\nLingue nessuna\nGS 1 (PE 200; BC +2)\nTratti\nAndatura sulla ragnatela. Il ragno ignora le restrizioni\ndi movimento causate dalle ragnatele e conosce\nl'ubicazione esatta di ogni altra creatura a contatto con\nla stessa ragnatela.\nMovimenti del ragno. Il ragno può scalare le superfici\ndifficili, compresi i soffitti, senza effettuare una prova di\ncaratteristica.\nAzioni\nMorso. Tiro per colpire in mischia: +5, portata 1,5 m\nColpito: 7 (1d8 + 3) danni perforanti più 7 (2d6) danni\nda veleno.\nRagnatela (ricarica 5–6). Tiro salvezza su Destrezza:\nCD 13, una creatura che il ragno è in grado di vedere\nentro 18 metri. Fallimento: il bersaglio è trattenuto\nfinché la ragnatela non viene distrutta (CA 10; PF 5;\nvulnerabilità ai danni da fuoco; immunità ai danni da\nveleno e psichici)."
+    },
+    {
+      "id": "srd521-it:beast:ragno-lupo-gigante",
+      "name": "Ragno lupo gigante",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "12 m, scalata 12 m",
+      "page": 399,
+      "stat_block": "Bestia Media, senza allineamento\nCA 13 Iniziativa +3 (13)\nPF 11 (2d8 + 2)\nVelocità 12 m, scalata 12 m\nMOD SALV MOD SALV MOD SALV\nFor 12 +1 +1 Des 16 +3 +3 Cos 13 +1 +1\nInt 3 −4 −4 Sag 12 +1 +1 Car 4 −3 −3\nAbilità Furtività +7, Percezione +3\nSensi Percezione passiva 10; scurovisione 18 m, vista\ncieca 3 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nTratti\nMovimenti del ragno. Il ragno può scalare le superfici\ndifficili, compresi i soffitti, senza effettuare una prova di\ncaratteristica.\nAzioni\nMorso. Tiro per colpire in mischia: +5, portata 1,5 m\nColpito: 5 (1d4 + 3) danni perforanti più 5 (2d4) danni\nda veleno."
+    },
+    {
+      "id": "srd521-it:beast:rana",
+      "name": "Rana",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "6 m, nuoto 6 m",
+      "page": 399,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 1 (1d4 − 1)\nVelocità 6 m, nuoto 6 m\nMOD SALV MOD SALV MOD SALV\nFor 1 −5 −5 Des 13 +1 +1 Cos 8 −1 −1\nInt 1 −5 −5 Sag 8 −1 −1 Car 3 −4 −4\nAbilità Furtività +3, Percezione +1\nSensi Percezione passiva 11; scurovisione 9 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nAnfibio. La rana può respirare in aria e in acqua.\nBalzo da fermo. La rana può compiere un salto in\nlungo di un massimo di 3 metri e uno in alto di un\nmassimo di 1,5 metri, con o senza rincorsa.\nAzioni\nMorso. Tiro per colpire in mischia: +3, portata 1,5 m.\nColpito: 1 danno perforante."
+    },
+    {
+      "id": "srd521-it:beast:rana-gigante",
+      "name": "Rana gigante",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "9 m, nuoto 9 m",
+      "page": 399,
+      "stat_block": "Bestia Media, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 18 (4d8)\nVelocità 9 m, nuoto 9 m\nMOD SALV MOD SALV MOD SALV\nFor 12 +1 +1 Des 13 +1 +1 Cos 11 +0 +0\nInt 2 −4 −4 Sag 10 +0 +0 Car 3 −4 −4\nAbilità Furtività +4, Percezione +2\nSensi Percezione passiva 12; scurovisione 9 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nTratti\nAnfibio. La rana può respirare in aria e in acqua.\nBalzo da fermo. La rana può compiere un salto in\nlungo di un massimo di 6 metri e uno in alto di un\nmassimo di 3 metri, con o senza rincorsa.\nAzioni\nMorso. Tiro per colpire in mischia: +3, portata 1,5 m.\nColpito: 5 (1d6 + 2) danni perforanti. Se il bersaglio\nè una creatura di taglia Media o inferiore, è afferrato\n(CD 11 per sfuggire).\nInghiottire. La rana inghiotte un bersaglio di taglia Piccola o inferiore che sta afferrando. La creatura inghiottita non è afferrata, ma è accecata e trattenuta, e beneficia di copertura totale contro attacchi e altri effetti al\ndi fuori della rana. Mentre inghiotte il bersaglio, la rana\nnon può usare Morso; se la rana muore, il bersaglio\ninghiottito non è più trattenuto e può fuggire dal cadavere usando 1,5 metri di movimento, uscendo prono.\nAlla fine del turno successivo della rana, il bersaglio\ninghiottito subisce 5 (2d4) danni da acido. Se i danni\nnon uccidono il bersaglio, la rana lo vomita, facendolo\nuscire prono."
+    },
+    {
+      "id": "srd521-it:beast:rospo-gigante",
+      "name": "Rospo gigante",
+      "challenge_rating": "1",
+      "has_fly_speed": false,
+      "speed": "9 m, nuoto 9 m",
+      "page": 400,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 11 Iniziativa +1 (11)\nPF 39 (6d10 + 6)\nVelocità 9 m, nuoto 9 m\nMOD SALV MOD SALV MOD SALV\nFor 15 +2 +2 Des 13 +1 +1 Cos 13 +1 +1\nInt 2 −4 −4 Sag 10 +0 +0 Car 3 −4 −4\nSensi Percezione passiva 10; scurovisione 18 m\nLingue nessuna\nGS 1 (PE 200; BC +2)\nTratti\nAnfibio. Il rospo può respirare in aria e in acqua.\nBalzo da fermo. Il rospo può compiere un salto in\nlungo di massimo 6 metri e uno in alto di massimo\n3 metri, con o senza rincorsa.\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m\nColpito: 5 (1d6 + 2) danni perforanti più 5 (2d4) danni\nda veleno. Se il bersaglio è una creatura di taglia Media\no inferiore, è afferrato (CD 12 per sfuggire).\nInghiottire. Il rospo inghiotte un bersaglio di taglia\nMedia o inferiore che sta afferrando. La creatura\ninghiottita non è afferrata, ma è accecata e trattenuta,\ne beneficia di copertura totale contro attacchi e altri\neffetti al di fuori del rospo. Inoltre, il bersaglio subisce\n10 (3d6) danni da acido al termine di ogni turno del\nrospo. Il rospo può inghiottire un solo bersaglio alla\nvolta e non può usare Morso finché ha un bersaglio\ninghiottito. Se il rospo muore, la creatura inghiottita\nnon è più trattenuta e può fuggire dal cadavere usando\n1,5 metri di movimento, uscendo prona."
+    },
+    {
+      "id": "srd521-it:beast:scarabeo-di-fuoco-gigante",
+      "name": "Scarabeo di fuoco gigante",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "9 m, scalata 9 m",
+      "page": 400,
+      "stat_block": "Bestia Piccola, senza allineamento\nCA 13 Iniziativa +0 (10)\nPF 4 (1d6 + 1)\nVelocità 9 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 8 −1 −1 Des 10 +0 +0 Cos 12 +1 +1\nInt 1 −5 −5 Sag 7 −2 −2 Car 3 −4 −4\nResistenze: fuoco\nSensi Percezione passiva 8; vista cieca 9 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nIlluminazione. Lo scarabeo proietta luce intensa in\nun raggio di 3 metri e luce fioca per altri 3 metri.\nAzioni\nMorso. Tiro per colpire in mischia: +1, portata 1,5 m\nColpito: 1 danno da fuoco."
+    },
+    {
+      "id": "srd521-it:beast:sciacallo",
+      "name": "Sciacallo",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "12 m",
+      "page": 400,
+      "stat_block": "Bestia Piccola, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 3 (1d6)\nVelocità 12 m\nMOD SALV MOD SALV MOD SALV\nFor 8 −1 −1 Des 15 +2 +2 Cos 11 +0 +0\nInt 3 −4 −4 Sag 12 +1 +1 Car 6 −2 −2\nAbilità Furtività +4, Percezione +5\nSensi Percezione passiva 15; scurovisione 27 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +1, portata 1,5 m.\nColpito: 1 (1d4 − 1) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:scorpione",
+      "name": "Scorpione",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "3 m",
+      "page": 401,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 11 Iniziativa +0 (10)\nPF 1 (1d4 − 1)\nVelocità 3 m\nMOD SALV MOD SALV MOD SALV\nFor 2 −4 −4 Des 11 +0 +0 Cos 8 −1 −1\nInt 1 −5 −5 Sag 8 −1 −1 Car 2 −4 −4\nSensi Percezione passiva 9; vista cieca 3 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nAzioni\nPungiglione. Tiro per colpire in mischia: +2, portata\n1,5 m Colpito: 1 danno perforante più 3 (1d6) danni da\nveleno."
+    },
+    {
+      "id": "srd521-it:beast:serpente-stritolatore",
+      "name": "Serpente stritolatore",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "9 m, nuoto 9 m",
+      "page": 401,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 13 Iniziativa +2 (12)\nPF 13 (2d10 + 2)\nVelocità 9 m, nuoto 9 m\nMOD SALV MOD SALV MOD SALV\nFor 15 +2 +2 Des 14 +2 +2 Cos 12 +1 +1\nInt 1 −5 −5 Sag 10 +0 +0 Car 3 −4 −4\nAbilità Furtività +4, Percezione +2\nSensi Percezione passiva 12; vista cieca 3 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m.\nColpito: 6 (1d8 + 2) danni perforanti.\nStritolare. Tiro salvezza su Forza: CD 12, una creatura\ndi taglia Media o inferiore che il serpente è in grado\ndi vedere entro 1,5 metri. Fallimento: 7 (3d4) danni\ncontundenti e il bersaglio viene afferrato (CD 12 per\nsfuggire)."
+    },
+    {
+      "id": "srd521-it:beast:serpente-velenoso",
+      "name": "Serpente velenoso",
+      "challenge_rating": "1/8",
+      "has_fly_speed": false,
+      "speed": "9 m, nuoto 9 m",
+      "page": 402,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 5 (2d4)\nVelocità 9 m, nuoto 9 m\nMOD SALV MOD SALV MOD SALV\nFor 2 −4 −4 Des 15 +2 +2 Cos 11 +0 +0\nInt 1 −5 −5 Sag 10 +0 +0 Car 3 −4 −4\nSensi Percezione passiva 10; vista cieca 3 m\nLingue nessuna\nGS 1/8 (PE 25; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m\nColpito: 4 (1d4 + 2) danni perforanti più 3 (1d6) danni\nda veleno."
+    },
+    {
+      "id": "srd521-it:beast:serpente-velenoso-gigante",
+      "name": "Serpente velenoso gigante",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "12 m, nuoto 12 m",
+      "page": 402,
+      "stat_block": "Bestia Media, senza allineamento\nCA 14 Iniziativa +4 (14)\nPF 11 (2d8 + 2)\nVelocità 12 m, nuoto 12 m\nMOD SALV MOD SALV MOD SALV\nFor 10 +0 +0 Des 18 +4 +4 Cos 13 +1 +1\nInt 2 −4 −4 Sag 10 +0 +0 Car 3 −4 −4\nAbilità Percezione +2\nSensi Percezione passiva 12; vista cieca 3 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +6, portata 3 m.\nColpito: 6 (1d4 + 4) danni perforanti più 4 (1d8) danni\nda veleno."
+    },
+    {
+      "id": "srd521-it:beast:squalo-tropicale",
+      "name": "Squalo tropicale",
+      "challenge_rating": "1/2",
+      "has_fly_speed": false,
+      "speed": "1,5 m, nuoto 9 m",
+      "page": 403,
+      "stat_block": "Bestia Media, senza allineamento\nCA 12 Iniziativa +2 (12)\nPF 22 (4d8 + 4)\nVelocità 1,5 m, nuoto 9 m\nMOD SALV MOD SALV MOD SALV\nFor 14 +2 +2 Des 15 +2 +2 Cos 13 +1 +1\nInt 1 −5 −5 Sag 10 +0 +0 Car 4 −3 −3\nAbilità Percezione +2\nSensi Percezione passiva 12; vista cieca 9 m\nLingue nessuna\nGS 1/2 (PE 100; BC +2)\nTratti\nTattiche del branco. Lo squalo dispone di vantaggio\na un tiro per colpire contro una creatura se almeno\nuno dei suoi alleati si trova entro 1,5 metri dalla creatura e non è incapacitato.\nRespirare sott'acqua. Lo squalo può respirare soltanto\nsott'acqua.\nAzioni\nMorso. Tiro per colpire in mischia: +4, portata 1,5 m\nColpito: 7 (2d4 + 2) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:tasso",
+      "name": "Tasso",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "6 m, scavo 1,5 m",
+      "page": 403,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 11 Iniziativa +0 (10)\nPF 5 (1d4 + 3)\nVelocità 6 m, scavo 1,5 m\nMOD SALV MOD SALV MOD SALV\nFor 10 +0 +0 Des 11 +0 +0 Cos 16 +3 +3\nInt 2 −4 −4 Sag 12 +1 +1 Car 5 −3 −3\nAbilità Percezione +3\nResistenze veleno\nSensi Percezione passiva 13; scurovisione 9 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +2, portata 1,5 m.\nColpito: 1 danno perforante."
+    },
+    {
+      "id": "srd521-it:beast:tasso-gigante",
+      "name": "Tasso gigante",
+      "challenge_rating": "1/4",
+      "has_fly_speed": false,
+      "speed": "9 m, scavo 3 m",
+      "page": 404,
+      "stat_block": "Bestia Media, senza allineamento\nCA 13 Iniziativa +0 (10)\nPF 15 (2d8 + 6)\nVelocità 9 m, scavo 3 m\nMOD SALV MOD SALV MOD SALV\nFor 13 +1 +1 Des 10 +0 +0 Cos 17 +3 +3\nInt 2 −4 −4 Sag 12 +1 +1 Car 5 −3 −3\nAbilità Percezione +3\nResistenze veleno\nSensi Percezione passiva 13; scurovisione 18 m\nLingue nessuna\nGS 1/4 (PE 50; BC +2)\nAzioni\nMorso. Tiro per colpire in mischia: +3, portata 1,5 m.\nColpito: 6 (2d4 + 1) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:tigre",
+      "name": "Tigre",
+      "challenge_rating": "1",
+      "has_fly_speed": false,
+      "speed": "12 m",
+      "page": 404,
+      "stat_block": "Bestia Grande, senza allineamento\nCA 13 Iniziativa +3 (13)\nPF 30 (4d10 + 8)\nVelocità 12 m\nMOD SALV MOD SALV MOD SALV\nFor 17 +3 +3 Des 16 +3 +3 Cos 14 +2 +2\nInt 3 −4 −4 Sag 12 +1 +1 Car 8 −1 −1\nAbilità Furtività +7, Percezione +3\nSensi Percezione passiva 13; scurovisione 18 m\nLingue nessuna\nGS 1 (PE 200; BC +2)\nAzioni\nSquarcio. Tiro per colpire in mischia: +5, portata 1,5 m.\nColpito: 10 (2d6 + 3) danni taglienti. Se il bersaglio è\nuna creatura di taglia Grande o inferiore, cade a terra\nprono.\nAzioni bonus\nFuga agile. La tigre effettua l'azione di Disimpegno\no Nascondersi."
+    },
+    {
+      "id": "srd521-it:beast:topo",
+      "name": "Topo",
+      "challenge_rating": "0",
+      "has_fly_speed": false,
+      "speed": "6 m, scalata 6 m",
+      "page": 405,
+      "stat_block": "Bestia Minuscola, senza allineamento\nCA 10 Iniziativa +0 (10)\nPF 1 (1d4 − 1)\nVelocità 6 m, scalata 6 m\nMOD SALV MOD SALV MOD SALV\nFor 2 −4 −4 Des 11 +0 +0 Cos 9 −1 −1\nInt 2 −4 −4 Sag 10 +0 +0 Car 4 −3 −3\nAbilità Percezione +2\nSensi Percezione passiva 12; scurovisione 9 m\nLingue nessuna\nGS 0 (PE 10; BC +2)\nTratti\nAgile. Il topo non provoca attacchi di opportunità\nquando esce dalla portata di un nemico.\nAzioni\nMorso. Tiro per colpire in mischia: +2, portata 1,5 m\nColpito: 1 danno perforante."
+    },
+    {
+      "id": "srd521-it:beast:topo-gigante",
+      "name": "Topo gigante",
+      "challenge_rating": "1/8",
+      "has_fly_speed": false,
+      "speed": "9 m, scalata 9 m",
+      "page": 405,
+      "stat_block": "Bestia Piccola, senza allineamento\nCA 13 Iniziativa +3 (13)\nPF 7 (2d6)\nVelocità 9 m, scalata 9 m\nMOD SALV MOD SALV MOD SALV\nFor 7 −2 −2 Des 16 +3 +5 Cos 11 +0 +0\nInt 2 −4 −4 Sag 10 +0 +0 Car 4 −3 −3\nAbilità Percezione +2\nSensi Percezione passiva 12; scurovisione 18 m\nLingue nessuna\nGS 1/8 (PE 25; BC +2)\nTratti\nTattiche del branco. Il topo dispone di vantaggio a\nun tiro per colpire contro una creatura se almeno uno\ndegli alleati del topo si trova entro 1,5 metri dalla creatura e non è incapacitato.\nAzioni\nMorso. Tiro per colpire in mischia: +5, portata 1,5 m.\nColpito: 5 (1d4 + 3) danni perforanti."
+    },
+    {
+      "id": "srd521-it:beast:vespa-gigante",
+      "name": "Vespa gigante",
+      "challenge_rating": "1/2",
+      "has_fly_speed": true,
+      "speed": "3 m, volo 15 m",
+      "page": 405,
+      "stat_block": "Bestia Media, senza allineamento\nCA 13 Iniziativa +2 (12)\nPF 22 (5d8)\nVelocità 3 m, volo 15 m\nMOD SALV MOD SALV MOD SALV\nFor 10 +0 +0 Des 14 +2 +2 Cos 10 +0 +0\nInt 1 −5 −5 Sag 10 +0 +0 Car 3 −4 −4\nSensi Percezione passiva 10\nLingue nessuna\nGS 1/2 (PE 100; BC +2)\nTratti\nVolo sfuggente. La vespa non provoca attacchi di\nopportunità quando vola oltre la portata di un nemico.\nAzioni\nPungiglione. Tiro per colpire in mischia: +4, portata\n1,5 m. Colpito: 5 (1d6 +2) danni perforanti più 5 (2d4)\ndanni da veleno."
+    }
+  ]
+}

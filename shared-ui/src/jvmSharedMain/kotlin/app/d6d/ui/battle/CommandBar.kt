@@ -296,6 +296,7 @@ private fun AbilityCard(
     manual: Boolean,
     enabled: Boolean,
     selected: Boolean,
+    resourceLabel: String?,
     onClick: () -> Unit,
     onHoverChange: (Boolean) -> Unit,
 ) {
@@ -407,6 +408,7 @@ private fun AbilityCard(
             if (damage.isNotBlank()) {
                 AbilityStat("Danno", damage, enabled)
             }
+            resourceLabel?.let { AbilityStat("Usi", it, enabled) }
         }
 
         if (manual) {
@@ -472,7 +474,6 @@ fun CommandBar(
     val inspectedId = viewModel.inspectedCombatantId
     val abilities = inspectedId?.let { viewModel.activeAbilities(it) }.orEmpty()
     val passives = inspectedId?.let { viewModel.passiveAbilities(it) }.orEmpty()
-    val budget = inspectedId?.let { viewModel.budget(it) }
     val movementRemaining = activeId?.let { viewModel.budget(it)?.movementRemainingFeet() }
     val combatActive = viewModel.status == CombatStatus.ACTIVE
     val displayedActorCanAct = inspectedId?.let(viewModel::canUseAbilitiesOf) == true
@@ -622,12 +623,8 @@ fun CommandBar(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 abilities.forEach { ability ->
-                    val affordable = displayedActorCanAct && when (ability.activationCost()) {
-                        ActivationCost.ACTION -> budget?.actionAvailable() ?: false
-                        ActivationCost.BONUS_ACTION -> budget?.bonusActionAvailable() ?: false
-                        ActivationCost.REACTION -> budget?.reactionAvailable() ?: false
-                        else -> true
-                    }
+                    val affordable = displayedActorCanAct &&
+                        viewModel.canAffordAbility(inspectedId, ability)
                     val manual = ability.automationStatus() == AutomationStatus.MANUAL_REQUIRED
                     val selected = viewModel.singleTargeting?.abilityId == ability.id() ||
                         viewModel.areaTargeting?.abilityId == ability.id()
@@ -637,6 +634,9 @@ fun CommandBar(
                             manual = manual,
                             enabled = if (manual) displayedActorCanAct else affordable,
                             selected = selected,
+                            resourceLabel = inspectedId?.let {
+                                viewModel.abilityResourceLabel(it, ability)
+                            },
                             onClick = {
                                 if (manual) {
                                     viewModel.showMessage(

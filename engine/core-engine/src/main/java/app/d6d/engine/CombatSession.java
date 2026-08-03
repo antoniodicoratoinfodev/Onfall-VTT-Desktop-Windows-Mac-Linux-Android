@@ -412,11 +412,13 @@ public final class CombatSession {
             throw rule("Manual damage must contain one value per damage component");
         }
         validateRange(request.attackerId(), request.targetId(), ability);
-        validateAttackActivationCost(request.attackerId(), ability.activationCost());
+        validateAttackActivationCost(
+                request.attackerId(), ability.activationCost(), ability.spellOrCantrip());
 
         beginCommand();
         try {
-            consumeAttackActivationCost(request.attackerId(), ability.activationCost());
+            consumeAttackActivationCost(
+                    request.attackerId(), ability.activationCost(), ability.spellOrCantrip());
             D20RollInput attackInput = imposeDisadvantage(
                     request.attackRoll(),
                     attacker.snapshot.strengthDexterityD20Disadvantage()
@@ -1705,9 +1707,10 @@ public final class CombatSession {
      * An attack paid with an Action starts the Attack action on its first strike.
      * Further strikes from that same action spend only its remaining attack count.
      */
-    private void validateAttackActivationCost(String combatantId, ActivationCost cost) {
-        if (cost != ActivationCost.ACTION) {
-            validateActivationCost(combatantId, cost, false);
+    private void validateAttackActivationCost(
+            String combatantId, ActivationCost cost, boolean magicAction) {
+        if (cost != ActivationCost.ACTION || magicAction) {
+            validateActivationCost(combatantId, cost, magicAction);
             return;
         }
         MutableCombatant combatant = combatant(combatantId);
@@ -1725,9 +1728,10 @@ public final class CombatSession {
         }
     }
 
-    private void consumeAttackActivationCost(String combatantId, ActivationCost cost) {
-        if (cost != ActivationCost.ACTION) {
-            consumeActivationCost(combatantId, cost, false);
+    private void consumeAttackActivationCost(
+            String combatantId, ActivationCost cost, boolean magicAction) {
+        if (cost != ActivationCost.ACTION || magicAction) {
+            consumeActivationCost(combatantId, cost, magicAction);
             return;
         }
         TurnBudget current = budget(combatantId);

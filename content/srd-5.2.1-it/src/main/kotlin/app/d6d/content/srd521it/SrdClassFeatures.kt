@@ -154,10 +154,11 @@ private fun ClassFeatureRecord.toRuleElement(): RuleElementDefinition {
         classEligibility = listOf(ClassEligibility(classId, effectiveMinimumLevel.coerceIn(1, 20))),
         prerequisite = effectivePrerequisite,
         sourcePage = page,
-        activation = activation.orEmpty(),
+        activation = if (id.endsWith(":feature:guerriero:azione-impetuosa")) "" else activation.orEmpty(),
         resourceId = resourceId,
         resourceCost = when {
             id.endsWith(":feature:paladino:tocco-rigenerante") -> 5
+            id.endsWith(":feature:guerriero:azione-impetuosa") -> 1
             else -> resource?.cost?.takeIf { it > 0 } ?: statedCost ?: 0
         },
         armorTrainingGrant = armorGrant,

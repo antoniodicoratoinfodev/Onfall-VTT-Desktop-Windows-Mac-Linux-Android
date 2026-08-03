@@ -40,9 +40,10 @@ shown in feet and in metres together. The last step chooses between **Fight mode
 and enemies out facing each other and ready to roll, and **Roleplay & Fight & Exploration**, which
 opens the same grid empty and leaves placement to the table.
 
-A combatant is **copied** into the session, so changes to HP, conditions, turns, and position never
-alter its Compendium template. Several sessions stay open at once in independent tabs, each with its
-own map, turn order, dice state, event log and undo history.
+A combatant is **copied** into the session, so ordinary changes to HP, conditions, turns, and
+position never alter its Compendium template. Explicit stat corrections and Action Surge uses
+(including Undo) are instead synchronized with the authoritative sheet. Several sessions stay open
+at once in independent tabs, each with its own map, turn order, dice state, event log and undo history.
 
 <table>
 <tr>
@@ -120,8 +121,9 @@ The Compendium is the archive everything else draws from: **character sheets**, 
 blocks**, the shared **ability catalog**, and the local libraries of portraits and map backgrounds.
 
 A character sheet can be filled in by hand or driven by the **guided SRD creation**, which proposes
-class, background feat, skill proficiencies, starting weapons, cantrips, prepared spells and class
-resources in exactly the quantities the SRD prescribes, and validates each choice as it is made.
+class, complete background, ability increases, skill and tool proficiencies, starting-equipment
+package, cantrips, prepared spells, Wild Shape forms and class resources in exactly the quantities
+the SRD prescribes, and validates each choice as it is made.
 Existing manual sheets are left untouched until the guided mode is activated on them. From there a
 character advances from level 1 to 20 at the official XP thresholds; class resources, proficiencies,
 feats, cantrips, prepared spells, spellbooks, always-prepared spells and derived Extra Attacks stay
@@ -145,7 +147,7 @@ a live preview of the finished block at the top of the editor.
 <tr>
 <td align="center">
 <img src="sample/sheet-guided-creation.png" width="720"/><br/>
-<sub>Guided SRD creation — class, background feat, skills and starting weapons</sub>
+<sub>Guided SRD creation — class, background, skills and starting equipment</sub>
 </td>
 </tr>
 <tr>
@@ -214,7 +216,8 @@ need.
 
 The Italian SRD 5.2.1 pack is a separate module, so the engine and the licensed content never mix.
 It carries 12 classes with their SRD subclasses, 408 class and subclass feature records (including
-10 metamagics and 28 eldritch invocations), 17 feats, 339 spells and the SRD weapon table. It is
+10 metamagics and 28 eldritch invocations), 4 complete backgrounds, 33 starting-equipment packages,
+17 feats, 339 spells, 38 weapons and 64 complete Beast stat blocks eligible for Wild Shape. It is
 distributed under CC BY 4.0; see [`NOTICE-SRD.md`](NOTICE-SRD.md).
 
 ## Architecture
@@ -226,7 +229,7 @@ distributed under CC BY 4.0; see [`NOTICE-SRD.md`](NOTICE-SRD.md).
 | `engine/persistence-json` | Java 17 | atomic saves, backups, import and export |
 | `engine/character-rules` | Kotlin | versioned class choices, XP progression and class resources |
 | `engine/sheet-model` | Kotlin | 2024 character sheet and 2025 monster stat block |
-| `content/srd-5.2.1-it` | Kotlin/JSON | Italian SRD classes, feats, actions and spells (CC BY 4.0) |
+| `content/srd-5.2.1-it` | Kotlin/JSON | Italian SRD classes, backgrounds, equipment, beasts, feats, actions and spells (CC BY 4.0) |
 | `shared-ui` | Kotlin + Compose MP | theme, components, screens, presentation state |
 | `desktop-app` | Kotlin | JVM window, dense shell |
 | `android-app` | Kotlin | Activity, touch shell |

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.CombatantSnapshot
+import app.d6d.domain.combat.CombatResourceState
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.SheetStore
 import app.d6d.ui.content.SessionTemplate
@@ -230,7 +231,30 @@ class RosterViewModel(
                 ),
             )
         }
-        return false
+        // Una sessione importata può contenere attori che non appartengono al
+        // Compendio locale: la loro modifica resta valida nel salvataggio della
+        // sessione, anche se qui non esiste una scheda da aggiornare.
+        return true
+    }
+
+    /** Conserva nella scheda gli usi limitati spesi (o ripristinati con Undo). */
+    fun applyCombatResources(
+        definitionId: String,
+        resources: List<CombatResourceState>,
+    ): Boolean {
+        val character = sheets.library.characters.firstOrNull { it.id == definitionId }
+            ?: return true
+        val spentById = resources.associate { it.id() to it.spent() }
+        val updatedPools = character.progression.resourcePools.map { pool ->
+            val spent = spentById[pool.resourceId] ?: return@map pool
+            pool.copy(spent = spent.coerceIn(0, pool.maximum))
+        }
+        if (updatedPools == character.progression.resourcePools) return true
+        return sheets.upsertCharacterSilently(
+            character.copy(
+                progression = character.progression.copy(resourcePools = updatedPools),
+            ),
+        )
     }
 
     /**

@@ -72,6 +72,7 @@ object SrdClasses {
         "$PREFIX:pool:feats:epic-or-other",
         "$PREFIX:pool:tools:musical-instruments",
         "$PREFIX:pool:tools:artisan-or-musical",
+        "$PREFIX:pool:tools:any",
         "$PREFIX:pool:languages:standard",
         "$PREFIX:pool:beasts:druido:wild-shape",
         "$PREFIX:pool:eldritch-invocations:warlock",

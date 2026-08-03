@@ -4,6 +4,7 @@ import app.d6d.content.srd521it.Srd521ItContent
 import app.d6d.content.srd521it.SrdChoiceOption
 import app.d6d.content.srd521it.SrdChoiceResolver
 import app.d6d.rules.character.Ability
+import app.d6d.rules.character.BackgroundDefinition
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.ChoiceKind
@@ -46,10 +47,9 @@ internal data class TemplateCharacterPlan(
     /** Ordine con cui spendere gli Aumenti dei punteggi di caratteristica. */
     val abilityPriority: List<Ability> = emptyList(),
     /**
-     * Armatura indossata. La creazione guidata non conosce l'equipaggiamento, ma
-     * "senza armatura" non e' un valore fisso: vale 10 piu' Destrezza, e lascia
-     * intatte le difese senza armatura che barbaro, monaco e stregone draconico
-     * adottano da soli.
+     * Armatura indossata dalla ricetta. La creazione guidata applica la dotazione
+     * SRD, poi il template ripristina la configurazione narrativa già prevista;
+     * "senza armatura" resta una formula, non un valore fisso.
      */
     val armorClassMethod: ArmorClassMethod = ArmorClassMethod.UNARMORED,
     val shieldEquipped: Boolean = false,
@@ -79,6 +79,7 @@ internal object TemplateCharacters {
     private const val MAX_PASSES = 6
 
     fun build(plan: TemplateCharacterPlan): CharacterSheet {
+        val backgroundIncreases = plannedBackgroundIncreases(plan)
         var sheet = CharacterSheet(
             id = plan.id,
             characterName = plan.name,
@@ -86,7 +87,11 @@ internal object TemplateCharacters {
             background = plan.background,
             alignment = plan.alignment,
             languages = plan.languages,
-            abilityScores = plan.scores,
+            // Le ricette storiche conservano i punteggi finali. Si sottraggono qui
+            // i bonus del background, che la creazione guidata riapplica e registra.
+            abilityScores = plan.scores.mapValues { (ability, score) ->
+                score - (backgroundIncreases[ability] ?: 0)
+            },
             armorClassMethod = plan.armorClassMethod,
             shieldEquipped = plan.shieldEquipped,
             appearance = plan.appearance,
@@ -108,7 +113,12 @@ internal object TemplateCharacters {
                     )
                 }
         }
-        return sheet.copy(weapons = sheet.weapons.map { it.atCurrentLevel(sheet) })
+        return sheet.copy(
+            weapons = sheet.weapons.map { it.atCurrentLevel(sheet) },
+            armorClassMethod = plan.armorClassMethod,
+            shieldEquipped = plan.shieldEquipped,
+            equipment = plan.equipment,
+        )
     }
 
     /**
@@ -161,6 +171,11 @@ internal object TemplateCharacters {
             usedFixedHitPoints = true,
             selections = selections,
             abilityScoreIncreases = abilityIncreases(requirements, selections, plan, sheet),
+            backgroundAbilityScoreIncreases = if (sheet.progression.configured) {
+                emptyMap()
+            } else {
+                plannedBackgroundIncreases(plan)
+            },
         )
     }
 
@@ -171,6 +186,10 @@ internal object TemplateCharacters {
         plan: TemplateCharacterPlan,
         sheet: CharacterSheet,
     ): List<String> {
+        if (choice.kind == ChoiceKind.BACKGROUND) {
+            val id = plannedBackground(plan).id
+            return options.firstOrNull { it.id == id }?.let { listOf(it.id) }.orEmpty()
+        }
         val wanted = if (choice.kind == ChoiceKind.ABILITY_SCORE_INCREASE) {
             // Un +1 sprecato su una caratteristica gia' al massimo invaliderebbe il
             // livello: si offrono prima quelle che hanno ancora margine.
@@ -278,6 +297,42 @@ internal object TemplateCharacters {
     private fun abilityOf(optionId: String): Ability? {
         val slug = optionId.substringAfterLast(':')
         return Ability.entries.firstOrNull { it.name.lowercase() == slug }
+    }
+
+    private fun plannedBackground(plan: TemplateCharacterPlan): BackgroundDefinition {
+        val backgrounds = Srd521ItContent.pack.backgrounds
+        val preferredFeat = plan.preferences.firstOrNull { ":feat:origin:" in it }
+        val matchingFeat = backgrounds.filter { background ->
+            preferredFeat != null && background.featId.contains(preferredFeat)
+        }
+        if (matchingFeat.size == 1) return matchingFeat.single()
+        if (matchingFeat.size > 1) {
+            val preferredList = when (plan.classId) {
+                CharacterClassId.CLERIC -> ":chierico"
+                CharacterClassId.WIZARD -> ":mago"
+                else -> null
+            }
+            matchingFeat.firstOrNull { preferredList != null && it.magicInitiateListId?.endsWith(preferredList) == true }
+                ?.let { return it }
+            return matchingFeat.maxWith(
+                compareBy<BackgroundDefinition> {
+                    plan.abilityPriority.count { ability -> ability in it.abilityOptions }
+                }.thenBy { it.name },
+            )
+        }
+        return backgrounds.maxWith(
+            compareBy<BackgroundDefinition> {
+                plan.abilityPriority.count { ability -> ability in it.abilityOptions }
+            }.thenBy { it.name },
+        )
+    }
+
+    private fun plannedBackgroundIncreases(plan: TemplateCharacterPlan): Map<Ability, Int> {
+        val background = plannedBackground(plan)
+        val order = (plan.abilityPriority + background.abilityOptions.sortedBy { it.ordinal })
+            .distinct()
+            .filter { it in background.abilityOptions }
+        return mapOf(order[0] to 2, order[1] to 1)
     }
 
     private fun Map<String, List<String>>.selections(): List<ChoiceSelection> =

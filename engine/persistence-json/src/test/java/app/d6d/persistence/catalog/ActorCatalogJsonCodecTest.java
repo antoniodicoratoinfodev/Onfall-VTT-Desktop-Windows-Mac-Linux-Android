@@ -9,9 +9,11 @@ import app.d6d.domain.campaign.ActorKind;
 import app.d6d.domain.campaign.ActorTemplate;
 import app.d6d.domain.catalog.ActorCatalogEntry;
 import app.d6d.domain.combat.AbilityDefinition;
+import app.d6d.domain.combat.AbilityEffect;
 import app.d6d.domain.combat.ActivationCost;
 import app.d6d.domain.combat.ActorDefinition;
 import app.d6d.domain.combat.AutomationStatus;
+import app.d6d.domain.combat.CombatResourceState;
 import app.d6d.domain.combat.ConditionType;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
@@ -230,6 +232,50 @@ class ActorCatalogJsonCodecTest {
         List<ActorCatalogEntry> legacy = ActorCatalogJsonCodec.decode(document);
         assertEquals(1, legacy.get(0).combatDefinition().attacksPerAction());
         assertFalse(legacy.get(0).combatDefinition().strengthDexterityD20Disadvantage());
+    }
+
+    @Test
+    void persistsAutomaticEffectsAndLimitedResourcesWithLegacyDefaults() {
+        AbilityDefinition surge = AbilityDefinition.builder("action-surge", "Action Surge")
+                .activationCost(ActivationCost.NONE)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .effect(AbilityEffect.GRANT_NON_MAGIC_ACTION)
+                .resource("fighter:action-surge", 1)
+                .build();
+        ActorTemplate template = new ActorTemplate(
+                "fighter",
+                "Fighter",
+                ActorKind.PLAYER_CHARACTER,
+                17,
+                Map.of());
+        ActorDefinition definition = ActorDefinition.builder("fighter", "Fighter")
+                .maxHitPoints(120)
+                .abilities(List.of(surge))
+                .resources(List.of(new CombatResourceState(
+                        "fighter:action-surge", "Action Surge", 2, 1)))
+                .build();
+        ActorCatalogEntry character = ActorCatalogEntry.character(template, definition, true);
+
+        Map<String, Object> document = mutableDocument(character);
+        ActorDefinition decoded = ActorCatalogJsonCodec.decode(document).get(0).combatDefinition();
+        assertEquals(AbilityEffect.GRANT_NON_MAGIC_ACTION, decoded.ability("action-surge").effect());
+        assertEquals("fighter:action-surge", decoded.ability("action-surge").resourceId());
+        assertEquals(1, decoded.ability("action-surge").resourceCost());
+        assertEquals(List.of(new CombatResourceState(
+                "fighter:action-surge", "Action Surge", 2, 1)), decoded.resources());
+
+        Map<String, Object> encodedEntry = object(array(document.get("entries")).get(0));
+        Map<String, Object> encodedDefinition = object(encodedEntry.get("combatDefinition"));
+        Map<String, Object> encodedAbility = object(array(encodedDefinition.get("abilities")).get(0));
+        encodedDefinition.remove("resources");
+        encodedAbility.remove("effect");
+        encodedAbility.remove("resourceId");
+        encodedAbility.remove("resourceCost");
+        ActorDefinition legacy = ActorCatalogJsonCodec.decode(document).get(0).combatDefinition();
+        assertEquals(AbilityEffect.NONE, legacy.ability("action-surge").effect());
+        assertEquals("", legacy.ability("action-surge").resourceId());
+        assertEquals(0, legacy.ability("action-surge").resourceCost());
+        assertEquals(List.of(), legacy.resources());
     }
 
     @Test

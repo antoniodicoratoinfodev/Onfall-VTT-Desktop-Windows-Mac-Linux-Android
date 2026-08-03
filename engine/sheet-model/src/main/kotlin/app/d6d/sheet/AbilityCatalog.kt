@@ -1,4 +1,5 @@
 @file:UseSerializers(
+    AbilityEffectSerializer::class,
     ActivationCostSerializer::class,
     AutomationStatusSerializer::class,
     DamageTypeSerializer::class,
@@ -8,6 +9,7 @@
 package app.d6d.sheet
 
 import app.d6d.domain.combat.AbilityDefinition
+import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.DamageFormula
@@ -88,6 +90,8 @@ data class CatalogAbility(
     val prerequisite: String = "",
     val resourceId: String? = null,
     val resourceCost: Int = 0,
+    /** Effetto immediato automatizzato che non richiede un bersaglio. */
+    val effect: AbilityEffect = AbilityEffect.NONE,
     val immutable: Boolean = false,
     /**
      * Effetti numerici che la capacità produce sulle statistiche. Li applica la
@@ -134,6 +138,9 @@ data class CatalogAbility(
         require(sourcePage >= 0) { "La pagina sorgente non può essere negativa." }
         require(spellLevel == null || spellLevel in 0..9) { "Il livello dell'incantesimo deve essere 0-9." }
         require(resourceCost >= 0) { "Il costo in risorse non può essere negativo." }
+        require(!passive || effect == AbilityEffect.NONE) {
+            "Una capacità con effetto automatico non può essere un tratto passivo."
+        }
         require(resolutionMethod != ResolutionMethod.ATTACK_ROLL || dealsDamage) {
             "Un attacco deve indicare il danno."
         }
@@ -168,6 +175,8 @@ data class CatalogAbility(
             .saveAbility(saveAbility?.let { SaveAbility.valueOf(it.name) })
             .halfOnSave(halfOnSave)
             .passive(passive)
+            .effect(effect)
+            .resource(resourceId.orEmpty(), resourceCost)
             .build()
     }
 

@@ -12,6 +12,7 @@ import app.d6d.rules.character.RuleEffect
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.RulesContentPack
 import app.d6d.rules.character.SpellcastingKind
+import app.d6d.rules.character.StartingArmor
 import app.d6d.rules.character.WeaponDefinition
 import app.d6d.rules.character.WeaponProperty
 import app.d6d.rules.character.WeaponReach
@@ -242,6 +243,14 @@ class GuidedCharacterService(val pack: RulesContentPack) {
             abilityScores = sheet.abilityScores,
             request = request,
         )
+        val selectedBackground = progressed.backgroundId.takeIf { it.isNotBlank() }?.let(pack::background)
+        val backgroundIncreases = if (wasConfigured) {
+            emptyMap()
+        } else {
+            request.backgroundAbilityScoreIncreases
+                .filterValues { it != 0 }
+                .ifEmpty { selectedBackground?.abilityOptions?.associateWith { 1 }.orEmpty() }
+        }
         val abilityCap = if (
             request.selections
                 .flatMap { it.optionIds }
@@ -253,6 +262,9 @@ class GuidedCharacterService(val pack: RulesContentPack) {
             20
         }
         val abilityScores = sheet.abilityScores.toMutableMap().apply {
+            backgroundIncreases.forEach { (ability, increase) ->
+                this[ability] = (getOrDefault(ability, 10) + increase).coerceAtMost(20)
+            }
             request.abilityScoreIncreases.forEach { (ability, increase) ->
                 this[ability] = (getOrDefault(ability, 10) + increase).coerceAtMost(abilityCap)
             }
@@ -269,14 +281,21 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         )
         val choicesById = requirements.associateBy { it.id }
 
-        val skills = sheet.skillProficiencies.toMutableMap()
+        val skills = sheet.skillProficiencies.toMutableMap().apply {
+            selectedBackground?.skillProficiencies?.forEach {
+                this[it] = Proficiency.PROFICIENT
+            }
+        }
         val selectedTools = mutableListOf<String>()
         val selectedLanguages = mutableListOf<String>()
         val selectedWeapons = mutableListOf<WeaponDefinition>()
+        val selectedEquipment = mutableListOf<app.d6d.rules.character.EquipmentPackageDefinition>()
         request.selections.forEach { selection ->
             when (choicesById[selection.choiceId]?.kind) {
                 ChoiceKind.STARTING_WEAPON ->
                     selectedWeapons += selection.optionIds.mapNotNull(pack::weapon)
+                ChoiceKind.STARTING_EQUIPMENT ->
+                    selectedEquipment += selection.optionIds.mapNotNull(pack::equipmentPackage)
                 ChoiceKind.SKILL_PROFICIENCY -> selection.optionIds.forEach { id ->
                     id.toSkillOrNull()?.let { skills[it] = Proficiency.PROFICIENT }
                 }
@@ -296,6 +315,9 @@ class GuidedCharacterService(val pack: RulesContentPack) {
                     selectedLanguages += selection.optionIds.map(::optionLabel)
                 else -> Unit
             }
+        }
+        selectedWeapons += selectedEquipment.flatMap { equipment ->
+            equipment.weaponIds.mapNotNull(pack::weapon)
         }
 
         val isFirstCharacterLevel = !wasConfigured
@@ -448,6 +470,15 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         } else {
             sheet.armorClassMethod
         }
+        val equippedArmorMethod = selectedEquipment.mapNotNull { equipment ->
+            when (equipment.armor) {
+                StartingArmor.LEATHER -> ArmorClassMethod.LEATHER
+                StartingArmor.STUDDED_LEATHER -> ArmorClassMethod.STUDDED_LEATHER
+                StartingArmor.CHAIN_SHIRT -> ArmorClassMethod.CHAIN_SHIRT
+                StartingArmor.CHAIN_MAIL -> ArmorClassMethod.CHAIN_MAIL
+                null -> null
+            }
+        }.lastOrNull()
         val fiendResistance = request.selections
             .firstOrNull { it.choiceId.endsWith(":resilienza-immonda") }
             ?.optionIds
@@ -458,6 +489,7 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         return withRefreshedEffects(
             sheet.copy(
                 className = classNames,
+                background = sheet.background.ifBlank { selectedBackground?.name.orEmpty() },
                 subclass = subclassNames,
                 level = progressed.totalLevel,
                 progression = progressed,
@@ -476,12 +508,20 @@ class GuidedCharacterService(val pack: RulesContentPack) {
                 saveProficiencies = saves,
                 skillProficiencies = skills,
                 armorTraining = armor,
-                armorClassMethod = armorClassMethod,
+                armorClassMethod = equippedArmorMethod ?: armorClassMethod,
+                shieldEquipped = sheet.shieldEquipped || selectedEquipment.any { it.shield },
                 fiendishResilienceDamageType =
                     fiendResistance ?: sheet.fiendishResilienceDamageType,
                 weaponProficiencies = weaponTraining,
                 toolProficiencies = toolTraining,
                 languages = languages,
+                equipment = appendEquipmentText(
+                    sheet.equipment,
+                    selectedEquipment.map { it.description },
+                ),
+                money = sheet.money.copy(
+                    gold = sheet.money.gold + selectedEquipment.sumOf { it.goldPieces },
+                ),
                 abilityIds = selectedAbilityIds,
                 // Privilegi e talenti non vengono piu' riscritti come elenco di nomi:
                 // la progressione li conosce gia' e la scheda li mostra da li', con il
@@ -628,6 +668,7 @@ fun WeaponDefinition.toWeaponEntry(
         attackAbility = attackAbility,
         diceCount = diceCount,
         diceSides = diceSides,
+        fixedDamage = fixedDamage,
         damageModifier = modifier,
         damageType = damageType,
         rangeFeet = attackRangeFeet,
@@ -691,6 +732,13 @@ private fun appendDistinctText(existing: String, addition: String): String =
         .filter { it.isNotBlank() }
         .distinctBy { it.lowercase() }
         .joinToString(", ")
+
+private fun appendEquipmentText(existing: String, additions: List<String>): String =
+    (listOf(existing) + additions)
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinctBy { it.lowercase() }
+        .joinToString("\n")
 
 private fun String.containsListedEntry(label: String): Boolean =
     split(',', ';', '\n').any { it.trim().equals(label, ignoreCase = true) }

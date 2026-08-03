@@ -7,6 +7,7 @@ import app.d6d.domain.combat.AbilityDefinition
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.AutomationStatus
+import app.d6d.domain.combat.CombatResourceState
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
@@ -256,6 +257,8 @@ data class WeaponEntry(
      * le limitazioni dell'armatura indossata senza competenza.
      */
     val legacyClassificationRequired: Boolean = false,
+    /** Danno base fisso; se positivo prevale sui campi dei dadi. */
+    val fixedDamage: Int = 0,
 ) {
     /** Vero quando questa voce descrive un incantesimo ad area anziché un attacco. */
     val isArea: Boolean get() = areaRadiusFeet > 0
@@ -264,10 +267,21 @@ data class WeaponEntry(
     /** Colonna "Danno e tipo" nella forma stampata sulla scheda. */
     val damageText: String
         get() = buildString {
-            append(diceCount).append('d').append(diceSides)
+            if (fixedDamage > 0) append(fixedDamage) else append(diceCount).append('d').append(diceSides)
             if (damageModifier != 0) append(formatModifier(damageModifier))
             append(' ').append(damageType.italianLabel)
         }
+
+    fun toDamageFormula(): DamageFormula = if (fixedDamage > 0) {
+        DamageFormula.fixed(damageType, (fixedDamage + damageModifier).coerceAtLeast(0))
+    } else {
+        DamageFormula.dice(
+            damageType,
+            diceCount.coerceAtLeast(1),
+            diceSides.coerceAtLeast(2),
+            damageModifier,
+        )
+    }
 }
 
 /** Slot di un singolo livello di incantesimo. */
@@ -768,14 +782,7 @@ data class CharacterSheet(
             ) {
                 return@mapIndexedNotNull null
             }
-            val damage = listOf(
-                DamageFormula.dice(
-                    weapon.damageType,
-                    weapon.diceCount.coerceAtLeast(1),
-                    weapon.diceSides.coerceAtLeast(2),
-                    weapon.damageModifier,
-                ),
-            )
+            val damage = listOf(weapon.toDamageFormula())
             val cost = if (weapon.bonusAction) ActivationCost.BONUS_ACTION else ActivationCost.ACTION
             if (weapon.isArea) {
                 // Incantesimo ad area: risoluzione con tiro salvezza, non con tiro
@@ -855,6 +862,9 @@ data class CharacterSheet(
             spellSaveDc ?: 0,
             attacksPerAction,
             strengthDexterityD20Disadvantage,
+            progression.resourcePools
+                .filter { it.maximum > 0 }
+                .map { CombatResourceState(it.resourceId, it.name, it.maximum, it.spent) },
         )
     }
 

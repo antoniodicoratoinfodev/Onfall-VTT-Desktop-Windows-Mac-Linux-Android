@@ -6,7 +6,9 @@ import androidx.compose.runtime.setValue
 import app.d6d.content.srd521it.Srd521ItContent
 import app.d6d.content.srd521it.SrdChoiceOption
 import app.d6d.content.srd521it.SrdChoiceResolver
+import app.d6d.domain.combat.AbilityEffect
 import app.d6d.rules.character.Ability
+import app.d6d.rules.character.BackgroundDefinition
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.LevelUpRequest
@@ -82,6 +84,9 @@ class SheetViewModel(
 
     val srdClasses get() = Srd521ItContent.pack.classes
 
+    fun backgroundDefinition(id: String): BackgroundDefinition? =
+        Srd521ItContent.pack.background(id)
+
     var library by mutableStateOf(SheetLibrary())
         private set
 
@@ -96,6 +101,7 @@ class SheetViewModel(
                 // La riclassificazione del tavolo vince sul pacchetto, che resta
                 // immutato: e' una scelta d'uso, non una modifica al contenuto.
                 library.passiveOverrides[ability.id]
+                    ?.takeIf { ability.effect == AbilityEffect.NONE }
                     ?.takeIf { it != ability.passive }
                     ?.let { ability.copy(passive = it) }
                     ?: ability
@@ -609,10 +615,15 @@ class SheetViewModel(
      */
     fun setAbilityPassive(abilityId: String, passive: Boolean): Boolean {
         val own = library.abilities.firstOrNull { it.id == abilityId }
+        val bundled = bundledSrdAbilities.firstOrNull { it.id == abilityId }
+        val classified = own ?: bundled
+        if (passive && classified != null && classified.effect != AbilityEffect.NONE) {
+            status = "Una capacità con effetto automatico deve restare attiva."
+            return false
+        }
         if (own != null && !own.immutable && bundledSrdAbilities.none { it.id == abilityId }) {
             return upsertAbility(own.copy(passive = passive))
         }
-        val bundled = bundledSrdAbilities.firstOrNull { it.id == abilityId }
         if (bundled == null) {
             status = "Abilità non trovata nel Compendio."
             return false

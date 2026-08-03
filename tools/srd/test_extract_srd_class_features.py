@@ -22,6 +22,21 @@ sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
 
+class ActivationExtractionTest(unittest.TestCase):
+    def test_action_surge_exception_is_not_an_activation(self) -> None:
+        description = (
+            "Nel suo turno, può effettuare un'azione aggiuntiva, "
+            "fatta eccezione per l'azione di Magia."
+        )
+        self.assertIsNone(MODULE.activation_from(description))
+
+    def test_explicit_activation_costs_are_preserved(self) -> None:
+        self.assertEqual("azione", MODULE.activation_from("Usare un'azione per attivarlo."))
+        self.assertEqual("azione bonus", MODULE.activation_from("Come azione bonus, si trasforma."))
+        self.assertEqual("reazione", MODULE.activation_from("Può usare la sua reazione."))
+        self.assertEqual("azione di Magia", MODULE.activation_from("Come azione di Magia, lancia."))
+
+
 @unittest.skipUnless(PDF.is_file() and shutil.which("pdftohtml"), "PDF SRD o Poppler non disponibile")
 class ClassFeatureExtractorTest(unittest.TestCase):
     @classmethod

@@ -184,7 +184,8 @@ private val EventType.tint: Color
         EventType.CONDITION_REMOVED, EventType.CONDITION_IMMUNE -> Palette.Bloodied
         EventType.CONCENTRATION_STARTED, EventType.CONCENTRATION_CHECKED,
         EventType.CONCENTRATION_ENDED -> Palette.Temporary
-        EventType.ROUND_STARTED, EventType.TURN_STARTED -> Palette.Gold
+        EventType.ROUND_STARTED, EventType.TURN_STARTED, EventType.ACTION_GRANTED -> Palette.Gold
+        EventType.ABILITY_ACTIVATED, EventType.RESOURCE_SPENT -> Palette.Party
         EventType.ABILITY_CHECK_ROLLED -> Palette.Party
         EventType.DEATH_SAVE_ROLLED -> Palette.Bloodied
         EventType.STABILIZED, EventType.KNOCKED_OUT -> Palette.Heal
@@ -249,6 +250,12 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
         EventType.TURN_STARTED -> "Turno di $actor"
         EventType.TURN_ENDED -> "$actor termina il turno"
         EventType.ACTION_SPENT -> "$actor usa ${detail("cost").activationCostInItalian()}"
+        EventType.ABILITY_ACTIVATED -> "$actor attiva «${abilityName.ifBlank { detail("abilityId") }}»"
+        EventType.RESOURCE_SPENT ->
+            "$actor consuma ${detail("cost")} uso di ${detail("resourceName")}; " +
+                "ne restano ${detail("remaining")}/${detail("maximum")}"
+        EventType.ACTION_GRANTED ->
+            "$actor ottiene un'azione aggiuntiva, non utilizzabile per l'azione di Magia"
         EventType.MOVEMENT_SPENT ->
             "$actor usa ${detail("feet").asFeet()} di movimento; " +
                 "ne restano ${detail("remaining").asFeet()}"

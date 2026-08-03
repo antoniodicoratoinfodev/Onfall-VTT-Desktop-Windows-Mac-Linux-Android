@@ -1,12 +1,17 @@
 package app.d6d.persistence.combat;
 
+import app.d6d.domain.combat.AbilityDefinition;
+import app.d6d.domain.combat.AbilityEffect;
+import app.d6d.domain.combat.ActivationCost;
 import app.d6d.domain.combat.ActorDefinition;
+import app.d6d.domain.combat.CombatResourceState;
 import app.d6d.domain.combat.CombatState;
 import app.d6d.domain.combat.D20Mode;
 import app.d6d.domain.combat.D20RollInput;
 import app.d6d.domain.combat.DamageComponent;
 import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.RollSource;
+import app.d6d.domain.combat.ResolutionMethod;
 import app.d6d.domain.space.GridPosition;
 import app.d6d.domain.space.MapBackground;
 import app.d6d.domain.space.MapGrid;
@@ -144,6 +149,40 @@ class NewStatePersistenceTest {
         assertEquals(-4, after.combatants().get("hero").exhaustionD20Penalty());
         assertEquals(1, after.combatants().get("goblin").deathSaves().failures());
         assertTrue(after.combatants().get("goblin").unconscious());
+    }
+
+    @Test
+    void azioneImpetuosaMantieneEffettoUsoERestrizioneDopoIlRipristino() {
+        String abilityId = "azione-impetuosa";
+        String resourceId = "guerriero:azione-impetuosa";
+        AbilityDefinition surge = AbilityDefinition.builder(abilityId, "Azione impetuosa")
+                .activationCost(ActivationCost.NONE)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .effect(AbilityEffect.GRANT_NON_MAGIC_ACTION)
+                .resource(resourceId, 1)
+                .build();
+        ActorDefinition fighter = ActorDefinition.builder("fighter-def", "Guerriero")
+                .maxHitPoints(30)
+                .initiativeScore(20)
+                .abilities(List.of(surge))
+                .resources(List.of(new CombatResourceState(
+                        resourceId, "Azione impetuosa", 2, 0)))
+                .build();
+        CombatSession session = CombatSession.create("surge-persistence", 11L);
+        session.addCombatant("fighter", fighter);
+        session.setInitiative("fighter", 20);
+        session.markReady();
+        session.start();
+        session.activateAbility("fighter", abilityId);
+
+        CombatState after = roundTrip(session).currentState();
+
+        assertEquals(AbilityEffect.GRANT_NON_MAGIC_ACTION,
+                after.combatant("fighter").snapshot().ability(abilityId).effect());
+        assertEquals(1, after.combatant("fighter").resources().get(0).spent());
+        assertTrue(after.turnBudgets().get("fighter").additionalActionAvailable());
+        assertTrue(after.turnBudgets().get("fighter").additionalActionMagicRestricted());
+        assertTrue(after.turnBudgets().get("fighter").actionSurgeUsedThisTurn());
     }
 
     @Test
