@@ -37,6 +37,21 @@ class SrdBeastsTest {
     }
 
     @Test
+    fun `ogni forma ha una proiezione da combattimento con gli attacchi dello stat block`() {
+        val actors = SrdBeasts.all.map { it.toActorDefinition() }
+
+        assertEquals(64, actors.size)
+        assertTrue(actors.all { it.armorClass() > 0 && it.maxHitPoints() > 0 })
+        SrdBeasts.all.zip(actors)
+            .filter { (form, _) -> "Tiro per colpire" in form.statBlock }
+            .forEach { (form, actor) ->
+                assertTrue(actor.abilities().isNotEmpty(), "Attacco non proiettato per ${form.name}")
+            }
+        val wolf = actors.first { it.id() == "srd521-it:beast:lupo" }
+        assertTrue(wolf.abilities().any { it.name() == "Morso" })
+    }
+
+    @Test
     fun `ogni forma e consultabile nel compendio con la scheda delle statistiche`() {
         val wolf = requireNotNull(SrdBeasts.byId("srd521-it:beast:lupo"))
         val element = requireNotNull(Srd521ItContent.pack.element(wolf.id))
@@ -46,7 +61,9 @@ class SrdBeastsTest {
         assertTrue(element.description.contains("Tattiche del branco"))
         assertEquals(394, element.sourcePage)
         assertEquals(CharacterClassId.DRUID, element.classEligibility.single().classId)
-        assertTrue(catalog.passive)
+        assertFalse(catalog.passive)
+        assertEquals("srd521-it:resource:druido:forma-selvatica", catalog.resourceId)
+        assertEquals(1, catalog.resourceCost)
         assertTrue(catalog.rulesText.contains("Morso"))
     }
 }

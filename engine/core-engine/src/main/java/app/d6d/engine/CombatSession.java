@@ -949,6 +949,48 @@ public final class CombatSession {
                 "hitPointsAfter", existing.currentHitPoints));
     }
 
+    /**
+     * Attiva una forma alternativa consumando azione e risorsa nello stesso
+     * comando annullabile. La definizione di catalogo del personaggio non cambia:
+     * la nuova fotografia vale soltanto per questo incontro.
+     */
+    public synchronized void transformCombatant(
+            String combatantId,
+            String abilityId,
+            CombatantSnapshot transformed,
+            int temporaryHitPoints) {
+        requireStatus(CombatStatus.ACTIVE);
+        MutableCombatant existing = combatant(combatantId);
+        AbilityDefinition ability = ability(existing, abilityId);
+        Objects.requireNonNull(transformed, "transformed");
+        if (!existing.snapshot.instanceId().equals(transformed.instanceId())
+                || !existing.snapshot.definitionId().equals(transformed.definitionId())) {
+            throw rule("A transformation must preserve combatant and definition ids");
+        }
+        if (ability.passive()) throw rule("A passive trait cannot transform a combatant");
+        if (temporaryHitPoints < 0) throw rule("Temporary hit points cannot be negative");
+        validateActivationCost(combatantId, ability.activationCost(), ability.spellOrCantrip());
+        validateAbilityResource(existing, ability);
+
+        beginCommand();
+        try {
+            consumeActivationCost(combatantId, ability.activationCost(), ability.spellOrCantrip());
+            consumeAbilityResource(combatantId, existing, ability);
+            String previousName = existing.snapshot.name();
+            existing.snapshot = transformed;
+            existing.currentHitPoints = Math.min(existing.currentHitPoints, transformed.maxHitPoints());
+            existing.temporaryHitPoints = Math.max(existing.temporaryHitPoints, temporaryHitPoints);
+            append(EventType.COMBATANT_TRANSFORMED, combatantId, "", details(
+                    "abilityId", abilityId,
+                    "previousName", previousName,
+                    "name", transformed.name(),
+                    "temporaryHitPoints", existing.temporaryHitPoints));
+        } catch (RuntimeException | Error failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
     // --- mappa tattica -------------------------------------------------------------
 
     /**

@@ -39,8 +39,8 @@ fun RuleElementDefinition.toCatalogAbility(manifest: ContentPackManifest): Catal
     CatalogAbility(
         id = id,
         name = name,
-        passive = id != ACTION_SURGE_ID && isPassiveTrait(activation.toActivationCost()),
-        activationCost = activation.toActivationCost(),
+        passive = id != ACTION_SURGE_ID && !id.isWildShapeForm() && isPassiveTrait(activation.toActivationCost()),
+        activationCost = if (id.isWildShapeForm()) ActivationCost.BONUS_ACTION else activation.toActivationCost(),
         resolutionMethod = if (id == ACTION_SURGE_ID) ResolutionMethod.AUTOMATIC else ResolutionMethod.MANUAL,
         dealsDamage = false,
         automationStatus = if (id == ACTION_SURGE_ID) AutomationStatus.AUTOMATED else AutomationStatus.MANUAL_REQUIRED,
@@ -58,14 +58,17 @@ fun RuleElementDefinition.toCatalogAbility(manifest: ContentPackManifest): Catal
         concentration = spell?.concentration ?: false,
         ritual = spell?.ritual ?: false,
         prerequisite = prerequisite,
-        resourceId = resourceId,
-        resourceCost = resourceCost,
+        resourceId = if (id.isWildShapeForm()) WILD_SHAPE_RESOURCE_ID else resourceId,
+        resourceCost = if (id.isWildShapeForm()) 1 else resourceCost,
         effect = if (id == ACTION_SURGE_ID) AbilityEffect.GRANT_NON_MAGIC_ACTION else AbilityEffect.NONE,
         immutable = true,
         effects = effects,
     )
 
 private const val ACTION_SURGE_ID = "srd521-it:feature:guerriero:azione-impetuosa"
+private const val WILD_SHAPE_RESOURCE_ID = "srd521-it:resource:druido:forma-selvatica"
+
+private fun String.isWildShapeForm(): Boolean = startsWith("srd521-it:beast:")
 
 /**
  * Un tratto è passivo quando vale sempre e non c'è nulla da spendere nel turno.

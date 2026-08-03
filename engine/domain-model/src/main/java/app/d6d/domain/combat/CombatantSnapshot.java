@@ -129,6 +129,75 @@ public record CombatantSnapshot(
                 actor.attacksPerAction(), actor.strengthDexterityD20Disadvantage(), actor.resources());
     }
 
+    /**
+     * Crea la fotografia temporanea di Forma Selvatica.
+     *
+     * <p>I PF e le risorse restano quelli del druido; CA, movimento, attacchi e
+     * statistiche fisiche arrivano dalla bestia. I privilegi di classe e le altre
+     * forme conosciute restano nello snapshot, mentre armi e incantesimi non sono
+     * utilizzabili finche' dura la trasformazione.</p>
+     */
+    public static CombatantSnapshot wildShape(
+            String instanceId,
+            ActorDefinition druid,
+            ActorDefinition beast) {
+        Objects.requireNonNull(druid, "druid");
+        Objects.requireNonNull(beast, "beast");
+        List<AbilityDefinition> retained = druid.abilities().stream()
+                .filter(ability -> ability.passive()
+                        || ability.id().startsWith("srd521-it:feature:")
+                        || ability.id().startsWith("srd521-it:feat:")
+                        || ability.id().startsWith("srd521-it:beast:"))
+                .filter(ability -> !ability.spellOrCantrip())
+                .toList();
+        Map<String, AbilityDefinition> abilityMap = java.util.stream.Stream
+                .concat(beast.abilities().stream(), retained.stream())
+                .collect(java.util.stream.Collectors.toMap(
+                        AbilityDefinition::id,
+                        ability -> ability,
+                        (first, ignored) -> first,
+                        java.util.LinkedHashMap::new));
+        List<AbilityDefinition> abilities = List.copyOf(abilityMap.values());
+        Map<SaveAbility, Integer> saves = new java.util.EnumMap<>(SaveAbility.class);
+        druid.savingThrowBonuses().forEach((ability, bonus) -> saves.merge(ability, bonus, Math::max));
+        beast.savingThrowBonuses().forEach((ability, bonus) -> saves.merge(ability, bonus, Math::max));
+        Set<DamageType> resistances = new java.util.HashSet<>(druid.resistances());
+        resistances.addAll(beast.resistances());
+        Set<DamageType> immunities = new java.util.HashSet<>(druid.damageImmunities());
+        immunities.addAll(beast.damageImmunities());
+        Set<ConditionType> conditionImmunities = new java.util.HashSet<>(druid.conditionImmunities());
+        conditionImmunities.addAll(beast.conditionImmunities());
+        return new CombatantSnapshot(
+                instanceId,
+                druid.id(),
+                druid.definitionVersion() + "+forma-selvatica." + substringAfterLast(beast.id(), ':'),
+                druid.rulesetVersion(),
+                druid.name() + " · " + beast.name(),
+                beast.armorClass(),
+                druid.maxHitPoints(),
+                druid.currentHitPoints(),
+                druid.temporaryHitPoints(),
+                beast.speedFeet(),
+                beast.initiativeModifier(),
+                beast.initiativeScore(),
+                Math.max(druid.constitutionSaveBonus(), beast.constitutionSaveBonus()),
+                resistances,
+                beast.vulnerabilities(),
+                immunities,
+                conditionImmunities,
+                abilities,
+                saves,
+                druid.spellSaveDc(),
+                beast.attacksPerAction(),
+                beast.strengthDexterityD20Disadvantage(),
+                druid.resources());
+    }
+
+    private static String substringAfterLast(String value, char separator) {
+        int index = value.lastIndexOf(separator);
+        return index < 0 ? value : value.substring(index + 1);
+    }
+
     public AbilityDefinition ability(String abilityId) {
         return abilities.stream().filter(ability -> ability.id().equals(abilityId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown ability: " + abilityId));

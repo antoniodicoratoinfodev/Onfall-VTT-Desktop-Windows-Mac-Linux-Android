@@ -532,6 +532,61 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         )
     }
 
+    /**
+     * Sostituisce una scelta gia' acquisita senza simulare un nuovo livello.
+     *
+     * Il comando serve alle scelte che le regole consentono di cambiare durante
+     * un riposo. Aggiorna tutte le proiezioni correnti della scelta, ma conserva
+     * la cronologia dell'avanzamento: quella descrive cio' che fu scelto salendo
+     * di livello e non viene riscritta retroattivamente.
+     */
+    fun replaceSelectedOption(
+        sheet: CharacterSheet,
+        oldOptionId: String,
+        newOptionId: String,
+        allowedOptionIds: Set<String>,
+    ): CharacterSheet {
+        require(sheet.progression.configured) { "La progressione guidata non e' configurata." }
+        require(oldOptionId != newOptionId) { "La nuova opzione deve essere diversa da quella sostituita." }
+        require(oldOptionId in sheet.progression.selectedFeatureIds) {
+            "L'opzione da sostituire non e' posseduta dal personaggio."
+        }
+        require(newOptionId in allowedOptionIds) { "La nuova opzione non e' disponibile." }
+        require(newOptionId !in sheet.progression.selectedFeatureIds) {
+            "La nuova opzione e' gia' posseduta dal personaggio."
+        }
+
+        val containingSelections = sheet.progression.selections.count { oldOptionId in it.optionIds }
+        require(containingSelections == 1) {
+            "La scelta da sostituire non e' rappresentata in modo univoco nella progressione."
+        }
+        val updatedProgression = sheet.progression.copy(
+            selections = sheet.progression.selections.map { selection ->
+                if (oldOptionId in selection.optionIds) {
+                    selection.copy(
+                        optionIds = selection.optionIds.map { id ->
+                            if (id == oldOptionId) newOptionId else id
+                        },
+                    )
+                } else {
+                    selection
+                }
+            },
+            selectedFeatureIds = sheet.progression.selectedFeatureIds.map { id ->
+                if (id == oldOptionId) newOptionId else id
+            },
+        )
+        return sheet.copy(
+            progression = updatedProgression,
+            abilityIds = sheet.abilityIds.map { id ->
+                if (id == oldOptionId) newOptionId else id
+            }.distinct(),
+            excludedTraitIds = sheet.excludedTraitIds.map { id ->
+                if (id == oldOptionId) newOptionId else id
+            }.toSet(),
+        )
+    }
+
     private fun deriveSpellcasting(
         previous: Spellcasting?,
         progression: app.d6d.rules.character.CharacterProgression,

@@ -53,6 +53,8 @@ public enum EventType {
 
     /** Correzione dichiarata di una scheda durante lo scontro. */
     COMBATANT_EDITED,
+    /** Forma Selvatica o un'altra trasformazione esplicita del combattente. */
+    COMBATANT_TRANSFORMED,
 
     // Mappa tattica.
     MAP_CONFIGURED,

@@ -79,6 +79,9 @@ class BattleViewModel(
      * subito, anche a tavolo aperto.
      */
     private val passiveProvider: (String) -> Boolean? = { null },
+    private val actorProvider: (String) -> ActorDefinition? = { null },
+    private val wildShapeProvider: (String) -> ActorDefinition? = { null },
+    private val druidLevelProvider: (String) -> Int = { 0 },
     private val resourceSink: CombatResourceSink = CombatResourceSink { _, _ -> },
     private val editSink: CombatantEditSink = CombatantEditSink { _, _ -> },
 ) {
@@ -543,6 +546,11 @@ class BattleViewModel(
             message = "Capacità non trovata."
             return
         }
+        val wildShape = wildShapeProvider(abilityId)
+        if (wildShape != null) {
+            activateWildShape(attacker, ability, wildShape)
+            return
+        }
         if (ability.effect() != AbilityEffect.NONE) {
             activateAbility(attacker, ability)
             return
@@ -567,6 +575,48 @@ class BattleViewModel(
         pendingArea = null
         targetSelection = null
         singleTargeting = SingleTargeting(ability.id(), attacker, ability.name())
+    }
+
+    /** Assume immediatamente una forma conosciuta, consumando Azione bonus e uso. */
+    private fun activateWildShape(
+        combatantId: String,
+        ability: AbilityDefinition,
+        beast: ActorDefinition,
+    ) {
+        val definitionId = combatant(combatantId)?.snapshot()?.definitionId() ?: return
+        val druid = actorProvider(definitionId) ?: run {
+            message = "La scheda originale del druido non è disponibile."
+            return
+        }
+        val druidLevel = druidLevelProvider(definitionId)
+        if (druidLevel < 2) {
+            message = "Forma Selvatica richiede almeno due livelli da Druido."
+            return
+        }
+        val transformed = CombatantSnapshot.wildShape(combatantId, druid, beast)
+        var activated = false
+        command(UndoEffect.ResourceChange(combatantId, definitionId)) {
+            session.transformCombatant(combatantId, ability.id(), transformed, druidLevel)
+            try {
+                resourceSink.onChanged(
+                    definitionId,
+                    session.currentState().combatant(combatantId).resources(),
+                )
+            } catch (failure: Exception) {
+                session.undo()
+                throw IllegalStateException(
+                    failure.message ?: "Il consumo di Forma Selvatica non è stato salvato nella scheda.",
+                    failure,
+                )
+            }
+            activated = true
+        }
+        if (activated) {
+            actionResolution = ActionResolution(
+                text = "Forma Selvatica: ${druid.name()} assume la forma di ${beast.name()}.",
+                isHit = true,
+            )
+        }
     }
 
     /** Attiva una capacità automatica che non richiede bersaglio, come Azione Impetuosa. */

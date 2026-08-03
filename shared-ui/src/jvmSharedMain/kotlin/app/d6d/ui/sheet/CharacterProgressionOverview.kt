@@ -11,12 +11,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.rules.character.RecoveryPeriod
+import app.d6d.content.srd521it.SrdBeastForm
 import app.d6d.sheet.CharacterSheet
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
@@ -47,6 +53,8 @@ internal fun ProgressionOverview(
         }
         return
     }
+
+    var showWildShapeReplacement by remember(sheet.id) { mutableStateOf(false) }
 
     SheetBox("Progressione SRD 5.2.1", Modifier.fillMaxWidth()) {
         FlowRow(
@@ -142,8 +150,101 @@ internal fun ProgressionOverview(
                     dense = true,
                     onClick = { viewModel.recoverCharacterResources(RecoveryPeriod.LONG_REST) },
                 )
+                if (
+                    viewModel.knownWildShapeForms().isNotEmpty() &&
+                    viewModel.wildShapeReplacementOptions().isNotEmpty()
+                ) {
+                    GameButton(
+                        "Riposo lungo + sostituisci forma",
+                        accent = Palette.Gold,
+                        dense = true,
+                        onClick = { showWildShapeReplacement = true },
+                    )
+                }
             }
         }
     }
+
+    if (showWildShapeReplacement) {
+        WildShapeReplacementDialog(
+            knownForms = viewModel.knownWildShapeForms(),
+            availableForms = viewModel.wildShapeReplacementOptions(),
+            onConfirm = { oldId, newId ->
+                if (viewModel.longRestAndReplaceWildShapeForm(oldId, newId)) {
+                    showWildShapeReplacement = false
+                }
+            },
+            onDismiss = { showWildShapeReplacement = false },
+        )
+    }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WildShapeReplacementDialog(
+    knownForms: List<SrdBeastForm>,
+    availableForms: List<SrdBeastForm>,
+    onConfirm: (String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var oldFormId by remember(knownForms) { mutableStateOf(knownForms.firstOrNull()?.id.orEmpty()) }
+    var newFormId by remember(availableForms) {
+        mutableStateOf(availableForms.firstOrNull()?.id.orEmpty())
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Palette.Surface,
+        title = { Text("Sostituisci una forma conosciuta", color = Palette.Text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Il comando completa un riposo lungo e sostituisce esattamente una forma, come previsto da Forma Selvatica.",
+                    color = Palette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text("FORMA DA DIMENTICARE", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    knownForms.forEach { form ->
+                        GameButton(
+                            form.name,
+                            accent = if (form.id == oldFormId) Palette.Gold else Palette.TextMuted,
+                            selected = form.id == oldFormId,
+                            dense = true,
+                            onClick = { oldFormId = form.id },
+                        )
+                    }
+                }
+                Text("NUOVA FORMA", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    availableForms.forEach { form ->
+                        GameButton(
+                            "${form.name} · ${form.summary}",
+                            accent = if (form.id == newFormId) Palette.Heal else Palette.TextMuted,
+                            selected = form.id == newFormId,
+                            dense = true,
+                            onClick = { newFormId = form.id },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            GameButton(
+                "Completa riposo e sostituisci",
+                accent = Palette.Heal,
+                onClick = {
+                    if (oldFormId.isNotBlank() && newFormId.isNotBlank()) {
+                        onConfirm(oldFormId, newFormId)
+                    }
+                },
+            )
+        },
+        dismissButton = { GameButton("Annulla", onClick = onDismiss) },
+    )
+}

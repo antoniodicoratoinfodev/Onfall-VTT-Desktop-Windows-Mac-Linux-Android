@@ -191,7 +191,9 @@ private val EventType.tint: Color
         EventType.STABILIZED, EventType.KNOCKED_OUT -> Palette.Heal
         EventType.DIED -> Palette.Critical
         EventType.EXHAUSTION_CHANGED -> Palette.Enemy
-        EventType.COMBATANT_EDITED -> Palette.Party
+        EventType.COMBATANT_EDITED,
+        EventType.COMBATANT_TRANSFORMED,
+        -> Palette.Party
         EventType.COMBATANT_MOVED, EventType.COMBATANT_PLACED -> Palette.Party
         EventType.MAP_CONFIGURED, EventType.MAP_BACKGROUND_SET -> Palette.Gold
         else -> Palette.TextMuted
@@ -420,6 +422,9 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
                 append(" [rev. ").append(detail("version")).append(']')
             }
         }
+        EventType.COMBATANT_TRANSFORMED ->
+            "$actor usa Forma Selvatica: ${detail("previousName")} diventa ${detail("name")}; " +
+                "${detail("temporaryHitPoints")} PF temporanei"
 
         EventType.MAP_CONFIGURED -> buildString {
             append("Mappa ").append(detail("columns")).append('×').append(detail("rows"))

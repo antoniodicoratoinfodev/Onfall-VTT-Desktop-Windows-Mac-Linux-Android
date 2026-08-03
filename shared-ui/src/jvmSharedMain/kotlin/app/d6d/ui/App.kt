@@ -70,6 +70,7 @@ import app.d6d.ui.session.WorkspaceOpenResult
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.state.CombatResourceSink
 import app.d6d.ui.state.CombatantEditSink
+import app.d6d.content.srd521it.SrdBeasts
 import app.d6d.ui.theme.AppTheme
 import app.d6d.ui.theme.AtmosphericBackground
 import app.d6d.ui.theme.GoldenRule
@@ -138,6 +139,9 @@ fun AppRoot(
                     session,
                     footprintProvider = { definitionId -> roster.footprintFor(definitionId) },
                     passiveProvider = { abilityId -> roster.abilityIsPassive(abilityId) },
+                    actorProvider = { definitionId -> roster.definitionFor(definitionId) },
+                    wildShapeProvider = { abilityId -> SrdBeasts.byId(abilityId)?.toActorDefinition() },
+                    druidLevelProvider = { definitionId -> roster.druidLevelFor(definitionId) },
                     resourceSink = CombatResourceSink { definitionId, resources ->
                         if (!roster.applyCombatResources(definitionId, resources)) {
                             error(roster.sheets.status ?: "Risorse della scheda non salvate.")

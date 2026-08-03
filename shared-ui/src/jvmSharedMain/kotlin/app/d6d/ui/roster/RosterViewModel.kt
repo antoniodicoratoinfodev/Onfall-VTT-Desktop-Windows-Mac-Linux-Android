@@ -111,6 +111,11 @@ class RosterViewModel(
         return null
     }
 
+    fun druidLevelFor(id: String): Int =
+        sheets.library.characters.firstOrNull { it.id == id }
+            ?.progression?.levelIn(app.d6d.rules.character.CharacterClassId.DRUID)
+            ?: 0
+
     /**
      * Dice se una capacita' vale come tratto permanente, secondo il Compendio.
      *

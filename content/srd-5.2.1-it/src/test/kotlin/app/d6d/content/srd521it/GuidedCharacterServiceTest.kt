@@ -314,6 +314,37 @@ class GuidedCharacterServiceTest {
     }
 
     @Test
+    fun `una forma selvatica conosciuta si sostituisce senza creare un nuovo livello`() {
+        var druid = createSimple(CharacterClassId.DRUID)
+        druid = druid.copy(experiencePoints = ExperienceProgression.thresholdForLevel(2))
+        druid = service.advance(druid, requestFor(druid, CharacterClassId.DRUID))
+        val known = druid.progression.selectedFeatureIds.mapNotNull(SrdBeasts::byId)
+        val forgotten = known.first()
+        val learned = SrdBeasts.availableAt(2).first { candidate ->
+            known.none { it.id == candidate.id }
+        }
+
+        val replaced = service.replaceSelectedOption(
+            sheet = druid,
+            oldOptionId = forgotten.id,
+            newOptionId = learned.id,
+            allowedOptionIds = SrdBeasts.availableAt(2).mapTo(mutableSetOf()) { it.id },
+        )
+
+        assertEquals(2, replaced.progression.totalLevel)
+        assertFalse(forgotten.id in replaced.progression.selectedFeatureIds)
+        assertTrue(learned.id in replaced.progression.selectedFeatureIds)
+        assertFalse(forgotten.id in replaced.abilityIds)
+        assertTrue(learned.id in replaced.abilityIds)
+        assertTrue(
+            replaced.progression.advancementHistory.any { record ->
+                record.selections.any { forgotten.id in it.optionIds }
+            },
+            "La cronologia del livello non deve essere riscritta retroattivamente.",
+        )
+    }
+
+    @Test
     fun `il ranger sceglie e riceve due lingue al secondo livello`() {
         var ranger = createSimple(CharacterClassId.RANGER)
         ranger = ranger.copy(

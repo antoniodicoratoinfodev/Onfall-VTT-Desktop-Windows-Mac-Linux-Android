@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.d6d.content.srd521it.Srd521ItContent
+import app.d6d.content.srd521it.SrdBeastForm
+import app.d6d.content.srd521it.SrdBeasts
 import app.d6d.content.srd521it.SrdChoiceOption
 import app.d6d.content.srd521it.SrdChoiceResolver
 import app.d6d.domain.combat.AbilityEffect
@@ -387,10 +389,60 @@ class SheetViewModel(
     }
 
     fun recoverCharacterResources(period: RecoveryPeriod) {
-        val restored = character.progression.resourcePools.map { it.recoveredAfter(period) }
-        val casting = character.spellcasting
-        character = character.copy(
-            progression = character.progression.copy(resourcePools = restored),
+        character = character.recoveredAfter(period)
+        status = if (period == RecoveryPeriod.LONG_REST) {
+            "Risorse da riposo lungo recuperate."
+        } else {
+            "Risorse da riposo breve recuperate."
+        }
+    }
+
+    /** Forme attualmente apprese tramite le scelte di Forma selvatica. */
+    fun knownWildShapeForms(): List<SrdBeastForm> =
+        character.progression.selectedFeatureIds.mapNotNull(SrdBeasts::byId)
+
+    /** Forme legali al livello attuale che il druido non conosce ancora. */
+    fun wildShapeReplacementOptions(): List<SrdBeastForm> {
+        val knownIds = knownWildShapeForms().mapTo(mutableSetOf()) { it.id }
+        return SrdBeasts.availableAt(character.progression.levelIn(CharacterClassId.DRUID))
+            .filterNot { it.id in knownIds }
+    }
+
+    /**
+     * Completa il riposo lungo e usa l'unica sostituzione di forma concessa al
+     * suo termine. Le due modifiche sono preparate insieme: una scelta invalida
+     * non recupera silenziosamente le risorse.
+     */
+    fun longRestAndReplaceWildShapeForm(oldFormId: String, newFormId: String): Boolean =
+        runCatching {
+            val legalIds = SrdBeasts
+                .availableAt(character.progression.levelIn(CharacterClassId.DRUID))
+                .mapTo(mutableSetOf()) { it.id }
+            guidedCharacters.replaceSelectedOption(
+                sheet = character,
+                oldOptionId = oldFormId,
+                newOptionId = newFormId,
+                allowedOptionIds = legalIds,
+            ).recoveredAfter(RecoveryPeriod.LONG_REST)
+        }.fold(
+            onSuccess = { updated ->
+                character = updated
+                val oldName = SrdBeasts.byId(oldFormId)?.name ?: oldFormId
+                val newName = SrdBeasts.byId(newFormId)?.name ?: newFormId
+                status = "Riposo lungo completato: $oldName sostituita con $newName."
+                true
+            },
+            onFailure = { failure ->
+                status = failure.message ?: "Impossibile sostituire la forma conosciuta."
+                false
+            },
+        )
+
+    private fun CharacterSheet.recoveredAfter(period: RecoveryPeriod): CharacterSheet {
+        val restored = progression.resourcePools.map { it.recoveredAfter(period) }
+        val casting = spellcasting
+        return copy(
+            progression = progression.copy(resourcePools = restored),
             spellcasting = casting?.copy(
                 slots = if (period == RecoveryPeriod.LONG_REST) {
                     casting.slots.map { it.copy(spent = 0) }
@@ -409,11 +461,6 @@ class SheetViewModel(
                 },
             ),
         )
-        status = if (period == RecoveryPeriod.LONG_REST) {
-            "Risorse da riposo lungo recuperate."
-        } else {
-            "Risorse da riposo breve recuperate."
-        }
     }
 
     fun progressionRequirements(
