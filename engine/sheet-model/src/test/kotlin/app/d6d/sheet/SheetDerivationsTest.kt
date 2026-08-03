@@ -21,6 +21,37 @@ import app.d6d.rules.character.RuleElementKind
  * regolamento e non come farebbe l'aritmetica ingenua.
  */
 class SheetDerivationsTest {
+
+    @Test
+    fun `gli slot incantesimo diventano risorse leggibili nella tab di battaglia`() {
+        val actor = CharacterSheet(
+            spellcasting = Spellcasting(
+                slots = (1..9).map { level ->
+                    when (level) {
+                        1 -> SpellSlot(level, total = 4, spent = 1)
+                        2 -> SpellSlot(level, total = 3, spent = 3)
+                        else -> SpellSlot(level)
+                    }
+                },
+                pactSlots = SpellSlot(level = 2, total = 2, spent = 1),
+            ),
+        ).toActorDefinition()
+
+        val standardFirst = actor.resources().single {
+            it.id() == "${SPELL_SLOT_RESOURCE_PREFIX}1"
+        }
+        val standardSecond = actor.resources().single {
+            it.id() == "${SPELL_SLOT_RESOURCE_PREFIX}2"
+        }
+        val pactSecond = actor.resources().single {
+            it.id() == "${PACT_SLOT_RESOURCE_PREFIX}2"
+        }
+        assertEquals(3, standardFirst.remaining())
+        assertEquals(0, standardSecond.remaining())
+        assertEquals(1, pactSecond.remaining())
+        assertEquals(3, actor.resources().size)
+    }
+
     @Test
     fun `attacco extra segue il livello di classe senza sommarsi in multiclasse`() {
         val multiclass = CharacterSheet(

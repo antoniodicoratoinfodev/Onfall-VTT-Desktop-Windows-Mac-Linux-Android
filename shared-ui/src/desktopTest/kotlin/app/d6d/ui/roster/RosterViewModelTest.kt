@@ -11,9 +11,13 @@ import app.d6d.sheet.Ability
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
+import app.d6d.sheet.PACT_SLOT_RESOURCE_PREFIX
 import app.d6d.sheet.Proficiency
+import app.d6d.sheet.SPELL_SLOT_RESOURCE_PREFIX
 import app.d6d.sheet.SheetLibrary
 import app.d6d.sheet.SheetStore
+import app.d6d.sheet.SpellSlot
+import app.d6d.sheet.Spellcasting
 import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.sheet.SheetKind
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -330,6 +334,48 @@ class RosterViewModelTest {
         assertEquals(
             1,
             catalogEntry("pg-tarvos")!!.combatDefinition().resources().single().spent(),
+        )
+    }
+
+    @Test
+    fun `gli slot consumati in combattimento restano nella scheda e nel catalogo`() {
+        val roster = roster()
+        roster.sheets.kind = SheetKind.PERSONAGGIO
+        roster.sheets.selectCharacter("pg-tarvos")
+        roster.sheets.character = roster.sheets.character.copy(
+            spellcasting = Spellcasting(
+                slots = (1..9).map { level ->
+                    SpellSlot(level, total = if (level == 1) 4 else 0)
+                },
+                pactSlots = SpellSlot(level = 2, total = 2),
+            ),
+        )
+        assertTrue(roster.sheets.save())
+
+        assertTrue(
+            roster.applyCombatResources(
+                "pg-tarvos",
+                listOf(
+                    CombatResourceState("${SPELL_SLOT_RESOURCE_PREFIX}1", "Slot 1", 4, 2),
+                    CombatResourceState("${PACT_SLOT_RESOURCE_PREFIX}2", "Patto 2", 2, 1),
+                ),
+            ),
+        )
+
+        val casting = roster.sheets.library.characters
+            .first { it.id == "pg-tarvos" }
+            .spellcasting!!
+        assertEquals(2, casting.slots.first { it.level == 1 }.spent)
+        assertEquals(1, casting.pactSlots!!.spent)
+
+        val catalogResources = catalogEntry("pg-tarvos")!!.combatDefinition().resources()
+        assertEquals(
+            2,
+            catalogResources.single { it.id() == "${SPELL_SLOT_RESOURCE_PREFIX}1" }.spent(),
+        )
+        assertEquals(
+            1,
+            catalogResources.single { it.id() == "${PACT_SLOT_RESOURCE_PREFIX}2" }.spent(),
         )
     }
 

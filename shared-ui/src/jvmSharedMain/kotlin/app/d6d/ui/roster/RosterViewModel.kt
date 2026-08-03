@@ -8,6 +8,8 @@ import app.d6d.domain.combat.CombatantSnapshot
 import app.d6d.domain.combat.CombatResourceState
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.SheetStore
+import app.d6d.sheet.isPactSpellSlot
+import app.d6d.sheet.spellSlotLevelOrNull
 import app.d6d.ui.content.SessionTemplate
 import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.sheet.SheetKind
@@ -242,7 +244,7 @@ class RosterViewModel(
         return true
     }
 
-    /** Conserva nella scheda gli usi limitati spesi (o ripristinati con Undo). */
+    /** Conserva nella scheda risorse e slot spesi (o ripristinati con Undo). */
     fun applyCombatResources(
         definitionId: String,
         resources: List<CombatResourceState>,
@@ -254,10 +256,39 @@ class RosterViewModel(
             val spent = spentById[pool.resourceId] ?: return@map pool
             pool.copy(spent = spent.coerceIn(0, pool.maximum))
         }
-        if (updatedPools == character.progression.resourcePools) return true
+        val casting = character.spellcasting
+        val standardSlotSpent = resources
+            .filterNot { it.isPactSpellSlot() }
+            .mapNotNull { resource ->
+                resource.spellSlotLevelOrNull()?.let { level -> level to resource.spent() }
+            }
+            .toMap()
+        val pactSlotSpent = resources
+            .firstOrNull { it.isPactSpellSlot() }
+            ?.let { resource -> resource.spellSlotLevelOrNull()?.let { it to resource.spent() } }
+        val updatedCasting = casting?.copy(
+            slots = casting.slots.map { slot ->
+                standardSlotSpent[slot.level]
+                    ?.let { slot.copy(spent = it.coerceIn(0, slot.total)) }
+                    ?: slot
+            },
+            pactSlots = casting.pactSlots?.let { slot ->
+                pactSlotSpent
+                    ?.takeIf { it.first == slot.level }
+                    ?.let { slot.copy(spent = it.second.coerceIn(0, slot.total)) }
+                    ?: slot
+            },
+        )
+        if (
+            updatedPools == character.progression.resourcePools &&
+            updatedCasting == character.spellcasting
+        ) {
+            return true
+        }
         return sheets.upsertCharacterSilently(
             character.copy(
                 progression = character.progression.copy(resourcePools = updatedPools),
+                spellcasting = updatedCasting,
             ),
         )
     }

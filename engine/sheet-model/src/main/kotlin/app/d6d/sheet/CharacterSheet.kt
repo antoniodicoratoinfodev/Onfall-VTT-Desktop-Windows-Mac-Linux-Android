@@ -862,9 +862,19 @@ data class CharacterSheet(
             spellSaveDc ?: 0,
             attacksPerAction,
             strengthDexterityD20Disadvantage,
-            progression.resourcePools
-                .filter { it.maximum > 0 }
-                .map { CombatResourceState(it.resourceId, it.name, it.maximum, it.spent) },
+            buildList {
+                progression.resourcePools
+                    .filter { it.maximum > 0 }
+                    .mapTo(this) {
+                        CombatResourceState(it.resourceId, it.name, it.maximum, it.spent)
+                    }
+                spellcasting?.slots
+                    ?.filter { it.total > 0 }
+                    ?.mapTo(this) { it.toCombatResource() }
+                spellcasting?.pactSlots
+                    ?.takeIf { it.total > 0 }
+                    ?.let { add(it.toCombatResource(pact = true)) }
+            },
         )
     }
 

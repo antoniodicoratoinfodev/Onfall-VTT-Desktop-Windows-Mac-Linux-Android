@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -40,6 +43,9 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.d6d.domain.combat.CombatResourceState
+import app.d6d.sheet.isPactSpellSlot
+import app.d6d.sheet.spellSlotLevelOrNull
 import app.d6d.ui.components.CombatantPortrait
 import app.d6d.ui.components.ConditionChip
 import app.d6d.ui.components.EditableValue
@@ -219,6 +225,13 @@ fun CombatantRailCard(
                 }
             }
 
+            if (faction == Faction.PARTY) {
+                val spellSlots = spellSlotIndicators(combatant.resources())
+                if (spellSlots.isNotEmpty()) {
+                    SpellSlotIndicators(spellSlots)
+                }
+            }
+
             if (combatant.conditions().isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     combatant.conditions().forEach { condition ->
@@ -228,6 +241,117 @@ fun CombatantRailCard(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+internal enum class SpellSlotKind(
+    val visibleLabel: String,
+    val accessibleLabel: String,
+) {
+    STANDARD("SLOT INCANTESIMO", "Slot incantesimo"),
+    PACT("SLOT DEL PATTO", "Slot del Patto"),
+}
+
+internal data class SpellSlotIndicator(
+    val kind: SpellSlotKind,
+    val level: Int,
+    val total: Int,
+    val remaining: Int,
+)
+
+/** Mantiene separati gli slot Incantesimo e del Patto anche quando hanno lo stesso livello. */
+internal fun spellSlotIndicators(resources: List<CombatResourceState>): List<SpellSlotIndicator> =
+    resources
+        .mapNotNull { resource ->
+            resource.spellSlotLevelOrNull()?.let { level ->
+                val kind = if (resource.isPactSpellSlot()) SpellSlotKind.PACT else SpellSlotKind.STANDARD
+                (kind to level) to resource
+            }
+        }
+        .groupBy({ it.first }, { it.second })
+        .map { (kindAndLevel, sameKindAndLevel) ->
+            SpellSlotIndicator(
+                kind = kindAndLevel.first,
+                level = kindAndLevel.second,
+                total = sameKindAndLevel.sumOf { it.maximum() },
+                remaining = sameKindAndLevel.sumOf { it.remaining() },
+            )
+        }
+        .filter { it.total > 0 }
+        .sortedWith(compareBy<SpellSlotIndicator> { it.kind.ordinal }.thenBy { it.level })
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SpellSlotIndicators(slots: List<SpellSlotIndicator>) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.semantics {
+            contentDescription = slots.joinToString("; ") {
+                "${it.kind.accessibleLabel} livello ${it.level}: " +
+                    "${it.remaining} rimanenti su ${it.total}"
+            }
+        },
+    ) {
+        slots.groupBy { it.kind }.forEach { (kind, kindSlots) ->
+            val slotColor = when (kind) {
+                SpellSlotKind.STANDARD -> Palette.Party
+                SpellSlotKind.PACT -> Palette.Gold
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = kind.visibleLabel,
+                    color = slotColor,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    kindSlots.forEach { slot ->
+                        SpellSlotSquare(slot, slotColor)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SpellSlotSquare(
+    slot: SpellSlotIndicator,
+    slotColor: Color,
+) {
+    Column(
+        modifier = Modifier
+            .size(44.dp)
+            .background(slotColor.copy(alpha = 0.10f), RoundedCornerShape(6.dp))
+            .border(1.dp, slotColor.copy(alpha = 0.9f), RoundedCornerShape(6.dp))
+            .padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text(
+            "${slot.level}°",
+            color = slotColor,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        FlowRow(
+            modifier = Modifier.width(28.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            maxItemsInEachRow = 4,
+        ) {
+            repeat(slot.remaining) {
+                Box(
+                    Modifier
+                        .size(5.dp)
+                        .background(slotColor, RoundedCornerShape(1.dp)),
+                )
             }
         }
     }
