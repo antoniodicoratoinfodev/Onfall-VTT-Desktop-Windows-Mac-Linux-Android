@@ -206,7 +206,7 @@ private fun TemplateChoiceStep(
                 viewModel.includedTemplates.forEach { template ->
                     GameButton(
                         label = template.name,
-                        subtitle = "Livello ${template.partyLevel} · ${template.party.size} personaggi · " +
+                        subtitle = "Livello ${template.partyLevel} · ${template.partyCount} personaggi · " +
                             "${template.opponentCount} avversari",
                         accent = Palette.Gold,
                         onClick = { viewModel.useIncludedTemplate(template) },

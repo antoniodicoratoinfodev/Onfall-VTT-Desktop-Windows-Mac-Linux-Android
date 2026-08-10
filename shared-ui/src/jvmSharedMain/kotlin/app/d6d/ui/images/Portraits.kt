@@ -90,6 +90,10 @@ class PortraitRepository(
     internal val decodedCacheSize: Int get() = synchronized(decoded) { decoded.size }
     internal val decodedCacheBytes: Long get() = synchronized(decoded) { decodedBytes }
 
+    /** Lettura non bloccante per rimontare una schermata senza un passaggio su IO. */
+    internal fun cachedBitmap(name: String): ImageBitmap? =
+        synchronized(decoded) { decoded[name]?.image }
+
     /** Cambia a ogni import: fa ricomporre chi disegna le immagini. */
     var revision by mutableStateOf(0)
         private set
@@ -476,12 +480,17 @@ class PortraitRepository(
 @Composable
 fun PortraitRepository.rememberBitmap(name: String?): ImageBitmap? {
     val currentRevision = revision
+    val cached = name?.takeIf { it.isNotBlank() }?.let(::cachedBitmap)
     return produceState<ImageBitmap?>(
-        initialValue = null,
+        initialValue = cached,
         key1 = name,
         key2 = currentRevision,
     ) {
-        value = if (name.isNullOrBlank()) null else withContext(Dispatchers.IO) { bitmap(name) }
+        value = when {
+            name.isNullOrBlank() -> null
+            cached != null -> cached
+            else -> withContext(Dispatchers.IO) { bitmap(name) }
+        }
     }.value
 }
 

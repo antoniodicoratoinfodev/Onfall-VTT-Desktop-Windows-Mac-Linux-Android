@@ -132,6 +132,9 @@ internal class WorkspaceRecoveryStore(
         const val SCHEMA_VERSION = 1
         const val FILE_NAME = "workspace-recovery.json"
         const val FILE_STEM = "workspace-recovery"
-        const val MAX_BACKUPS = 2
+        // Il file e' gia' sostituito atomicamente ed e' soltanto una bozza
+        // effimera. Copiarlo e forzarlo di nuovo dopo ogni comando raddoppiava
+        // l'I/O di recovery senza proteggere un salvataggio scelto dall'utente.
+        const val MAX_BACKUPS = 0
     }
 }

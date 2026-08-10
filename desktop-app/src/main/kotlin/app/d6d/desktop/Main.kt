@@ -3,6 +3,7 @@ package app.d6d.desktop
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,11 +35,14 @@ import java.awt.RenderingHints
 import java.awt.Taskbar
 import java.awt.Toolkit
 import java.awt.image.BufferedImage
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.math.roundToInt
+import org.jetbrains.skiko.GraphicsApi
 
 /**
  * Cartella dati locale.
@@ -55,6 +59,17 @@ private fun dataDirectory(): Path {
     }
     Files.createDirectories(directory)
     return directory
+}
+
+/**
+ * Il fondale e' volutamente piu' leggero su Windows, dove DPI e monitor ad alto
+ * refresh moltiplicano il costo dei gradienti. Il limite a circa 60 FPS evita
+ * il lavoro extra dei display a 120/144 Hz; Metal/macOS conserva la frequenza nativa.
+ */
+internal fun atmosphericFrameIntervalMillis(renderApi: GraphicsApi, windows: Boolean): Long? = when {
+    windows -> 17L
+    renderApi == GraphicsApi.SOFTWARE_FAST || renderApi == GraphicsApi.SOFTWARE_COMPAT -> 67L
+    else -> null
 }
 
 /**
@@ -211,7 +226,8 @@ fun main() {
 
 @Composable
 private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
-    val dataDirectory = dataDirectory()
+    val dataDirectory = remember { dataDirectory() }
+    val filePicker = remember { desktopFilePicker() }
     var exitRequested by remember { mutableStateOf(false) }
     val cursorStore = remember(dataDirectory) {
         CursorPairStore(dataDirectory.resolve("cursor-pair.txt"))
@@ -244,12 +260,33 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
         iconBytes?.let { runCatching { BitmapPainter(it.decodeToImageBitmap()) }.getOrNull() }
     }
 
+    val windowState = rememberWindowState(width = 1480.dp, height = 940.dp)
     Window(
         onCloseRequest = { exitRequested = true },
         title = AppIdentity.windowTitle,
-        state = rememberWindowState(width = 1480.dp, height = 940.dp),
+        state = windowState,
         icon = windowIcon,
     ) {
+        var windowFocused by remember(window) { mutableStateOf(window.isFocused) }
+        var renderApi by remember(window) { mutableStateOf(window.renderApi) }
+        DisposableEffect(window) {
+            val focusListener = object : WindowAdapter() {
+                override fun windowGainedFocus(event: WindowEvent) {
+                    windowFocused = true
+                }
+
+                override fun windowLostFocus(event: WindowEvent) {
+                    windowFocused = false
+                }
+            }
+            window.addWindowFocusListener(focusListener)
+            window.onRenderApiChanged { renderApi = window.renderApi }
+            onDispose { window.removeWindowFocusListener(focusListener) }
+        }
+        val windows = remember {
+            System.getProperty("os.name", "").startsWith("Windows", ignoreCase = true)
+        }
+        val backgroundFrameInterval = atmosphericFrameIntervalMillis(renderApi, windows)
         val cursorPairs = remember(selectedCursorSize) {
             mapOf(
                 CursorPair.COLD to desktopCursorPair(
@@ -324,8 +361,10 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
                     dataDirectory = dataDirectory,
                     compact = maxWidth < 1000.dp,
                     modifier = Modifier.fillMaxSize(),
-                    filePicker = desktopFilePicker(),
+                    filePicker = filePicker,
                     cursorPreferences = cursorPreferences,
+                    atmosphericAnimationFrameMillis = backgroundFrameInterval,
+                    atmosphericAnimationRunning = windowFocused && !windowState.isMinimized,
                     exitRequested = exitRequested,
                     onExitRequestHandled = { exitRequested = false },
                     onExitConfirmed = ::exitApplication,

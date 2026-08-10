@@ -1,6 +1,7 @@
 package app.d6d.ui.roster
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.d6d.domain.combat.ActorDefinition
@@ -68,33 +69,32 @@ class RosterViewModel(
     }
 
     /** Roster unificato, derivato dalla libreria delle schede. */
-    val items: List<RosterItem>
-        get() {
-            val people = sheets.library.characters.map {
-                RosterItem(
-                    it.id,
-                    it.characterName.ifBlank { "Senza nome" },
-                    RosterKind.PERSONAGGIO,
-                    // Una scheda guidata scrive gia' i livelli dentro la classe
-                    // ("Guerriero 3 / Ladro 2"): ripeterli darebbe "Guerriero 3 3".
-                    // Quelle manuali tengono il livello in un campo a parte.
-                    if (it.progression.configured) {
-                        it.className.trim().ifBlank { "Personaggio" }
-                    } else {
-                        "${it.className} ${it.level}".trim().ifBlank { "Personaggio" }
-                    },
-                )
-            }
-            val creatures = sheets.library.monsters.map {
-                RosterItem(
-                    it.id,
-                    it.name.ifBlank { "Senza nome" },
-                    RosterKind.CREATURA,
-                    "GS ${it.challengeRating}",
-                )
-            }
-            return people + creatures
+    val items: List<RosterItem> by derivedStateOf {
+        val people = sheets.library.characters.map {
+            RosterItem(
+                it.id,
+                it.characterName.ifBlank { "Senza nome" },
+                RosterKind.PERSONAGGIO,
+                // Una scheda guidata scrive gia' i livelli dentro la classe
+                // ("Guerriero 3 / Ladro 2"): ripeterli darebbe "Guerriero 3 3".
+                // Quelle manuali tengono il livello in un campo a parte.
+                if (it.progression.configured) {
+                    it.className.trim().ifBlank { "Personaggio" }
+                } else {
+                    "${it.className} ${it.level}".trim().ifBlank { "Personaggio" }
+                },
+            )
         }
+        val creatures = sheets.library.monsters.map {
+            RosterItem(
+                it.id,
+                it.name.ifBlank { "Senza nome" },
+                RosterKind.CREATURA,
+                "GS ${it.challengeRating}",
+            )
+        }
+        people + creatures
+    }
 
     val selectedId: String? get() = sheets.selectedId
 
@@ -135,7 +135,8 @@ class RosterViewModel(
      * senza toccare quelle che ha modificato.
      */
     internal fun installTemplateContent(template: SessionTemplate) {
-        sheets.restoreMissing(template.party, template.monsters)
+        val known = sheets.library.characters.mapTo(mutableSetOf()) { it.id }
+        sheets.restoreMissing(template.buildMissingParty(known), template.monsters)
     }
 
     /**
@@ -147,8 +148,16 @@ class RosterViewModel(
      * che mancano: le schede dell'utente, anche se modificate, restano intatte.
      */
     internal fun installIncludedContent() {
+        val known = sheets.library.characters.mapTo(mutableSetOf()) { it.id }
+        val missingCharacters = buildList {
+            SessionTemplates.all.forEach { template ->
+                val built = template.buildMissingParty(known)
+                addAll(built)
+                built.forEach { known += it.id }
+            }
+        }
         sheets.restoreMissing(
-            SessionTemplates.all.flatMap { it.party },
+            missingCharacters,
             SessionTemplates.all.flatMap { it.monsters },
         )
     }

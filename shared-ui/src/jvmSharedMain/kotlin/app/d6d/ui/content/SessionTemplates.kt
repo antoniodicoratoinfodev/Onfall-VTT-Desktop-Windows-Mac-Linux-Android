@@ -46,6 +46,20 @@ internal data class SessionTemplate(
      */
     val party: List<CharacterSheet> by lazy { partyPlans.map(TemplateCharacters::build) }
 
+    /** Dimensione della squadra senza materializzare le costose schede di livello alto. */
+    val partyCount: Int get() = partyPlans.size
+
+    /**
+     * Costruisce soltanto le schede che non sono gia' installate nel Compendio.
+     * In particolare evita di far avanzare di nuovo i personaggi di livello 20 a
+     * ogni avvio, quando i loro documenti sono gia' presenti su disco.
+     */
+    internal fun buildMissingParty(knownIds: Set<String>): List<CharacterSheet> =
+        partyPlans.asSequence()
+            .filterNot { it.id in knownIds }
+            .map(TemplateCharacters::build)
+            .toList()
+
     val monsters: List<MonsterStatBlock> get() = opponents.map { it.statBlock }
 
     /** Numero di token avversari, contando le copie. */

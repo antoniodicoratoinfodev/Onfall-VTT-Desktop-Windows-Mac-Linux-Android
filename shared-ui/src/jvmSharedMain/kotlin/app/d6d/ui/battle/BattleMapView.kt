@@ -131,6 +131,7 @@ fun BattleMapView(
 
     val map = viewModel.battleMap
     val grid = map.grid()
+    val placements = remember(map) { map.orderedPlacements() }
     val density = LocalDensity.current
     val background = portraits.rememberBitmap(map.backgroundImage())
 
@@ -158,6 +159,7 @@ fun BattleMapView(
     // e' ancora stata spostata e deve partire esattamente centrata.
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     var pan by remember { mutableStateOf<Offset?>(null) }
+    var mapPanning by remember { mutableStateOf(false) }
     val cellPx = with(density) { liveCell.toPx() }
 
     // Casella sotto il mouse: serve a far seguire al puntatore il cerchio dell'area
@@ -232,6 +234,32 @@ fun BattleMapView(
 
     val camera = MapViewportGeometry(viewport, grid.columns(), grid.rows(), cellPx)
     val mapOffset = effectiveOffset(camera)
+
+    LaunchedEffect(areaTargeting) {
+        if (areaTargeting == null) hoverCell = null
+    }
+    // Il tracking continuo del mouse serve soltanto mentre si sceglie il centro di
+    // un'area. Lasciarlo montato sempre faceva processare alla mappa ogni evento di
+    // mouse ad alta frequenza anche durante il normale uso su Windows.
+    val areaHoverTracking = if (areaTargeting != null) {
+        Modifier.pointerInput(viewModel, density.density) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull()
+                    when (event.type) {
+                        PointerEventType.Exit -> hoverCell = null
+                        else -> if (change != null) {
+                            val cam = geometry(with(density) { liveCell.toPx() })
+                            hoverCell = cam.cellAt(change.position, effectiveOffset(cam))
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        Modifier
+    }
 
     // Il trascinamento dalle barre usa lo stesso viewport e lo stesso offset della
     // camera: non esiste piu' una seconda, implicita geometria del nodo griglia.
@@ -347,7 +375,10 @@ fun BattleMapView(
                             val movement = change.positionChange()
                             if (!panning) {
                                 travelled += movement
-                                if (travelled.getDistance() > viewConfiguration.touchSlop) panning = true
+                                if (travelled.getDistance() > viewConfiguration.touchSlop) {
+                                    panning = true
+                                    mapPanning = true
+                                }
                             }
                             if (panning) {
                                 val currentCamera = geometry(with(density) { liveCell.toPx() })
@@ -358,28 +389,12 @@ fun BattleMapView(
                             }
                         }
                     } finally {
+                        mapPanning = false
                         setMapDragCursor(false)
                     }
                 }
             }
-            // Traccia la casella sotto il mouse senza consumare nulla: pan, tap e
-            // rotella continuano a funzionare. Serve al cerchio dell'area, che segue
-            // il puntatore mentre si mira un incantesimo.
-            .pointerInput(viewModel, density.density) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull()
-                        when (event.type) {
-                            PointerEventType.Exit -> hoverCell = null
-                            else -> if (change != null) {
-                                val cam = geometry(with(density) { liveCell.toPx() })
-                                hoverCell = cam.cellAt(change.position, effectiveOffset(cam))
-                            }
-                        }
-                    }
-                }
-            },
+            .then(areaHoverTracking),
     ) {
         // Il Canvas ha sempre la dimensione del viewport. La mappa e' un mondo
         // virtuale disegnato applicando `mapOffset + casella * cellPx`: quindi non
@@ -404,7 +419,9 @@ fun BattleMapView(
                         dstW.roundToInt().coerceAtLeast(1),
                         dstH.roundToInt().coerceAtLeast(1),
                     ),
-                    filterQuality = FilterQuality.Medium,
+                    // Durante il pan privilegia la risposta immediata; al rilascio
+                    // un solo redraw ripristina il campionamento piu' accurato.
+                    filterQuality = if (mapPanning) FilterQuality.Low else FilterQuality.Medium,
                 )
             }
 
@@ -480,7 +497,7 @@ fun BattleMapView(
             }
         }
 
-        map.orderedPlacements().forEach { placement ->
+        placements.forEach { placement ->
             key(placement.combatantId()) {
                 MapToken(viewModel, portraits, placement, liveCell, mapOffset)
             }
@@ -991,16 +1008,15 @@ private fun MapToken(
         animationSpec = tween(400, easing = FastOutSlowInEasing),
         label = "tokenHitPoints",
     )
-    val pulse = if (active && !defeated) {
-        val animated by rememberInfiniteTransition(label = "tokenPulse").animateFloat(
+    val pulseState = if (active && !defeated) {
+        rememberInfiniteTransition(label = "tokenPulse").animateFloat(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(1150, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "tokenPulseValue",
         )
-        animated
     } else {
-        0f
+        null
     }
 
     val accent = if (defeated) Palette.TextFaint else faction.color
@@ -1165,6 +1181,9 @@ private fun MapToken(
             val topLeft = Offset(inset, inset)
 
             if (active && !defeated) {
+                // Letto nella fase di disegno: invalida soltanto il Canvas e non
+                // ricompone tutto il token sessanta volte al secondo.
+                val pulse = pulseState?.value ?: 0f
                 // Alone caldo sotto il combattente di turno: un piccolo cerchio di
                 // luce da lume, piu' intenso al centro, che pulsa piano.
                 drawCircle(

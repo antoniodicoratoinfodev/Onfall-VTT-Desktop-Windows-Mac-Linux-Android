@@ -1,7 +1,5 @@
 package app.d6d.ui
 
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -109,6 +107,10 @@ fun AppRoot(
     filePicker: FilePicker = FilePicker { null },
     // Solo il desktop offre cursori personalizzati; null mantiene Android invariato.
     cursorPreferences: CursorPreferences? = null,
+    // Il desktop puo' limitare il solo fondale sui renderer piu' costosi. Null
+    // mantiene l'animazione sincronizzata al display, come su macOS e Android.
+    atmosphericAnimationFrameMillis: Long? = null,
+    atmosphericAnimationRunning: Boolean = true,
     // Il desktop inoltra qui la richiesta della X della finestra, così le bozze
     // multi-sessione non possono essere perse senza una conferma esplicita.
     exitRequested: Boolean = false,
@@ -125,7 +127,10 @@ fun AppRoot(
         // da combattimento ne discende.
         val roster = remember {
             RosterViewModel(
-                ActorCatalogStore(dataDirectory),
+                // Il catalogo e' una proiezione rigenerabile delle schede: copie
+                // versionate a ogni uso di risorsa raddoppiavano l'I/O sincrono,
+                // soprattutto costoso su NTFS/Defender.
+                ActorCatalogStore(dataDirectory, ActorCatalogStore.DEFAULT_BASE_NAME, 0),
                 SheetStore(dataDirectory.resolve("schede.json")),
                 loadOnCreate = false,
             )
@@ -284,89 +289,88 @@ fun AppRoot(
             }
         }
 
-        // Il passaggio fra le schermate e' una dissolvenza breve invece di uno
-        // scatto: i view model vivono sopra, quindi nulla viene perso o ricreato.
+        // Le schermate sono volutamente scambiate in modo diretto. Una dissolvenza
+        // full-screen teneva vive, misurava e disegnava entrambe per 220 ms: fra
+        // mappa ed editor del Compendio il picco era molto visibile su Windows.
+        // I view model vivono sopra questo ramo, quindi lo stato applicativo resta.
         val content: @Composable (Modifier) -> Unit = { contentModifier ->
-            Crossfade(
-                targetState = destination,
-                modifier = contentModifier,
-                animationSpec = tween(220),
-                label = "destinazione",
-            ) { shown ->
-                when (shown) {
-                    Destination.BATTAGLIA ->
-                        key(activeSession.id) {
-                            BattleScreen(
-                                viewModel = battleViewModel,
-                                portraits = portraits,
-                                sessions = sessions,
-                                workspace = workspace,
-                                roster = roster,
-                                compact = compact,
-                                onOpenCombatantSheet = { definitionId ->
-                                    if (roster.items.any { it.id == definitionId }) {
-                                        requestedCompendiumItemId = definitionId
-                                        requestedCompendiumNewKind = null
-                                        destination = Destination.COMPENDIO
-                                    } else {
-                                        battleViewModel.showMessage(
-                                            "La scheda collegata a questo combattente non è presente nel Compendio.",
-                                        )
-                                    }
-                                },
-                                onCreateRosterCharacter = {
-                                    requestedCompendiumItemId = null
-                                    requestedCompendiumNewKind = RosterKind.PERSONAGGIO
-                                    destination = Destination.COMPENDIO
-                                },
-                                onCreateRosterCreature = {
-                                    requestedCompendiumItemId = null
-                                    requestedCompendiumNewKind = RosterKind.CREATURA
-                                    destination = Destination.COMPENDIO
-                                },
-                                onOpenSavedSession = openSavedSession,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-
-                    Destination.INCONTRO ->
-                        EncounterBuilderScreen(
-                            viewModel = encounterBuilder,
-                            compact = compact,
+            when (destination) {
+                Destination.BATTAGLIA ->
+                    key(activeSession.id) {
+                        BattleScreen(
+                            viewModel = battleViewModel,
+                            portraits = portraits,
+                            sessions = sessions,
                             workspace = workspace,
-                            onStarted = { session, name, mode ->
-                                openEncounter(session, name, mode)
+                            roster = roster,
+                            compact = compact,
+                            onOpenCombatantSheet = { definitionId ->
+                                if (roster.items.any { it.id == definitionId }) {
+                                    requestedCompendiumItemId = definitionId
+                                    requestedCompendiumNewKind = null
+                                    destination = Destination.COMPENDIO
+                                } else {
+                                    battleViewModel.showMessage(
+                                        "La scheda collegata a questo combattente non è presente nel Compendio.",
+                                    )
+                                }
                             },
-                            onOpenBattle = { destination = Destination.BATTAGLIA },
-                            onOpenCompendium = {
+                            onCreateRosterCharacter = {
                                 requestedCompendiumItemId = null
+                                requestedCompendiumNewKind = RosterKind.PERSONAGGIO
                                 destination = Destination.COMPENDIO
                             },
-                            modifier = Modifier.fillMaxSize(),
+                            onCreateRosterCreature = {
+                                requestedCompendiumItemId = null
+                                requestedCompendiumNewKind = RosterKind.CREATURA
+                                destination = Destination.COMPENDIO
+                            },
+                            onOpenSavedSession = openSavedSession,
+                            modifier = contentModifier,
                         )
+                    }
 
-                    Destination.COMPENDIO ->
-                        RosterScreen(
-                            viewModel = roster,
-                            portraits = portraits,
-                            compact = compact,
-                            requestedItemId = requestedCompendiumItemId,
-                            onRequestedItemHandled = { requestedCompendiumItemId = null },
-                            requestedNewKind = requestedCompendiumNewKind,
-                            onRequestedNewHandled = { requestedCompendiumNewKind = null },
-                            cursorPreferences = cursorPreferences,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                }
+                Destination.INCONTRO ->
+                    EncounterBuilderScreen(
+                        viewModel = encounterBuilder,
+                        compact = compact,
+                        workspace = workspace,
+                        onStarted = { session, name, mode ->
+                            openEncounter(session, name, mode)
+                        },
+                        onOpenBattle = { destination = Destination.BATTAGLIA },
+                        onOpenCompendium = {
+                            requestedCompendiumItemId = null
+                            destination = Destination.COMPENDIO
+                        },
+                        modifier = contentModifier,
+                    )
+
+                Destination.COMPENDIO ->
+                    RosterScreen(
+                        viewModel = roster,
+                        portraits = portraits,
+                        compact = compact,
+                        requestedItemId = requestedCompendiumItemId,
+                        onRequestedItemHandled = { requestedCompendiumItemId = null },
+                        requestedNewKind = requestedCompendiumNewKind,
+                        onRequestedNewHandled = { requestedCompendiumNewKind = null },
+                        cursorPreferences = cursorPreferences,
+                        modifier = contentModifier,
+                    )
             }
         }
 
         CompositionLocalProvider(LocalUiLayout provides layout) {
             Box(modifier.fillMaxSize()) {
                 // Fondale atmosferico condiviso: resta fermo mentre le schermate si
-                // dissolvono sopra. La battaglia dipinge il proprio fondo opaco,
+                // alternano sopra. La battaglia dipinge il proprio fondo opaco,
                 // quindi la mappa tattica non lo vede e resta pulita e leggibile.
-                AtmosphericBackground(Modifier.fillMaxSize())
+                AtmosphericBackground(
+                    modifier = Modifier.fillMaxSize(),
+                    animationFrameIntervalMillis = atmosphericAnimationFrameMillis,
+                    animationRunning = atmosphericAnimationRunning,
+                )
 
                 if (compact) {
                     Column(Modifier.fillMaxSize()) {

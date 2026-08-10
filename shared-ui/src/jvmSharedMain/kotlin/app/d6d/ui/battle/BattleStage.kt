@@ -234,6 +234,10 @@ internal fun FloatingPanel(
     // Il gestore del trascinamento non va riavviato a ogni spostamento, ma deve
     // leggere sempre la frazione piu' recente: `rememberUpdatedState` la tiene fresca.
     val currentFraction by rememberUpdatedState(fraction)
+    // Durante il gesto la posizione resta locale: aggiornare UiLayoutState a ogni
+    // evento ricomponeva la shell e riavviava inutilmente il debounce di persistenza.
+    // La frazione globale viene pubblicata una volta sola, al rilascio.
+    var livePosition by remember { mutableStateOf<Offset?>(null) }
 
     Box(
         Modifier
@@ -241,13 +245,24 @@ internal fun FloatingPanel(
                 panelSize = it.size
                 parentSize = it.parentLayoutCoordinates?.size ?: parentSize
             }
-            .offset { fraction?.let(::toPixels) ?: start() }
+            .offset {
+                livePosition?.let { IntOffset(it.x.roundToInt(), it.y.roundToInt()) }
+                    ?: fraction?.let(::toPixels)
+                    ?: start()
+            }
             .pointerInput(Unit) {
                 var dragPosition = Offset.Zero
                 detectDragGestures(
                     onDragStart = {
                         val base = currentFraction?.let(::toPixels) ?: start()
                         dragPosition = Offset(base.x.toFloat(), base.y.toFloat())
+                        livePosition = dragPosition
+                    },
+                    onDragCancel = { livePosition = null },
+                    onDragEnd = {
+                        val free = freeSpace()
+                        onFractionChange(dragPosition.toPanelFraction(free))
+                        livePosition = null
                     },
                     onDrag = { change, amount ->
                         change.consume()
@@ -257,7 +272,7 @@ internal fun FloatingPanel(
                         // frazionari: arrotondarli uno per uno faceva restare la targa molto
                         // indietro rispetto al puntatore.
                         dragPosition = accumulatePanelDrag(dragPosition, amount, free)
-                        onFractionChange(dragPosition.toPanelFraction(free))
+                        livePosition = dragPosition
                     },
                 )
             },

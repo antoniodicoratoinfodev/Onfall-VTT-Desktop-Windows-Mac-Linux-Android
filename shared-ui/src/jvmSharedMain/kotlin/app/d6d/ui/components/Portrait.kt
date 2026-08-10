@@ -62,8 +62,8 @@ fun CombatantPortrait(
 
     // Pulsazione solo sul turno attivo: segnala di chi e' il turno senza
     // aggiungere testo, che a colpo d'occhio sarebbe piu' lento da leggere.
-    val pulse = if (active && !defeated) {
-        val animated by rememberInfiniteTransition(label = "activePulse").animateFloat(
+    val pulseState = if (active && !defeated) {
+        rememberInfiniteTransition(label = "activePulse").animateFloat(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
@@ -72,9 +72,8 @@ fun CombatantPortrait(
             ),
             label = "activePulseValue",
         )
-        animated
     } else {
-        0f
+        null
     }
 
     val accent = when {
@@ -92,6 +91,9 @@ fun CombatantPortrait(
             val topLeft = Offset(inset, inset)
 
             if (active && !defeated) {
+                // Leggere lo stato qui limita l'invalidazione al disegno del
+                // medaglione, senza ricomporre testo e layout a ogni frame.
+                val pulse = pulseState?.value ?: 0f
                 drawCircle(
                     color = accent.copy(alpha = 0.10f + 0.16f * pulse),
                     radius = size.minDimension / 2f,
@@ -152,10 +154,12 @@ fun CombatantPortrait(
 
 /** Iniziali usate nel medaglione: una parola sola da' una lettera, due o piu' ne danno due. */
 internal fun initials(value: String): String {
-    val words = value.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    val words = value.trim().split(Whitespace).filter { it.isNotEmpty() }
     return when {
         words.isEmpty() -> "?"
         words.size == 1 -> words[0].take(1).uppercase()
         else -> (words.first().take(1) + words.last().take(1)).uppercase()
     }
 }
+
+private val Whitespace = Regex("\\s+")

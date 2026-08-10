@@ -1,15 +1,12 @@
 package app.d6d.ui.theme
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -30,6 +27,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.random.Random
+import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Canvas as bitmapCanvas
 
 /**
@@ -54,6 +52,8 @@ fun AtmosphericBackground(
     modifier: Modifier = Modifier,
     embers: Boolean = true,
     vignette: Float = 0.52f,
+    animationFrameIntervalMillis: Long? = null,
+    animationRunning: Boolean = true,
 ) {
     // Strato fermo: base, pietra, crepe e vignettatura. Legge solo la dimensione,
     // quindi si ridisegna soltanto al ridimensionamento.
@@ -62,18 +62,10 @@ fun AtmosphericBackground(
     }
 
     if (embers) {
-        val transition = rememberInfiniteTransition(label = "backdrop")
-        // Un tempo 0..1 in ciclo continuo. Luce e particelle usano solo armoniche
-        // intere, quindi il passaggio fra fine e inizio del ciclo resta invisibile.
-        val time by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 18_000, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-            label = "firelight",
-        )
+        // Su renderer meno rapidi il solo fondale puo' essere campionato a una
+        // frequenza inferiore al display: il ciclo resta identico, ma non obbliga
+        // Skia a ricreare decine di gradienti a 120/144 Hz.
+        val time by backdropAnimationTime(animationFrameIntervalMillis, animationRunning)
         Canvas(modifier.fillMaxSize()) {
             drawFirelight(time)
             // Il dithering deve stare sopra il bagliore animato, non soltanto sul
@@ -83,6 +75,36 @@ fun AtmosphericBackground(
         }
     } else {
         Canvas(modifier.fillMaxSize()) { drawRect(backdropDither) }
+    }
+}
+
+private const val BACKDROP_CYCLE_MILLIS = 18_000L
+private const val BACKDROP_CYCLE_NANOS = BACKDROP_CYCLE_MILLIS * 1_000_000L
+
+/** Tempo ciclico stabile, estratto per verificare anche il percorso a frame limitati. */
+internal fun backdropCycleProgress(elapsedNanos: Long): Float =
+    Math.floorMod(elapsedNanos, BACKDROP_CYCLE_NANOS).toFloat() / BACKDROP_CYCLE_NANOS.toFloat()
+
+internal fun backdropResumedCycleProgress(resumeProgress: Float, elapsedNanos: Long): Float =
+    backdropCycleProgress((resumeProgress * BACKDROP_CYCLE_NANOS).toLong() + elapsedNanos)
+
+@Composable
+private fun backdropAnimationTime(frameIntervalMillis: Long?, running: Boolean): State<Float> {
+    val interval = frameIntervalMillis?.coerceAtLeast(16L)
+    return produceState(initialValue = 0f, key1 = interval, key2 = running) {
+        // `produceState` conserva il valore quando cambia una chiave: fermando la
+        // coroutine il fondale resta sull'ultimo fotogramma, senza spegnersi.
+        if (!running) return@produceState
+        val resumedAt = System.nanoTime()
+        val resumedProgress = value
+        while (true) {
+            value = backdropResumedCycleProgress(resumedProgress, System.nanoTime() - resumedAt)
+            if (interval == null) {
+                withFrameNanos { }
+            } else {
+                delay(interval)
+            }
+        }
     }
 }
 

@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -71,6 +72,16 @@ fun RosterScreen(
     var section by remember { mutableStateOf(RosterSection.SCHEDE) }
     var compactPane by remember { mutableStateOf(CompactRosterPane.LIST) }
     var pendingNavigation by remember { mutableStateOf<RosterNavigation?>(null) }
+    // Sul desktop l'editor completo contiene centinaia di campi eager. Lasciamo
+    // apparire prima shell e lista, poi lo montiamo al frame successivo: eventuali
+    // richieste di selezione vengono cosi' applicate prima e l'editor nasce una volta.
+    var desktopEditorReady by remember { mutableStateOf(compact) }
+    LaunchedEffect(Unit) {
+        if (!desktopEditorReady) {
+            withFrameNanos { }
+            desktopEditorReady = true
+        }
+    }
 
     val applyNavigation: (RosterNavigation, Boolean) -> SheetNavigationResult = { navigation, discard ->
         when (navigation) {
@@ -207,7 +218,13 @@ fun RosterScreen(
                                 modifier = Modifier.width(258.dp),
                                 onSelect = { item -> requestNavigation(RosterNavigation.Select(item)) },
                             )
-                            Box(Modifier.weight(1f)) { editor(Modifier.fillMaxSize()) }
+                            Box(Modifier.weight(1f)) {
+                                if (desktopEditorReady) {
+                                    editor(Modifier.fillMaxSize())
+                                } else {
+                                    Box(Modifier.fillMaxSize().background(Palette.Surface.copy(alpha = 0.45f)))
+                                }
+                            }
                         }
                     }
                 }
