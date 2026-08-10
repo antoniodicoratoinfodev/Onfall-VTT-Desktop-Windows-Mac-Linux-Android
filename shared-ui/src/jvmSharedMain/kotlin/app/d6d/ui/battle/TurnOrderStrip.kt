@@ -51,9 +51,11 @@ fun TurnOrderStrip(
     modifier: Modifier = Modifier,
     editing: Boolean = false,
     showInitiative: Boolean = true,
+    cardScale: Float = 1f,
 ) {
     val groups = viewModel.turnGroups
     if (groups.isEmpty()) return
+    val layoutScale = cardScale.coerceIn(0.9f, 1.12f)
 
     Row(
         modifier.horizontalScroll(rememberScrollState()),
@@ -67,6 +69,7 @@ fun TurnOrderStrip(
                 current = index == viewModel.turnIndex,
                 editing = editing,
                 showInitiative = showInitiative,
+                layoutScale = layoutScale,
                 canMoveEarlier = index > 0,
                 canMoveLater = index < groups.lastIndex,
             )
@@ -81,6 +84,7 @@ private fun TurnChip(
     current: Boolean,
     editing: Boolean,
     showInitiative: Boolean,
+    layoutScale: Float,
     canMoveEarlier: Boolean,
     canMoveLater: Boolean,
 ) {
@@ -131,8 +135,10 @@ private fun TurnChip(
 
     Column(
         Modifier
-            .heightIn(min = 44.dp)
-            .widthIn(max = 220.dp)
+            // Cambiano solo le misure della card. La tipografia resta alla densita'
+            // nativa, evitando il nuovo hinting dei glyph durante il resize.
+            .heightIn(min = 44.dp * layoutScale)
+            .widthIn(max = 220.dp * layoutScale)
             .clip(shape)
             .background(
                 when {
@@ -175,8 +181,14 @@ private fun TurnChip(
                 },
                 onClick = onChipClick,
             )
-            .padding(horizontal = 9.dp, vertical = 5.dp),
+            .padding(
+                horizontal = 9.dp * layoutScale,
+                vertical = 5.dp * layoutScale,
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
+        // Quando l'iniziativa e' nascosta resta una sola riga: centrare l'intero
+        // blocco evita che il nome rimanga appoggiato al bordo superiore.
+        verticalArrangement = Arrangement.Center,
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(3.dp),

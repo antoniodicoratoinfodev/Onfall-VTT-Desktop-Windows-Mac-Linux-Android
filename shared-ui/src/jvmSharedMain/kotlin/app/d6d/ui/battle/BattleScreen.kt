@@ -52,7 +52,6 @@ import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.Faction
 import app.d6d.ui.components.HorizontalResizeHandle
 import app.d6d.ui.components.PanelScrollbar
-import app.d6d.ui.components.ScaledDensity
 import app.d6d.ui.components.VerticalResizeHandle
 import kotlin.math.roundToInt
 import app.d6d.ui.images.PortraitRepository
@@ -68,7 +67,6 @@ import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
 
-private val TOP_BAR_BASE = 64.dp
 private val TURN_ORDER_LABEL_SPACE = 24.dp
 private val TURN_ORDER_EDIT_EXTRA_HEIGHT = 28.dp
 private val TURN_ORDER_COMPACT_BREAKPOINT = 960.dp
@@ -668,7 +666,7 @@ private fun BattleTopBar(
             TURN_ORDER_MIN_HEIGHT,
             TURN_ORDER_MAX_HEIGHT,
         )
-        val turnScale = turnOrderContentScale(viewportHeight)
+        val turnCardScale = turnOrderCardScale(viewportHeight)
         val barHeight = viewportHeight + TURN_ORDER_LABEL_SPACE +
             if (viewModel.editMode) TURN_ORDER_EDIT_EXTRA_HEIGHT else 0.dp
         val tight = maxWidth < 1260.dp
@@ -720,13 +718,12 @@ private fun BattleTopBar(
                         Modifier.weight(1f).fillMaxWidth(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        ScaledDensity(turnScale) {
-                            TurnOrderStrip(
-                                viewModel,
-                                editing = viewModel.editMode,
-                                showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
-                            )
-                        }
+                        TurnOrderStrip(
+                            viewModel,
+                            editing = viewModel.editMode,
+                            showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
+                            cardScale = turnCardScale,
+                        )
                     }
                 }
             }
@@ -789,9 +786,12 @@ private fun CompactTurnOrderActions(
     }
 }
 
-/** Taglie contenute: il resize resta leggibile senza allargare le card a dismisura. */
-private fun turnOrderContentScale(viewportHeight: Dp): Float = when {
-    viewportHeight < TOP_BAR_BASE -> 0.9f
+/**
+ * Il resize continua a cambiare le dimensioni delle card, con pochi livelli
+ * stabili. Il fattore non viene mai applicato alla densita' o alla tipografia.
+ */
+private fun turnOrderCardScale(viewportHeight: Dp): Float = when {
+    viewportHeight < 64.dp -> 0.9f
     viewportHeight >= 128.dp -> 1.12f
     viewportHeight >= 96.dp -> 1.08f
     viewportHeight >= 80.dp -> 1.04f

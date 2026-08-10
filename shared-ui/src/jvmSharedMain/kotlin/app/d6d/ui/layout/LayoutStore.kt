@@ -44,8 +44,8 @@ data class UiLayout(
     // Separato dal collasso per restare compatibili con le preferenze salvate
     // quando l'ordine dei turni aveva soltanto due stati.
     val turnsShowInitiative: Boolean = true,
-    // Altezza fissa della fascia turni sopra la mappa: i riquadri turno vengono
-    // scalati per riempirla, quindi allargandola crescono e restringendola calano.
+    // Altezza della fascia turni sopra la mappa: i riquadri ne seguono la misura,
+    // mentre il testo conserva la densita' nativa per restare nitido.
     val topBarHeightDp: Float = 64f,
     // Altezza fissa della fascia comandi sotto la mappa, con scorrimento interno.
     val commandBarHeightDp: Float = 176f,
