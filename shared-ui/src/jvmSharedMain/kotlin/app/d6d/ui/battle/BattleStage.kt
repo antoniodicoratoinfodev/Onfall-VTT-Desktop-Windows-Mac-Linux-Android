@@ -243,24 +243,40 @@ internal fun FloatingPanel(
             }
             .offset { fraction?.let(::toPixels) ?: start() }
             .pointerInput(Unit) {
-                detectDragGestures { change, amount ->
-                    change.consume()
-                    val free = freeSpace()
-                    val base = currentFraction?.let(::toPixels) ?: start()
-                    val x = (base.x + amount.x.roundToInt()).coerceIn(0, free.width)
-                    val y = (base.y + amount.y.roundToInt()).coerceIn(0, free.height)
-                    onFractionChange(
-                        Offset(
-                            if (free.width == 0) 0f else x.toFloat() / free.width,
-                            if (free.height == 0) 0f else y.toFloat() / free.height,
-                        ),
-                    )
-                }
+                var dragPosition = Offset.Zero
+                detectDragGestures(
+                    onDragStart = {
+                        val base = currentFraction?.let(::toPixels) ?: start()
+                        dragPosition = Offset(base.x.toFloat(), base.y.toFloat())
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        val free = freeSpace()
+                        // Conserva i sottopixel fra un evento e il successivo. Su Windows,
+                        // con scaling DPI o mouse ad alta frequenza, i delta sono spesso
+                        // frazionari: arrotondarli uno per uno faceva restare la targa molto
+                        // indietro rispetto al puntatore.
+                        dragPosition = accumulatePanelDrag(dragPosition, amount, free)
+                        onFractionChange(dragPosition.toPanelFraction(free))
+                    },
+                )
             },
     ) {
         content()
     }
 }
+
+/** Accumula un delta senza perdere i sottopixel e mantiene la targa nel contenitore. */
+internal fun accumulatePanelDrag(position: Offset, amount: Offset, freeSpace: IntSize): Offset = Offset(
+    x = (position.x + amount.x).coerceIn(0f, freeSpace.width.toFloat()),
+    y = (position.y + amount.y).coerceIn(0f, freeSpace.height.toFloat()),
+)
+
+/** Converte la posizione corrente nella frazione persistita, gestendo gli assi senza spazio. */
+internal fun Offset.toPanelFraction(freeSpace: IntSize): Offset = Offset(
+    x = if (freeSpace.width == 0) 0f else x / freeSpace.width,
+    y = if (freeSpace.height == 0) 0f else y / freeSpace.height,
+)
 
 /**
  * Legenda: scala della griglia e distanza fra attore e bersaglio.
