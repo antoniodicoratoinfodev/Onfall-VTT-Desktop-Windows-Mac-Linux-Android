@@ -6,9 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -40,6 +41,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.CombatStatus
@@ -66,11 +68,12 @@ import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
 
-// Altezza a cui i riquadri dell'ordine turni hanno la dimensione naturale (scala
-// 1). Piu' la fascia supera questa quota, piu' i riquadri crescono; sotto,
-// rimpiccioliscono. Cosi' il contenuto riempie sempre la fascia mentre la si
-// trascina, invece di restare fermo con dello spazio vuoto.
 private val TOP_BAR_BASE = 64.dp
+private val TURN_ORDER_LABEL_SPACE = 24.dp
+private val TURN_ORDER_EDIT_EXTRA_HEIGHT = 28.dp
+private val TURN_ORDER_COMPACT_BREAKPOINT = 960.dp
+private val TURN_ORDER_MIN_HEIGHT = 56.dp
+private val TURN_ORDER_MAX_HEIGHT = 240.dp
 
 /**
  * Schermata di combattimento.
@@ -114,7 +117,7 @@ fun BattleScreen(
             HorizontalResizeHandle(
                 onDrag = { dragPx ->
                     layout.topBarHeight = (layout.topBarHeight + with(density) { dragPx.toDp() })
-                        .coerceIn(56.dp, 240.dp)
+                        .coerceIn(TURN_ORDER_MIN_HEIGHT, TURN_ORDER_MAX_HEIGHT)
                 },
             )
         }
@@ -567,138 +570,232 @@ private fun BattleTopBar(
     autosaveWarning: Boolean,
     compact: Boolean,
 ) {
-    // Il pannello ordine turni si puo' contrarre per liberare spazio in cima.
     val layout = LocalUiLayout.current
     val turnOrderMode = layout.turnOrderDisplayMode
 
-    if (compact) {
-        Column(
-            Modifier.fillMaxWidth()
-                .background(Palette.Surface.copy(alpha = 0.92f))
-                .padding(horizontal = 10.dp, vertical = 7.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Il vecchio layout resta intatto. Cambia ramo in base allo spazio che
+        // arriva davvero alla battaglia, quindi rail e resize non soffocano il centro.
+        val useCompactLayout = compact || maxWidth < TURN_ORDER_COMPACT_BREAKPOINT
+        val labelNeedsOwnRow = maxWidth < 520.dp
+        if (useCompactLayout) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Palette.Surface.copy(alpha = 0.92f))
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                BattleMark()
-                BattleTitle(sessions, modifier = Modifier.weight(1f))
-                // Il round vive ora nel registro, accanto a "Registro eventi". Lo
-                // stato si mostra solo quando dice qualcosa: durante il gioco "Attivo"
-                // e' scontato, quindi sparisce e lascia l'intestazione piu' pulita.
-                if (viewModel.status != CombatStatus.ACTIVE) {
-                    Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BattleMark()
+                    BattleTitle(sessions, modifier = Modifier.weight(1f))
+                    if (viewModel.status != CombatStatus.ACTIVE) {
+                        Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
+                    }
+                }
+                if (labelNeedsOwnRow) {
+                    // Sulle finestre molto strette l'etichetta usa tutta la riga:
+                    // i pulsanti non possono piu' ridurne la larghezza.
+                    TurnsLabel(
+                        turnOrderMode,
+                        layout::cycleTurnOrderDisplayMode,
+                        Modifier.align(Alignment.CenterHorizontally),
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (turnOrderMode != TurnOrderDisplayMode.HIDDEN) {
+                            Box(
+                                Modifier.weight(1f),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                TurnOrderStrip(
+                                    viewModel,
+                                    editing = viewModel.editMode,
+                                    showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
+                                )
+                            }
+                        } else {
+                            Box(Modifier.weight(1f))
+                        }
+                        CompactTurnOrderActions(
+                            viewModel = viewModel,
+                            sessions = sessions,
+                            openSessionCount = openSessionCount,
+                            autosaveWarning = autosaveWarning,
+                        )
+                    }
+                } else {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Column(
+                            Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            TurnsLabel(turnOrderMode, layout::cycleTurnOrderDisplayMode)
+                            if (turnOrderMode != TurnOrderDisplayMode.HIDDEN) {
+                                TurnOrderStrip(
+                                    viewModel,
+                                    editing = viewModel.editMode,
+                                    showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
+                                )
+                            }
+                        }
+                        CompactTurnOrderActions(
+                            viewModel = viewModel,
+                            sessions = sessions,
+                            openSessionCount = openSessionCount,
+                            autosaveWarning = autosaveWarning,
+                            modifier = Modifier.align(Alignment.CenterVertically),
+                        )
+                    }
                 }
             }
+            return@BoxWithConstraints
+        }
+
+        val viewportHeight = layout.topBarHeight.coerceIn(
+            TURN_ORDER_MIN_HEIGHT,
+            TURN_ORDER_MAX_HEIGHT,
+        )
+        val turnScale = turnOrderContentScale(viewportHeight)
+        val barHeight = viewportHeight + TURN_ORDER_LABEL_SPACE +
+            if (viewModel.editMode) TURN_ORDER_EDIT_EXTRA_HEIGHT else 0.dp
+        val tight = maxWidth < 1260.dp
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .then(
+                    if (turnOrderMode == TurnOrderDisplayMode.HIDDEN) {
+                        Modifier
+                    } else {
+                        Modifier.height(barHeight)
+                    },
+                )
+                .background(Palette.Surface.copy(alpha = 0.92f))
+                .padding(horizontal = 12.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BattleTitle(
+                sessions,
+                Modifier.widthIn(max = if (tight) 170.dp else 220.dp),
+            )
+
+            // La scritta conserva la sua fascia di 24 dp; sotto scorre soltanto
+            // l'ordine. Nessuna tessera o badge puo' disegnarle sopra.
+            Column(
+                Modifier
+                    .weight(1f)
+                    .align(Alignment.Top)
+                    .then(
+                        if (turnOrderMode == TurnOrderDisplayMode.HIDDEN) {
+                            Modifier.height(TURN_ORDER_LABEL_SPACE)
+                        } else {
+                            Modifier.fillMaxHeight()
+                        },
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(Modifier.fillMaxWidth().height(TURN_ORDER_LABEL_SPACE)) {
+                    TurnsLabel(
+                        turnOrderMode,
+                        layout::cycleTurnOrderDisplayMode,
+                        Modifier.align(Alignment.TopCenter),
+                    )
+                }
+                if (turnOrderMode != TurnOrderDisplayMode.HIDDEN) {
+                    Box(
+                        Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ScaledDensity(turnScale) {
+                            TurnOrderStrip(
+                                viewModel,
+                                editing = viewModel.editMode,
+                                showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
+                            )
+                        }
+                    }
+                }
+            }
+
             Row(
-                Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (turnOrderMode == TurnOrderDisplayMode.HIDDEN) {
-                    TurnsLabel(turnOrderMode, layout::cycleTurnOrderDisplayMode)
-                    Spacer(Modifier.weight(1f))
-                } else {
-                    Column(Modifier.weight(1f)) {
-                        TurnsLabel(turnOrderMode, layout::cycleTurnOrderDisplayMode)
-                        TurnOrderStrip(
-                            viewModel,
-                            editing = viewModel.editMode,
-                            showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
-                        )
-                    }
+                if (viewModel.status == CombatStatus.DRAFT || viewModel.status == CombatStatus.READY) {
+                    GameButton(
+                        label = when {
+                            !tight && viewModel.simultaneousTies -> "Parità insieme"
+                            !tight -> "Parità separate"
+                            viewModel.simultaneousTies -> "Parità unite"
+                            else -> "Parità divise"
+                        },
+                        accent = if (viewModel.simultaneousTies) Palette.GoldBright else Palette.TextMuted,
+                        selected = viewModel.simultaneousTies,
+                        dense = true,
+                        onClick = { viewModel.simultaneousTies = !viewModel.simultaneousTies },
+                    )
                 }
                 EditModeButton(viewModel)
                 SessionMenuButton(
                     sessions,
+                    modifier = Modifier.widthIn(max = if (tight) 120.dp else 150.dp),
+                    dense = true,
                     openSessionCount = openSessionCount,
                     autosaveWarning = autosaveWarning,
                 )
-            }
-        }
-        return
-    }
-
-    // In modifica ogni riquadro turno guadagna i comandi ◀ ▶ e "rendi corrente":
-    // la fascia cresce quel tanto che basta a ospitarli, senza rimpicciolire i
-    // turni. La scala dei riquadri resta quella scelta dall'altezza a riposo.
-    val turnScale = (layout.topBarHeight / TOP_BAR_BASE).coerceIn(0.6f, 3.5f)
-    val barHeight = if (viewModel.editMode) layout.topBarHeight + 28.dp * turnScale else layout.topBarHeight
-
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .then(if (turnOrderMode == TurnOrderDisplayMode.HIDDEN) Modifier else Modifier.height(barHeight))
-            .background(Palette.Surface.copy(alpha = 0.92f))
-            .padding(horizontal = 12.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BattleTitle(sessions)
-
-        // L'etichetta "Ordine dei turni" attraversa i tre stati senza un tasto
-        // separato. Da nascosta resta solo l'etichetta; negli altri due stati la
-        // colonna riempie l'altezza scelta e i riquadri vi si scalano.
-        if (turnOrderMode == TurnOrderDisplayMode.HIDDEN) {
-            TurnsLabel(turnOrderMode, layout::cycleTurnOrderDisplayMode)
-            Spacer(Modifier.weight(1f))
-        } else {
-            Column(
-                Modifier.weight(1f).fillMaxHeight(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                ScaledDensity(turnScale) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            TurnsLabel(turnOrderMode, layout::cycleTurnOrderDisplayMode)
-                            if (viewModel.isSimultaneousTurn) Chip("Turno simultaneo", Palette.GoldBright)
-                        }
-                        TurnOrderStrip(
-                            viewModel,
-                            editing = viewModel.editMode,
-                            showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
-                        )
-                    }
+                if (viewModel.status != CombatStatus.ACTIVE) {
+                    Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
                 }
             }
         }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (viewModel.status == CombatStatus.DRAFT || viewModel.status == CombatStatus.READY) {
-                GameButton(
-                    label = if (viewModel.simultaneousTies) "Parità insieme" else "Parità separate",
-                    accent = if (viewModel.simultaneousTies) Palette.GoldBright else Palette.TextMuted,
-                    selected = viewModel.simultaneousTies,
-                    dense = true,
-                    onClick = { viewModel.simultaneousTies = !viewModel.simultaneousTies },
-                )
-            }
-            EditModeButton(viewModel)
-            SessionMenuButton(
-                sessions,
-                dense = true,
-                openSessionCount = openSessionCount,
-                autosaveWarning = autosaveWarning,
-            )
-            // "Round" si e' spostato nel registro; "Attivo" non si mostra, resta solo
-            // uno stato quando c'e' davvero qualcosa da segnalare (bozza, pausa...).
-            if (viewModel.status != CombatStatus.ACTIVE) {
-                Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
-            }
-        }
     }
+}
+
+@Composable
+private fun CompactTurnOrderActions(
+    viewModel: BattleViewModel,
+    sessions: SessionManager,
+    openSessionCount: Int,
+    autosaveWarning: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        EditModeButton(viewModel)
+        SessionMenuButton(
+            sessions,
+            modifier = Modifier.widthIn(max = 130.dp),
+            dense = true,
+            openSessionCount = openSessionCount,
+            autosaveWarning = autosaveWarning,
+        )
+    }
+}
+
+/** Taglie contenute: il resize resta leggibile senza allargare le card a dismisura. */
+private fun turnOrderContentScale(viewportHeight: Dp): Float = when {
+    viewportHeight < TOP_BAR_BASE -> 0.9f
+    viewportHeight >= 128.dp -> 1.12f
+    viewportHeight >= 96.dp -> 1.08f
+    viewportHeight >= 80.dp -> 1.04f
+    else -> 1f
 }
 
 /**
@@ -706,14 +803,21 @@ private fun BattleTopBar(
  * all'ordine con iniziativa e infine torna a nasconderlo.
  */
 @Composable
-private fun TurnsLabel(mode: TurnOrderDisplayMode, onCycle: () -> Unit) {
+private fun TurnsLabel(
+    mode: TurnOrderDisplayMode,
+    onCycle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val nextAction = when (mode) {
         TurnOrderDisplayMode.HIDDEN -> "Mostra l'ordine dei turni senza iniziativa"
         TurnOrderDisplayMode.ORDER_ONLY -> "Mostra anche i valori di iniziativa"
         TurnOrderDisplayMode.WITH_INITIATIVE -> "Nascondi l'ordine dei turni"
     }
     Row(
-        Modifier
+        modifier
+            // Il testo decide la larghezza naturale e non viene mai forzato nei
+            // 132 dp precedenti, insufficienti con font/DPI di Windows.
+            .widthIn(min = 168.dp)
             .clip(RoundedCornerShape(5.dp))
             .clickable(
                 role = Role.Button,
@@ -721,14 +825,22 @@ private fun TurnsLabel(mode: TurnOrderDisplayMode, onCycle: () -> Unit) {
                 onClick = onCycle,
             )
             .padding(horizontal = 5.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Eyebrow("Ordine dei turni")
+        Text(
+            text = "ORDINE DEI TURNI",
+            color = Palette.Gold,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            softWrap = false,
+        )
         Text(
             text = if (mode == TurnOrderDisplayMode.HIDDEN) "▸" else "▾",
             color = Palette.TextMuted,
             style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
