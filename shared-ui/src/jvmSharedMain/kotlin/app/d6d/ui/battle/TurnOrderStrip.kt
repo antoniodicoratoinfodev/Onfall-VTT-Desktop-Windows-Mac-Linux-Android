@@ -17,6 +17,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
@@ -90,6 +93,7 @@ private fun TurnChip(
 
     // Un gruppo misto (alleati e nemici insieme) non ha un colore di fazione unico.
     val factions = group.map { if (viewModel.isParty(it)) Faction.PARTY else Faction.ENEMY }.toSet()
+    val turnFaction = factions.singleOrNull()
     val accent = when {
         allDown -> Palette.TextFaint
         factions.size > 1 -> Palette.Gold
@@ -129,6 +133,7 @@ private fun TurnChip(
         Modifier
             .heightIn(min = 44.dp)
             .widthIn(max = 220.dp)
+            .clip(shape)
             .background(
                 when {
                     allDown -> SolidColor(Palette.SurfaceHigh)
@@ -143,6 +148,16 @@ private fun TurnChip(
                 },
                 shape,
             )
+            // Stessa strip delle carte laterali: blu per la squadra, rossa per
+            // i nemici. Un turno misto resta neutro.
+            .drawBehind {
+                turnFaction?.let { faction ->
+                    drawRect(
+                        color = faction.color.copy(alpha = 0.9f),
+                        size = Size(3.dp.toPx(), size.height),
+                    )
+                }
+            }
             .then(outline)
             .semantics {
                 contentDescription = "Turno di $names"
