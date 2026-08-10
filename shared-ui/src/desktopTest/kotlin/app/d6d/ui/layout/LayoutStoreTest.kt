@@ -38,6 +38,7 @@ class LayoutStoreTest {
             logHeightDp = 180f,
             logCollapsed = true,
             turnsCollapsed = true,
+            turnsShowInitiative = false,
             topBarHeightDp = 90f,
             commandBarHeightDp = 220f,
             commandsCollapsed = true,
@@ -60,6 +61,18 @@ class LayoutStoreTest {
         Files.writeString(file, "{ questo non è json valido")
 
         assertEquals(UiLayout(), store().load())
+    }
+
+    @Test
+    fun `una preferenza precedente mantiene la visualizzazione con iniziativa`() {
+        val file = directory.resolve("layout.json")
+        Files.createDirectories(directory)
+        Files.writeString(file, """{"turnsCollapsed":false}""")
+
+        val loaded = store().load()
+
+        assertFalse(loaded.turnsCollapsed)
+        assertTrue(loaded.turnsShowInitiative)
     }
 
     @Test
@@ -121,5 +134,21 @@ class LayoutStoreTest {
         assertNull(loaded.targetPlate)
         assertNull(loaded.activePlate)
         assertFalse(loaded.logCollapsed)
+    }
+
+    @Test
+    fun `un clic attraversa le tre modalita dell ordine dei turni`() {
+        val state = UiLayoutState(UiLayout(turnsCollapsed = true))
+
+        assertEquals(TurnOrderDisplayMode.HIDDEN, state.turnOrderDisplayMode)
+
+        state.cycleTurnOrderDisplayMode()
+        assertEquals(TurnOrderDisplayMode.ORDER_ONLY, state.turnOrderDisplayMode)
+
+        state.cycleTurnOrderDisplayMode()
+        assertEquals(TurnOrderDisplayMode.WITH_INITIATIVE, state.turnOrderDisplayMode)
+
+        state.cycleTurnOrderDisplayMode()
+        assertEquals(TurnOrderDisplayMode.HIDDEN, state.turnOrderDisplayMode)
     }
 }

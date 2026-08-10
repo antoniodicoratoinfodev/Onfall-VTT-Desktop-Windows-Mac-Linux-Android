@@ -41,6 +41,9 @@ data class UiLayout(
     val logHeightDp: Float = 230f,
     val logCollapsed: Boolean = false,
     val turnsCollapsed: Boolean = false,
+    // Separato dal collasso per restare compatibili con le preferenze salvate
+    // quando l'ordine dei turni aveva soltanto due stati.
+    val turnsShowInitiative: Boolean = true,
     // Altezza fissa della fascia turni sopra la mappa: i riquadri turno vengono
     // scalati per riempirla, quindi allargandola crescono e restringendola calano.
     val topBarHeightDp: Float = 64f,

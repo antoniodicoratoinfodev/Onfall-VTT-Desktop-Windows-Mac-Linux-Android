@@ -47,6 +47,7 @@ fun TurnOrderStrip(
     viewModel: BattleViewModel,
     modifier: Modifier = Modifier,
     editing: Boolean = false,
+    showInitiative: Boolean = true,
 ) {
     val groups = viewModel.turnGroups
     if (groups.isEmpty()) return
@@ -62,6 +63,7 @@ fun TurnOrderStrip(
                 group = group,
                 current = index == viewModel.turnIndex,
                 editing = editing,
+                showInitiative = showInitiative,
                 canMoveEarlier = index > 0,
                 canMoveLater = index < groups.lastIndex,
             )
@@ -75,6 +77,7 @@ private fun TurnChip(
     group: List<String>,
     current: Boolean,
     editing: Boolean,
+    showInitiative: Boolean,
     canMoveEarlier: Boolean,
     canMoveLater: Boolean,
 ) {
@@ -194,21 +197,24 @@ private fun TurnChip(
                 )
             }
         }
-        Text(
-            text = buildString {
-                append("Iniziativa ${viewModel.initiativeScore(group.first()) ?: "—"}")
-                if (simultaneous) append(" · insieme")
-                if (targeted) append(" · bersaglio")
-                if (allDown) append(" · 0 PF · turno saltato")
-            },
-            color = when {
-                allDown -> Palette.TextFaint
-                current -> Palette.Gold
-                targeted -> accent
-                else -> Palette.TextFaint
-            },
-            style = MaterialTheme.typography.labelSmall,
-        )
+        val secondaryText = buildList {
+            if (showInitiative) add("Iniziativa ${viewModel.initiativeScore(group.first()) ?: "—"}")
+            if (simultaneous) add("insieme")
+            if (targeted) add("bersaglio")
+            if (allDown) add("0 PF · turno saltato")
+        }.joinToString(" · ")
+        if (secondaryText.isNotEmpty()) {
+            Text(
+                text = secondaryText,
+                color = when {
+                    allDown -> Palette.TextFaint
+                    current -> Palette.Gold
+                    targeted -> accent
+                    else -> Palette.TextFaint
+                },
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
 
         if (editing) {
             Row(

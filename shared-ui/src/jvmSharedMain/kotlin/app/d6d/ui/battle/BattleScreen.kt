@@ -55,6 +55,7 @@ import app.d6d.ui.components.VerticalResizeHandle
 import kotlin.math.roundToInt
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.layout.LocalUiLayout
+import app.d6d.ui.layout.TurnOrderDisplayMode
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.session.SessionManager
 import app.d6d.ui.session.SessionMenuButton
@@ -109,7 +110,7 @@ fun BattleScreen(
         GoldenRule()
         // Il bordo inferiore della fascia turni: trascinandolo verso il basso la
         // fascia cresce. Solo sul desktop e solo quando l'ordine turni e' visibile.
-        if (!compact && !layout.turnsCollapsed) {
+        if (!compact && layout.turnOrderDisplayMode != TurnOrderDisplayMode.HIDDEN) {
             HorizontalResizeHandle(
                 onDrag = { dragPx ->
                     layout.topBarHeight = (layout.topBarHeight + with(density) { dragPx.toDp() })
@@ -568,6 +569,7 @@ private fun BattleTopBar(
 ) {
     // Il pannello ordine turni si puo' contrarre per liberare spazio in cima.
     val layout = LocalUiLayout.current
+    val turnOrderMode = layout.turnOrderDisplayMode
 
     if (compact) {
         Column(
@@ -595,7 +597,19 @@ private fun BattleTopBar(
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TurnOrderStrip(viewModel, Modifier.weight(1f), editing = viewModel.editMode)
+                if (turnOrderMode == TurnOrderDisplayMode.HIDDEN) {
+                    TurnsLabel(turnOrderMode, layout::cycleTurnOrderDisplayMode)
+                    Spacer(Modifier.weight(1f))
+                } else {
+                    Column(Modifier.weight(1f)) {
+                        TurnsLabel(turnOrderMode, layout::cycleTurnOrderDisplayMode)
+                        TurnOrderStrip(
+                            viewModel,
+                            editing = viewModel.editMode,
+                            showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
+                        )
+                    }
+                }
                 EditModeButton(viewModel)
                 SessionMenuButton(
                     sessions,
@@ -616,7 +630,7 @@ private fun BattleTopBar(
     Row(
         Modifier
             .fillMaxWidth()
-            .then(if (layout.turnsCollapsed) Modifier else Modifier.height(barHeight))
+            .then(if (turnOrderMode == TurnOrderDisplayMode.HIDDEN) Modifier else Modifier.height(barHeight))
             .background(Palette.Surface.copy(alpha = 0.92f))
             .padding(horizontal = 12.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(9.dp),
@@ -624,12 +638,11 @@ private fun BattleTopBar(
     ) {
         BattleTitle(sessions)
 
-        // La fascia si apre e si chiude cliccando l'etichetta "Ordine dei turni"
-        // (non c'e' piu' un tasto separato). Da collassata resta solo l'etichetta,
-        // per riaprirla, poi lo spazio elastico; da espansa la colonna riempie
-        // l'altezza scelta e i riquadri vi si scalano di conseguenza.
-        if (layout.turnsCollapsed) {
-            TurnsLabel(collapsed = true) { layout.turnsCollapsed = false }
+        // L'etichetta "Ordine dei turni" attraversa i tre stati senza un tasto
+        // separato. Da nascosta resta solo l'etichetta; negli altri due stati la
+        // colonna riempie l'altezza scelta e i riquadri vi si scalano.
+        if (turnOrderMode == TurnOrderDisplayMode.HIDDEN) {
+            TurnsLabel(turnOrderMode, layout::cycleTurnOrderDisplayMode)
             Spacer(Modifier.weight(1f))
         } else {
             Column(
@@ -646,10 +659,14 @@ private fun BattleTopBar(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            TurnsLabel(collapsed = false) { layout.turnsCollapsed = true }
+                            TurnsLabel(turnOrderMode, layout::cycleTurnOrderDisplayMode)
                             if (viewModel.isSimultaneousTurn) Chip("Turno simultaneo", Palette.GoldBright)
                         }
-                        TurnOrderStrip(viewModel, editing = viewModel.editMode)
+                        TurnOrderStrip(
+                            viewModel,
+                            editing = viewModel.editMode,
+                            showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
+                        )
                     }
                 }
             }
@@ -685,19 +702,23 @@ private fun BattleTopBar(
 }
 
 /**
- * Etichetta "Ordine dei turni", ora cliccabile: apre o chiude la fascia dei turni
- * al posto del vecchio tasto "Turni". Il chevron indica lo stato, e resta
- * raggiungibile anche a fascia chiusa per poterla riaprire.
+ * Etichetta "Ordine dei turni": ogni clic passa da nascosto a solo ordine, poi
+ * all'ordine con iniziativa e infine torna a nasconderlo.
  */
 @Composable
-private fun TurnsLabel(collapsed: Boolean, onToggle: () -> Unit) {
+private fun TurnsLabel(mode: TurnOrderDisplayMode, onCycle: () -> Unit) {
+    val nextAction = when (mode) {
+        TurnOrderDisplayMode.HIDDEN -> "Mostra l'ordine dei turni senza iniziativa"
+        TurnOrderDisplayMode.ORDER_ONLY -> "Mostra anche i valori di iniziativa"
+        TurnOrderDisplayMode.WITH_INITIATIVE -> "Nascondi l'ordine dei turni"
+    }
     Row(
         Modifier
             .clip(RoundedCornerShape(5.dp))
             .clickable(
                 role = Role.Button,
-                onClickLabel = if (collapsed) "Mostra l'ordine dei turni" else "Nascondi l'ordine dei turni",
-                onClick = onToggle,
+                onClickLabel = nextAction,
+                onClick = onCycle,
             )
             .padding(horizontal = 5.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -705,7 +726,7 @@ private fun TurnsLabel(collapsed: Boolean, onToggle: () -> Unit) {
     ) {
         Eyebrow("Ordine dei turni")
         Text(
-            text = if (collapsed) "▸" else "▾",
+            text = if (mode == TurnOrderDisplayMode.HIDDEN) "▸" else "▾",
             color = Palette.TextMuted,
             style = MaterialTheme.typography.labelSmall,
         )

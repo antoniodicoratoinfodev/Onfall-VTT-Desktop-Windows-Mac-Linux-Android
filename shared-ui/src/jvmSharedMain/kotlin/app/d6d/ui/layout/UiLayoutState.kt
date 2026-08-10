@@ -8,6 +8,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+/** Le tre visualizzazioni attraversate cliccando l'etichetta dell'ordine. */
+enum class TurnOrderDisplayMode {
+    HIDDEN,
+    ORDER_ONLY,
+    WITH_INITIATIVE,
+}
+
 /**
  * Disposizione dell'interfaccia viva, condivisa da tutta la shell.
  *
@@ -30,6 +37,7 @@ class UiLayoutState(
     var logHeight by mutableStateOf(initial.logHeightDp.dp)
     var logCollapsed by mutableStateOf(initial.logCollapsed)
     var turnsCollapsed by mutableStateOf(initial.turnsCollapsed)
+    var turnsShowInitiative by mutableStateOf(initial.turnsShowInitiative)
     var topBarHeight by mutableStateOf(initial.topBarHeightDp.dp)
     var commandBarHeight by mutableStateOf(initial.commandBarHeightDp.dp)
     var commandsCollapsed by mutableStateOf(initial.commandsCollapsed)
@@ -40,6 +48,28 @@ class UiLayoutState(
     var activePlate by mutableStateOf(initial.activePlate?.toOffset())
     var targetPlateScale by mutableStateOf(initial.targetPlateScale)
     var activePlateScale by mutableStateOf(initial.activePlateScale)
+
+    val turnOrderDisplayMode: TurnOrderDisplayMode
+        get() = when {
+            turnsCollapsed -> TurnOrderDisplayMode.HIDDEN
+            turnsShowInitiative -> TurnOrderDisplayMode.WITH_INITIATIVE
+            else -> TurnOrderDisplayMode.ORDER_ONLY
+        }
+
+    /**
+     * Attraversa le tre modalita' nell'ordine mostrato all'utente:
+     * nascosto -> solo nomi -> nomi e iniziativa -> nascosto.
+     */
+    fun cycleTurnOrderDisplayMode() {
+        when (turnOrderDisplayMode) {
+            TurnOrderDisplayMode.HIDDEN -> {
+                turnsCollapsed = false
+                turnsShowInitiative = false
+            }
+            TurnOrderDisplayMode.ORDER_ONLY -> turnsShowInitiative = true
+            TurnOrderDisplayMode.WITH_INITIATIVE -> turnsCollapsed = true
+        }
+    }
 
     private var lastSaved = initial.sanitized()
 
@@ -52,6 +82,7 @@ class UiLayoutState(
         logHeightDp = logHeight.value,
         logCollapsed = logCollapsed,
         turnsCollapsed = turnsCollapsed,
+        turnsShowInitiative = turnsShowInitiative,
         topBarHeightDp = topBarHeight.value,
         commandBarHeightDp = commandBarHeight.value,
         commandsCollapsed = commandsCollapsed,
@@ -82,6 +113,7 @@ class UiLayoutState(
         logHeight = value.logHeightDp.dp
         logCollapsed = value.logCollapsed
         turnsCollapsed = value.turnsCollapsed
+        turnsShowInitiative = value.turnsShowInitiative
         topBarHeight = value.topBarHeightDp.dp
         commandBarHeight = value.commandBarHeightDp.dp
         commandsCollapsed = value.commandsCollapsed
