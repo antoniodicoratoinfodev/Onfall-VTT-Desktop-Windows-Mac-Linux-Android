@@ -216,7 +216,7 @@ public record CombatState(
         List<List<String>> groups = turnGroups();
         if (turnIndex < 0 || turnIndex >= groups.size()) return List.of();
         return groups.get(turnIndex).stream()
-                .filter(id -> !combatants.get(id).defeated())
+                .filter(id -> !combatants.get(id).defeated() && !combatants.get(id).dead())
                 .toList();
     }
 

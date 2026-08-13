@@ -38,7 +38,8 @@ public record AbilityDefinition(
         boolean spellOrCantrip,
         AbilityEffect effect,
         String resourceId,
-        int resourceCost) {
+        int resourceCost,
+        HealingDefinition healing) {
 
     public AbilityDefinition {
         id = requireText(id, "id");
@@ -71,6 +72,71 @@ public record AbilityDefinition(
         if (resolutionMethod == ResolutionMethod.ATTACK_ROLL && damage.isEmpty()) {
             throw new IllegalArgumentException("An attack needs at least one damage component");
         }
+        if (healing != null) {
+            if (passive) {
+                throw new IllegalArgumentException("A healing ability cannot be passive");
+            }
+            if (resolutionMethod != ResolutionMethod.AUTOMATIC
+                    || automationStatus != AutomationStatus.AUTOMATED) {
+                throw new IllegalArgumentException("Healing must use automatic automated resolution");
+            }
+            if (!damage.isEmpty()) {
+                throw new IllegalArgumentException("A healing ability cannot also deal damage");
+            }
+            if (areaRadiusFeet != 0) {
+                throw new IllegalArgumentException("A healing ability cannot be an area effect");
+            }
+            if (maxTargets != 1) {
+                throw new IllegalArgumentException("A healing ability must target exactly one combatant");
+            }
+            if (effect != AbilityEffect.NONE) {
+                throw new IllegalArgumentException("A healing ability cannot also apply another effect");
+            }
+            if (healing.scalesWithSlot()) {
+                if (!spellOrCantrip || resourceCost != 1) {
+                    throw new IllegalArgumentException(
+                            "An upcast healing spell must consume exactly one spell slot");
+                }
+                SpellSlotResourceId baseSlot = SpellSlotResourceId.parse(resourceId)
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "An upcast healing spell needs a standard or Pact slot resource"));
+                if (baseSlot.level() != healing.slotScaling().baseSlotLevel()) {
+                    throw new IllegalArgumentException(
+                            "Healing scaling must start at the ability resource's slot level");
+                }
+            }
+        }
+    }
+
+    /**
+     * Backward-compatible constructor matching the complete pre-healing record shape.
+     */
+    public AbilityDefinition(
+            String id,
+            String version,
+            String source,
+            String rulesetVersion,
+            String name,
+            ActivationCost activationCost,
+            ResolutionMethod resolutionMethod,
+            int attackBonus,
+            int rangeFeet,
+            int maxTargets,
+            List<DamageFormula> damage,
+            AutomationStatus automationStatus,
+            String rulesText,
+            int areaRadiusFeet,
+            SaveAbility saveAbility,
+            boolean halfOnSave,
+            boolean passive,
+            SaveAbility attackAbility,
+            boolean spellOrCantrip,
+            AbilityEffect effect,
+            String resourceId,
+            int resourceCost) {
+        this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus,
+                rangeFeet, maxTargets, damage, automationStatus, rulesText, areaRadiusFeet, saveAbility,
+                halfOnSave, passive, attackAbility, spellOrCantrip, effect, resourceId, resourceCost, null);
     }
 
     /** Backward-compatible constructor: a plain single-target ability, no area or save. */
@@ -80,7 +146,7 @@ public record AbilityDefinition(
             int maxTargets, List<DamageFormula> damage, AutomationStatus automationStatus, String rulesText) {
         this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
                 maxTargets, damage, automationStatus, rulesText, 0, null, false, false, null, false,
-                AbilityEffect.NONE, "", 0);
+                AbilityEffect.NONE, "", 0, null);
     }
 
     /** Backward-compatible constructor: an ability the player activates, never a passive trait. */
@@ -91,7 +157,7 @@ public record AbilityDefinition(
             int areaRadiusFeet, SaveAbility saveAbility, boolean halfOnSave) {
         this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
                 maxTargets, damage, automationStatus, rulesText, areaRadiusFeet, saveAbility, halfOnSave, false,
-                null, false, AbilityEffect.NONE, "", 0);
+                null, false, AbilityEffect.NONE, "", 0, null);
     }
 
     /**
@@ -104,7 +170,7 @@ public record AbilityDefinition(
             int areaRadiusFeet, SaveAbility saveAbility, boolean halfOnSave, boolean passive) {
         this(id, version, source, rulesetVersion, name, activationCost, resolutionMethod, attackBonus, rangeFeet,
                 maxTargets, damage, automationStatus, rulesText, areaRadiusFeet, saveAbility, halfOnSave, passive,
-                null, false, AbilityEffect.NONE, "", 0);
+                null, false, AbilityEffect.NONE, "", 0, null);
     }
 
     /** True when the ability affects a spherical area rather than a single target. */
@@ -161,6 +227,7 @@ public record AbilityDefinition(
         private AbilityEffect effect = AbilityEffect.NONE;
         private String resourceId = "";
         private int resourceCost;
+        private HealingDefinition healing;
 
         private Builder(String id, String name) {
             this.id = id;
@@ -185,6 +252,7 @@ public record AbilityDefinition(
         public Builder attackAbility(SaveAbility value) { this.attackAbility = value; return this; }
         public Builder spellOrCantrip(boolean value) { this.spellOrCantrip = value; return this; }
         public Builder effect(AbilityEffect value) { this.effect = value; return this; }
+        public Builder healing(HealingDefinition value) { this.healing = value; return this; }
         public Builder resource(String id, int cost) {
             this.resourceId = id;
             this.resourceCost = cost;
@@ -195,7 +263,7 @@ public record AbilityDefinition(
             return new AbilityDefinition(id, version, source, rulesetVersion, name, activationCost,
                     resolutionMethod, attackBonus, rangeFeet, maxTargets, damage, automationStatus, rulesText,
                     areaRadiusFeet, saveAbility, halfOnSave, passive, attackAbility, spellOrCantrip,
-                    effect, resourceId, resourceCost);
+                    effect, resourceId, resourceCost, healing);
         }
     }
 }

@@ -172,4 +172,19 @@ public record TurnBudget(
                 additionalActionAvailable, additionalActionMagicRestricted, actionSurgeUsedThisTurn,
                 attackActionInProgress);
     }
+
+    /**
+     * Apre un nuovo turno globale senza ricaricare le risorse proprie del
+     * combattente. Serve soprattutto alle reazioni: uno slot speso nel turno del
+     * proprietario non deve impedire una magia di reazione nel turno seguente di
+     * un altro combattente.
+     */
+    public TurnBudget resetSpellSlotSpentForNewTurn() {
+        if (!spellSlotSpentThisTurn) return this;
+        return new TurnBudget(movementAllowanceFeet, movementSpentFeet, actionAvailable,
+                bonusActionAvailable, reactionAvailable, objectInteractionAvailable,
+                attacksRemaining, false, additionalActionAvailable,
+                additionalActionMagicRestricted, actionSurgeUsedThisTurn,
+                attackActionInProgress);
+    }
 }

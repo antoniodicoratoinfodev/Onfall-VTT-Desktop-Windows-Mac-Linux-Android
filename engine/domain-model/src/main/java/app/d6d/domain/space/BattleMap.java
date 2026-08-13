@@ -1,5 +1,7 @@
 package app.d6d.domain.space;
 
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +30,8 @@ public record BattleMap(
 
     public BattleMap {
         Objects.requireNonNull(grid, "grid");
-        placements = Map.copyOf(Objects.requireNonNull(placements, "placements"));
+        placements = Collections.unmodifiableMap(
+                new LinkedHashMap<>(Objects.requireNonNull(placements, "placements")));
         backgroundImage = backgroundImage == null ? "" : backgroundImage;
         background = background == null ? MapBackground.UNSET : background;
         for (Map.Entry<String, TokenPlacement> entry : placements.entrySet()) {
@@ -139,8 +142,16 @@ public record BattleMap(
         return new BattleMap(grid, placements, backgroundImage, transform);
     }
 
-    /** Segnaposti in ordine stabile, per disegnarli sempre nella stessa sequenza. */
+    /**
+     * Segnaposti in ordine canonico per id.
+     *
+     * <p>Non dipendere dall'iterazione della mappa sorgente e' essenziale anche per
+     * il combattimento: un'area consuma i tiri deterministici in questo ordine, che
+     * deve quindi restare identico dopo salvataggio e riapertura in un'altra JVM.</p>
+     */
     public List<TokenPlacement> orderedPlacements() {
-        return List.copyOf(placements.values());
+        return placements.values().stream()
+                .sorted(Comparator.comparing(TokenPlacement::combatantId))
+                .toList();
     }
 }

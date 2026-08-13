@@ -2,6 +2,11 @@ package app.d6d.domain.space;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -139,6 +144,27 @@ class BattleMapTest {
 
         assertFalse(map.configured());
         assertFalse(map.grid().configured());
+    }
+
+    @Test
+    void iSegnapostiHannoUnOrdineCanonicoIndipendenteDallaMappaSorgente() {
+        Map<String, TokenPlacement> first = new HashMap<>();
+        first.put("zeta", TokenPlacement.single("zeta", new GridPosition(1, 1)));
+        first.put("alfa", TokenPlacement.single("alfa", new GridPosition(2, 1)));
+        first.put("medio", TokenPlacement.single("medio", new GridPosition(3, 1)));
+        Map<String, TokenPlacement> second = new LinkedHashMap<>();
+        second.put("medio", TokenPlacement.single("medio", new GridPosition(3, 1)));
+        second.put("zeta", TokenPlacement.single("zeta", new GridPosition(1, 1)));
+        second.put("alfa", TokenPlacement.single("alfa", new GridPosition(2, 1)));
+
+        BattleMap fromHashMap = new BattleMap(GRID, first, "", MapBackground.UNSET);
+        BattleMap fromDifferentOrder = new BattleMap(GRID, second, "", MapBackground.UNSET);
+        List<String> expected = List.of("alfa", "medio", "zeta");
+
+        assertEquals(expected, fromHashMap.orderedPlacements().stream()
+                .map(TokenPlacement::combatantId).toList());
+        assertEquals(expected, fromDifferentOrder.orderedPlacements().stream()
+                .map(TokenPlacement::combatantId).toList());
     }
 
     @Test
