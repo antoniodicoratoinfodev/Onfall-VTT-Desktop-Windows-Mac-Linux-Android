@@ -76,11 +76,11 @@ class WorkspaceRecoveryStoreTest {
         val archive = SessionArchiveStore(directory.resolve("sessions"))
         val source = SessionWorkspace(
             store = archive,
-            initialSession = SampleEncounter.startedSession(seed = 311L),
-            initialDisplayName = "Prima",
             refreshManagersOnCreate = false,
-        )
-        val first = source.activeSession
+        ).apply {
+            openNew(SampleEncounter.startedSession(seed = 311L), "Prima")
+        }
+        val first = source.active
         assertEquals(SessionSaveResult.SAVED, first.manager.save("Prima"))
         first.battle.endTurn()
         val firstTurn = first.battle.turnIndex
@@ -93,22 +93,22 @@ class WorkspaceRecoveryStoreTest {
         assertNotNull(recovered)
         val target = SessionWorkspace(
             store = archive,
-            initialSession = SampleEncounter.startedSession(seed = 999L),
-            initialDisplayName = "Tavolo temporaneo",
             refreshManagersOnCreate = false,
-        )
+        ).apply {
+            openNew(SampleEncounter.startedSession(seed = 999L), "Tavolo temporaneo")
+        }
 
         assertTrue(target.restoreRecovery(recovered))
 
         assertEquals(2, target.openSessions.size)
-        assertEquals("Bozza", target.activeSession.displayName)
+        assertEquals("Bozza", target.active.displayName)
         val restoredFirst = target.openSessions.first { it.displayName == "Prima" }
         assertEquals("prima", restoredFirst.manager.currentSlug)
         assertEquals(firstTurn, restoredFirst.battle.turnIndex)
         assertTrue(restoredFirst.manager.hasCurrentSave)
         assertTrue(restoredFirst.manager.hasUnsavedChanges)
-        assertNull(target.activeSession.manager.currentSlug)
-        assertTrue(target.activeSession.manager.hasUnsavedChanges)
+        assertNull(target.active.manager.currentSlug)
+        assertTrue(target.active.manager.hasUnsavedChanges)
         assertFalse(target.status.isNullOrBlank())
     }
 
@@ -116,17 +116,17 @@ class WorkspaceRecoveryStoreTest {
     fun `il recovery serializza il clone catturato anche se il tavolo poi avanza`() {
         val source = SessionWorkspace(
             store = SessionArchiveStore(directory.resolve("sessions-frozen-recovery")),
-            initialSession = SampleEncounter.startedSession(seed = 313L),
-            initialDisplayName = "Recovery congelato",
             refreshManagersOnCreate = false,
-        )
+        ).apply {
+            openNew(SampleEncounter.startedSession(seed = 313L), "Recovery congelato")
+        }
         val snapshot = source.recoverySnapshot()
         val capturedState = snapshot.sessions.single().session.currentState()
 
         // Prima del fix RecoveredGameSession conteneva la CombatSession viva e il
         // codec, eseguito dopo su I/O, avrebbe visto questa revisione successiva.
-        source.activeSession.battle.endTurn()
-        val liveState = source.activeSession.battle.state
+        source.active.battle.endTurn()
+        val liveState = source.active.battle.state
         val recoveryStore = WorkspaceRecoveryStore(directory.resolve("frozen-recovery"))
         recoveryStore.save(snapshot)
 
@@ -140,14 +140,15 @@ class WorkspaceRecoveryStoreTest {
         val archive = SessionArchiveStore(directory.resolve("sessions-cpu"))
         val source = SessionWorkspace(
             store = archive,
-            initialSession = mixedCpuSession(seed = 321L),
-            initialDisplayName = "Recovery CPU",
-            initialPresentation = mapOf(
-                "enemyCpuDifficulty" to EnemyCpuDifficulty.EASY.name,
-            ),
             refreshManagersOnCreate = false,
-        )
-        val sourceBattle = source.activeSession.battle
+        ).apply {
+            openNew(
+                mixedCpuSession(seed = 321L),
+                "Recovery CPU",
+                mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.EASY.name),
+            )
+        }
+        val sourceBattle = source.active.battle
         sourceBattle.playEnemyCpuTurn()
         sourceBattle.undo()
         assertTrue(sourceBattle.enemyCpuTurnSuppressed)
@@ -157,13 +158,13 @@ class WorkspaceRecoveryStoreTest {
         val recovered = requireNotNull(recoveryStore.load())
         val target = SessionWorkspace(
             store = archive,
-            initialSession = SampleEncounter.startedSession(seed = 999L),
-            initialDisplayName = "Temporanea",
             refreshManagersOnCreate = false,
-        )
+        ).apply {
+            openNew(SampleEncounter.startedSession(seed = 999L), "Temporanea")
+        }
 
         assertTrue(target.restoreRecovery(recovered))
-        val restored = target.activeSession.battle
+        val restored = target.active.battle
         assertEquals(EnemyCpuDifficulty.EASY, restored.enemyCpuDifficulty)
         assertTrue(restored.enemyCpuTurnSuppressed)
         assertFalse(restored.shouldScheduleEnemyCpu)
@@ -174,30 +175,35 @@ class WorkspaceRecoveryStoreTest {
         val archive = SessionArchiveStore(directory.resolve("sessions-cpu-mixed"))
         val source = SessionWorkspace(
             store = archive,
-            initialSession = mixedCpuSession(322L),
-            initialDisplayName = "Recovery CPU mixed",
-            initialPresentation = mapOf(
-                "enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name,
-            ),
             refreshManagersOnCreate = false,
-        )
-        source.activeSession.battle.playEnemyCpuTurn()
-        assertTrue(source.activeSession.battle.enemyCpuBatchCompleted)
+        ).apply {
+            openNew(
+                mixedCpuSession(322L),
+                "Recovery CPU mixed",
+                mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name),
+            )
+        }
+        source.active.battle.playEnemyCpuTurn()
+        assertTrue(source.active.battle.enemyCpuBatchCompleted)
 
         val recoveryStore = WorkspaceRecoveryStore(directory.resolve("recovery-cpu-mixed"))
         recoveryStore.save(source.recoverySnapshot())
         val recovered = requireNotNull(recoveryStore.load())
         val target = SessionWorkspace(
             store = archive,
-            initialSession = SampleEncounter.startedSession(seed = 999L),
-            initialDisplayName = "Temporanea",
             refreshManagersOnCreate = false,
-        )
+        ).apply {
+            openNew(SampleEncounter.startedSession(seed = 999L), "Temporanea")
+        }
 
         assertTrue(target.restoreRecovery(recovered))
-        val restored = target.activeSession.battle
+        val restored = target.active.battle
         assertTrue(restored.enemyCpuBatchCompleted)
         assertFalse(restored.shouldScheduleEnemyCpu)
         assertEquals("hero", restored.activeActorId)
     }
 }
+
+/** Nei test la sessione attiva e' sempre attesa: qui l'assenza e' un fallimento. */
+private val SessionWorkspace.active: OpenGameSession
+    get() = requireNotNull(activeSession) { "Il workspace non ha alcuna sessione aperta" }

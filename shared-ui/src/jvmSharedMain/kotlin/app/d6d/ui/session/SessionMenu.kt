@@ -237,7 +237,7 @@ fun SessionMenuDialog(
                         workspace.openSessions.forEach { opened ->
                             OpenSessionButton(
                                 opened = opened,
-                                selected = opened.id == workspace.activeSession.id,
+                                selected = opened.id == workspace.activeSession?.id,
                                 modifier = Modifier.fillMaxWidth(),
                                 onClick = {
                                     manager.menuOpen = false
@@ -255,7 +255,7 @@ fun SessionMenuDialog(
                         workspace.openSessions.forEach { opened ->
                             OpenSessionButton(
                                 opened = opened,
-                                selected = opened.id == workspace.activeSession.id,
+                                selected = opened.id == workspace.activeSession?.id,
                                 onClick = {
                                     manager.menuOpen = false
                                     workspace.activate(opened.id)
@@ -405,6 +405,68 @@ fun SessionMenuDialog(
             },
         )
     }
+}
+
+/**
+ * Sceglie un salvataggio da riaprire, senza passare da un documento aperto.
+ *
+ * [SessionMenuDialog] appartiene a una partita: salva, rinomina, sovrascrive.
+ * Questo invece serve a chi una partita non ce l'ha ancora — il tavolo che apre
+ * l'applicazione, o che ha appena chiuso l'ultima scheda — e sa fare una cosa
+ * sola: riaprire un file in una scheda nuova.
+ */
+@Composable
+fun OpenSavedSessionDialog(
+    workspace: SessionWorkspace,
+    onDismiss: () -> Unit,
+    onOpened: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Palette.Surface,
+        title = {
+            Text("Apri una sessione salvata", color = Palette.Text, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            if (workspace.savedSessions.isEmpty()) {
+                Text(
+                    "L'archivio è vuoto: nessuna sessione è ancora stata salvata.",
+                    color = Palette.TextMuted,
+                )
+            } else {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState())
+                        .selectableGroup(),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    workspace.savedSessions.forEach { summary ->
+                        GameButton(
+                            label = summary.displayName,
+                            subtitle = "Round ${summary.round}",
+                            accent = Palette.Heal,
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                scope.launch {
+                                    when (runDiskIo { workspace.openSaved(summary) }) {
+                                        WorkspaceOpenResult.OPENED,
+                                        WorkspaceOpenResult.ALREADY_OPEN -> onOpened()
+                                        WorkspaceOpenResult.FAILED -> Unit
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
+        },
+    )
 }
 
 @Composable

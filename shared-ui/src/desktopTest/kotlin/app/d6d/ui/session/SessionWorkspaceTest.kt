@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -44,14 +45,14 @@ class SessionWorkspaceTest {
 
     private fun workspace(store: SessionArchiveStore = store()) = SessionWorkspace(
         store = store,
-        initialSession = SampleEncounter.startedSession(seed = 11L),
-        initialDisplayName = "Prima",
-    )
+    ).apply {
+        openNew(SampleEncounter.startedSession(seed = 11L), "Prima")
+    }
 
     @Test
     fun `due schede mantengono motore undo e stato sporco indipendenti`() {
         val workspace = workspace()
-        val first = workspace.activeSession
+        val first = workspace.active
         val second = workspace.openNew(
             SampleEncounter.startedSession(seed = 22L),
             "Seconda",
@@ -84,36 +85,34 @@ class SessionWorkspaceTest {
     fun `la presentazione iniziale viene adottata dalla prima scheda`() {
         val workspace = SessionWorkspace(
             store = store(),
-            initialSession = SampleEncounter.startedSession(seed = 12L),
-            initialDisplayName = "Con configurazione",
-            initialPresentation = mapOf("rollMode" to D20Mode.ADVANTAGE.name),
-        )
+        ).apply {
+            openNew(SampleEncounter.startedSession(seed = 12L), "Con configurazione", mapOf("rollMode" to D20Mode.ADVANTAGE.name))
+        }
 
-        assertEquals(D20Mode.ADVANTAGE, workspace.activeSession.battle.rollMode)
+        assertEquals(D20Mode.ADVANTAGE, workspace.active.battle.rollMode)
     }
 
     @Test
     fun `save e open ripristinano difficolta e sospensione cpu senza replay`() {
         val store = store()
-        val source = SessionWorkspace(
-            store = store,
-            initialSession = mixedCpuSession(seed = 13L),
-            initialDisplayName = "CPU persistita",
-            initialPresentation = mapOf(
-                "enemyCpuDifficulty" to EnemyCpuDifficulty.SORRY_FOR_YOU.name,
-            ),
-        )
-        val sourceBattle = source.activeSession.battle
+        val source = SessionWorkspace(store = store).apply {
+            openNew(
+                mixedCpuSession(seed = 13L),
+                "CPU persistita",
+                mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.SORRY_FOR_YOU.name),
+            )
+        }
+        val sourceBattle = source.active.battle
         sourceBattle.playEnemyCpuTurn()
         sourceBattle.undo()
         assertTrue(sourceBattle.enemyCpuTurnSuppressed)
-        assertEquals(SessionSaveResult.SAVED, source.activeSession.manager.save("CPU persistita"))
+        assertEquals(SessionSaveResult.SAVED, source.active.manager.save("CPU persistita"))
 
         val target = workspace(store)
         val summary = store.list().single { it.slug == "cpu-persistita" }
         assertEquals(WorkspaceOpenResult.OPENED, target.openSaved(summary))
 
-        val restored = target.activeSession.battle
+        val restored = target.active.battle
         assertEquals(EnemyCpuDifficulty.SORRY_FOR_YOU, restored.enemyCpuDifficulty)
         assertTrue(restored.enemyCpuTurnSuppressed)
         assertFalse(restored.shouldScheduleEnemyCpu)
@@ -122,23 +121,22 @@ class SessionWorkspaceTest {
     @Test
     fun `save e open conservano il guard del batch mixed completato`() {
         val store = store()
-        val source = SessionWorkspace(
-            store = store,
-            initialSession = mixedCpuSession(14L),
-            initialDisplayName = "CPU mixed",
-            initialPresentation = mapOf(
-                "enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name,
-            ),
-        )
-        source.activeSession.battle.playEnemyCpuTurn()
-        assertTrue(source.activeSession.battle.enemyCpuBatchCompleted)
-        assertEquals(SessionSaveResult.SAVED, source.activeSession.manager.save("CPU mixed"))
+        val source = SessionWorkspace(store = store).apply {
+            openNew(
+                mixedCpuSession(14L),
+                "CPU mixed",
+                mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name),
+            )
+        }
+        source.active.battle.playEnemyCpuTurn()
+        assertTrue(source.active.battle.enemyCpuBatchCompleted)
+        assertEquals(SessionSaveResult.SAVED, source.active.manager.save("CPU mixed"))
 
         val target = workspace(store)
         val summary = store.list().single { it.slug == "cpu-mixed" }
         assertEquals(WorkspaceOpenResult.OPENED, target.openSaved(summary))
 
-        val restored = target.activeSession.battle
+        val restored = target.active.battle
         assertTrue(restored.enemyCpuBatchCompleted)
         assertFalse(restored.shouldScheduleEnemyCpu)
         assertEquals("hero", restored.activeActorId)
@@ -150,7 +148,7 @@ class SessionWorkspaceTest {
         store.save("Archivio", SampleEncounter.startedSession(seed = 31L), emptyMap())
         val summary = store.list().single()
         val workspace = workspace(store)
-        val draft = workspace.activeSession
+        val draft = workspace.active
 
         val result = workspace.openSaved(summary)
 
@@ -158,7 +156,7 @@ class SessionWorkspaceTest {
         assertEquals(2, workspace.openSessions.size)
         assertTrue(workspace.openSessions.any { it === draft })
         assertTrue(draft.manager.hasUnsavedChanges)
-        assertEquals(summary.slug, workspace.activeSession.manager.currentSlug)
+        assertEquals(summary.slug, workspace.active.manager.currentSlug)
     }
 
     @Test
@@ -169,19 +167,19 @@ class SessionWorkspaceTest {
         val workspace = workspace(store)
 
         assertEquals(WorkspaceOpenResult.OPENED, workspace.openSaved(summary))
-        val opened = workspace.activeSession
+        val opened = workspace.active
         val count = workspace.openSessions.size
         workspace.activate(workspace.openSessions.first { it.id != opened.id }.id)
 
         assertEquals(WorkspaceOpenResult.ALREADY_OPEN, workspace.openSaved(summary))
         assertEquals(count, workspace.openSessions.size)
-        assertSame(opened, workspace.activeSession)
+        assertSame(opened, workspace.active)
     }
 
     @Test
     fun `una scheda non puo sovrascrivere il file posseduto da un'altra`() {
         val workspace = workspace()
-        val first = workspace.activeSession
+        val first = workspace.active
         assertEquals(SessionSaveResult.SAVED, first.manager.save("Prima"))
         val second = workspace.openNew(
             SampleEncounter.startedSession(seed = 52L),
@@ -201,7 +199,7 @@ class SessionWorkspaceTest {
     @Test
     fun `il caricamento diretto non puo sottrarre il file a un'altra scheda`() {
         val workspace = workspace()
-        val first = workspace.activeSession
+        val first = workspace.active
         assertEquals(SessionSaveResult.SAVED, first.manager.save("Prima"))
         val firstSummary = store().list().single { it.slug == "prima" }
         val second = workspace.openNew(
@@ -222,7 +220,7 @@ class SessionWorkspaceTest {
     @Test
     fun `la chiusura protegge le modifiche e non elimina il salvataggio`() {
         val workspace = workspace()
-        val first = workspace.activeSession
+        val first = workspace.active
         assertEquals(SessionSaveResult.SAVED, first.manager.save("Prima"))
         workspace.openNew(SampleEncounter.startedSession(seed = 62L), "Seconda")
         first.battle.endTurn()
@@ -238,14 +236,47 @@ class SessionWorkspaceTest {
     }
 
     @Test
-    fun `l'ultima scheda resta disponibile al workspace`() {
+    fun `un workspace appena creato non ha alcuna partita aperta`() {
+        val workspace = SessionWorkspace(store = store())
+
+        assertNull(workspace.activeSession)
+        assertFalse(workspace.hasOpenSessions)
+        assertTrue(workspace.openSessions.isEmpty())
+    }
+
+    @Test
+    fun `chiudere l'ultima scheda riporta il workspace a vuoto`() {
         val workspace = workspace()
 
         assertEquals(
-            WorkspaceCloseResult.LAST_SESSION,
-            workspace.requestClose(workspace.activeSession.id, discardUnsavedChanges = true),
+            WorkspaceCloseResult.CLOSED,
+            workspace.requestClose(workspace.active.id, discardUnsavedChanges = true),
         )
-        assertEquals(1, workspace.openSessions.size)
+        assertNull(workspace.activeSession)
+        assertFalse(workspace.hasOpenSessions)
+    }
+
+    @Test
+    fun `da vuoto si riapre una partita e torna a esserci una sessione attiva`() {
+        val workspace = SessionWorkspace(store = store())
+
+        val aperta = workspace.openNew(SampleEncounter.startedSession(seed = 31L), "Ripartenza")
+
+        assertSame(aperta, workspace.active)
+        assertTrue(workspace.hasOpenSessions)
+    }
+
+    @Test
+    fun `l'archivio e' sfogliabile anche senza partite aperte`() {
+        val store = store()
+        val preparato = SessionWorkspace(store = store)
+            .apply { openNew(SampleEncounter.startedSession(seed = 32L), "Salvata") }
+        assertEquals(SessionSaveResult.SAVED, preparato.active.manager.save("Salvata"))
+
+        val vuoto = SessionWorkspace(store = store)
+
+        assertNull(vuoto.activeSession)
+        assertEquals(listOf("Salvata"), vuoto.savedSessions.map { it.displayName })
     }
 
     @Test
@@ -253,13 +284,13 @@ class SessionWorkspaceTest {
         var footprint = 2
         val workspace = SessionWorkspace(
             store = store(),
-            initialSession = SampleEncounter.startedSession(seed = 71L),
-            initialDisplayName = "Taglie",
             battleFactory = { session ->
                 BattleViewModel(session, footprintProvider = { footprint })
             },
-        )
-        val battle = workspace.activeSession.battle
+        ).apply {
+            openNew(SampleEncounter.startedSession(seed = 71L), "Taglie")
+        }
+        val battle = workspace.active.battle
         val unplaced = battle.state.combatants().keys.first { battle.placementOf(it) == null }
 
         footprint = 4
@@ -272,7 +303,7 @@ class SessionWorkspaceTest {
     fun `flush autosave salva anche le schede non attive`() {
         val store = store()
         val workspace = workspace(store)
-        val first = workspace.activeSession
+        val first = workspace.active
         first.manager.save("Prima")
         val second = workspace.openNew(SampleEncounter.startedSession(seed = 82L), "Seconda")
         second.manager.save("Seconda")
@@ -293,11 +324,10 @@ class SessionWorkspaceTest {
         val store = store()
         val workspace = SessionWorkspace(
             store = store,
-            initialSession = mixedCpuSession(seed = 83L),
-            initialDisplayName = "CPU autosave",
-            initialPresentation = mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name),
-        )
-        val opened = workspace.activeSession
+        ).apply {
+            openNew(mixedCpuSession(seed = 83L), "CPU autosave", mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        }
+        val opened = workspace.active
         assertEquals(SessionSaveResult.SAVED, opened.manager.save("CPU autosave"))
         opened.battle.enemyCpuSpeed = EnemyCpuSpeed.SLOW
 
@@ -324,7 +354,7 @@ class SessionWorkspaceTest {
     @Test
     fun `un errore autosave resta visibile passando a un'altra scheda`() {
         val workspace = workspace()
-        val first = workspace.activeSession
+        val first = workspace.active
         assertEquals(SessionSaveResult.SAVED, first.manager.save("Prima"))
         val second = workspace.openNew(SampleEncounter.startedSession(seed = 91L), "Seconda")
         assertEquals(SessionSaveResult.SAVED, second.manager.save("Seconda"))
@@ -347,3 +377,7 @@ class SessionWorkspaceTest {
         assertEquals(null, workspace.autosaveWarning)
     }
 }
+
+/** Nei test la sessione attiva e' sempre attesa: qui l'assenza e' un fallimento. */
+private val SessionWorkspace.active: OpenGameSession
+    get() = requireNotNull(activeSession) { "Il workspace non ha alcuna sessione aperta" }

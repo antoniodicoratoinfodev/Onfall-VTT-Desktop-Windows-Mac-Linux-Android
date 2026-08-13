@@ -21,7 +21,6 @@ enum class WorkspaceOpenResult {
 enum class WorkspaceCloseResult {
     CLOSED,
     UNSAVED_CHANGES,
-    LAST_SESSION,
     NOT_FOUND,
 }
 
@@ -74,9 +73,6 @@ internal data class PreparedWorkspaceSession(
  */
 class SessionWorkspace(
     private val store: SessionArchiveStore,
-    initialSession: CombatSession,
-    initialDisplayName: String,
-    initialPresentation: Map<String, String> = emptyMap(),
     private val battleFactory: (CombatSession) -> BattleViewModel = { BattleViewModel(it) },
     private val refreshManagersOnCreate: Boolean = true,
 ) {
@@ -101,15 +97,40 @@ class SessionWorkspace(
 
     val openSessions: List<OpenGameSession> get() = entries
 
-    val activeSession: OpenGameSession
-        get() = requireNotNull(entries.firstOrNull { it.id == activeId } ?: entries.firstOrNull()) {
-            "Il workspace deve contenere almeno una sessione aperta"
-        }
+    /**
+     * Partita in primo piano, oppure null.
+     *
+     * L'assenza e' uno stato ordinario, non un errore: l'applicazione si apre
+     * cosi', su Partita e senza nulla di gia' avviato, e ci torna quando il tavolo
+     * chiude l'ultima scheda. Battaglia e i comandi di sessione devono quindi
+     * saperlo reggere invece di darlo per scontato.
+     */
+    val activeSession: OpenGameSession?
+        get() = entries.firstOrNull { it.id == activeId } ?: entries.firstOrNull()
+
+    val hasOpenSessions: Boolean get() = entries.isNotEmpty()
+
+    /**
+     * Salvataggi presenti su disco.
+     *
+     * Vive nel workspace e non nel [SessionManager] di un documento perche'
+     * l'elenco serve anche quando non c'e' alcun documento: e' proprio da li' che
+     * si riapre una partita a workspace vuoto.
+     */
+    var savedSessions by mutableStateOf<List<SessionSummary>>(emptyList())
+        private set
 
     init {
-        openNew(initialSession, initialDisplayName, initialPresentation)
-        // L'apertura iniziale è lo stato normale dell'app, non una notifica utile.
-        status = null
+        if (refreshManagersOnCreate) refreshArchive()
+    }
+
+    /** Rilegge dal disco l'elenco dei salvataggi; un errore diventa uno stato, non un'eccezione. */
+    fun refreshArchive() {
+        try {
+            savedSessions = store.list()
+        } catch (failure: IOException) {
+            status = "Errore su disco: ${failure.message}"
+        }
     }
 
     /**
@@ -183,9 +204,8 @@ class SessionWorkspace(
     /**
      * Chiude soltanto la scheda, mai il suo file.
      *
-     * L'ultima resta aperta perche' Battaglia e il menu archivio hanno sempre
-     * bisogno di un documento attivo. Crearne o aprirne un'altra sblocca subito
-     * la chiusura.
+     * Anche l'ultima si puo' chiudere: il workspace vuoto e' lo stesso stato in
+     * cui l'applicazione si apre, e riporta il tavolo su Partita.
      */
     fun requestClose(
         id: String,
@@ -193,10 +213,6 @@ class SessionWorkspace(
     ): WorkspaceCloseResult {
         val index = entries.indexOfFirst { it.id == id }
         if (index < 0) return WorkspaceCloseResult.NOT_FOUND
-        if (entries.size == 1) {
-            status = "Apri o crea un'altra partita prima di chiudere l'ultima scheda."
-            return WorkspaceCloseResult.LAST_SESSION
-        }
 
         val closing = entries[index]
         if (closing.manager.hasUnsavedChanges && !discardUnsavedChanges) {
@@ -208,9 +224,13 @@ class SessionWorkspace(
         entries.removeAt(index)
         clearAutosaveWarning(closing.id)
         if (activeId == closing.id) {
-            activeId = entries[index.coerceAtMost(entries.lastIndex)].id
+            activeId = entries.getOrNull(index.coerceAtMost(entries.lastIndex))?.id
         }
-        status = "Scheda «${closing.displayName}» chiusa."
+        status = if (entries.isEmpty()) {
+            "Scheda «${closing.displayName}» chiusa: nessuna partita aperta."
+        } else {
+            "Scheda «${closing.displayName}» chiusa."
+        }
         return WorkspaceCloseResult.CLOSED
     }
 
@@ -256,6 +276,7 @@ class SessionWorkspace(
 
     /** Aggiorna gli elenchi archivio di tutte le schede aperte. */
     fun refreshSessionLists() {
+        refreshArchive()
         entries.forEach { it.manager.refresh() }
     }
 
@@ -295,7 +316,7 @@ class SessionWorkspace(
         )
     }
 
-    /** Sostituisce il tavolo iniziale con una bozza lasciata da un arresto anomalo. */
+    /** Ripopola il workspace con le bozze lasciate da un arresto anomalo. */
     internal fun restoreRecovery(recovery: WorkspaceRecovery): Boolean {
         if (recovery.sessions.isEmpty()) return false
         val slugs = recovery.sessions.mapNotNull { it.currentSlug }

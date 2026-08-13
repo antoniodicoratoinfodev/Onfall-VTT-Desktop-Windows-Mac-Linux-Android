@@ -45,7 +45,6 @@ import kotlinx.coroutines.launch
  * viene ricreato o adottato sopra un altro. Salvataggio e chiusura si riferiscono
  * sempre alla scheda evidenziata.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OpenSessionsPanel(
     workspace: SessionWorkspace,
@@ -54,11 +53,66 @@ fun OpenSessionsPanel(
     compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    // A workspace vuoto non c'e' nulla da elencare, cambiare o salvare: e' lo
+    // stato in cui l'applicazione si apre, e la sola cosa sensata da offrire e'
+    // cominciare una partita.
+    when (val active = workspace.activeSession) {
+        null -> EmptyWorkspacePanel(workspace, onNewSession, modifier)
+        else -> OpenSessionsPanelContent(workspace, active, onOpenBattle, onNewSession, compact, modifier)
+    }
+}
+
+/** Workspace senza partite aperte: un invito, non un pannello vuoto. */
+@Composable
+private fun EmptyWorkspacePanel(
+    workspace: SessionWorkspace,
+    onNewSession: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(Palette.Surface.copy(alpha = 0.92f))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Eyebrow("Nessuna partita aperta")
+        Text(
+            "Scegli una partita inclusa, parti dai tuoi template oppure riapri una sessione salvata.",
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        GameButton("Nuova partita", accent = Palette.Gold, dense = true, onClick = onNewSession)
+
+        workspace.status?.let { message ->
+            Text(
+                text = message,
+                color = Palette.GoldBright,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Palette.Gold.copy(alpha = 0.10f), RoundedCornerShape(5.dp))
+                    .clickable { workspace.dismissStatus() }
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OpenSessionsPanelContent(
+    workspace: SessionWorkspace,
+    active: OpenGameSession,
+    onOpenBattle: () -> Unit,
+    onNewSession: () -> Unit,
+    compact: Boolean,
+    modifier: Modifier,
+) {
     val scope = rememberCoroutineScope()
     var closeCandidate by remember { mutableStateOf<OpenGameSession?>(null) }
     var compactMenuOpen by remember { mutableStateOf(false) }
     var closeAfterSaveId by remember { mutableStateOf<String?>(null) }
-    val active = workspace.activeSession
     val listState = rememberLazyListState()
     val activeIndex = workspace.openSessions.indexOfFirst { it.id == active.id }
 
@@ -152,7 +206,6 @@ fun OpenSessionsPanel(
                     label = "Chiudi scheda",
                     accent = Palette.TextMuted,
                     dense = true,
-                    enabled = workspace.openSessions.size > 1,
                     onClick = {
                         when (workspace.requestClose(active.id)) {
                             WorkspaceCloseResult.UNSAVED_CHANGES -> closeCandidate = active
@@ -234,7 +287,6 @@ fun OpenSessionsPanel(
                         GameButton(
                             label = "Chiudi scheda",
                             accent = Palette.TextMuted,
-                            enabled = workspace.openSessions.size > 1,
                             onClick = {
                                 compactMenuOpen = false
                                 when (workspace.requestClose(active.id)) {

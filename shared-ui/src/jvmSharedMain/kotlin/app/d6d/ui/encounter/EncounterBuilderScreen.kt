@@ -24,7 +24,10 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -41,15 +44,11 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.roster.RosterKind
-import app.d6d.ui.runDiskIo
+import app.d6d.ui.session.OpenSavedSessionDialog
 import app.d6d.ui.session.OpenSessionsPanel
-import app.d6d.ui.session.SessionManager
-import app.d6d.ui.session.SessionMenuDialog
 import app.d6d.ui.session.SessionWorkspace
-import app.d6d.ui.session.WorkspaceOpenResult
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
-import kotlinx.coroutines.launch
 
 /** Configuratore del prossimo combattimento, alimentato dal Compendio. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -65,8 +64,10 @@ fun EncounterBuilderScreen(
     onOpenCompendium: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val scope = rememberCoroutineScope()
-    val sessions = workspace.activeSession.manager
+    // La procedura guidata non dipende da una partita aperta: quando non ce n'e'
+    // nessuna e' anzi il suo caso d'uso principale. L'archivio si sfoglia dal
+    // workspace, che esiste sempre.
+    var openSavedOpen by remember { mutableStateOf(false) }
     // Fondo trasparente: lascia trasparire il fondale atmosferico condiviso di
     // AppRoot. Intestazione e pannelli hanno superfici proprie e restano leggibili.
     Column(modifier.fillMaxSize()) {
@@ -92,28 +93,24 @@ fun EncounterBuilderScreen(
             )
         }
 
-        SessionMenuDialog(
-            manager = sessions,
-            workspace = workspace,
-            onOpenInNewTab = { summary ->
-                scope.launch {
-                    when (runDiskIo { workspace.openSaved(summary) }) {
-                        WorkspaceOpenResult.OPENED,
-                        WorkspaceOpenResult.ALREADY_OPEN -> {
-                            viewModel.restartWizard()
-                            onOpenBattle()
-                        }
-                        WorkspaceOpenResult.FAILED -> Unit
-                    }
-                }
-            },
-        )
+        if (openSavedOpen) {
+            OpenSavedSessionDialog(
+                workspace = workspace,
+                onDismiss = { openSavedOpen = false },
+                onOpened = {
+                    openSavedOpen = false
+                    viewModel.restartWizard()
+                    onOpenBattle()
+                },
+            )
+        }
 
         when (viewModel.step) {
             NewGameStep.TEMPLATE -> TemplateChoiceStep(
                 viewModel = viewModel,
                 compact = compact,
-                sessions = sessions,
+                savedCount = workspace.savedSessions.size,
+                onOpenSaved = { openSavedOpen = true },
                 onCreateFromScratch = {
                     viewModel.createFromScratch()
                     onOpenCompendium()
@@ -172,7 +169,8 @@ private fun EncounterHeader(step: NewGameStep, compact: Boolean) {
 private fun TemplateChoiceStep(
     viewModel: EncounterBuilderViewModel,
     compact: Boolean,
-    sessions: SessionManager,
+    savedCount: Int,
+    onOpenSaved: () -> Unit,
     onCreateFromScratch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -247,16 +245,13 @@ private fun TemplateChoiceStep(
                 )
                 GameButton(
                     label = "Apri sessione salvata",
-                    subtitle = when (sessions.sessions.size) {
+                    subtitle = when (savedCount) {
                         0 -> "Nessuna sessione salvata"
                         1 -> "1 sessione salvata"
-                        else -> "${sessions.sessions.size} sessioni salvate"
+                        else -> "$savedCount sessioni salvate"
                     },
                     accent = Palette.Heal,
-                    onClick = {
-                        sessions.refresh()
-                        sessions.menuOpen = true
-                    },
+                    onClick = onOpenSaved,
                 )
             }
         }

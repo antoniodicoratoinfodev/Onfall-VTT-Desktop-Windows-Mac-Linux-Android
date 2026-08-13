@@ -42,14 +42,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.engine.CombatSession
-import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.ui.battle.BattleScreen
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.AppGlyph
 import app.d6d.ui.components.GlyphIcon
 import app.d6d.ui.components.VerticalResizeHandle
 import app.d6d.ui.components.initials
-import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.cursors.CursorPreferences
 import app.d6d.ui.encounter.EncounterBuilderScreen
 import app.d6d.ui.encounter.EncounterBuilderViewModel
@@ -128,7 +126,7 @@ fun AppRoot(
 ) {
     AppTheme {
         val uiScope = rememberCoroutineScope()
-        var destination by remember { mutableStateOf(Destination.BATTAGLIA) }
+        var destination by remember { mutableStateOf(Destination.INCONTRO) }
         var requestedCompendiumItemId by remember { mutableStateOf<String?>(null) }
         var requestedCompendiumNewKind by remember { mutableStateOf<RosterKind?>(null) }
 
@@ -173,16 +171,12 @@ fun AppRoot(
         val portraits = remember {
             PortraitRepository(ImageStore(dataDirectory), filePicker, uiScope, loadOnCreate = false)
         }
-        // All'avvio si apre il template piu' semplice: un tavolo nuovo trova una
-        // partita giocabile invece di una mappa vuota, e le altre due si scelgono
-        // dalla procedura Nuova partita.
+        // All'avvio non si apre alcuna partita: il tavolo decide da Partita se
+        // cominciarne una inclusa, costruirla dai propri template o riaprire un
+        // salvataggio. Nessuno si ritrova dentro uno scontro che non ha scelto.
         val workspace = remember {
-            val opening = SessionTemplates.default
             SessionWorkspace(
                 store = SessionArchiveStore(dataDirectory.resolve("sessions")),
-                initialSession = opening.startedSession(),
-                initialDisplayName = opening.name,
-                initialPresentation = mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name),
                 battleFactory = battleFactory,
                 refreshManagersOnCreate = false,
             )
@@ -202,7 +196,11 @@ fun AppRoot(
                 }
             }
             val recovered = runCatching { runDiskIo { recoveryStore.load() } }.getOrNull()
-            if (recovered != null) workspace.restoreRecovery(recovered)
+            // Un recupero riuscito riporta il tavolo dov'era: chi si e' schiantato
+            // a meta' scontro ritrova lo scontro, non la procedura guidata.
+            if (recovered != null && workspace.restoreRecovery(recovered)) {
+                destination = Destination.BATTAGLIA
+            }
             runCatching { runDiskIo { workspace.refreshSessionLists() } }
             recoveryReady = true
         }
@@ -221,8 +219,6 @@ fun AppRoot(
             }
         }
         val activeSession = workspace.activeSession
-        val battleViewModel = activeSession.battle
-        val sessions = activeSession.manager
         var exitWarningOpen by remember { mutableStateOf(false) }
 
         LaunchedEffect(exitRequested) {
@@ -296,10 +292,9 @@ fun AppRoot(
                         encounterBuilder.restartWizard()
                         destination = Destination.BATTAGLIA
                     }
-                    WorkspaceOpenResult.FAILED -> {
-                        sessions.status = workspace.status
-                        sessions.menuOpen = true
-                    }
+                    // Il motivo del rifiuto vive gia' nello stato del workspace,
+                    // che Partita mostra: non serve un secondo canale.
+                    WorkspaceOpenResult.FAILED -> destination = Destination.INCONTRO
                 }
             }
         }
@@ -310,12 +305,19 @@ fun AppRoot(
         // I view model vivono sopra questo ramo, quindi lo stato applicativo resta.
         val content: @Composable (Modifier) -> Unit = { contentModifier ->
             when (destination) {
-                Destination.BATTAGLIA ->
+                Destination.BATTAGLIA -> if (activeSession == null) {
+                    // Senza partita aperta la mappa non ha nulla da mostrare: si
+                    // dice perche', e si offre la strada per cominciarne una.
+                    NoOpenSessionScreen(
+                        onOpenNewGame = { destination = Destination.INCONTRO },
+                        modifier = contentModifier,
+                    )
+                } else {
                     key(activeSession.id) {
                         BattleScreen(
-                            viewModel = battleViewModel,
+                            viewModel = activeSession.battle,
                             portraits = portraits,
-                            sessions = sessions,
+                            sessions = activeSession.manager,
                             workspace = workspace,
                             roster = roster,
                             compact = compact,
@@ -325,7 +327,7 @@ fun AppRoot(
                                     requestedCompendiumNewKind = null
                                     destination = Destination.COMPENDIO
                                 } else {
-                                    battleViewModel.showMessage(
+                                    activeSession.battle.showMessage(
                                         "La scheda collegata a questo combattente non è presente nel Compendio.",
                                     )
                                 }
@@ -344,6 +346,7 @@ fun AppRoot(
                             modifier = contentModifier,
                         )
                     }
+                }
 
                 Destination.INCONTRO ->
                     EncounterBuilderScreen(
@@ -472,6 +475,41 @@ fun AppRoot(
                     },
                 )
             }
+        }
+    }
+}
+
+/**
+ * Battaglia senza alcuna partita aperta.
+ *
+ * E' lo stato in cui l'applicazione si apre. Non e' un errore ne' un caricamento
+ * in corso: e' un tavolo sgombro, e l'unica cosa da dire e' dove si comincia.
+ */
+@Composable
+private fun NoOpenSessionScreen(
+    onOpenNewGame: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            GlyphIcon(AppGlyph.SWORDS, tint = Palette.Gold, size = 44.dp)
+            Text(
+                text = "Nessuna partita aperta",
+                color = Palette.Text,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = "Vai su Partita per cominciarne una nuova o riaprire un salvataggio.",
+                color = Palette.TextMuted,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            GameButton("Vai a Partita", accent = Palette.Gold, primary = true, onClick = onOpenNewGame)
         }
     }
 }
