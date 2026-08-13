@@ -5,6 +5,7 @@ import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.HealingTarget
 import app.d6d.domain.combat.ResolutionMethod
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -72,4 +73,13 @@ object AutomationStatusSerializer : KSerializer<AutomationStatus> {
     override fun serialize(encoder: Encoder, value: AutomationStatus) = encoder.encodeString(value.name)
 
     override fun deserialize(decoder: Decoder): AutomationStatus = AutomationStatus.valueOf(decoder.decodeString())
+}
+
+object HealingTargetSerializer : KSerializer<HealingTarget> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("app.d6d.domain.combat.HealingTarget", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: HealingTarget) = encoder.encodeString(value.name)
+
+    override fun deserialize(decoder: Decoder): HealingTarget = HealingTarget.valueOf(decoder.decodeString())
 }

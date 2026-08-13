@@ -2,8 +2,11 @@ package app.d6d.sheet
 
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AbilityEffect
+import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.HealingTarget
 import app.d6d.domain.combat.ResolutionMethod
+import app.d6d.rules.character.CharacterClassId
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -73,11 +76,152 @@ class SheetStoreTest {
             resourceCost = 1,
             effect = AbilityEffect.GRANT_NON_MAGIC_ACTION,
         )
+        val healing = CatalogAbility(
+            id = "cura-automatica",
+            name = "Cura automatica",
+            activationCost = ActivationCost.BONUS_ACTION,
+            resolutionMethod = ResolutionMethod.AUTOMATIC,
+            rangeFeet = 30,
+            dealsDamage = false,
+            spellOrCantrip = true,
+            resourceId = "${SPELL_SLOT_RESOURCE_PREFIX}1",
+            resourceCost = 1,
+            healing = CatalogHealing.dice(
+                HealingTarget.SELF_OR_ALLY,
+                2,
+                8,
+                3,
+                CatalogHealingBonusSource.CLASS_LEVEL,
+                CharacterClassId.FIGHTER,
+                CatalogHealingSlotScaling(
+                    baseSlotLevel = 1,
+                    additionalDicePerSlotLevel = 2,
+                ),
+            ),
+        )
         val store = SheetStore(file)
 
-        store.save(SheetLibrary(abilities = listOf(ability, automaticEffect)))
+        store.save(SheetLibrary(abilities = listOf(ability, automaticEffect, healing)))
 
-        assertEquals(listOf(ability, automaticEffect), store.load().abilities)
+        val loaded = store.load().abilities
+        assertEquals(listOf(ability, automaticEffect, healing), loaded)
+        assertEquals(HealingTarget.SELF_OR_ALLY, loaded.last().toDefinition().healing().target())
+        assertEquals(CatalogHealingBonusSource.CLASS_LEVEL, loaded.last().healing?.bonusSource)
+        assertEquals(
+            CatalogHealingSlotScaling(1, 2),
+            loaded.last().healing?.slotScaling,
+        )
+        assertEquals(
+            "2d8+8",
+            loaded.last().toDefinition(
+                healingContext = HealingFormulaContext(
+                    classLevels = mapOf(CharacterClassId.FIGHTER to 5),
+                ),
+            ).healing().dice().notation(),
+        )
+        assertEquals(
+            "6d8+8",
+            loaded.last().healing?.toDefinitionAtSlotLevel(
+                slotLevel = 3,
+                context = HealingFormulaContext(
+                    classLevels = mapOf(CharacterClassId.FIGHTER to 5),
+                ),
+            )?.dice()?.notation(),
+        )
+    }
+
+    @Test
+    fun `una formula di cura senza i nuovi campi dinamici resta compatibile`() {
+        val file = directory.resolve("healing-legacy.json")
+        Files.writeString(
+            file,
+            """{
+              "schemaVersion": ${SheetLibrary.SCHEMA_VERSION},
+              "characters": [],
+              "monsters": [],
+              "abilities": [{
+                "id": "cura-legacy",
+                "healing": {
+                  "target": "SELF",
+                  "dice": {"count": 1, "sides": 6, "modifier": 2},
+                  "fixedAmount": null
+                }
+              }],
+              "passiveOverrides": {}
+            }""".trimIndent(),
+        )
+
+        val healing = SheetStore(file).load().abilities.single().healing
+
+        assertEquals(CatalogHealingBonusSource.NONE, healing?.bonusSource)
+        assertEquals(null, healing?.bonusClassId)
+        assertEquals(null, healing?.slotScaling)
+        assertEquals("1d6+2", healing?.toDefinition()?.dice()?.notation())
+    }
+
+    @Test
+    fun `recuperare energie privato resta manuale senza una riserva`() {
+        val ability = defaultAbilityCatalog().single { it.id == "abilita-recuperare-energie" }
+
+        assertEquals(ResolutionMethod.MANUAL, ability.resolutionMethod)
+        assertEquals(AutomationStatus.MANUAL_REQUIRED, ability.automationStatus)
+        assertEquals(null, ability.healing)
+        assertEquals(null, ability.resourceId)
+        assertEquals(0, ability.resourceCost)
+    }
+
+    @Test
+    fun `lo schema nove conserva il preset recuperare energie manuale`() {
+        val legacy = CatalogAbility(
+            id = "abilita-recuperare-energie",
+            name = "Recuperare Energie",
+            activationCost = ActivationCost.BONUS_ACTION,
+            resolutionMethod = ResolutionMethod.MANUAL,
+            dealsDamage = false,
+            automationStatus = AutomationStatus.MANUAL_REQUIRED,
+            rulesText = "Recupera 1d10 + livello da guerriero punti ferita; si ricarica con un riposo.",
+        )
+        val customized = legacy.copy(rulesText = "Versione personalizzata del tavolo.")
+        val standardFile = directory.resolve("standard-v9.json")
+        val customFile = directory.resolve("custom-v9.json")
+        SheetStore(standardFile).save(SheetLibrary(schemaVersion = 9, abilities = listOf(legacy)))
+        SheetStore(customFile).save(SheetLibrary(schemaVersion = 9, abilities = listOf(customized)))
+
+        val migrated = SheetStore(standardFile).load().abilities
+            .single { it.id == legacy.id }
+        val preserved = SheetStore(customFile).load().abilities
+            .single { it.id == legacy.id }
+
+        assertEquals(ResolutionMethod.MANUAL, migrated.resolutionMethod)
+        assertEquals(null, migrated.healing)
+        assertEquals(customized, preserved)
+    }
+
+    @Test
+    fun `lo schema dieci disattiva solo il preset di cura illimitato`() {
+        val unlimited = CatalogAbility(
+            id = "abilita-recuperare-energie",
+            name = "Recuperare Energie",
+            activationCost = ActivationCost.BONUS_ACTION,
+            resolutionMethod = ResolutionMethod.AUTOMATIC,
+            dealsDamage = false,
+            automationStatus = AutomationStatus.AUTOMATED,
+            rulesText = "Recupera 1d10 punti ferita.",
+            healing = CatalogHealing.dice(HealingTarget.SELF, 1, 10),
+        )
+        val customized = unlimited.copy(rulesText = "Versione personalizzata.")
+        val standardFile = directory.resolve("standard-v10.json")
+        val customFile = directory.resolve("custom-v10.json")
+        SheetStore(standardFile).save(SheetLibrary(schemaVersion = 10, abilities = listOf(unlimited)))
+        SheetStore(customFile).save(SheetLibrary(schemaVersion = 10, abilities = listOf(customized)))
+
+        val migrated = SheetStore(standardFile).load().abilities.single { it.id == unlimited.id }
+        val preserved = SheetStore(customFile).load().abilities.single { it.id == unlimited.id }
+
+        assertEquals(ResolutionMethod.MANUAL, migrated.resolutionMethod)
+        assertEquals(AutomationStatus.MANUAL_REQUIRED, migrated.automationStatus)
+        assertEquals(null, migrated.healing)
+        assertEquals(customized, preserved)
     }
 
     @Test

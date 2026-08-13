@@ -2,6 +2,7 @@ package app.d6d.sheet
 
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.HealingTarget
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.CharacterProgression
 import app.d6d.rules.character.ClassLevelState
+import app.d6d.rules.character.ClassEligibility
 import app.d6d.rules.character.RuleElementKind
 
 /**
@@ -49,6 +51,10 @@ class SheetDerivationsTest {
         assertEquals(3, standardFirst.remaining())
         assertEquals(0, standardSecond.remaining())
         assertEquals(1, pactSecond.remaining())
+        assertEquals(1, standardFirst.spellSlotLevelOrNull())
+        assertFalse(standardFirst.isPactSpellSlot())
+        assertEquals(2, pactSecond.spellSlotLevelOrNull())
+        assertTrue(pactSecond.isPactSpellSlot())
         assertEquals(3, actor.resources().size)
     }
 
@@ -539,6 +545,71 @@ class SheetDerivationsTest {
         assertEquals(8, selected.damage().single().dice().count())
         assertEquals(20, selected.areaRadiusFeet())
         assertEquals(SaveAbility.DEXTERITY, selected.saveAbility())
+    }
+
+    @Test
+    fun `le cure risolvono modificatore da incantatore e livello di classe nella fotografia`() {
+        val spell = CatalogAbility(
+            id = "cura-del-chierico",
+            name = "Cura del chierico",
+            activationCost = ActivationCost.ACTION,
+            resolutionMethod = ResolutionMethod.AUTOMATIC,
+            dealsDamage = false,
+            category = RuleElementKind.SPELL,
+            resourceId = "${SPELL_SLOT_RESOURCE_PREFIX}1",
+            resourceCost = 1,
+            classEligibility = listOf(ClassEligibility(CharacterClassId.CLERIC, 1)),
+            healing = CatalogHealing.dice(
+                HealingTarget.SELF_OR_ALLY,
+                2,
+                8,
+                bonusSource = CatalogHealingBonusSource.SPELLCASTING_ABILITY,
+                slotScaling = CatalogHealingSlotScaling(
+                    baseSlotLevel = 1,
+                    additionalDicePerSlotLevel = 2,
+                ),
+            ),
+        )
+        val secondWind = CatalogAbility(
+            id = "recupero-guerriero",
+            name = "Recupero guerriero",
+            activationCost = ActivationCost.BONUS_ACTION,
+            resolutionMethod = ResolutionMethod.AUTOMATIC,
+            dealsDamage = false,
+            healing = CatalogHealing.dice(
+                HealingTarget.SELF,
+                1,
+                10,
+                bonusSource = CatalogHealingBonusSource.CLASS_LEVEL,
+                bonusClassId = CharacterClassId.FIGHTER,
+            ),
+        )
+        val sheet = CharacterSheet(
+            abilityScores = mapOf(
+                Ability.INTELLIGENCE to 10,
+                Ability.WISDOM to 18,
+            ),
+            progression = CharacterProgression(
+                classLevels = listOf(
+                    ClassLevelState(CharacterClassId.CLERIC, 1),
+                    ClassLevelState(CharacterClassId.FIGHTER, 7),
+                ),
+            ),
+            spellcasting = Spellcasting(
+                ability = Ability.INTELLIGENCE,
+                abilitiesByClass = mapOf(CharacterClassId.CLERIC to Ability.WISDOM),
+            ),
+            abilityIds = listOf(spell.id, secondWind.id),
+        )
+
+        val actor = sheet.toActorDefinition(abilityCatalog = listOf(spell, secondWind))
+
+        assertEquals("2d8+4", actor.ability(spell.id).healing().dice().notation())
+        assertEquals(1, actor.ability(spell.id).healing().slotScaling().baseSlotLevel())
+        assertEquals(2, actor.ability(spell.id).healing().slotScaling().additionalDicePerSlotLevel())
+        assertEquals("6d8+4", actor.ability(spell.id).healing().resolveAtSlotLevel(3).dice().notation())
+        assertEquals("1d10+7", actor.ability(secondWind.id).healing().dice().notation())
+        assertEquals(2, actor.abilities().size, "lo scaling non deve duplicare le capacità nello snapshot")
     }
 
     @Test

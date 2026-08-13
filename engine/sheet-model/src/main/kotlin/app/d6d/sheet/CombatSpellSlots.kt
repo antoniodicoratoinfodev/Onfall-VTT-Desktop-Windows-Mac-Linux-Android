@@ -1,27 +1,28 @@
 package app.d6d.sheet
 
 import app.d6d.domain.combat.CombatResourceState
+import app.d6d.domain.combat.SpellSlotResourceId
 
-const val SPELL_SLOT_RESOURCE_PREFIX = "app.d6d:spell-slot:"
-const val PACT_SLOT_RESOURCE_PREFIX = "app.d6d:pact-slot:"
+const val SPELL_SLOT_RESOURCE_PREFIX = SpellSlotResourceId.STANDARD_PREFIX
+const val PACT_SLOT_RESOURCE_PREFIX = SpellSlotResourceId.PACT_PREFIX
 
 /** Livello dello slot fotografato come risorsa da combattimento, oppure null. */
 fun CombatResourceState.spellSlotLevelOrNull(): Int? {
-    val suffix = when {
-        id().startsWith(SPELL_SLOT_RESOURCE_PREFIX) -> id().removePrefix(SPELL_SLOT_RESOURCE_PREFIX)
-        id().startsWith(PACT_SLOT_RESOURCE_PREFIX) -> id().removePrefix(PACT_SLOT_RESOURCE_PREFIX)
-        else -> return null
-    }
-    return suffix.toIntOrNull()?.takeIf { it in 1..9 }
+    return SpellSlotResourceId.parse(id()).orElse(null)?.level()
 }
 
-fun CombatResourceState.isPactSpellSlot(): Boolean = id().startsWith(PACT_SLOT_RESOURCE_PREFIX)
+fun CombatResourceState.isPactSpellSlot(): Boolean =
+    SpellSlotResourceId.parse(id()).orElse(null)?.kind() == SpellSlotResourceId.Kind.PACT
 
 internal fun SpellSlot.toCombatResource(pact: Boolean = false): CombatResourceState {
-    val prefix = if (pact) PACT_SLOT_RESOURCE_PREFIX else SPELL_SLOT_RESOURCE_PREFIX
+    val resourceId = if (pact) {
+        SpellSlotResourceId.pact(level)
+    } else {
+        SpellSlotResourceId.standard(level)
+    }
     val label = if (pact) "Slot del patto" else "Slot incantesimo"
     return CombatResourceState(
-        "$prefix$level",
+        resourceId.id(),
         "$label di ${level}º livello",
         total,
         spent.coerceIn(0, total),

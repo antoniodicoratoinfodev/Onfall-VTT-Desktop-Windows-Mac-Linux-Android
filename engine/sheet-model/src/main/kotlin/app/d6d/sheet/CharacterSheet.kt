@@ -822,6 +822,7 @@ data class CharacterSheet(
             }
         }
         val weaponIds = combatAbilities.mapTo(mutableSetOf()) { it.id() }
+        val healingClassLevels = progression.classLevels.associate { it.classId to it.level }
         val catalogAbilities = abilityIds
             .distinct()
             .mapNotNull { selectedId -> abilityCatalog.firstOrNull { it.id == selectedId } }
@@ -836,7 +837,19 @@ data class CharacterSheet(
                 } else {
                     ability
                 }
-                resolved.toDefinition(rulesetVersion)
+                val classCastingAbility = resolved.classEligibility
+                    .asSequence()
+                    .filter { progression.levelIn(it.classId) >= it.minimumLevel }
+                    .mapNotNull { spellcasting?.abilitiesByClass?.get(it.classId) }
+                    .firstOrNull()
+                val effectiveCastingAbility = classCastingAbility ?: spellcasting?.ability
+                resolved.toDefinition(
+                    rulesetVersion,
+                    HealingFormulaContext(
+                        spellcastingAbilityModifier = effectiveCastingAbility?.let(::modifier) ?: 0,
+                        classLevels = healingClassLevels,
+                    ),
+                )
             }
             .filterNot { it.id() in weaponIds }
 

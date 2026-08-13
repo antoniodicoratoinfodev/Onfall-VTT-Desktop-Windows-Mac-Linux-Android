@@ -3,6 +3,7 @@
     ActivationCostSerializer::class,
     AutomationStatusSerializer::class,
     DamageTypeSerializer::class,
+    HealingTargetSerializer::class,
     ResolutionMethodSerializer::class,
 )
 
@@ -14,6 +15,10 @@ import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.DiceExpression
+import app.d6d.domain.combat.HealingDefinition
+import app.d6d.domain.combat.HealingSlotScaling
+import app.d6d.domain.combat.HealingTarget
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import app.d6d.rules.character.CharacterClassId
@@ -108,6 +113,8 @@ data class CatalogAbility(
     val attackAbility: Ability? = null,
     /** Marcatura esplicita per capacità private che rappresentano magia. */
     val spellOrCantrip: Boolean = false,
+    /** Cura automatizzata; null per attacchi, tratti e capacita' legacy. */
+    val healing: CatalogHealing? = null,
 ) {
     val isArea: Boolean get() = areaRadiusFeet > 0
     val isSpellOrCantrip: Boolean
@@ -129,7 +136,10 @@ data class CatalogAbility(
             }.joinToString(" + ")
         }
 
-    fun toDefinition(rulesetVersion: String = "5.2.1"): AbilityDefinition {
+    fun toDefinition(
+        rulesetVersion: String = "5.2.1",
+        healingContext: HealingFormulaContext = HealingFormulaContext(),
+    ): AbilityDefinition {
         require(id.isNotBlank()) { "L'identificatore dell'abilità non può essere vuoto." }
         require(name.isNotBlank()) { "Il nome dell'abilità non può essere vuoto." }
         require(rangeFeet >= 0) { "La gittata non può essere negativa." }
@@ -177,13 +187,140 @@ data class CatalogAbility(
             .passive(passive)
             .effect(effect)
             .resource(resourceId.orEmpty(), resourceCost)
+            .healing(healing?.toDefinition(healingContext))
             .build()
     }
 
     fun availableTo(classId: CharacterClassId, classLevel: Int): Boolean =
         classEligibility.isEmpty() || classEligibility.any {
             it.classId == classId && classLevel >= it.minimumLevel
+    }
+}
+
+/** Formula di dadi serializzabile usata dalle cure del Compendio. */
+@Serializable
+data class CatalogHealingDice(
+    val count: Int,
+    val sides: Int,
+    val modifier: Int = 0,
+) {
+    fun toExpression(): DiceExpression = DiceExpression(count, sides, modifier)
+}
+
+/** Scaling dei dadi per ogni livello di slot sopra quello base. */
+@Serializable
+data class CatalogHealingSlotScaling(
+    val baseSlotLevel: Int,
+    val additionalDicePerSlotLevel: Int,
+) {
+    init {
+        require(baseSlotLevel in 1..9) { "Il livello slot base deve essere compreso tra 1 e 9." }
+        require(additionalDicePerSlotLevel > 0) { "I dadi aggiuntivi per livello devono essere positivi." }
+    }
+
+    fun toDefinition(): HealingSlotScaling =
+        HealingSlotScaling(baseSlotLevel, additionalDicePerSlotLevel)
+}
+
+/** Dynamic bonus evaluated from the character that receives the catalog ability. */
+@Serializable
+enum class CatalogHealingBonusSource {
+    NONE,
+    SPELLCASTING_ABILITY,
+    CLASS_LEVEL,
+}
+
+/** Values available while a catalog healing formula becomes an encounter definition. */
+data class HealingFormulaContext(
+    val spellcastingAbilityModifier: Int = 0,
+    val classLevels: Map<CharacterClassId, Int> = emptyMap(),
+) {
+    init {
+        require(classLevels.values.all { it >= 0 }) { "I livelli di classe non possono essere negativi." }
+    }
+
+    fun bonus(source: CatalogHealingBonusSource, classId: CharacterClassId?): Int = when (source) {
+        CatalogHealingBonusSource.NONE -> 0
+        CatalogHealingBonusSource.SPELLCASTING_ABILITY -> spellcastingAbilityModifier
+        CatalogHealingBonusSource.CLASS_LEVEL -> classLevels[requireNotNull(classId)] ?: 0
+    }
+}
+
+/** Cura strutturata conservata nel Compendio; usa dadi oppure un importo fisso. */
+@Serializable
+data class CatalogHealing(
+    val target: HealingTarget,
+    val dice: CatalogHealingDice? = null,
+    val fixedAmount: Int? = null,
+    val bonusSource: CatalogHealingBonusSource = CatalogHealingBonusSource.NONE,
+    val bonusClassId: CharacterClassId? = null,
+    val slotScaling: CatalogHealingSlotScaling? = null,
+) {
+    init {
+        require((dice == null) != (fixedAmount == null)) {
+            "Una cura deve indicare dadi oppure un importo fisso."
         }
+        require(fixedAmount == null || fixedAmount > 0) {
+            "Una cura fissa deve essere positiva."
+        }
+        when (bonusSource) {
+            CatalogHealingBonusSource.CLASS_LEVEL -> require(bonusClassId != null) {
+                "Una cura basata sul livello deve indicare la classe."
+            }
+            CatalogHealingBonusSource.NONE,
+            CatalogHealingBonusSource.SPELLCASTING_ABILITY,
+            -> require(bonusClassId == null) {
+                "La classe si indica soltanto per un bonus basato sul livello."
+            }
+        }
+        require(bonusSource == CatalogHealingBonusSource.NONE || dice != null) {
+            "Un bonus dinamico richiede una formula di dadi."
+        }
+        require(slotScaling == null || dice != null) {
+            "Lo scaling per livello slot richiede una formula di dadi."
+        }
+    }
+
+    fun toDefinition(context: HealingFormulaContext = HealingFormulaContext()): HealingDefinition {
+        if (dice == null) {
+            return HealingDefinition.fixed(target, requireNotNull(fixedAmount))
+        }
+        val resolvedModifier = Math.addExact(
+            dice.modifier,
+            context.bonus(bonusSource, bonusClassId),
+        )
+        val resolvedDice = DiceExpression(dice.count, dice.sides, resolvedModifier)
+        return slotScaling?.let {
+            HealingDefinition.dice(target, resolvedDice, it.toDefinition())
+        } ?: HealingDefinition.dice(target, resolvedDice)
+    }
+
+    /** Proiezione concreta per chi ha già scelto il livello dello slot da spendere. */
+    fun toDefinitionAtSlotLevel(
+        slotLevel: Int,
+        context: HealingFormulaContext = HealingFormulaContext(),
+    ): HealingDefinition = toDefinition(context).resolveAtSlotLevel(slotLevel)
+
+    companion object {
+        fun dice(
+            target: HealingTarget,
+            count: Int,
+            sides: Int,
+            modifier: Int = 0,
+            bonusSource: CatalogHealingBonusSource = CatalogHealingBonusSource.NONE,
+            bonusClassId: CharacterClassId? = null,
+            slotScaling: CatalogHealingSlotScaling? = null,
+        ): CatalogHealing = CatalogHealing(
+            target,
+            CatalogHealingDice(count, sides, modifier),
+            bonusSource = bonusSource,
+            bonusClassId = bonusClassId,
+            slotScaling = slotScaling,
+        )
+
+        fun fixed(target: HealingTarget, amount: Int): CatalogHealing =
+            CatalogHealing(target, fixedAmount = amount)
+    }
 }
 
 /**

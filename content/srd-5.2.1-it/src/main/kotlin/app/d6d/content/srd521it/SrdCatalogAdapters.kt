@@ -3,12 +3,18 @@ package app.d6d.content.srd521it
 import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AutomationStatus
+import app.d6d.domain.combat.HealingTarget
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.rules.character.ContentPackManifest
+import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.RuleElementDefinition
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.RulesContentPack
 import app.d6d.sheet.CatalogAbility
+import app.d6d.sheet.CatalogHealing
+import app.d6d.sheet.CatalogHealingBonusSource
+import app.d6d.sheet.CatalogHealingSlotScaling
+import app.d6d.sheet.SPELL_SLOT_RESOURCE_PREFIX
 import app.d6d.sheet.reflowRulesText
 
 /**
@@ -35,15 +41,28 @@ fun RuleElementDefinition.toCatalogAbility(pack: RulesContentPack): CatalogAbili
 }
 
 /** Proiezione leggibile dal Compendio e selezionabile dalle schede/battaglia. */
-fun RuleElementDefinition.toCatalogAbility(manifest: ContentPackManifest): CatalogAbility =
-    CatalogAbility(
+fun RuleElementDefinition.toCatalogAbility(manifest: ContentPackManifest): CatalogAbility {
+    val healingSpec = structuredHealingById[id]
+    return CatalogAbility(
         id = id,
         name = name,
-        passive = id != ACTION_SURGE_ID && !id.isWildShapeForm() && isPassiveTrait(activation.toActivationCost()),
+        passive = healingSpec == null &&
+            id != ACTION_SURGE_ID &&
+            !id.isWildShapeForm() &&
+            isPassiveTrait(activation.toActivationCost()),
         activationCost = if (id.isWildShapeForm()) ActivationCost.BONUS_ACTION else activation.toActivationCost(),
-        resolutionMethod = if (id == ACTION_SURGE_ID) ResolutionMethod.AUTOMATIC else ResolutionMethod.MANUAL,
+        resolutionMethod = if (id == ACTION_SURGE_ID || healingSpec != null) {
+            ResolutionMethod.AUTOMATIC
+        } else {
+            ResolutionMethod.MANUAL
+        },
+        rangeFeet = healingSpec?.rangeFeet ?: 5,
         dealsDamage = false,
-        automationStatus = if (id == ACTION_SURGE_ID) AutomationStatus.AUTOMATED else AutomationStatus.MANUAL_REQUIRED,
+        automationStatus = if (id == ACTION_SURGE_ID || healingSpec != null) {
+            AutomationStatus.AUTOMATED
+        } else {
+            AutomationStatus.MANUAL_REQUIRED
+        },
         rulesText = description.reflowRulesText(),
         category = kind,
         classEligibility = classEligibility,
@@ -58,15 +77,83 @@ fun RuleElementDefinition.toCatalogAbility(manifest: ContentPackManifest): Catal
         concentration = spell?.concentration ?: false,
         ritual = spell?.ritual ?: false,
         prerequisite = prerequisite,
-        resourceId = if (id.isWildShapeForm()) WILD_SHAPE_RESOURCE_ID else resourceId,
-        resourceCost = if (id.isWildShapeForm()) 1 else resourceCost,
+        resourceId = healingSpec?.resourceId
+            ?: if (id.isWildShapeForm()) WILD_SHAPE_RESOURCE_ID else resourceId,
+        resourceCost = healingSpec?.resourceCost
+            ?: if (id.isWildShapeForm()) 1 else resourceCost,
         effect = if (id == ACTION_SURGE_ID) AbilityEffect.GRANT_NON_MAGIC_ACTION else AbilityEffect.NONE,
         immutable = true,
         effects = effects,
+        healing = healingSpec?.healing,
     )
+}
 
 private const val ACTION_SURGE_ID = "srd521-it:feature:guerriero:azione-impetuosa"
 private const val WILD_SHAPE_RESOURCE_ID = "srd521-it:resource:druido:forma-selvatica"
+private const val CURE_WOUNDS_ID = "srd521-it:spell:cura-ferite"
+private const val HEALING_WORD_ID = "srd521-it:spell:parola-guaritrice"
+private const val SECOND_WIND_ID = "srd521-it:feature:guerriero:recuperare-energie"
+private const val SECOND_WIND_RESOURCE_ID = "srd521-it:resource:guerriero:recuperare-energie"
+
+/**
+ * Cure che il motore sa risolvere senza interpretare il testo SRD.
+ *
+ * La chiave e tutti i numeri sono intenzionalmente espliciti: una frase come
+ * "recupera punti ferita" in una voce nuova o legacy non deve trasformarla
+ * silenziosamente in una capacità automatizzata. Anche le risorse vengono
+ * assegnate soltanto alle tre identità note qui sotto.
+ */
+private val structuredHealingById = mapOf(
+    CURE_WOUNDS_ID to StructuredHealingSpec(
+        healing = CatalogHealing.dice(
+            HealingTarget.SELF_OR_ALLY,
+            2,
+            8,
+            bonusSource = CatalogHealingBonusSource.SPELLCASTING_ABILITY,
+            slotScaling = CatalogHealingSlotScaling(
+                baseSlotLevel = 1,
+                additionalDicePerSlotLevel = 2,
+            ),
+        ),
+        rangeFeet = 5,
+        resourceId = "${SPELL_SLOT_RESOURCE_PREFIX}1",
+        resourceCost = 1,
+    ),
+    HEALING_WORD_ID to StructuredHealingSpec(
+        healing = CatalogHealing.dice(
+            HealingTarget.SELF_OR_ALLY,
+            2,
+            4,
+            bonusSource = CatalogHealingBonusSource.SPELLCASTING_ABILITY,
+            slotScaling = CatalogHealingSlotScaling(
+                baseSlotLevel = 1,
+                additionalDicePerSlotLevel = 2,
+            ),
+        ),
+        rangeFeet = 60,
+        resourceId = "${SPELL_SLOT_RESOURCE_PREFIX}1",
+        resourceCost = 1,
+    ),
+    SECOND_WIND_ID to StructuredHealingSpec(
+        healing = CatalogHealing.dice(
+            HealingTarget.SELF,
+            1,
+            10,
+            bonusSource = CatalogHealingBonusSource.CLASS_LEVEL,
+            bonusClassId = CharacterClassId.FIGHTER,
+        ),
+        rangeFeet = 0,
+        resourceId = SECOND_WIND_RESOURCE_ID,
+        resourceCost = 1,
+    ),
+)
+
+private data class StructuredHealingSpec(
+    val healing: CatalogHealing,
+    val rangeFeet: Int,
+    val resourceId: String,
+    val resourceCost: Int,
+)
 
 private fun String.isWildShapeForm(): Boolean = startsWith("srd521-it:beast:")
 

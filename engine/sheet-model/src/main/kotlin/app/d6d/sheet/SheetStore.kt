@@ -26,7 +26,7 @@ data class SheetLibrary(
     val passiveOverrides: Map<String, Boolean> = emptyMap(),
 ) {
     companion object {
-        const val SCHEMA_VERSION = 9
+        const val SCHEMA_VERSION = 11
     }
 }
 
@@ -131,7 +131,27 @@ class SheetStore(private val file: Path) {
         } else {
             library.abilities
         }
-        val abilities = migratedExisting +
+        // Lo schema 10 aveva reso eseguibile il preset Recuperare Energie.
+        val healedExisting = if (library.schemaVersion < 10) {
+            val replacement = defaults.first { it.id == "abilita-recuperare-energie" }
+            migratedExisting.map { stored ->
+                if (stored == legacyRecoverEnergyAbility()) replacement else stored
+            }
+        } else {
+            migratedExisting
+        }
+        // Quel preset non possiede pero' una riserva sulla scheda privata: lasciarlo
+        // automatico lo renderebbe illimitato. Lo schema 11 riporta al tavolo solo
+        // la copia incorporata esatta; le varianti personalizzate restano intatte.
+        val resourceSafeExisting = if (library.schemaVersion < 11) {
+            val replacement = defaults.first { it.id == "abilita-recuperare-energie" }
+            healedExisting.map { stored ->
+                if (stored == legacyUnlimitedRecoverEnergyAbility()) replacement else stored
+            }
+        } else {
+            healedExisting
+        }
+        val abilities = resourceSafeExisting +
             defaults.filter { builtIn -> library.abilities.none { it.id == builtIn.id } }
 
         // Lo schema 9 porta la stessa classificazione anche sulle vecchie righe
@@ -211,5 +231,26 @@ class SheetStore(private val file: Path) {
         }
     }
 }
+
+private fun legacyRecoverEnergyAbility(): CatalogAbility = CatalogAbility(
+    id = "abilita-recuperare-energie",
+    name = "Recuperare Energie",
+    activationCost = app.d6d.domain.combat.ActivationCost.BONUS_ACTION,
+    resolutionMethod = app.d6d.domain.combat.ResolutionMethod.MANUAL,
+    dealsDamage = false,
+    automationStatus = app.d6d.domain.combat.AutomationStatus.MANUAL_REQUIRED,
+    rulesText = "Recupera 1d10 + livello da guerriero punti ferita; si ricarica con un riposo.",
+)
+
+private fun legacyUnlimitedRecoverEnergyAbility(): CatalogAbility = CatalogAbility(
+    id = "abilita-recuperare-energie",
+    name = "Recuperare Energie",
+    activationCost = app.d6d.domain.combat.ActivationCost.BONUS_ACTION,
+    resolutionMethod = app.d6d.domain.combat.ResolutionMethod.AUTOMATIC,
+    dealsDamage = false,
+    automationStatus = app.d6d.domain.combat.AutomationStatus.AUTOMATED,
+    rulesText = "Recupera 1d10 punti ferita.",
+    healing = CatalogHealing.dice(app.d6d.domain.combat.HealingTarget.SELF, 1, 10),
+)
 
 private class UnsupportedSheetSchemaException(message: String) : IllegalArgumentException(message)
