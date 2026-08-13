@@ -14,6 +14,9 @@ import app.d6d.domain.combat.SaveAbility;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.DiceExpression;
+import app.d6d.domain.combat.HealingDefinition;
+import app.d6d.domain.combat.HealingSlotScaling;
+import app.d6d.domain.combat.HealingTarget;
 import app.d6d.domain.combat.ResolutionMethod;
 
 import java.math.BigDecimal;
@@ -197,6 +200,31 @@ public final class ActorCatalogJsonCodec {
         result.put("effect", ability.effect().name());
         result.put("resourceId", ability.resourceId());
         result.put("resourceCost", ability.resourceCost());
+        result.put("healing", ability.healing() == null ? null : encodeHealing(ability.healing()));
+        return result;
+    }
+
+    private static Map<String, Object> encodeHealing(HealingDefinition healing) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("target", healing.target().name());
+        if (healing.dice() == null) {
+            result.put("dice", null);
+        } else {
+            Map<String, Object> dice = new LinkedHashMap<>();
+            dice.put("count", healing.dice().count());
+            dice.put("sides", healing.dice().sides());
+            dice.put("modifier", healing.dice().modifier());
+            result.put("dice", dice);
+        }
+        result.put("fixedAmount", healing.fixedAmount());
+        if (healing.slotScaling() == null) {
+            result.put("slotScaling", null);
+        } else {
+            Map<String, Object> scaling = new LinkedHashMap<>();
+            scaling.put("baseSlotLevel", healing.slotScaling().baseSlotLevel());
+            scaling.put("additionalDicePerSlotLevel", healing.slotScaling().additionalDicePerSlotLevel());
+            result.put("slotScaling", scaling);
+        }
         return result;
     }
 
@@ -428,6 +456,9 @@ public final class ActorCatalogJsonCodec {
         int resourceCost = value.get("resourceCost") == null
                 ? 0
                 : integer(value.get("resourceCost"), path + ".resourceCost");
+        HealingDefinition healing = value.get("healing") == null
+                ? null
+                : decodeHealing(value.get("healing"), path + ".healing");
 
         try {
             return new AbilityDefinition(
@@ -452,7 +483,8 @@ public final class ActorCatalogJsonCodec {
                     spellOrCantrip,
                     effect,
                     resourceId,
-                    resourceCost);
+                    resourceCost,
+                    healing);
         } catch (IllegalArgumentException exception) {
             throw formatError(path, messageOf(exception));
         }
@@ -469,6 +501,56 @@ public final class ActorCatalogJsonCodec {
             if (exception instanceof CatalogFormatException catalogException) {
                 throw catalogException;
             }
+            throw formatError(path, messageOf(exception));
+        }
+    }
+
+    private static HealingDefinition decodeHealing(Object encoded, String path) {
+        Map<String, Object> value = object(encoded, path);
+        HealingTarget target = healingTarget(
+                required(value, "target", path), path + ".target");
+
+        Object encodedDice = present(value, "dice", path);
+        Object encodedFixedAmount = present(value, "fixedAmount", path);
+        DiceExpression dice = null;
+        Integer fixedAmount = null;
+        if (encodedDice != null) {
+            Map<String, Object> diceObject = object(encodedDice, path + ".dice");
+            try {
+                dice = new DiceExpression(
+                        integer(required(diceObject, "count", path + ".dice"), path + ".dice.count"),
+                        integer(required(diceObject, "sides", path + ".dice"), path + ".dice.sides"),
+                        integer(required(diceObject, "modifier", path + ".dice"), path + ".dice.modifier"));
+            } catch (IllegalArgumentException exception) {
+                if (exception instanceof CatalogFormatException catalogException) {
+                    throw catalogException;
+                }
+                throw formatError(path + ".dice", messageOf(exception));
+            }
+        }
+        if (encodedFixedAmount != null) {
+            fixedAmount = integer(encodedFixedAmount, path + ".fixedAmount");
+        }
+        HealingSlotScaling slotScaling = null;
+        if (value.get("slotScaling") != null) {
+            String scalingPath = path + ".slotScaling";
+            Map<String, Object> encodedScaling = object(value.get("slotScaling"), scalingPath);
+            try {
+                slotScaling = new HealingSlotScaling(
+                        integer(required(encodedScaling, "baseSlotLevel", scalingPath),
+                                scalingPath + ".baseSlotLevel"),
+                        integer(required(encodedScaling, "additionalDicePerSlotLevel", scalingPath),
+                                scalingPath + ".additionalDicePerSlotLevel"));
+            } catch (IllegalArgumentException exception) {
+                if (exception instanceof CatalogFormatException catalogException) {
+                    throw catalogException;
+                }
+                throw formatError(scalingPath, messageOf(exception));
+            }
+        }
+        try {
+            return new HealingDefinition(target, dice, fixedAmount, slotScaling);
+        } catch (IllegalArgumentException exception) {
             throw formatError(path, messageOf(exception));
         }
     }
@@ -653,6 +735,15 @@ public final class ActorCatalogJsonCodec {
             return DamageType.valueOf(name);
         } catch (IllegalArgumentException exception) {
             throw unknownEnum(path, "DamageType", name, DamageType.values());
+        }
+    }
+
+    private static HealingTarget healingTarget(Object value, String path) {
+        String name = text(value, path);
+        try {
+            return HealingTarget.valueOf(name);
+        } catch (IllegalArgumentException exception) {
+            throw unknownEnum(path, "HealingTarget", name, HealingTarget.values());
         }
     }
 

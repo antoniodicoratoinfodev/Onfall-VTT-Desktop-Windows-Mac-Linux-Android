@@ -21,6 +21,9 @@ import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.DiceExpression;
 import app.d6d.domain.combat.EventType;
+import app.d6d.domain.combat.HealingDefinition;
+import app.d6d.domain.combat.HealingSlotScaling;
+import app.d6d.domain.combat.HealingTarget;
 import app.d6d.domain.combat.ResolutionMethod;
 import app.d6d.domain.combat.TurnBudget;
 import app.d6d.domain.space.BattleMap;
@@ -406,7 +409,8 @@ public final class CombatSessionJsonCodec {
                 "passive", ability.passive(),
                 "effect", ability.effect().name(),
                 "resourceId", ability.resourceId(),
-                "resourceCost", ability.resourceCost());
+                "resourceCost", ability.resourceCost(),
+                "healing", ability.healing() == null ? null : encodeHealing(ability.healing()));
     }
 
     private AbilityDefinition decodeAbility(Map<?, ?> value, String path) {
@@ -442,7 +446,40 @@ public final class CombatSessionJsonCodec {
                 value.get("resourceId") == null ? "" : (String) value.get("resourceId"),
                 value.get("resourceCost") == null
                         ? 0
-                        : asInteger(value.get("resourceCost"), member(path, "resourceCost")));
+                        : asInteger(value.get("resourceCost"), member(path, "resourceCost")),
+                decodeHealing(value.get("healing"), member(path, "healing")));
+    }
+
+    private Map<String, Object> encodeHealing(HealingDefinition healing) {
+        return object(
+                "target", healing.target().name(),
+                "dice", healing.dice() == null ? null : encodeDice(healing.dice()),
+                "fixedAmount", healing.fixedAmount(),
+                "slotScaling", healing.slotScaling() == null ? null : object(
+                        "baseSlotLevel", healing.slotScaling().baseSlotLevel(),
+                        "additionalDicePerSlotLevel", healing.slotScaling().additionalDicePerSlotLevel()));
+    }
+
+    private HealingDefinition decodeHealing(Object encoded, String path) {
+        if (encoded == null) return null;
+        Map<?, ?> value = asObject(encoded, path);
+        Object diceValue = required(value, "dice", path);
+        DiceExpression dice = diceValue == null
+                ? null
+                : decodeDice(asObject(diceValue, path + ".dice"), path + ".dice");
+        HealingSlotScaling slotScaling = null;
+        if (value.get("slotScaling") != null) {
+            String scalingPath = path + ".slotScaling";
+            Map<?, ?> scaling = asObject(value.get("slotScaling"), scalingPath);
+            slotScaling = new HealingSlotScaling(
+                    integer(scaling, "baseSlotLevel", scalingPath),
+                    integer(scaling, "additionalDicePerSlotLevel", scalingPath));
+        }
+        return new HealingDefinition(
+                enumeration(value, "target", path, HealingTarget::valueOf),
+                dice,
+                nullableInteger(value, "fixedAmount", path),
+                slotScaling);
     }
 
     private Map<String, Object> encodeResource(CombatResourceState resource) {

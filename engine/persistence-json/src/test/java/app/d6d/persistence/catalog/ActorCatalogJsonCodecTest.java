@@ -17,8 +17,13 @@ import app.d6d.domain.combat.CombatResourceState;
 import app.d6d.domain.combat.ConditionType;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
+import app.d6d.domain.combat.DiceExpression;
+import app.d6d.domain.combat.HealingDefinition;
+import app.d6d.domain.combat.HealingSlotScaling;
+import app.d6d.domain.combat.HealingTarget;
 import app.d6d.domain.combat.ResolutionMethod;
 import app.d6d.domain.combat.SaveAbility;
+import app.d6d.domain.combat.SpellSlotResourceId;
 import app.d6d.persistence.json.Json;
 
 import java.math.BigDecimal;
@@ -276,6 +281,61 @@ class ActorCatalogJsonCodecTest {
         assertEquals("", legacy.ability("action-surge").resourceId());
         assertEquals(0, legacy.ability("action-surge").resourceCost());
         assertEquals(List.of(), legacy.resources());
+    }
+
+    @Test
+    void persistsStructuredHealingAndDefaultsLegacyCatalogsToNoHealing() {
+        AbilityDefinition healingWord = AbilityDefinition.builder("healing-word", "Healing Word")
+                .activationCost(ActivationCost.BONUS_ACTION)
+                .rangeFeet(60)
+                .spellOrCantrip(true)
+                .resource(SpellSlotResourceId.standard(1).id(), 1)
+                .healing(HealingDefinition.dice(
+                        HealingTarget.SELF_OR_ALLY,
+                        new DiceExpression(2, 4, 3),
+                        new HealingSlotScaling(1, 2)))
+                .build();
+        AbilityDefinition secondWind = AbilityDefinition.builder("second-wind", "Second Wind")
+                .activationCost(ActivationCost.BONUS_ACTION)
+                .healing(HealingDefinition.fixed(HealingTarget.SELF, 8))
+                .build();
+        ActorTemplate template = new ActorTemplate(
+                "cleric", "Cleric", ActorKind.PLAYER_CHARACTER, 3, Map.of());
+        ActorDefinition definition = ActorDefinition.builder("cleric", "Cleric")
+                .maxHitPoints(24)
+                .abilities(List.of(healingWord, secondWind))
+                .build();
+        ActorCatalogEntry character = ActorCatalogEntry.character(template, definition, true);
+
+        Map<String, Object> document = mutableDocument(character);
+        AbilityDefinition decoded = ActorCatalogJsonCodec.decode(document)
+                .get(0).combatDefinition().ability("healing-word");
+        assertEquals(healingWord.healing(), decoded.healing());
+        assertEquals(secondWind.healing(), ActorCatalogJsonCodec.decode(document)
+                .get(0).combatDefinition().ability("second-wind").healing());
+
+        Map<String, Object> encodedEntry = object(array(document.get("entries")).get(0));
+        Map<String, Object> encodedDefinition = object(encodedEntry.get("combatDefinition"));
+        Map<String, Object> encodedAbility = object(array(encodedDefinition.get("abilities")).get(0));
+        Map<String, Object> encodedHealing = object(encodedAbility.get("healing"));
+        encodedHealing.put("target", "ANY");
+        ActorCatalogJsonCodec.CatalogFormatException unknownTarget = assertThrows(
+                ActorCatalogJsonCodec.CatalogFormatException.class,
+                () -> ActorCatalogJsonCodec.decode(document));
+        assertTrue(unknownTarget.getMessage().contains(".healing.target"));
+        assertTrue(unknownTarget.getMessage().contains("unknown HealingTarget value 'ANY'"));
+        encodedHealing.put("target", HealingTarget.SELF_OR_ALLY.name());
+        encodedHealing.remove("slotScaling");
+        AbilityDefinition legacyFormula = ActorCatalogJsonCodec.decode(document)
+                .get(0).combatDefinition().ability("healing-word");
+        assertEquals(
+                HealingDefinition.dice(
+                        HealingTarget.SELF_OR_ALLY, new DiceExpression(2, 4, 3)),
+                legacyFormula.healing());
+        encodedAbility.remove("healing");
+        AbilityDefinition legacy = ActorCatalogJsonCodec.decode(document)
+                .get(0).combatDefinition().ability("healing-word");
+        assertEquals(null, legacy.healing());
     }
 
     @Test

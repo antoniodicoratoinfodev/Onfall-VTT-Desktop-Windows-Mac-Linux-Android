@@ -13,8 +13,13 @@ import app.d6d.domain.combat.ConditionType;
 import app.d6d.domain.combat.D20Mode;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DamageType;
+import app.d6d.domain.combat.DiceExpression;
+import app.d6d.domain.combat.HealingDefinition;
+import app.d6d.domain.combat.HealingSlotScaling;
+import app.d6d.domain.combat.HealingTarget;
 import app.d6d.domain.combat.ResolutionMethod;
 import app.d6d.domain.combat.SaveAbility;
+import app.d6d.domain.combat.SpellSlotResourceId;
 import app.d6d.engine.CombatSession;
 import app.d6d.persistence.json.Json;
 import org.junit.jupiter.api.Test;
@@ -57,6 +62,17 @@ class CombatSessionPersistenceTest {
         assertFalse(restoredBlade.spellOrCantrip());
         assertTrue(restored.currentState().combatant("hero").snapshot()
                 .ability("focus").spellOrCantrip());
+        assertEquals(
+                HealingDefinition.dice(
+                        HealingTarget.SELF_OR_ALLY,
+                        new DiceExpression(2, 8, 3),
+                        new HealingSlotScaling(1, 2)),
+                restored.currentState().combatant("hero").snapshot()
+                        .ability("mending-light").healing());
+        assertEquals(
+                HealingDefinition.fixed(HealingTarget.SELF, 8),
+                restored.currentState().combatant("hero").snapshot()
+                        .ability("second-wind").healing());
         assertEquals(Set.of("hero"), restored.currentState().partyCombatantIds());
         assertEquals(savedAudit, restored.auditTrail());
         assertFalse(restored.canUndo());
@@ -146,6 +162,7 @@ class CombatSessionPersistenceTest {
             for (Map<String, Object> ability : abilities) {
                 ability.remove("attackAbility");
                 ability.remove("spellOrCantrip");
+                ability.remove("healing");
             }
         }
 
@@ -161,6 +178,39 @@ class CombatSessionPersistenceTest {
         assertFalse(legacyBlade.spellOrCantrip());
         assertFalse(restored.currentState().combatant("hero").snapshot()
                 .ability("focus").spellOrCantrip());
+        assertEquals(null, restored.currentState().combatant("hero").snapshot()
+                        .ability("mending-light").healing());
+    }
+
+    @Test
+    void legacyHealingWithoutSlotScalingKeepsItsBaseFormula() {
+        CombatSessionJsonCodec codec = new CombatSessionJsonCodec();
+        Map<String, Object> encoded = codec.encode(populatedActiveSession(606L));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> state = (Map<String, Object>) encoded.get("currentState");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> combatants = (Map<String, Object>) state.get("combatants");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> hero = (Map<String, Object>) combatants.get("hero");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> snapshot = (Map<String, Object>) hero.get("snapshot");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> abilities = (List<Map<String, Object>>) snapshot.get("abilities");
+        Map<String, Object> encodedAbility = abilities.stream()
+                .filter(ability -> "mending-light".equals(ability.get("id")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> encodedHealing = (Map<String, Object>) encodedAbility.get("healing");
+        encodedHealing.remove("slotScaling");
+
+        HealingDefinition restored = codec.decode(Json.parseObject(Json.encode(encoded)))
+                .currentState().combatant("hero").snapshot().ability("mending-light").healing();
+
+        assertEquals(
+                HealingDefinition.dice(
+                        HealingTarget.SELF_OR_ALLY, new DiceExpression(2, 8, 3)),
+                restored);
     }
 
     private static CombatSession populatedActiveSession(long seed) {
@@ -184,6 +234,22 @@ class CombatSessionPersistenceTest {
                 .resolutionMethod(ResolutionMethod.AUTOMATIC)
                 .spellOrCantrip(true)
                 .build();
+        AbilityDefinition mendingLight = AbilityDefinition.builder("mending-light", "Mending light")
+                .activationCost(ActivationCost.BONUS_ACTION)
+                .rangeFeet(30)
+                .spellOrCantrip(true)
+                .resource(SpellSlotResourceId.standard(1).id(), 1)
+                .healing(HealingDefinition.dice(
+                        HealingTarget.SELF_OR_ALLY,
+                        new DiceExpression(2, 8, 3),
+                        new HealingSlotScaling(1, 2)))
+                .build();
+        // Una cura a importo fisso e senza slot: l'altra forma che il codec deve
+        // riportare identica, con "dice" nullo nel documento salvato.
+        AbilityDefinition secondWind = AbilityDefinition.builder("second-wind", "Second wind")
+                .activationCost(ActivationCost.BONUS_ACTION)
+                .healing(HealingDefinition.fixed(HealingTarget.SELF, 8))
+                .build();
         ActorDefinition hero = ActorDefinition.builder("hero-definition", "Hero")
                 .definitionVersion("5")
                 .rulesetVersion("rules-7")
@@ -201,7 +267,7 @@ class CombatSessionPersistenceTest {
                 .vulnerabilities(Set.of(DamageType.PSYCHIC))
                 .damageImmunities(Set.of(DamageType.POISON))
                 .conditionImmunities(Set.of(ConditionType.POISONED))
-                .abilities(List.of(blade, focus))
+                .abilities(List.of(blade, focus, mendingLight, secondWind))
                 .build();
         ActorDefinition goblin = ActorDefinition.builder("goblin-definition", "Goblin")
                 .armorClass(13)
