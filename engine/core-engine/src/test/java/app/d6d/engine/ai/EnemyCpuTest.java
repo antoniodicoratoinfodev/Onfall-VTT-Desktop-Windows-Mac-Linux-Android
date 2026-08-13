@@ -1,6 +1,7 @@
 package app.d6d.engine.ai;
 
 import app.d6d.domain.combat.AbilityDefinition;
+import app.d6d.domain.combat.AbilityEffect;
 import app.d6d.domain.combat.ActivationCost;
 import app.d6d.domain.combat.ActorDefinition;
 import app.d6d.domain.combat.AttackRequest;
@@ -24,13 +25,16 @@ import app.d6d.domain.space.TokenPlacement;
 import app.d6d.engine.CombatSession;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EnemyCpuTest {
@@ -400,12 +404,14 @@ class EnemyCpuTest {
 
         CombatSession risky = active(List.of(
                 setup("caster", caster, false, 20),
-                setup("ally", actor("ally", 30, List.of()), false, 15),
+                setup("ally-a", actor("ally-a", 30, List.of()), false, 15),
+                setup("ally-b", actor("ally-b", 30, List.of()), false, 14),
                 setup("hero", actor("hero", 30, List.of()), true, 10)), false, 15L);
         risky.configureMap(MapGrid.standard(15, 15));
-        risky.placeCombatant("caster", new GridPosition(1, 1), 1);
-        risky.placeCombatant("ally", new GridPosition(6, 5), 1);
-        risky.placeCombatant("hero", new GridPosition(7, 5), 1);
+        risky.placeCombatant("caster", new GridPosition(5, 5), 1);
+        risky.placeCombatant("hero", new GridPosition(0, 0), 1);
+        risky.placeCombatant("ally-a", new GridPosition(0, 1), 1);
+        risky.placeCombatant("ally-b", new GridPosition(1, 0), 1);
 
         EnemyCpuDecision riskyChoice = new EnemyCpu(EnemyCpuDifficulty.MEDIUM)
                 .decide(risky.currentState(), "caster");
@@ -438,6 +444,438 @@ class EnemyCpuTest {
                 .toList());
         assertEquals(2, areaReport.targets().size());
         assertEquals(2, clusterResult.checkpointCount(), "un'area e la chiusura turno sono due comandi");
+    }
+
+    @Test
+    void automaticAreaWithoutSavingThrowIsPlannedAndResolved() {
+        AbilityDefinition shockwave = AbilityDefinition.builder("shockwave", "Shockwave")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .automationStatus(AutomationStatus.AUTOMATED)
+                .rangeFeet(60)
+                .areaRadiusFeet(5)
+                .damage(List.of(DamageFormula.fixed(DamageType.FORCE, 7)))
+                .build();
+        ActorDefinition caster = actor("caster", 30, List.of(shockwave));
+        CombatSession session = active(List.of(
+                setup("caster", caster, false, 20),
+                setup("hero-a", actor("hero-a", 30, List.of()), true, 10),
+                setup("hero-b", actor("hero-b", 30, List.of()), true, 9)), false, 160L);
+        session.configureMap(MapGrid.standard(12, 12));
+        session.placeCombatant("caster", new GridPosition(0, 0), 1);
+        session.placeCombatant("hero-a", new GridPosition(5, 5), 1);
+        session.placeCombatant("hero-b", new GridPosition(6, 5), 1);
+
+        EnemyCpuDecision decision = new EnemyCpu(EnemyCpuDifficulty.MEDIUM)
+                .decide(session.currentState(), "caster");
+        assertInstanceOf(EnemyCpuDecision.AreaAttack.class, decision);
+
+        EnemyCpuActionReport report = new EnemyCpu(EnemyCpuDifficulty.MEDIUM)
+                .actCurrentGroup(session).actions().stream()
+                .filter(action -> action.type() == EnemyCpuActionType.AREA_ATTACK)
+                .findFirst().orElseThrow();
+        assertEquals(14, report.amount());
+        assertTrue(report.targets().stream().noneMatch(EnemyCpuTargetReport::saved));
+    }
+
+    @Test
+    void areaSearchIncludesUsefulCentersThatAreNeitherTargetsNorPairMidpoints() {
+        AbilityDefinition burst = area("burst", 10, 5);
+        ActorDefinition caster = ActorDefinition.builder("caster-def", "Caster")
+                .maxHitPoints(30)
+                .spellSaveDc(100)
+                .abilities(List.of(burst))
+                .build();
+        CombatSession session = active(List.of(
+                setup("caster", caster, false, 20),
+                setup("hero-a", actor("hero-a", 30, List.of()), true, 10),
+                setup("hero-b", actor("hero-b", 30, List.of()), true, 9),
+                setup("hero-c", actor("hero-c", 30, List.of()), true, 8)), false, 161L);
+        session.configureMap(MapGrid.standard(12, 12));
+        session.placeCombatant("caster", new GridPosition(0, 0), 1);
+        session.placeCombatant("hero-a", new GridPosition(2, 2), 1);
+        session.placeCombatant("hero-b", new GridPosition(2, 5), 1);
+        session.placeCombatant("hero-c", new GridPosition(3, 6), 1);
+
+        EnemyCpuDecision.AreaAttack decision = assertInstanceOf(
+                EnemyCpuDecision.AreaAttack.class,
+                new EnemyCpu(EnemyCpuDifficulty.MEDIUM)
+                        .decide(session.currentState(), "caster"));
+
+        assertEquals(new GridPosition(2, 6), decision.center());
+    }
+
+    @Test
+    void unavoidableFriendlyFireAreaDoesNotKeepAMeleeHybridAtRange() {
+        AbilityDefinition burst = AbilityDefinition.builder("burst", "Burst")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .automationStatus(AutomationStatus.AUTOMATED)
+                .rangeFeet(60)
+                .areaRadiusFeet(5)
+                .damage(List.of(DamageFormula.fixed(DamageType.FORCE, 20)))
+                .build();
+        ActorDefinition hybrid = actor("hybrid", 30, List.of(
+                burst,
+                attack("blade", 5, 5)));
+        CombatSession session = active(List.of(
+                setup("hybrid", hybrid, false, 20),
+                setup("ally-a", actor("ally-a", 30, List.of()), false, 15),
+                setup("ally-b", actor("ally-b", 30, List.of()), false, 14),
+                setup("hero", actor("hero", 50, List.of()), true, 10)), false, 1611L);
+        session.configureMap(MapGrid.standard(10, 10));
+        session.placeCombatant("hybrid", new GridPosition(4, 4), 1);
+        session.placeCombatant("hero", new GridPosition(0, 0), 1);
+        session.placeCombatant("ally-a", new GridPosition(0, 1), 1);
+        session.placeCombatant("ally-b", new GridPosition(1, 0), 1);
+
+        EnemyCpuResult result = new EnemyCpu(EnemyCpuDifficulty.EASY).actCurrentGroup(session);
+
+        assertFalse(result.actions().stream()
+                .anyMatch(action -> action.type() == EnemyCpuActionType.AREA_ATTACK));
+        assertTrue(result.actions().stream().anyMatch(action ->
+                action.type() == EnemyCpuActionType.MOVE
+                        && action.actorId().equals("hybrid")));
+        assertTrue(result.actions().stream().anyMatch(action ->
+                action.type() == EnemyCpuActionType.ATTACK
+                        && action.abilityId().equals("blade")));
+        assertEquals(5, session.currentState().distanceFeet("hybrid", "hero").orElseThrow());
+    }
+
+    @Test
+    void anAreaSpecialistOutsideCastingRangeAdvancesTowardItsRole() {
+        AbilityDefinition burst = AbilityDefinition.builder("burst", "Burst")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .automationStatus(AutomationStatus.AUTOMATED)
+                .rangeFeet(30)
+                .areaRadiusFeet(5)
+                .damage(List.of(DamageFormula.fixed(DamageType.FORCE, 10)))
+                .build();
+        CombatSession session = active(List.of(
+                setup("caster", actor("caster", 30, List.of(burst)), false, 20),
+                setup("hero", actor("hero", 50, List.of()), true, 10)), false, 16115L);
+        session.configureMap(MapGrid.standard(20, 20));
+        session.placeCombatant("caster", new GridPosition(0, 0), 1);
+        session.placeCombatant("hero", new GridPosition(19, 19), 1);
+        int before = session.currentState().distanceFeet("caster", "hero").orElseThrow();
+
+        EnemyCpuResult result = new EnemyCpu(EnemyCpuDifficulty.MEDIUM).actCurrentGroup(session);
+
+        assertTrue(result.actions().stream().anyMatch(action ->
+                action.type() == EnemyCpuActionType.MOVE
+                        && action.actorId().equals("caster")));
+        assertTrue(session.currentState().distanceFeet("caster", "hero").orElseThrow() < before);
+    }
+
+    @Test
+    void exactAreaSearchStaysBoundedOnTheLargestSupportedMap() {
+        AbilityDefinition enormous = AbilityDefinition.builder("enormous", "Enormous")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .automationStatus(AutomationStatus.AUTOMATED)
+                .rangeFeet(2_000)
+                .areaRadiusFeet(2_000)
+                .damage(List.of(DamageFormula.fixed(DamageType.FORCE, 1)))
+                .build();
+        ActorDefinition caster = actor("caster", 30, List.of(enormous));
+        ActorDefinition target = actor("target", 30, List.of());
+        List<Setup> setups = new ArrayList<>();
+        setups.add(setup("caster", caster, false, 20));
+        for (int index = 0; index < 512; index++) {
+            setups.add(setup("hero-" + index, target, true, 10));
+        }
+        CombatSession session = active(setups, true, 1612L);
+        session.configureMap(MapGrid.standard(400, 400));
+        session.placeCombatant("caster", new GridPosition(399, 399), 1);
+        for (int index = 0; index < 512; index++) {
+            session.placeCombatant(
+                    "hero-" + index,
+                    new GridPosition(index % 400, index / 400),
+                    1);
+        }
+
+        assertTimeout(Duration.ofSeconds(5), () -> assertInstanceOf(
+                EnemyCpuDecision.AreaAttack.class,
+                new EnemyCpu(EnemyCpuDifficulty.MEDIUM)
+                        .decide(session.currentState(), "caster")));
+    }
+
+    @Test
+    void exhaustedRangedAbilityDoesNotKeepAHybridOutOfMelee() {
+        AbilityDefinition spentBolt = AbilityDefinition.builder("spent-bolt", "Spent bolt")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .attackBonus(100)
+                .rangeFeet(60)
+                .damage(List.of(DamageFormula.fixed(DamageType.FORCE, 20)))
+                .resource("bolt-charge", 1)
+                .build();
+        ActorDefinition hybrid = ActorDefinition.builder("hybrid-def", "Hybrid")
+                .maxHitPoints(30)
+                .abilities(List.of(spentBolt, attack("blade", 5, 4)))
+                .resources(List.of(new CombatResourceState("bolt-charge", "Bolt charge", 1, 1)))
+                .build();
+        CombatSession session = active(List.of(
+                setup("hybrid", hybrid, false, 20),
+                setup("hero", actor("hero", 50, List.of()), true, 10)), false, 162L);
+        session.configureMap(MapGrid.standard(15, 15));
+        session.placeCombatant("hybrid", new GridPosition(1, 5), 1);
+        session.placeCombatant("hero", new GridPosition(7, 5), 1);
+
+        EnemyCpuResult result = new EnemyCpu(EnemyCpuDifficulty.MEDIUM).actCurrentGroup(session);
+
+        assertTrue(result.actions().stream().anyMatch(action -> action.type() == EnemyCpuActionType.MOVE));
+        assertTrue(result.actions().stream().anyMatch(action ->
+                action.type() == EnemyCpuActionType.ATTACK && action.abilityId().equals("blade")));
+        assertEquals(5, session.currentState().distanceFeet("hybrid", "hero").orElseThrow());
+    }
+
+    @Test
+    void actionSurgeIsSpentOnlyWhenItUnlocksAUsefulNonMagicAction() {
+        AbilityDefinition sword = attack("sword", 5, 4);
+        AbilityDefinition surge = AbilityDefinition.builder("surge", "Action Surge")
+                .activationCost(ActivationCost.NONE)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .effect(AbilityEffect.GRANT_NON_MAGIC_ACTION)
+                .resource("surge-use", 1)
+                .build();
+        ActorDefinition fighter = ActorDefinition.builder("fighter-def", "Fighter")
+                .maxHitPoints(30)
+                .abilities(List.of(sword, surge))
+                .resources(List.of(new CombatResourceState("surge-use", "Surge", 1, 0)))
+                .build();
+
+        CombatSession useful = active(List.of(
+                setup("fighter", fighter, false, 20),
+                setup("hero", actor("hero", 50, List.of()), true, 10)), false, 163L);
+        useful.configureMap(MapGrid.standard(12, 12));
+        useful.placeCombatant("fighter", new GridPosition(5, 5), 1);
+        useful.placeCombatant("hero", new GridPosition(6, 5), 1);
+
+        EnemyCpuResult usefulResult = new EnemyCpu(EnemyCpuDifficulty.MEDIUM).actCurrentGroup(useful);
+        assertEquals(List.of(EnemyCpuActionType.ATTACK, EnemyCpuActionType.ACTIVATE, EnemyCpuActionType.ATTACK),
+                usefulResult.actions().stream()
+                        .filter(action -> action.type() != EnemyCpuActionType.TURN_ENDED)
+                        .map(EnemyCpuActionReport::type)
+                        .toList());
+        assertEquals(0, useful.currentState().combatant("fighter")
+                .resource("surge-use").orElseThrow().remaining());
+
+        CombatSession unreachable = active(List.of(
+                setup("fighter", fighter, false, 20),
+                setup("hero", actor("hero", 50, List.of()), true, 10)), false, 164L);
+        unreachable.configureMap(MapGrid.standard(20, 20));
+        unreachable.placeCombatant("fighter", new GridPosition(0, 0), 1);
+        unreachable.placeCombatant("hero", new GridPosition(19, 19), 1);
+
+        EnemyCpuResult unreachableResult = new EnemyCpu(EnemyCpuDifficulty.MEDIUM)
+                .actCurrentGroup(unreachable);
+        assertFalse(unreachableResult.actions().stream()
+                .anyMatch(action -> action.type() == EnemyCpuActionType.ACTIVATE));
+        assertEquals(1, unreachable.currentState().combatant("fighter")
+                .resource("surge-use").orElseThrow().remaining());
+    }
+
+    @Test
+    void actionSurgeDoesNotUnlockAnotherMagicAction() {
+        AbilityDefinition magic = AbilityDefinition.builder("magic", "Magic")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .spellOrCantrip(true)
+                .attackBonus(100)
+                .rangeFeet(60)
+                .damage(List.of(DamageFormula.fixed(DamageType.FORCE, 4)))
+                .build();
+        AbilityDefinition surge = AbilityDefinition.builder("surge", "Action Surge")
+                .activationCost(ActivationCost.NONE)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .effect(AbilityEffect.GRANT_NON_MAGIC_ACTION)
+                .resource("surge-use", 1)
+                .build();
+        ActorDefinition caster = ActorDefinition.builder("caster-def", "Caster")
+                .maxHitPoints(30)
+                .abilities(List.of(magic, surge))
+                .resources(List.of(new CombatResourceState("surge-use", "Surge", 1, 0)))
+                .build();
+        CombatSession session = active(List.of(
+                setup("caster", caster, false, 20),
+                setup("hero", actor("hero", 50, List.of()), true, 10)), false, 165L);
+
+        EnemyCpuResult result = new EnemyCpu(EnemyCpuDifficulty.MEDIUM).actCurrentGroup(session);
+
+        assertEquals(1, result.actions().stream()
+                .filter(action -> action.type() == EnemyCpuActionType.ATTACK).count());
+        assertFalse(result.actions().stream().anyMatch(action -> action.type() == EnemyCpuActionType.ACTIVATE));
+        assertEquals(1, session.currentState().combatant("caster")
+                .resource("surge-use").orElseThrow().remaining());
+    }
+
+    @Test
+    void actionSurgeDoesNotUnlockAnAreaThatCannotDamageTheTarget() {
+        AbilityDefinition openingMagic = AbilityDefinition.builder("opening", "Opening")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .spellOrCantrip(true)
+                .attackBonus(100)
+                .rangeFeet(60)
+                .damage(List.of(DamageFormula.fixed(DamageType.PSYCHIC, 50)))
+                .build();
+        AbilityDefinition immuneArea = AbilityDefinition.builder("immune-area", "Immune area")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .automationStatus(AutomationStatus.AUTOMATED)
+                .rangeFeet(60)
+                .areaRadiusFeet(5)
+                .damage(List.of(DamageFormula.fixed(DamageType.FORCE, 20)))
+                .build();
+        AbilityDefinition surge = AbilityDefinition.builder("surge", "Action Surge")
+                .activationCost(ActivationCost.NONE)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .effect(AbilityEffect.GRANT_NON_MAGIC_ACTION)
+                .resource("surge-use", 1)
+                .build();
+        ActorDefinition fighter = ActorDefinition.builder("fighter-def", "Fighter")
+                .maxHitPoints(30)
+                .abilities(List.of(openingMagic, immuneArea, surge))
+                .resources(List.of(new CombatResourceState("surge-use", "Surge", 1, 0)))
+                .build();
+        ActorDefinition immune = ActorDefinition.builder("immune-def", "Immune")
+                .maxHitPoints(200)
+                .damageImmunities(Set.of(DamageType.FORCE))
+                .build();
+        CombatSession session = active(List.of(
+                setup("fighter", fighter, false, 20),
+                setup("hero", immune, true, 10)), false, 1651L);
+        session.configureMap(MapGrid.standard(10, 10));
+        session.placeCombatant("fighter", new GridPosition(0, 0), 1);
+        session.placeCombatant("hero", new GridPosition(3, 0), 1);
+
+        EnemyCpuResult result = new EnemyCpu(EnemyCpuDifficulty.MEDIUM).actCurrentGroup(session);
+
+        assertEquals(1, result.actions().stream()
+                .filter(action -> action.type() == EnemyCpuActionType.ATTACK).count());
+        assertFalse(result.actions().stream().anyMatch(action ->
+                action.type() == EnemyCpuActionType.ACTIVATE
+                        || action.type() == EnemyCpuActionType.AREA_ATTACK));
+        assertEquals(1, session.currentState().combatant("fighter")
+                .resource("surge-use").orElseThrow().remaining());
+    }
+
+    @Test
+    void actionSurgeDoesNotUnlockAHealingActionWithZeroExpectedRecovery() {
+        AbilityDefinition openingMagic = AbilityDefinition.builder("opening", "Opening")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .spellOrCantrip(true)
+                .attackBonus(100)
+                .rangeFeet(60)
+                .damage(List.of(DamageFormula.fixed(DamageType.PSYCHIC, 50)))
+                .build();
+        AbilityDefinition emptyHealing = AbilityDefinition.builder("empty-healing", "Empty healing")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .automationStatus(AutomationStatus.AUTOMATED)
+                .rangeFeet(60)
+                .healing(HealingDefinition.dice(
+                        HealingTarget.ALLY,
+                        new DiceExpression(1, 4, -100)))
+                .build();
+        AbilityDefinition surge = AbilityDefinition.builder("surge", "Action Surge")
+                .activationCost(ActivationCost.NONE)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .effect(AbilityEffect.GRANT_NON_MAGIC_ACTION)
+                .resource("surge-use", 1)
+                .build();
+        ActorDefinition fighter = ActorDefinition.builder("fighter-def", "Fighter")
+                .maxHitPoints(30)
+                .abilities(List.of(openingMagic, emptyHealing, surge))
+                .resources(List.of(new CombatResourceState("surge-use", "Surge", 1, 0)))
+                .build();
+        ActorDefinition wounded = ActorDefinition.builder("wounded-def", "Wounded")
+                .maxHitPoints(20)
+                .currentHitPoints(1)
+                .build();
+        CombatSession session = active(List.of(
+                setup("fighter", fighter, false, 20),
+                setup("wounded", wounded, false, 15),
+                setup("hero", actor("hero", 200, List.of()), true, 10)), false, 1652L);
+
+        EnemyCpuResult result = new EnemyCpu(EnemyCpuDifficulty.MEDIUM).actCurrentGroup(session);
+
+        assertEquals(1, result.actions().stream()
+                .filter(action -> action.type() == EnemyCpuActionType.ATTACK).count());
+        assertFalse(result.actions().stream()
+                .anyMatch(action -> action.type() == EnemyCpuActionType.ACTIVATE));
+        assertEquals(1, session.currentState().combatant("fighter")
+                .resource("surge-use").orElseThrow().remaining());
+        assertEquals(1, session.currentState().combatant("wounded").currentHitPoints());
+    }
+
+    @Test
+    void temporaryHitPointsPreventFalseKillPriority() {
+        ActorDefinition attacker = actor("enemy", 30, List.of(attack("hit", 60, 8)));
+        ActorDefinition warded = ActorDefinition.builder("warded-def", "Warded")
+                .maxHitPoints(30)
+                .currentHitPoints(1)
+                .temporaryHitPoints(100)
+                .armorClass(12)
+                .build();
+        ActorDefinition fragile = ActorDefinition.builder("fragile-def", "Fragile")
+                .maxHitPoints(30)
+                .currentHitPoints(7)
+                .armorClass(12)
+                .build();
+        CombatSession session = active(List.of(
+                setup("enemy", attacker, false, 20),
+                setup("warded", warded, true, 10),
+                setup("fragile", fragile, true, 9)), false, 166L);
+
+        EnemyCpuDecision.Attack decision = assertInstanceOf(
+                EnemyCpuDecision.Attack.class,
+                new EnemyCpu(EnemyCpuDifficulty.SORRY_FOR_YOU)
+                        .decide(session.currentState(), "enemy"));
+
+        assertEquals("fragile", decision.targetId());
+    }
+
+    @Test
+    void imposedAttackDisadvantageChangesExpectedDamageChoice() {
+        AbilityDefinition strengthStrike = AbilityDefinition.builder("strength", "Strength")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .attackAbility(SaveAbility.STRENGTH)
+                .attackBonus(10)
+                .rangeFeet(60)
+                .damage(List.of(DamageFormula.fixed(DamageType.FORCE, 12)))
+                .build();
+        AbilityDefinition mentalStrike = AbilityDefinition.builder("mental", "Mental")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .attackAbility(SaveAbility.INTELLIGENCE)
+                .attackBonus(10)
+                .rangeFeet(60)
+                .damage(List.of(DamageFormula.fixed(DamageType.FORCE, 9)))
+                .build();
+        ActorDefinition attacker = ActorDefinition.builder("enemy-def", "Enemy")
+                .maxHitPoints(30)
+                .strengthDexterityD20Disadvantage(true)
+                .abilities(List.of(strengthStrike, mentalStrike))
+                .build();
+        ActorDefinition target = ActorDefinition.builder("target-def", "Target")
+                .maxHitPoints(100)
+                .armorClass(20)
+                .build();
+        CombatSession session = active(List.of(
+                setup("enemy", attacker, false, 20),
+                setup("target", target, true, 10)), false, 167L);
+
+        EnemyCpuDecision.Attack decision = assertInstanceOf(
+                EnemyCpuDecision.Attack.class,
+                new EnemyCpu(EnemyCpuDifficulty.MEDIUM)
+                        .decide(session.currentState(), "enemy"));
+
+        assertEquals("mental", decision.abilityId());
     }
 
     /**
@@ -694,6 +1132,37 @@ class EnemyCpuTest {
     }
 
     @Test
+    void unusedRangedHealingDoesNotDefineRoleWhenNoAllyNeedsIt() {
+        AbilityDefinition healing = AbilityDefinition.builder("word", "Healing word")
+                .activationCost(ActivationCost.BONUS_ACTION)
+                .resolutionMethod(ResolutionMethod.AUTOMATIC)
+                .automationStatus(AutomationStatus.AUTOMATED)
+                .rangeFeet(60)
+                .healing(HealingDefinition.fixed(HealingTarget.ALLY, 10))
+                .build();
+        ActorDefinition hybrid = actor("hybrid", 20, List.of(attack("mace", 5, 5), healing));
+        CombatSession session = active(List.of(
+                setup("hybrid", hybrid, false, 20),
+                setup("healthy-ally", actor("healthy-ally", 20, List.of()), false, 15),
+                setup("hero", actor("hero", 50, List.of()), true, 10)), false, 1843L);
+        session.configureMap(MapGrid.standard(15, 15));
+        session.placeCombatant("hybrid", new GridPosition(1, 5), 1);
+        session.placeCombatant("healthy-ally", new GridPosition(2, 5), 1);
+        session.placeCombatant("hero", new GridPosition(7, 5), 1);
+
+        EnemyCpuResult result = new EnemyCpu(EnemyCpuDifficulty.MEDIUM).actCurrentGroup(session);
+
+        assertTrue(result.actions().stream().anyMatch(action ->
+                action.type() == EnemyCpuActionType.MOVE && action.actorId().equals("hybrid")));
+        assertTrue(result.actions().stream().anyMatch(action ->
+                action.type() == EnemyCpuActionType.ATTACK
+                        && action.actorId().equals("hybrid")
+                        && action.abilityId().equals("mace")));
+        assertFalse(result.actions().stream().anyMatch(action -> action.type() == EnemyCpuActionType.HEAL));
+        assertEquals(5, session.currentState().distanceFeet("hybrid", "hero").orElseThrow());
+    }
+
+    @Test
     void hardMeleeAlreadyAdjacentRepositionsIntoTheOppositeFreeSector() {
         ActorDefinition melee = actor("melee", 30, List.of(attack("blade", 5, 1)));
         CombatSession session = active(List.of(
@@ -754,10 +1223,13 @@ class EnemyCpuTest {
                 setup("caster", caster, false, 20),
                 setup("hero-a", actor("hero-a", 100, List.of()), true, 10),
                 setup("hero-b", actor("hero-b", 100, List.of()), true, 9)), false, 187L);
-        session.configureMap(MapGrid.standard(10, 10));
-        session.placeCombatant("caster", new GridPosition(1, 1), 1);
-        session.placeCombatant("hero-a", new GridPosition(2, 1), 1);
-        session.placeCombatant("hero-b", new GridPosition(2, 2), 1);
+        // In questa mappa compatta ogni centro che colpisce gli eroi include
+        // anche il lanciatore: l'auto-colpo e' quindi parte del contratto del test,
+        // non un effetto accidentale del vecchio elenco incompleto dei centri.
+        session.configureMap(MapGrid.standard(2, 2));
+        session.placeCombatant("caster", new GridPosition(0, 0), 1);
+        session.placeCombatant("hero-a", new GridPosition(0, 1), 1);
+        session.placeCombatant("hero-b", new GridPosition(1, 0), 1);
 
         EnemyCpuResult result = new EnemyCpu(EnemyCpuDifficulty.MEDIUM).actCurrentGroup(session);
 
@@ -781,9 +1253,9 @@ class EnemyCpuTest {
         CombatSession session = active(List.of(
                 setup("caster", caster, false, 20),
                 setup("victim", victim, true, 10)), false, 1871L);
-        session.configureMap(MapGrid.standard(10, 10));
-        session.placeCombatant("caster", new GridPosition(1, 1), 1);
-        session.placeCombatant("victim", new GridPosition(2, 1), 1);
+        session.configureMap(MapGrid.standard(2, 2));
+        session.placeCombatant("caster", new GridPosition(0, 0), 1);
+        session.placeCombatant("victim", new GridPosition(0, 1), 1);
 
         EnemyCpuResult result = new EnemyCpu(EnemyCpuDifficulty.SORRY_FOR_YOU).actCurrentGroup(session);
 

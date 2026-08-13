@@ -55,6 +55,16 @@ class OpenGameSession internal constructor(
     val displayName: String get() = manager.currentDisplayName
 }
 
+/** Insieme di snapshot gia' chiusi sul contesto UI, pronto per il dispatcher I/O. */
+class PreparedWorkspacePersistence internal constructor(
+    internal val sessions: List<PreparedWorkspaceSession>,
+)
+
+internal data class PreparedWorkspaceSession(
+    val opened: OpenGameSession,
+    val persistence: PreparedSessionPersistence,
+)
+
 /**
  * Workspace multi-sessione dell'app.
  *
@@ -205,17 +215,41 @@ class SessionWorkspace(
     }
 
     /**
+     * Chiude sul contesto UI gli eventuali playback prima di una scrittura globale.
+     * Va chiamato prima di spostare [flushAutosaves] sul dispatcher del disco.
+     */
+    fun prepareForPersistence(): PreparedWorkspacePersistence {
+        val openedSessions = entries.toList()
+        return PreparedWorkspacePersistence(
+            openedSessions.map { opened ->
+                PreparedWorkspaceSession(opened, opened.manager.prepareForPersistence())
+            },
+        )
+    }
+
+    /**
      * Autosave di tutte le partite collegate a un file, anche se non sono attive.
      *
-     * E' il percorso della chiusura: qui non si puo' aspettare il ritmo della CPU,
-     * quindi un turno nemico ancora in pausa viene concluso subito e il file
-     * conserva un turno intero invece che mezzo.
+     * Non consolida i turni CPU: una scheda con un playback in corso viene
+     * rifiutata dal proprio manager e finisce fra gli avvisi. Chi chiude o salva
+     * davvero usa [prepareForPersistence] e l'overload che ne riceve l'esito.
      */
     fun flushAutosaves() {
         entries.forEach { opened ->
-            opened.battle.settleEnemyCpuTurn()
             if (opened.manager.currentSlug != null && opened.manager.hasUnsavedChanges) {
                 flushAutosave(opened)
+            }
+        }
+    }
+
+    /** Writer puro: usa soltanto documenti gia' preparati, anche se una tab viene chiusa. */
+    fun flushAutosaves(prepared: PreparedWorkspacePersistence) {
+        prepared.sessions.forEach { document ->
+            if (
+                document.persistence.currentSlug != null &&
+                document.persistence.hasUnsavedChanges
+            ) {
+                flushAutosave(document.opened, document.persistence)
             }
         }
     }
@@ -243,15 +277,19 @@ class SessionWorkspace(
 
     /** Cattura tutti i documenti aperti, comprese le bozze mai salvate. */
     internal fun recoverySnapshot(): WorkspaceRecovery {
-        val activeIndex = entries.indexOfFirst { it.id == activeId }.coerceAtLeast(0)
+        val openedSessions = entries.toList()
+        val activeIndex = openedSessions.indexOfFirst { it.id == activeId }.coerceAtLeast(0)
+        val snapshots = openedSessions.map { opened ->
+            opened to opened.manager.snapshotForPersistence()
+        }
         return WorkspaceRecovery(
             activeIndex = activeIndex,
-            sessions = entries.map { opened ->
+            sessions = snapshots.map { (opened, snapshot) ->
                 RecoveredGameSession(
-                    displayName = opened.manager.currentName.ifBlank { opened.displayName },
-                    currentSlug = opened.manager.currentSlug,
-                    session = opened.battle.session,
-                    presentation = opened.battle.presentationState(),
+                    displayName = snapshot.currentName.ifBlank { snapshot.state.encounterId() },
+                    currentSlug = snapshot.currentSlug,
+                    session = snapshot.session,
+                    presentation = snapshot.presentation,
                 )
             },
         )
@@ -293,19 +331,38 @@ class SessionWorkspace(
     fun flushAutosave(opened: OpenGameSession): SessionSaveResult {
         if (entries.none { it.id == opened.id }) return SessionSaveResult.NO_CURRENT_SESSION
         val result = opened.manager.flushAutosave()
+        updateAutosaveWarning(opened, result, opened.displayName)
+        return result
+    }
+
+    /** Autosave di uno snapshot preparato; non consulta sessione, nome o slug vivi. */
+    fun flushAutosave(
+        opened: OpenGameSession,
+        prepared: PreparedSessionPersistence,
+    ): SessionSaveResult {
+        val result = opened.manager.flushAutosave(prepared)
+        val displayName = prepared.currentName.ifBlank { prepared.state.encounterId() }
+        updateAutosaveWarning(opened, result, displayName)
+        return result
+    }
+
+    private fun updateAutosaveWarning(
+        opened: OpenGameSession,
+        result: SessionSaveResult,
+        displayName: String,
+    ) {
         if (
             result == SessionSaveResult.FAILED ||
             result == SessionSaveResult.OPEN_IN_ANOTHER_TAB ||
             result == SessionSaveResult.NO_CURRENT_SESSION ||
             result == SessionSaveResult.NAME_COLLISION
         ) {
-            val message = "«${opened.displayName}»: " +
+            val message = "«$displayName»: " +
                 (opened.manager.status ?: "controlla il salvataggio della sessione.")
             autosaveWarnings = autosaveWarnings + (opened.id to message)
         } else if (result == SessionSaveResult.SAVED || result == SessionSaveResult.NOT_NEEDED) {
             clearAutosaveWarning(opened.id)
         }
-        return result
     }
 
     fun dismissStatus() {

@@ -88,6 +88,35 @@ class UndoAndPersistenceTest {
     }
 
     @Test
+    void nextUndoRevisionStaysAboveAGroupUntilEveryLaterCommandIsRemoved() {
+        CombatSession session = CombatFixtures.active(123456L);
+        assertEquals(Long.MIN_VALUE, session.nextUndoRevision(), "nothing to undo yet");
+
+        long startingRevision = session.currentState().revision();
+        session.attack(AttackRequest.digital("hero", "goblin", "sword", D20Mode.NORMAL));
+        long groupBoundary = session.currentState().revision();
+        assertTrue(session.nextUndoRevision() < groupBoundary, "the group is still on top");
+
+        session.endTurn();
+        session.endTurn();
+        assertTrue(session.nextUndoRevision() >= groupBoundary, "two commands sit above the group");
+
+        // Ogni undo assegna una revisione nuova: soltanto il confine dice quando
+        // il gruppo e' tornato davvero in cima.
+        assertTrue(session.undo());
+        assertTrue(session.currentState().revision() > groupBoundary);
+        assertTrue(session.nextUndoRevision() >= groupBoundary, "one command still sits above");
+
+        assertTrue(session.undo());
+        assertTrue(session.currentState().revision() > groupBoundary);
+        assertTrue(session.nextUndoRevision() < groupBoundary, "the group is on top again");
+
+        assertTrue(session.undoTo(startingRevision));
+        assertFalse(session.canUndo());
+        assertEquals(Long.MIN_VALUE, session.nextUndoRevision());
+    }
+
+    @Test
     void anOverflowingAttackIsRejectedAtomically() {
         var oversized = app.d6d.domain.combat.AbilityDefinition.attack(
                 "oversized", "Oversized", app.d6d.domain.combat.ActivationCost.ACTION,

@@ -21,6 +21,9 @@ public enum EnemyCpuOutcome {
     /** Un attore e' stato arrestato dal controllo di revisione. */
     REVISION_GUARD_TRIGGERED,
 
+    /** I comandi gia' prodotti sono stati annullati esplicitamente dal chiamante. */
+    ROLLED_BACK,
+
     /** L'incontro non era attivo. */
     ENCOUNTER_NOT_ACTIVE,
 

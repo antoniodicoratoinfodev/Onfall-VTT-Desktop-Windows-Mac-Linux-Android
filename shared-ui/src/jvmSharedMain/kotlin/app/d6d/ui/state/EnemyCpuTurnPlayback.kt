@@ -5,6 +5,7 @@ import app.d6d.domain.combat.CombatResourceState
 import app.d6d.engine.ai.EnemyCpu
 import app.d6d.engine.ai.EnemyCpuActionReport
 import app.d6d.engine.ai.EnemyCpuActionType
+import app.d6d.engine.ai.EnemyCpuOutcome
 import app.d6d.engine.ai.EnemyCpuReason
 import app.d6d.engine.ai.EnemyCpuResult
 import kotlinx.coroutines.flow.first
@@ -87,14 +88,16 @@ internal class EnemyCpuTurnPlayback(
     private val scheduledSignature: String,
 ) {
 
-    private val resourcesBefore = model.state.combatants().mapValues { (_, combatant) ->
-        combatant.snapshot().definitionId() to combatant.resources()
-    }
     private val playedGeneration = model.sessionGeneration
     private val runner = EnemyCpu(model.enemyCpuDifficulty).startCurrentGroup(model.session)
+    private val resourcesBefore = runner.ownedState().combatants().mapValues { (_, combatant) ->
+        combatant.snapshot().definitionId() to combatant.resources()
+    }
     private var shownReports = 0
     private var failure: String? = null
     private var completed = false
+    private var completing = false
+    private var persistedResourceChanges = emptyMap<String, EnemyCpuResourceDelta>()
 
     /**
      * Vero quando nel frattempo il tavolo ha caricato un'altra partita.
@@ -115,15 +118,20 @@ internal class EnemyCpuTurnPlayback(
 
     /** Esegue il comando successivo; falso quando non resta altro da mostrare. */
     fun advance(): Boolean {
+        if (completed || completing || failure != null || abandoned) return false
+        return advanceOne()
+    }
+
+    private fun advanceOne(): Boolean {
         if (failure != null || abandoned) return false
-        val executed = try {
-            runner.advance()
+        return try {
+            val executed = runner.advance()
+            publish()
+            executed
         } catch (failed: RuntimeException) {
             failure = failed.message ?: "La CPU non ha potuto completare il turno."
             false
         }
-        publish()
-        return executed
     }
 
     /**
@@ -133,49 +141,85 @@ internal class EnemyCpuTurnPlayback(
      * salvare, e chi arriva secondo non deve rifare nulla.
      */
     fun complete() {
-        if (completed) return
-        completed = true
+        if (completed || completing) return
+        completing = true
         try {
             // Un'attesa interrotta non deve lasciare il gruppo a meta' turno.
-            while (!abandoned && failure == null && !runner.finished()) advance()
+            while (!abandoned && failure == null && !runner.finished()) advanceOne()
             if (abandoned) return
             val reason = failure
             if (reason != null) {
-                suppressTurn(reason)
+                rollbackOrPreserve(reason)
                 return
             }
             consolidate(runner.result())
         } catch (failed: RuntimeException) {
-            suppressTurn(failed.message ?: "La CPU non ha potuto completare il turno.")
+            rollbackOrPreserve(failed.message ?: "La CPU non ha potuto completare il turno.")
         } finally {
-            model.enemyCpuBusy = false
-            model.enemyCpuActingCombatantId = null
-            model.enemyCpuPlayback = null
-            model.sync()
+            completing = false
+            completed = true
+            releaseIfOwned()
         }
     }
 
-    private fun consolidate(result: EnemyCpuResult) {
-        val resourceChanges = changedEnemyCpuResources(
-            before = resourcesBefore,
-            after = model.state.combatants().mapValues { (_, combatant) -> combatant.resources() },
-        )
-        val resourceSyncFailure = model.persistEnemyCpuResourceChanges(resourceChanges)
-        if (resourceSyncFailure != null) {
-            model.rollbackEnemyCpuCommands(
-                startingRevision = result.startingRevision(),
-                resourceChanges = resourceChanges,
-            )
-            // I numeri mostrati durante il turno appartengono a comandi annullati.
+    /**
+     * Entrare in Modifica non puo' lasciare sul tavolo mezzo piano CPU.
+     *
+     * Si riavvolgono i comandi gia' mostrati e si abbandona questo runner. Finche'
+     * Modifica resta attiva lo scheduler e' fermo; quando il tavolo ne esce la CPU
+     * ripianifica dallo stato eventualmente corretto dall'utente.
+     */
+    fun pauseForEdit() {
+        if (completed || completing || abandoned) return
+        completed = true
+        val resourceChanges = ownedResourceChanges()
+        if (runner.rollbackOwnedCommandsIfCurrent()) {
             model.floating = emptyMap()
-            suppressTurn("Turno CPU annullato: $resourceSyncFailure")
+            model.actionResolution = null
+            model.enemyCpuActionLabel = null
+            model.sync()
+        } else {
+            preserveOwnedCommandsAndSuppress(
+                "Turno CPU sospeso: il tavolo è cambiato prima dell'ingresso in Modifica.",
+                resourceChanges,
+            )
+        }
+        releaseIfOwned()
+    }
+
+    private fun consolidate(result: EnemyCpuResult) {
+        if (
+            result.outcome() == EnemyCpuOutcome.REVISION_GUARD_TRIGGERED &&
+            externalRevisionPresent()
+        ) {
+            // Il runner dichiara come propria soltanto endingRevision: quella
+            // corrente appartiene invece al comando esterno che ha fatto scattare
+            // la guardia. Non va attribuita alle risorse CPU, inglobata nell'Undo
+            // del batch o rimossa tornando a startingRevision.
+            preserveOwnedCommandsAndSuppress(
+                "Turno CPU sospeso: lo stato del tavolo è cambiato durante la riproduzione.",
+                ownedResourceChanges(),
+            )
             return
         }
-        model.recordEnemyCpuUndoBatch(
-            result = result,
-            resourceChanges = resourceChanges,
-            turnSignature = scheduledSignature,
-        )
+        val resourceChanges = ownedResourceChanges()
+        // Se una fase successiva fallisse dopo aver scritto nel Compendio, il
+        // percorso di errore deve sapere quali valori esterni ripristinare.
+        persistedResourceChanges = resourceChanges
+        val resourceSyncFailure = model.persistEnemyCpuResourceChanges(resourceChanges)
+        if (resourceSyncFailure != null) {
+            rollbackOrPreserve("$resourceSyncFailure")
+            return
+        }
+
+        // Il sink puo' essere lento e dare a un mutatore esterno il tempo di
+        // inserire una revisione: ricontrollare la sessione viva evita che quella
+        // revisione finisca nel checkpoint CPU.
+        if (externalRevisionPresent()) {
+            persistedResourceChanges = emptyMap()
+            suppressTurn("Turno CPU sospeso: lo stato del tavolo è cambiato durante il consolidamento.")
+            return
+        }
         if (result.acted()) summarize(result)
         if (result.decisionLimitReached() && model.enemyCpuTurnSignature == scheduledSignature) {
             model.suppressedEnemyCpuTurnSignature = scheduledSignature
@@ -194,6 +238,18 @@ internal class EnemyCpuTurnPlayback(
                 model.followEnemyCpuActor(partyActor, keepTarget = true)
             }
         }
+        // Da qui in poi non restano operazioni fallibili: se una delle fasi sopra
+        // lancia, rollbackOrPreserve non puo' lasciare un UndoEffect gia' inserito.
+        persistedResourceChanges = emptyMap()
+        if (externalRevisionPresent()) {
+            suppressTurn("Turno CPU sospeso: lo stato del tavolo è cambiato durante il consolidamento.")
+            return
+        }
+        model.recordEnemyCpuUndoBatch(
+            result = result,
+            resourceChanges = resourceChanges,
+            turnSignature = scheduledSignature,
+        )
     }
 
     private fun summarize(result: EnemyCpuResult) {
@@ -226,6 +282,66 @@ internal class EnemyCpuTurnPlayback(
         model.suppressedEnemyCpuTurnSignature = model.enemyCpuTurnSignature ?: scheduledSignature
         model.completedEnemyCpuTurnSignature = null
         model.message = reason
+    }
+
+    /** Delta prodotto soltanto dalle revisioni che il runner dichiara proprie. */
+    private fun ownedResourceChanges(): Map<String, EnemyCpuResourceDelta> =
+        changedEnemyCpuResources(
+            before = resourcesBefore,
+            after = runner.ownedState().combatants().mapValues { (_, combatant) ->
+                combatant.resources()
+            },
+        )
+
+    /** La sorgente autorevole e' la sessione, non la cache Compose del modello. */
+    private fun externalRevisionPresent(): Boolean =
+        model.session.currentState().revision() != runner.ownedRevision()
+
+    /**
+     * Annulla il frammento CPU soltanto se e' ancora in cima alla sessione.
+     * Se una revisione esterna e' gia' arrivata, conserva entrambi i contributi e
+     * sincronizza esclusivamente le risorse osservate nell'ultima state owned.
+     */
+    private fun rollbackOrPreserve(reason: String) {
+        val ownedChanges = ownedResourceChanges()
+        if (runner.rollbackOwnedCommandsIfCurrent()) {
+            val restoreFailure = model.restoreEnemyCpuResourceChanges(persistedResourceChanges)
+            persistedResourceChanges = emptyMap()
+            model.floating = emptyMap()
+            model.actionResolution = null
+            val suffix = restoreFailure?.let { " Risorse non riallineate: $it" }.orEmpty()
+            suppressTurn("Turno CPU annullato: $reason$suffix")
+            return
+        }
+
+        persistedResourceChanges = emptyMap()
+        preserveOwnedCommandsAndSuppress(
+            "Turno CPU sospeso senza rimuovere le modifiche esterne: $reason",
+            ownedChanges,
+        )
+    }
+
+    private fun preserveOwnedCommandsAndSuppress(
+        reason: String,
+        resourceChanges: Map<String, EnemyCpuResourceDelta>,
+    ) {
+        val syncFailure = model.persistEnemyCpuResourceChanges(resourceChanges)
+        persistedResourceChanges = emptyMap()
+        val suffix = syncFailure?.let { " Risorse CPU non sincronizzate: $it" }.orEmpty()
+        suppressTurn(reason + suffix)
+    }
+
+    /**
+     * Un playback vecchio puo' terminare dopo che [BattleViewModel.adopt] ha gia'
+     * avviato quello della nuova sessione. Soltanto il proprietario corrente puo'
+     * quindi liberare busy, evidenza e riferimento condiviso.
+     */
+    private fun releaseIfOwned() {
+        if (model.enemyCpuPlayback !== this) return
+        model.enemyCpuPlayback = null
+        model.enemyCpuBusy = false
+        model.enemyCpuActingCombatantId = null
+        model.sync()
     }
 
     /** Allinea stato, evidenza e feedback a quanto il motore ha appena eseguito. */

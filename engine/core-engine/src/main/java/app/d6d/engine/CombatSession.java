@@ -143,6 +143,22 @@ public final class CombatSession {
         return !undoStack.isEmpty();
     }
 
+    /**
+     * Revisione dello stato che il prossimo {@link #undo()} ripristinerebbe.
+     *
+     * <p>Serve a chi tratta piu' comandi come una sola operazione di tavolo: la
+     * revisione corrente non basta a sapere se il proprio gruppo e' ancora in
+     * cima, perche' ogni Undo ne assegna comunque una nuova. Il confine, invece,
+     * torna a scendere sotto quella del gruppo esattamente quando ogni comando
+     * inserito sopra e' stato rimosso.</p>
+     *
+     * @return la revisione ripristinabile, o {@link Long#MIN_VALUE} se non c'e' nulla da annullare
+     */
+    public synchronized long nextUndoRevision() {
+        Checkpoint next = undoStack.peek();
+        return next == null ? Long.MIN_VALUE : next.state.revision;
+    }
+
     public synchronized void addCombatant(String instanceId, ActorDefinition actor) {
         requireStatus(CombatStatus.DRAFT);
         requireText(instanceId, "instanceId");

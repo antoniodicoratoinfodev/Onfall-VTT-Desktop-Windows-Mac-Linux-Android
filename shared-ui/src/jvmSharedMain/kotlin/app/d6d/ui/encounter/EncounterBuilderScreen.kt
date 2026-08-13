@@ -722,7 +722,7 @@ internal val EnemyCpuSpeed.italianPace: String
     get() = when (this) {
         EnemyCpuSpeed.SLOW -> "Una pausa lunga fra un comando e l'altro."
         EnemyCpuSpeed.NORMAL -> "Il ritmo consigliato per seguire lo scontro."
-        EnemyCpuSpeed.FAST -> "Si vede ogni comando, ma senza attese."
+        EnemyCpuSpeed.FAST -> "Si vede ogni comando, con pause molto brevi."
         EnemyCpuSpeed.INSTANT -> "Nessuna pausa: il turno nemico si risolve tutto insieme."
     }
 

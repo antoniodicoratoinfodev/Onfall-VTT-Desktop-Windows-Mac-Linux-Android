@@ -5,7 +5,6 @@ import app.d6d.domain.combat.CombatStatus;
 import app.d6d.engine.CombatSession;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -32,6 +31,16 @@ public final class EnemyCpuTurnRunner {
     private final CombatSession session;
     private final long startingRevision;
 
+    /**
+     * Ultima revisione prodotta (o inizialmente osservata) dal runner.
+     *
+     * <p>La revisione corrente della sessione non viene mai adottata implicitamente:
+     * se fra due {@link #advance()} il tavolo applica un altro comando, quel comando
+     * non appartiene al batch CPU e il runner si arresta.</p>
+     */
+    private long expectedRevision;
+    private CombatState expectedState;
+
     private final List<EnemyCpuActionReport> reports = new ArrayList<>();
     private final Map<String, EnemyCpu.ActorMemory> memories = new HashMap<>();
     private final Set<String> processedActors = new LinkedHashSet<>();
@@ -52,37 +61,77 @@ public final class EnemyCpuTurnRunner {
     /** Attore dell'ultimo comando davvero eseguito, per l'evidenza sulla mappa. */
     private String actingCombatantId = "";
 
+    /** La vittoria viene risolta in un advance distinto dal colpo conclusivo. */
+    private boolean enemyVictoryPending;
+    private String pendingVictoryFocus = "";
+
     private EnemyCpuResult result;
 
     EnemyCpuTurnRunner(EnemyCpu cpu, CombatSession session) {
         this.cpu = Objects.requireNonNull(cpu, "cpu");
         this.session = Objects.requireNonNull(session, "session");
-        CombatState initial = session.currentState();
-        this.startingRevision = initial.revision();
-        this.initialRound = initial.round();
-        this.initialTurnIndex = initial.turnIndex();
-        prepare(initial);
+        synchronized (session) {
+            CombatState initial = session.currentState();
+            this.startingRevision = initial.revision();
+            this.expectedRevision = initial.revision();
+            this.expectedState = initial;
+            this.initialRound = initial.round();
+            this.initialTurnIndex = initial.turnIndex();
+            prepare(initial);
+        }
     }
 
     /** Vero quando il turno e' concluso e {@link #result()} e' disponibile. */
-    public boolean finished() {
+    public synchronized boolean finished() {
         return result != null;
     }
 
     /** Esito complessivo del gruppo; disponibile soltanto a turno concluso. */
-    public EnemyCpuResult result() {
+    public synchronized EnemyCpuResult result() {
         if (result == null) throw new IllegalStateException("Il turno CPU non e' ancora concluso.");
         return result;
     }
 
     /** Report accumulati finora, nell'ordine di esecuzione. */
-    public List<EnemyCpuActionReport> reports() {
-        return Collections.unmodifiableList(reports);
+    public synchronized List<EnemyCpuActionReport> reports() {
+        return List.copyOf(reports);
     }
 
     /** Nemico che ha eseguito l'ultimo comando; stringa vuota prima del primo. */
-    public String actingCombatantId() {
+    public synchronized String actingCombatantId() {
         return actingCombatantId;
+    }
+
+    /** Ultima revisione che appartiene sicuramente a questo runner. */
+    public synchronized long ownedRevision() {
+        return expectedRevision;
+    }
+
+    /** Snapshot immutabile corrispondente a {@link #ownedRevision()}. */
+    public synchronized CombatState ownedState() {
+        return expectedState;
+    }
+
+    /**
+     * Riavvolge il frammento gia' eseguito soltanto se nessun altro comando e'
+     * stato inserito sopra il batch CPU.
+     *
+     * <p>Check e rollback condividono il lock della sessione, quindi la modalita'
+     * Modifica non puo' cancellare per errore una revisione esterna arrivata fra
+     * i due. Un rollback riuscito terminalizza il runner: eventuali chiamate ad
+     * {@link #advance()} diventano no-op e i report dei comandi annullati vengono
+     * scartati.</p>
+     */
+    public synchronized boolean rollbackOwnedCommandsIfCurrent() {
+        synchronized (session) {
+            if (session.currentState().revision() != expectedRevision) return false;
+            if (expectedRevision != startingRevision) {
+                if (!session.undoTo(startingRevision)) return false;
+                rememberExpected(session.currentState());
+            }
+            stopAfterRollback();
+            return true;
+        }
     }
 
     /**
@@ -92,22 +141,32 @@ public final class EnemyCpuTurnRunner {
      * proseguire, falso quando non resta altro da fare: in quel caso il turno e'
      * gia' stato chiuso e l'esito e' leggibile con {@link #result()}.</p>
      */
-    public boolean advance() {
+    public synchronized boolean advance() {
         if (result != null) return false;
-        while (true) {
-            if (actorId == null && !selectNextActor()) {
-                finish();
+        synchronized (session) {
+            CombatState current = session.currentState();
+            if (current.revision() != expectedRevision) {
+                stopForExternalRevision();
                 return false;
             }
-            switch (stepCurrentActor()) {
-                case EXECUTED -> {
-                    return true;
-                }
-                case FINISHED -> {
+
+            if (enemyVictoryPending) {
+                resolvePendingEnemyVictory();
+                return false;
+            }
+
+            while (true) {
+                if (actorId == null && !selectNextActor()) {
+                    finish();
                     return false;
                 }
-                case ACTOR_DONE -> closeCurrentActor();
-                case RETRY -> { }
+                switch (stepCurrentActor()) {
+                    case EXECUTED -> {
+                        return true;
+                    }
+                    case ACTOR_DONE -> closeCurrentActor();
+                    case RETRY -> { }
+                }
             }
         }
     }
@@ -120,8 +179,6 @@ public final class EnemyCpuTurnRunner {
         RETRY,
         /** L'attore ha finito: si passa al successivo del gruppo. */
         ACTOR_DONE,
-        /** Il turno e' concluso durante il comando (gruppo sconfitto). */
-        FINISHED,
     }
 
     private void prepare(CombatState initial) {
@@ -134,8 +191,7 @@ public final class EnemyCpuTurnRunner {
             return;
         }
         if (!EnemyCpu.hasStandingParty(initial)) {
-            result = cpu.resolveEnemyVictory(
-                    session, startingRevision, initialRound, initialTurnIndex, List.of(), "");
+            resolveEnemyVictory("");
             return;
         }
 
@@ -166,6 +222,7 @@ public final class EnemyCpuTurnRunner {
         }
         session.endTurn();
         CombatState ending = session.currentState();
+        rememberExpected(ending);
         reports.add(new EnemyCpuActionReport(
                 EnemyCpuActionType.TURN_ENDED,
                 String.join(",", structuralEnemies),
@@ -276,16 +333,11 @@ public final class EnemyCpuTurnRunner {
                     EnemyCpuReason.NO_PROGRESS));
             return StepOutcome.ACTOR_DONE;
         }
+        rememberExpected(after);
         actingCombatantId = actorId;
         if (!EnemyCpu.hasStandingParty(after)) {
-            result = cpu.resolveEnemyVictory(
-                    session,
-                    startingRevision,
-                    initialRound,
-                    initialTurnIndex,
-                    reports,
-                    focus.isBlank() ? initialFocus : focus);
-            return StepOutcome.FINISHED;
+            enemyVictoryPending = true;
+            pendingVictoryFocus = focus.isBlank() ? initialFocus : focus;
         }
         return StepOutcome.EXECUTED;
     }
@@ -353,6 +405,7 @@ public final class EnemyCpuTurnRunner {
                 && beforeEnd.currentCombatantIds().stream()
                         .noneMatch(beforeEnd.partyCombatantIds()::contains)) {
             session.endTurn();
+            rememberExpected(session.currentState());
             reports.add(new EnemyCpuActionReport(
                     EnemyCpuActionType.TURN_ENDED,
                     String.join(",", processedActors),
@@ -388,6 +441,81 @@ public final class EnemyCpuTurnRunner {
                 outcome,
                 startingRevision,
                 ending.revision());
+    }
+
+    /**
+     * Conclude immediatamente il runner quando la sessione non e' piu' alla
+     * revisione lasciata dalla CPU. Non chiude il turno e non include nel proprio
+     * risultato lo stato o la revisione del comando esterno.
+     */
+    private void stopForExternalRevision() {
+        revisionGuardTriggered = true;
+        enemyVictoryPending = false;
+        boolean turnAdvanced = expectedState.round() != initialRound
+                || expectedState.turnIndex() != initialTurnIndex;
+        boolean waitingForPlayer = partialMixedGroup
+                && !turnAdvanced
+                && expectedState.status() == CombatStatus.ACTIVE;
+        result = new EnemyCpuResult(
+                cpu.difficulty(),
+                List.copyOf(reports),
+                initialFocus,
+                turnAdvanced,
+                expectedState.status() == CombatStatus.RESOLVED,
+                waitingForPlayer,
+                partialMixedGroup,
+                decisionLimitReached,
+                EnemyCpuOutcome.REVISION_GUARD_TRIGGERED,
+                startingRevision,
+                expectedRevision);
+    }
+
+    /** Dimentica ogni effetto ormai annullato e rende il runner definitivamente inerte. */
+    private void stopAfterRollback() {
+        reports.clear();
+        actingCombatantId = "";
+        actorId = null;
+        enemyVictoryPending = false;
+        pendingVictoryFocus = "";
+        result = new EnemyCpuResult(
+                cpu.difficulty(),
+                List.of(),
+                initialFocus,
+                false,
+                expectedState.status() == CombatStatus.RESOLVED,
+                false,
+                partialMixedGroup,
+                false,
+                EnemyCpuOutcome.ROLLED_BACK,
+                startingRevision,
+                expectedRevision);
+    }
+
+    /** Il comando di risoluzione e' deliberatamente separato dall'attacco finale. */
+    private void resolvePendingEnemyVictory() {
+        resolveEnemyVictory(pendingVictoryFocus);
+        enemyVictoryPending = false;
+    }
+
+    /** Risolve la vittoria e mantiene la vista progressiva uguale all'esito finale. */
+    private void resolveEnemyVictory(String focusTargetId) {
+        EnemyCpuResult victory = cpu.resolveEnemyVictory(
+                session,
+                startingRevision,
+                initialRound,
+                initialTurnIndex,
+                reports,
+                focusTargetId);
+        CombatState ending = session.currentState();
+        rememberExpected(ending);
+        reports.clear();
+        reports.addAll(victory.actions());
+        result = victory;
+    }
+
+    private void rememberExpected(CombatState state) {
+        expectedState = state;
+        expectedRevision = state.revision();
     }
 
     private EnemyCpu.ActorMemory memory() {

@@ -6,6 +6,11 @@ import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.ui.content.SampleEncounter
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.state.EnemyCpuSpeed
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertSame
@@ -281,6 +286,39 @@ class SessionWorkspaceTest {
         assertFalse(second.manager.hasUnsavedChanges)
         assertEquals(first.battle.turnIndex, store.load("prima").session.currentState().turnIndex())
         assertEquals(second.battle.turnIndex, store.load("seconda").session.currentState().turnIndex())
+    }
+
+    @Test
+    fun `persistenza rifiuta mezzo playback e prepare lo consolida prima del disco`() = runTest {
+        val store = store()
+        val workspace = SessionWorkspace(
+            store = store,
+            initialSession = mixedCpuSession(seed = 83L),
+            initialDisplayName = "CPU autosave",
+            initialPresentation = mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name),
+        )
+        val opened = workspace.activeSession
+        assertEquals(SessionSaveResult.SAVED, opened.manager.save("CPU autosave"))
+        opened.battle.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) {
+            opened.battle.playEnemyCpuTurnPaced()
+        }
+        assertTrue(opened.battle.enemyCpuBusy)
+
+        // Il solo writer I/O non deve mai avanzare il modello dal proprio thread.
+        assertEquals(SessionSaveResult.FAILED, opened.manager.flushAutosave())
+        assertTrue(opened.battle.enemyCpuBusy)
+
+        val prepared = workspace.prepareForPersistence()
+        assertFalse(opened.battle.enemyCpuBusy)
+        workspace.flushAutosaves(prepared)
+        assertFalse(opened.manager.hasUnsavedChanges)
+        turn.cancelAndJoin()
+
+        val archived = store.load("cpu-autosave")
+        assertEquals(opened.battle.state, archived.session.currentState())
+        assertEquals(opened.battle.presentationState(), archived.presentation)
     }
 
     @Test

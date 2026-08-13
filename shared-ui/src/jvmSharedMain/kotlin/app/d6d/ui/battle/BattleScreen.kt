@@ -807,7 +807,8 @@ private fun BattleTopBar(
 
 @Composable
 private fun EnemyCpuBanner(viewModel: BattleViewModel, compact: Boolean) {
-    if (!viewModel.enemyCpuEnabled || viewModel.enemyCpuTurnKey == null) return
+    if (!viewModel.enemyCpuEnabled) return
+    val cpuTurnActive = viewModel.enemyCpuTurnKey != null
     val suspended = viewModel.enemyCpuTurnSuppressed
     val completed = viewModel.enemyCpuBatchCompleted
     Row(
@@ -825,6 +826,8 @@ private fun EnemyCpuBanner(viewModel: BattleViewModel, compact: Boolean) {
                 "CPU in pausa mentre la modalità Modifica è attiva."
             } else if (completed) {
                 "I nemici hanno agito · completa il turno con gli alleati."
+            } else if (!cpuTurnActive) {
+                "CPU · ${viewModel.enemyCpuDifficulty.italianLabel} pronta per il prossimo turno nemico."
             } else {
                 // Mentre il turno scorre la fascia racconta il comando in corso:
                 // e' l'unico posto dove un'azione gia' risolta resta leggibile.

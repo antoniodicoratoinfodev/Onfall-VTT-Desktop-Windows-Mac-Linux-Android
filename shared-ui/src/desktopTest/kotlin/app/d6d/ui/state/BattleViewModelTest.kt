@@ -291,6 +291,7 @@ class BattleViewModelTest {
             .build()
         val enemy = ActorDefinition.builder("cpu-area-enemy", "CPU area")
             .maxHitPoints(20)
+            .spellSaveDc(100)
             .abilities(listOf(area))
             .build()
         val hero = ActorDefinition.builder("cpu-area-hero", "Eroe area")
@@ -423,6 +424,34 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `entrare in modifica riavvolge il frammento cpu e ripianifica alla ripresa`() = runTest {
+        val session = enemyCpuResourceSession(heroColumn = 5)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+        val startingSquare = model.placementOf("enemy")!!.origin()
+
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+        assertTrue(model.enemyCpuBusy)
+        assertNotEquals(startingSquare, model.placementOf("enemy")!!.origin())
+
+        model.editMode = true
+
+        assertFalse(model.enemyCpuBusy)
+        assertEquals(startingSquare, model.placementOf("enemy")!!.origin())
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+        assertFalse(model.enemyCpuTurnSuppressed)
+        assertFalse(model.shouldScheduleEnemyCpu)
+        turn.cancelAndJoin()
+
+        model.editMode = false
+        assertTrue(model.shouldScheduleEnemyCpu)
+        model.playEnemyCpuTurn()
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        assertFalse(model.enemyCpuBatchPending)
+    }
+
+    @Test
     fun `annullare l attesa non lascia il turno nemico a meta`() = runTest {
         val session = enemyCpuResourceSession(heroColumn = 5)
         val model = BattleViewModel(session)
@@ -461,6 +490,190 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `il finally del playback adottato non spegne quello della nuova sessione`() = runTest {
+        val original = enemyCpuResourceSession(heroColumn = 5)
+        val model = BattleViewModel(original)
+        val cpuPresentation = mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name)
+        model.adopt(original, cpuPresentation)
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+        val oldTurn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+
+        val loaded = enemyCpuResourceSession(heroColumn = 5)
+        model.adopt(loaded, cpuPresentation)
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+        val newTurn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+        assertTrue(model.enemyCpuBusy)
+
+        oldTurn.cancelAndJoin()
+
+        assertSame(loaded, model.session)
+        assertTrue(model.enemyCpuBusy)
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+
+        newTurn.join()
+        assertFalse(model.enemyCpuBusy)
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+    }
+
+    @Test
+    fun `la guard revisione non annulla ne ingloba il comando esterno`() = runTest {
+        val session = enemyCpuResourceSession(heroColumn = 5)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+        val startingSquare = model.placementOf("enemy")!!.origin()
+
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+        val movedSquare = model.placementOf("enemy")!!.origin()
+        assertNotEquals(startingSquare, movedSquare)
+
+        // Simula un mutatore esterno al ViewModel fra due frame del playback.
+        session.applyDamage(
+            "enemy",
+            "hero",
+            listOf(app.d6d.domain.combat.DamageComponent(DamageType.FORCE, 1)),
+            false,
+        )
+        turn.join()
+
+        assertEquals(movedSquare, model.placementOf("enemy")!!.origin())
+        assertEquals(19, model.combatant("hero")!!.currentHitPoints())
+        assertTrue(model.enemyCpuTurnSuppressed)
+        assertTrue(model.message.orEmpty().contains("stato del tavolo è cambiato"))
+
+        // Non esiste un Undo batch CPU che inglobi entrambe le revisioni: il
+        // primo Undo rimuove soltanto il comando esterno.
+        model.undo()
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(movedSquare, model.placementOf("enemy")!!.origin())
+    }
+
+    @Test
+    fun `la guard esterna sincronizza il delta risorsa dell ultima revisione cpu`() = runTest {
+        val persistedSpent = mutableListOf<Int>()
+        val session = enemyCpuResourceSession(heroColumn = 2)
+        val model = BattleViewModel(
+            session,
+            resourceSink = CombatResourceSink { _, resources ->
+                persistedSpent += resources.single { it.id() == CPU_ATTACK_RESOURCE }.spent()
+            },
+        )
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(1, model.combatant("enemy")!!.resources().single().spent())
+
+        session.applyDamage(
+            "enemy",
+            "hero",
+            listOf(app.d6d.domain.combat.DamageComponent(DamageType.FORCE, 1)),
+            false,
+        )
+        turn.join()
+
+        assertEquals(14, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(listOf(1), persistedSpent)
+        assertTrue(model.enemyCpuTurnSuppressed)
+        model.undo()
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(1, model.combatant("enemy")!!.resources().single().spent())
+    }
+
+    @Test
+    fun `un errore risorse nella guard esterna preserva entrambe le revisioni`() = runTest {
+        val session = enemyCpuResourceSession(heroColumn = 2)
+        val model = BattleViewModel(
+            session,
+            resourceSink = CombatResourceSink { _, _ -> error("sink esterno non disponibile") },
+        )
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+        session.applyDamage(
+            "enemy",
+            "hero",
+            listOf(app.d6d.domain.combat.DamageComponent(DamageType.FORCE, 1)),
+            false,
+        )
+        turn.join()
+
+        assertEquals(14, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(1, model.combatant("enemy")!!.resources().single().spent())
+        assertTrue(model.message.orEmpty().contains("sink esterno non disponibile"))
+        model.undo()
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(1, model.combatant("enemy")!!.resources().single().spent())
+    }
+
+    @Test
+    fun `undo dopo il consolidamento rimuove prima la revisione esterna`() {
+        val session = enemyCpuResourceSession(heroColumn = 2)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.playEnemyCpuTurn()
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+
+        session.applyDamage(
+            "enemy",
+            "hero",
+            listOf(app.d6d.domain.combat.DamageComponent(DamageType.FORCE, 1)),
+            false,
+        )
+        model.undo()
+
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(1, model.combatant("enemy")!!.resources().single().spent())
+        assertTrue(model.message.orEmpty().contains("batch resta"))
+
+        model.undo()
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(0, model.combatant("enemy")!!.resources().single().spent())
+    }
+
+    @Test
+    fun `undo toglie una per volta tutte le revisioni esterne prima del batch cpu`() {
+        val session = enemyCpuResourceSession(heroColumn = 2)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.playEnemyCpuTurn()
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+
+        // Due comandi che non passano dal ViewModel: il batch resta in cima alla
+        // pila degli effetti pur non essendo piu' in cima alla sessione.
+        session.applyDamage(
+            "enemy",
+            "hero",
+            listOf(app.d6d.domain.combat.DamageComponent(DamageType.FORCE, 1)),
+            false,
+        )
+        session.applyDamage(
+            "enemy",
+            "hero",
+            listOf(app.d6d.domain.combat.DamageComponent(DamageType.FORCE, 2)),
+            false,
+        )
+        model.sync()
+        assertEquals(12, model.combatant("hero")!!.currentHitPoints())
+
+        model.undo()
+        assertEquals(14, model.combatant("hero")!!.currentHitPoints())
+        assertTrue(model.message.orEmpty().contains("batch resta"))
+
+        model.undo()
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints(),
+            "anche il secondo Undo tocca soltanto la revisione esterna")
+        assertTrue(model.message.orEmpty().contains("batch resta"))
+        assertEquals(1, model.combatant("enemy")!!.resources().single().spent())
+
+        model.undo()
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(0, model.combatant("enemy")!!.resources().single().spent())
+    }
+
+    @Test
     fun `chi salva chiude il turno cpu invece di fotografarne meta`() = runTest {
         val session = enemyCpuResourceSession(heroColumn = 5)
         val model = BattleViewModel(session)
@@ -495,6 +708,13 @@ class BattleViewModelTest {
         restored.adopt(session, model.presentationState())
 
         assertEquals(EnemyCpuSpeed.SLOW, restored.enemyCpuSpeed)
+    }
+
+    @Test
+    fun `il ritmo istantaneo non introduce pause di apertura o fra i comandi`() {
+        assertEquals(0L, EnemyCpuSpeed.INSTANT.openingDelayMillis)
+        assertEquals(0L, EnemyCpuSpeed.INSTANT.stepDelayMillis)
+        assertTrue(EnemyCpuSpeed.FAST.stepDelayMillis > 0L)
     }
 
     @Test

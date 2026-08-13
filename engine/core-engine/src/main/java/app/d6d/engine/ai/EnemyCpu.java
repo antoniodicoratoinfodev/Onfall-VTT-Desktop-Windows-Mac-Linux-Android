@@ -2,6 +2,7 @@ package app.d6d.engine.ai;
 
 import app.d6d.domain.combat.AbilityDefinition;
 import app.d6d.domain.combat.AbilityEffect;
+import app.d6d.domain.combat.ActivationCost;
 import app.d6d.domain.combat.AreaSpellResult;
 import app.d6d.domain.combat.AreaTargetResult;
 import app.d6d.domain.combat.AttackRequest;
@@ -18,6 +19,7 @@ import app.d6d.domain.combat.DiceExpression;
 import app.d6d.domain.combat.HealingDefinition;
 import app.d6d.domain.combat.HealingTarget;
 import app.d6d.domain.combat.ResolutionMethod;
+import app.d6d.domain.combat.SaveAbility;
 import app.d6d.domain.combat.SpellSlotResourceId;
 import app.d6d.domain.combat.TurnBudget;
 import app.d6d.domain.space.BattleMap;
@@ -30,12 +32,12 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.IntPredicate;
 
 /**
  * CPU deterministica che controlla soltanto lo schieramento avversario.
@@ -233,7 +235,7 @@ public final class EnemyCpu {
 
         if (!memory.moved) {
             Optional<Candidate> movement = movementCandidate(
-                    state, actorId, actor, opponents, focusTargetId, offenseAvailable);
+                    state, actorId, actor, opponents, focusTargetId, offenseAvailable, memory);
             if (movement.isPresent()
                     && !rejected.contains(decisionSignature(movement.get().decision))
                     && (selected == null || movement.get().score > selected.score + SCORE_EPSILON)) {
@@ -339,8 +341,8 @@ public final class EnemyCpu {
                 CombatantState target = state.combatant(targetId);
                 double expected = expectedAttackDamage(actor, ability, target);
                 if (expected <= 0.0) continue;
-                double hpRatio = hitPointRatio(target);
-                double killBonus = expected + SCORE_EPSILON >= target.currentHitPoints() ? KILL_BONUS : 0.0;
+                double hpRatio = survivabilityRatio(target);
+                double killBonus = expected + SCORE_EPSILON >= hitPointsToDefeat(target) ? KILL_BONUS : 0.0;
                 EnemyCpuProfile.Attack weights = profile.attack();
                 double score = weights.base()
                         + expected * weights.expectedDamageWeight()
@@ -379,36 +381,44 @@ public final class EnemyCpu {
             if (ability.passive()
                     || !ability.isArea()
                     || ability.automationStatus() != AutomationStatus.AUTOMATED
-                    || ability.resolutionMethod() != ResolutionMethod.SAVING_THROW
+                    || !hasAutomatedAreaResolution(ability)
                     || ability.damage().isEmpty()
                     || !canAfford(state, actorId, actor, ability, false, memory)) {
                 continue;
             }
-            for (GridPosition center : areaCenters(state, actorId, ability)) {
-                AreaEvaluation evaluation = evaluateArea(state, actorId, center, ability, focusTargetId);
-                if (evaluation.enemyHits == 0) continue;
-                EnemyCpuProfile.Area weights = profile.area();
-                if (weights.refusesFriendlyFire() && evaluation.friendlyHits > 0) continue;
-                double score = weights.base()
-                        + (evaluation.enemyHits >= 2 ? weights.multiTargetBonus() : 0.0)
-                        + evaluation.enemyDamage * weights.damageWeight()
-                        + evaluation.enemyHits * weights.hitWeight()
-                        - evaluation.friendlyDamage * weights.friendlyDamagePenalty()
-                        - evaluation.friendlyHits * weights.friendlyHitPenalty()
-                        + (evaluation.containsFocus ? weights.focusBonus() : 0.0)
-                        - abilityIndex * weights.abilityOrderWeight();
-                if (weights.requiresPositiveScore() && score <= 0.0) continue;
-                String key = "area:" + abilityIndex + ':' + positionKey(center);
-                candidates.add(new Candidate(
-                        new EnemyCpuDecision.AreaAttack(
-                                actorId,
-                                center,
-                                ability.id(),
-                                EnemyCpuReason.AREA_COVERAGE),
-                        score,
-                        key));
-            }
+            AreaChoice choice = bestAreaChoice(
+                    state, actorId, ability, abilityIndex, focusTargetId, true);
+            if (choice == null) continue;
+            candidates.add(new Candidate(
+                    new EnemyCpuDecision.AreaAttack(
+                            actorId,
+                            choice.center(),
+                            ability.id(),
+                            EnemyCpuReason.AREA_COVERAGE),
+                    choice.score(),
+                    "area:" + abilityIndex + ':' + positionKey(choice.center())));
         }
+    }
+
+    private double areaCandidateScore(AreaEvaluation evaluation, int abilityIndex) {
+        if (evaluation.enemyHits == 0 || evaluation.enemyDamage <= 0.0) {
+            return Double.NEGATIVE_INFINITY;
+        }
+        EnemyCpuProfile.Area weights = profile.area();
+        if (weights.refusesFriendlyFire() && evaluation.friendlyHits > 0) {
+            return Double.NEGATIVE_INFINITY;
+        }
+        double score = weights.base()
+                + (evaluation.enemyHits >= 2 ? weights.multiTargetBonus() : 0.0)
+                + evaluation.enemyDamage * weights.damageWeight()
+                + evaluation.enemyHits * weights.hitWeight()
+                - evaluation.friendlyDamage * weights.friendlyDamagePenalty()
+                - evaluation.friendlyHits * weights.friendlyHitPenalty()
+                + (evaluation.containsFocus ? weights.focusBonus() : 0.0)
+                - abilityIndex * weights.abilityOrderWeight();
+        return weights.requiresPositiveScore() && score <= 0.0
+                ? Double.NEGATIVE_INFINITY
+                : score;
     }
 
     private void addActivationCandidates(
@@ -425,7 +435,8 @@ public final class EnemyCpu {
                     || ability.effect() == AbilityEffect.NONE
                     || ability.automationStatus() != AutomationStatus.AUTOMATED
                     || ability.resolutionMethod() != ResolutionMethod.AUTOMATIC
-                    || !canAfford(state, actorId, actor, ability, false, memory)) {
+                    || !canAfford(state, actorId, actor, ability, false, memory)
+                    || !activationEnablesUsefulAction(state, actorId, actor, opponents, ability, memory)) {
                 continue;
             }
             candidates.add(new Candidate(
@@ -438,13 +449,127 @@ public final class EnemyCpu {
         }
     }
 
+    /**
+     * Un'azione aggiuntiva viene comprata soltanto quando l'azione ordinaria e'
+     * gia' terminata e il kit contiene davvero qualcosa di non magico da farne.
+     * In questo modo l'attivazione non precede alla cieca un attacco che potrebbe
+     * poi risultare fuori gittata, immune o privo della risorsa necessaria.
+     */
+    private boolean activationEnablesUsefulAction(
+            CombatState state,
+            String actorId,
+            CombatantState actor,
+            List<String> opponents,
+            AbilityDefinition activation,
+            ActorMemory memory) {
+        if (activation.effect() != AbilityEffect.GRANT_NON_MAGIC_ACTION) return false;
+        TurnBudget budget = state.turnBudgets().get(actorId);
+        if (budget == null
+                || budget.actionAvailable()
+                || budget.additionalActionAvailable()
+                || budget.actionSurgeUsedThisTurn()
+                || budget.attackActionInProgress()) {
+            return false;
+        }
+
+        List<AbilityDefinition> abilities = actor.snapshot().abilities();
+        for (int abilityIndex = 0; abilityIndex < abilities.size(); abilityIndex++) {
+            AbilityDefinition ability = abilities.get(abilityIndex);
+            if (ability.passive()
+                    || ability.spellOrCantrip()
+                    || ability.activationCost() != ActivationCost.ACTION
+                    || ability.automationStatus() != AutomationStatus.AUTOMATED
+                    || !resourceAvailableAfterActivation(actor, ability, activation)
+                    || (SpellSlotResourceId.parse(ability.resourceId()).isPresent()
+                            && budget.spellSlotSpentThisTurn())) {
+                continue;
+            }
+
+            if (!ability.isArea()
+                    && ability.resolutionMethod() == ResolutionMethod.ATTACK_ROLL
+                    && !ability.damage().isEmpty()
+                    && opponents.stream().anyMatch(targetId ->
+                            withinRange(state, actorId, targetId, ability.rangeFeet())
+                                    && expectedAttackDamage(actor, ability, state.combatant(targetId)) > 0.0)) {
+                return true;
+            }
+
+            if (ability.isArea()
+                    && hasAutomatedAreaResolution(ability)
+                    && !ability.damage().isEmpty()
+                    && state.battleMap().configured()
+                    && state.battleMap().isPlaced(actorId)) {
+                if (bestAreaChoice(
+                        state, actorId, ability, abilityIndex, "", true) != null) return true;
+            }
+
+            HealingDefinition healing = ability.healing();
+            if (healing != null
+                    && ability.resolutionMethod() == ResolutionMethod.AUTOMATIC
+                    && hasUsefulHealingTargetAfterActivation(
+                            state, actorId, actor, ability, healing, activation)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasUsefulHealingTargetAfterActivation(
+            CombatState state,
+            String actorId,
+            CombatantState actor,
+            AbilityDefinition ability,
+            HealingDefinition healing,
+            AbilityDefinition activation) {
+        boolean payable = healingCastOptions(actor, ability, healing).stream().anyMatch(option ->
+                option.expectedHealing() > 0.0
+                        && resourceAvailableAfterActivation(
+                                actor, ability, option.resourceId(), activation));
+        if (!payable) return false;
+        for (String targetId : state.rosterOrder()) {
+            CombatantState target = state.combatants().get(targetId);
+            if (target == null
+                    || target.dead()
+                    || !sameSide(state, actorId, targetId)
+                    || !healingTargetAllows(healing.target(), actorId, targetId)
+                    || target.snapshot().maxHitPoints() <= target.currentHitPoints()
+                    || (!target.defeated() && hitPointRatio(target) > profile.healing().dangerRatio())
+                    || !withinRange(state, actorId, targetId, ability.rangeFeet())) {
+                continue;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean resourceAvailableAfterActivation(
+            CombatantState actor,
+            AbilityDefinition ability,
+            AbilityDefinition activation) {
+        return resourceAvailableAfterActivation(actor, ability, ability.resourceId(), activation);
+    }
+
+    private static boolean resourceAvailableAfterActivation(
+            CombatantState actor,
+            AbilityDefinition ability,
+            String resourceId,
+            AbilityDefinition activation) {
+        if (ability.resourceCost() == 0) return true;
+        int remaining = actor.resource(resourceId).map(CombatResourceState::remaining).orElse(0);
+        if (activation.resourceCost() > 0 && activation.resourceId().equals(resourceId)) {
+            remaining -= activation.resourceCost();
+        }
+        return remaining >= ability.resourceCost();
+    }
+
     private Optional<Candidate> movementCandidate(
             CombatState state,
             String actorId,
             CombatantState actor,
             List<String> opponents,
             String focusTargetId,
-            boolean usefulImmediateAction) {
+            boolean usefulImmediateAction,
+            ActorMemory memory) {
         BattleMap map = state.battleMap();
         TurnBudget budget = state.turnBudgets().get(actorId);
         TokenPlacement current = map.placementOf(actorId).orElse(null);
@@ -456,18 +581,28 @@ public final class EnemyCpu {
         TokenPlacement target = map.placementOf(targetId).orElse(null);
         if (target == null) return Optional.empty();
 
-        boolean hasMelee = hasAutomatedMeleeAttack(actor);
+        boolean hasMelee = hasAutomatedMeleeAttack(state, actorId, actor, memory);
         MapGrid grid = map.grid();
         int currentDistance = grid.feetFor(current.squaresTo(target));
+        Map<String, Boolean> tacticalAreas = new HashMap<>();
         int rangedRange = Math.max(
-                bestAutomatedRangedRange(actor),
-                bestAutomatedRangedHealingRange(actor));
+                bestAutomatedRangedRange(
+                        state, actorId, actor, memory, focusTargetId, tacticalAreas),
+                bestAutomatedRangedHealingRange(state, actorId, actor, memory));
         boolean rangedPositioning = prefersRangedPositioning(
-                state, actor, targetId, hasMelee, rangedRange);
+                state,
+                actorId,
+                actor,
+                targetId,
+                focusTargetId,
+                hasMelee,
+                rangedRange,
+                memory,
+                tacticalAreas);
         boolean meleePositioning = hasMelee && !rangedPositioning;
         EnemyCpuProfile.Movement weights = profile.movement();
         boolean seekSurround = weights.seeksSurround() && meleePositioning;
-        int meleeRange = meleePositioning ? bestMeleeRange(actor) : 0;
+        int meleeRange = meleePositioning ? bestMeleeRange(state, actorId, actor, memory) : 0;
 
         // Chi combatte a distanza non avanza dopo aver gia' eseguito una buona
         // azione. Si muove soltanto per entrare in gittata o per ricreare una
@@ -656,12 +791,12 @@ public final class EnemyCpu {
         double bestScore = Double.NEGATIVE_INFINITY;
         for (String targetId : targets) {
             CombatantState target = state.combatant(targetId);
-            double ratio = hitPointRatio(target);
+            double ratio = survivabilityRatio(target);
             double averageDistance = activeEnemies.stream()
                     .mapToInt(actor -> distanceForOrdering(state, actor, targetId))
                     .average()
                     .orElse(0.0);
-            double score = weights.lowHitPointsWeight() / Math.max(1, target.currentHitPoints())
+            double score = weights.lowHitPointsWeight() / Math.max(1L, hitPointsToDefeat(target))
                     + (1.0 - ratio) * weights.woundedWeight()
                     + adjacentEnemyCount(state, targetId, "") * weights.surroundedWeight()
                     + threatRating(target) * weights.threatWeight()
@@ -697,83 +832,216 @@ public final class EnemyCpu {
                 .orElse(opponents.get(0));
     }
 
-    private List<GridPosition> areaCenters(CombatState state, String actorId, AbilityDefinition ability) {
-        BattleMap map = state.battleMap();
-        TokenPlacement caster = map.placementOf(actorId).orElse(null);
-        if (caster == null) return List.of();
-        LinkedHashSet<GridPosition> raw = new LinkedHashSet<>();
-        List<TokenPlacement> targets = standingParty(state).stream()
-                .map(id -> map.placementOf(id).orElse(null))
-                .filter(Objects::nonNull)
-                .toList();
-        for (TokenPlacement target : targets) raw.addAll(target.occupiedSquares());
-        for (int first = 0; first < targets.size(); first++) {
-            for (int second = first + 1; second < targets.size(); second++) {
-                GridPosition a = targets.get(first).origin();
-                GridPosition b = targets.get(second).origin();
-                raw.add(new GridPosition((a.column() + b.column()) / 2, (a.row() + b.row()) / 2));
-            }
-        }
-        return raw.stream()
-                .filter(map.grid()::contains)
-                .filter(center -> areaCenterWithinRange(map, caster, center, ability.rangeFeet()))
-                .sorted(Comparator.comparingInt(GridPosition::column).thenComparingInt(GridPosition::row))
-                .toList();
+    /** Forme d'area che {@link CombatSession#castArea(String, GridPosition, String)} risolve da solo. */
+    private static boolean hasAutomatedAreaResolution(AbilityDefinition ability) {
+        return ability.resolutionMethod() == ResolutionMethod.SAVING_THROW
+                || (ability.resolutionMethod() == ResolutionMethod.AUTOMATIC
+                        && !ability.hasSavingThrow());
     }
 
-    private AreaEvaluation evaluateArea(
+    /**
+     * Trova esattamente il centro migliore senza creare un {@link Candidate} per
+     * ogni casella. Ogni sagoma contribuisce, riga per riga, a un intervallo di
+     * centri: somme prefisse trasformano quindi il costo da
+     * O(centri * combattenti) a O(combattenti * raggio + griglia).
+     */
+    private AreaChoice bestAreaChoice(
             CombatState state,
             String actorId,
-            GridPosition center,
             AbilityDefinition ability,
-            String focusTargetId) {
-        int enemyHits = 0;
-        int friendlyHits = 0;
-        double enemyDamage = 0.0;
-        double friendlyDamage = 0.0;
-        boolean containsFocus = false;
-        for (TokenPlacement placement : state.battleMap().orderedPlacements()) {
-            if (!insideArea(state.battleMap().grid(), placement, center, ability.areaRadiusFeet())) continue;
+            int abilityIndex,
+            String focusTargetId,
+            boolean enforceCasterRange) {
+        BattleMap map = state.battleMap();
+        TokenPlacement caster = map.placementOf(actorId).orElse(null);
+        if (!map.configured() || caster == null) return null;
+
+        MapGrid grid = map.grid();
+        int columns = grid.columns();
+        int rows = grid.rows();
+        int stride = columns + 1;
+        int cells = Math.multiplyExact(rows, stride);
+        int[] enemyHits = new int[cells];
+        int[] friendlyHits = new int[cells];
+        int[] standingEnemyHits = new int[cells];
+        int[] focusHits = new int[cells];
+        double[] enemyDamage = new double[cells];
+        double[] friendlyDamage = new double[cells];
+        double radiusSquares = (double) ability.areaRadiusFeet() / grid.feetPerSquare();
+        CombatantState casterState = state.combatant(actorId);
+
+        for (TokenPlacement placement : map.orderedPlacements()) {
             CombatantState target = state.combatants().get(placement.combatantId());
             if (target == null || target.dead()) continue;
-            double damage = expectedAreaDamage(state.combatant(actorId), ability, target);
-            if (state.partyCombatantIds().contains(placement.combatantId())) {
-                enemyHits++;
-                enemyDamage += damage;
-                containsFocus |= placement.combatantId().equals(focusTargetId);
-            } else {
-                friendlyHits++;
-                friendlyDamage += damage;
+            boolean enemy = state.partyCombatantIds().contains(placement.combatantId());
+            addAreaContribution(
+                    grid,
+                    stride,
+                    placement,
+                    radiusSquares,
+                    enemy,
+                    enemy && !target.defeated(),
+                    placement.combatantId().equals(focusTargetId),
+                    expectedAreaDamage(casterState, ability, target),
+                    enemyHits,
+                    friendlyHits,
+                    standingEnemyHits,
+                    focusHits,
+                    enemyDamage,
+                    friendlyDamage);
+        }
+
+        prefixAreaRows(
+                rows,
+                columns,
+                stride,
+                enemyHits,
+                friendlyHits,
+                standingEnemyHits,
+                focusHits,
+                enemyDamage,
+                friendlyDamage);
+
+        int minimumColumn = 0;
+        int maximumColumn = columns - 1;
+        int minimumRow = 0;
+        int maximumRow = rows - 1;
+        if (enforceCasterRange) {
+            int rangeSquares = ability.rangeFeet() / grid.feetPerSquare();
+            minimumColumn = (int) Math.max(
+                    0L, (long) caster.origin().column() - rangeSquares);
+            maximumColumn = (int) Math.min(
+                    columns - 1L,
+                    (long) caster.origin().column() + caster.squaresPerSide() - 1L + rangeSquares);
+            minimumRow = (int) Math.max(
+                    0L, (long) caster.origin().row() - rangeSquares);
+            maximumRow = (int) Math.min(
+                    rows - 1L,
+                    (long) caster.origin().row() + caster.squaresPerSide() - 1L + rangeSquares);
+        }
+
+        AreaChoice best = null;
+        // Colonna e poi riga conserva lo stesso tie-break di positionKey().
+        for (int column = minimumColumn; column <= maximumColumn; column++) {
+            for (int row = minimumRow; row <= maximumRow; row++) {
+                int index = row * stride + column;
+                // I vecchi centri erano generati soltanto attorno a membri del
+                // party ancora in piedi; i caduti inclusi incidentalmente
+                // nell'area continuano invece a comparire nella valutazione.
+                if (standingEnemyHits[index] == 0) continue;
+                AreaEvaluation evaluation = new AreaEvaluation(
+                        enemyHits[index],
+                        friendlyHits[index],
+                        enemyDamage[index],
+                        friendlyDamage[index],
+                        focusHits[index] > 0);
+                double score = areaCandidateScore(evaluation, abilityIndex);
+                if (!Double.isFinite(score)) continue;
+                if (best == null || score > best.score() + SCORE_EPSILON) {
+                    best = new AreaChoice(new GridPosition(column, row), score);
+                }
             }
         }
-        return new AreaEvaluation(enemyHits, friendlyHits, enemyDamage, friendlyDamage, containsFocus);
+        return best;
     }
 
-    private static boolean insideArea(
+    /** Aggiunge a campi-differenza tutti i centri che intersecano una sagoma. */
+    private static void addAreaContribution(
             MapGrid grid,
+            int stride,
             TokenPlacement placement,
-            GridPosition center,
-            int radiusFeet) {
-        double radiusSquares = (double) radiusFeet / grid.feetPerSquare();
-        double centerX = center.column() + 0.5;
-        double centerY = center.row() + 0.5;
-        return placement.occupiedSquares().stream().anyMatch(square -> {
-            double dx = square.column() + 0.5 - centerX;
-            double dy = square.row() + 0.5 - centerY;
-            return Math.sqrt(dx * dx + dy * dy) <= radiusSquares + 1.0e-9;
-        });
+            double radiusSquares,
+            boolean enemy,
+            boolean standingEnemy,
+            boolean focus,
+            double damage,
+            int[] enemyHits,
+            int[] friendlyHits,
+            int[] standingEnemyHits,
+            int[] focusHits,
+            double[] enemyDamage,
+            double[] friendlyDamage) {
+        double expandedRadius = radiusSquares + 1.0e-9;
+        double radiusSquared = expandedRadius * expandedRadius;
+        int maximumReach = Math.min(
+                Math.max(grid.columns(), grid.rows()),
+                (int) Math.floor(expandedRadius));
+        int left = placement.origin().column();
+        int right = left + placement.squaresPerSide() - 1;
+        int top = placement.origin().row();
+        int bottom = top + placement.squaresPerSide() - 1;
+        int minimumRow = (int) Math.max(0L, (long) top - maximumReach);
+        int maximumRow = (int) Math.min(grid.rows() - 1L, (long) bottom + maximumReach);
+
+        for (int row = minimumRow; row <= maximumRow; row++) {
+            int verticalDistance = row < top ? top - row : row > bottom ? row - bottom : 0;
+            double horizontalSquared = radiusSquared
+                    - (double) verticalDistance * verticalDistance;
+            if (horizontalSquared < 0.0) continue;
+            int horizontalReach = Math.min(
+                    grid.columns(),
+                    (int) Math.floor(Math.sqrt(horizontalSquared)));
+            int from = (int) Math.max(0L, (long) left - horizontalReach);
+            int through = (int) Math.min(
+                    grid.columns() - 1L, (long) right + horizontalReach);
+            int start = row * stride + from;
+            int end = row * stride + through + 1;
+            if (enemy) {
+                enemyHits[start]++;
+                enemyHits[end]--;
+                enemyDamage[start] += damage;
+                enemyDamage[end] -= damage;
+                if (standingEnemy) {
+                    standingEnemyHits[start]++;
+                    standingEnemyHits[end]--;
+                }
+                if (focus) {
+                    focusHits[start]++;
+                    focusHits[end]--;
+                }
+            } else {
+                friendlyHits[start]++;
+                friendlyHits[end]--;
+                friendlyDamage[start] += damage;
+                friendlyDamage[end] -= damage;
+            }
+        }
     }
 
-    private static boolean areaCenterWithinRange(
-            BattleMap map,
-            TokenPlacement caster,
-            GridPosition center,
-            int rangeFeet) {
-        int nearest = caster.occupiedSquares().stream()
-                .mapToInt(square -> square.squaresTo(center))
-                .min()
-                .orElse(Integer.MAX_VALUE);
-        return map.grid().feetFor(nearest) <= rangeFeet;
+    private static void prefixAreaRows(
+            int rows,
+            int columns,
+            int stride,
+            int[] enemyHits,
+            int[] friendlyHits,
+            int[] standingEnemyHits,
+            int[] focusHits,
+            double[] enemyDamage,
+            double[] friendlyDamage) {
+        for (int row = 0; row < rows; row++) {
+            int runningEnemyHits = 0;
+            int runningFriendlyHits = 0;
+            int runningStandingEnemyHits = 0;
+            int runningFocusHits = 0;
+            double runningEnemyDamage = 0.0;
+            double runningFriendlyDamage = 0.0;
+            int rowStart = row * stride;
+            for (int column = 0; column < columns; column++) {
+                int index = rowStart + column;
+                runningEnemyHits += enemyHits[index];
+                runningFriendlyHits += friendlyHits[index];
+                runningStandingEnemyHits += standingEnemyHits[index];
+                runningFocusHits += focusHits[index];
+                runningEnemyDamage += enemyDamage[index];
+                runningFriendlyDamage += friendlyDamage[index];
+                enemyHits[index] = runningEnemyHits;
+                friendlyHits[index] = runningFriendlyHits;
+                standingEnemyHits[index] = runningStandingEnemyHits;
+                focusHits[index] = runningFocusHits;
+                enemyDamage[index] = runningEnemyDamage;
+                friendlyDamage[index] = runningFriendlyDamage;
+            }
+        }
     }
 
     private double expectedAttackDamage(
@@ -781,12 +1049,17 @@ public final class EnemyCpu {
             AbilityDefinition ability,
             CombatantState target) {
         int modifier = ability.attackBonus() + attacker.exhaustionD20Penalty();
-        int normalHits = 0;
-        for (int natural = 2; natural <= 19; natural++) {
-            if (natural + modifier >= target.snapshot().armorClass()) normalHits++;
-        }
-        double normalProbability = normalHits / 20.0;
-        double criticalProbability = 1.0 / 20.0;
+        boolean disadvantage = attacker.snapshot().strengthDexterityD20Disadvantage()
+                && (ability.attackAbility() == SaveAbility.STRENGTH
+                        || ability.attackAbility() == SaveAbility.DEXTERITY);
+        int normalHits = d20OutcomeCount(disadvantage, natural ->
+                natural >= 2
+                        && natural <= 19
+                        && natural + modifier >= target.snapshot().armorClass());
+        int criticalHits = d20OutcomeCount(disadvantage, natural -> natural == 20);
+        double samples = disadvantage ? 400.0 : 20.0;
+        double normalProbability = normalHits / samples;
+        double criticalProbability = criticalHits / samples;
         double normalDamage = expectedAdjustedDamage(ability.damage(), target, false, false, ability.halfOnSave());
         double criticalDamage = expectedAdjustedDamage(ability.damage(), target, true, false, ability.halfOnSave());
         return normalProbability * normalDamage + criticalProbability * criticalDamage;
@@ -800,14 +1073,31 @@ public final class EnemyCpu {
             return expectedAdjustedDamage(ability.damage(), target, false, false, ability.halfOnSave());
         }
         int bonus = target.snapshot().saveBonus(ability.saveAbility()) + target.exhaustionD20Penalty();
-        int successes = 0;
-        for (int natural = 1; natural <= 20; natural++) {
-            if (natural + bonus >= caster.snapshot().spellSaveDc()) successes++;
-        }
-        double saveProbability = successes / 20.0;
+        boolean disadvantage = target.snapshot().strengthDexterityD20Disadvantage()
+                && (ability.saveAbility() == SaveAbility.STRENGTH
+                        || ability.saveAbility() == SaveAbility.DEXTERITY);
+        int successes = d20OutcomeCount(disadvantage,
+                natural -> natural + bonus >= caster.snapshot().spellSaveDc());
+        double saveProbability = successes / (disadvantage ? 400.0 : 20.0);
         double full = expectedAdjustedDamage(ability.damage(), target, false, false, ability.halfOnSave());
         double saved = expectedAdjustedDamage(ability.damage(), target, false, true, ability.halfOnSave());
         return (1.0 - saveProbability) * full + saveProbability * saved;
+    }
+
+    private static int d20OutcomeCount(boolean disadvantage, IntPredicate outcome) {
+        int matches = 0;
+        if (!disadvantage) {
+            for (int natural = 1; natural <= 20; natural++) {
+                if (outcome.test(natural)) matches++;
+            }
+            return matches;
+        }
+        for (int first = 1; first <= 20; first++) {
+            for (int second = 1; second <= 20; second++) {
+                if (outcome.test(Math.min(first, second))) matches++;
+            }
+        }
+        return matches;
     }
 
     private static double expectedAdjustedDamage(
@@ -1007,50 +1297,148 @@ public final class EnemyCpu {
         });
     }
 
-    private static boolean hasAutomatedMeleeAttack(CombatantState actor) {
+    private boolean hasAutomatedMeleeAttack(
+            CombatState state,
+            String actorId,
+            CombatantState actor,
+            ActorMemory memory) {
         return actor.snapshot().abilities().stream().anyMatch(ability ->
                 !ability.passive()
                         && !ability.isArea()
                         && ability.automationStatus() == AutomationStatus.AUTOMATED
                         && ability.resolutionMethod() == ResolutionMethod.ATTACK_ROLL
-                        && ability.rangeFeet() <= 5);
+                        && !ability.damage().isEmpty()
+                        && ability.rangeFeet() <= 5
+                        && usableOffenseForPositioning(state, actorId, actor, ability, true, memory));
     }
 
-    private static int bestMeleeRange(CombatantState actor) {
+    private int bestMeleeRange(
+            CombatState state,
+            String actorId,
+            CombatantState actor,
+            ActorMemory memory) {
         return actor.snapshot().abilities().stream()
                 .filter(ability -> !ability.passive())
+                .filter(ability -> !ability.isArea())
                 .filter(ability -> ability.automationStatus() == AutomationStatus.AUTOMATED)
                 .filter(ability -> ability.resolutionMethod() == ResolutionMethod.ATTACK_ROLL)
+                .filter(ability -> !ability.damage().isEmpty())
                 .filter(ability -> ability.rangeFeet() <= 5)
+                .filter(ability -> usableOffenseForPositioning(
+                        state, actorId, actor, ability, true, memory))
                 .mapToInt(AbilityDefinition::rangeFeet)
                 .max()
                 .orElse(5);
     }
 
     /** Gittata offensiva utile per una creatura priva di un attacco melee automatico. */
-    private static int bestAutomatedRangedRange(CombatantState actor) {
-        return actor.snapshot().abilities().stream()
-                .filter(ability -> !ability.passive())
-                .filter(ability -> ability.automationStatus() == AutomationStatus.AUTOMATED)
-                .filter(ability -> !ability.damage().isEmpty())
-                .filter(ability -> ability.resolutionMethod() == ResolutionMethod.ATTACK_ROLL
-                        || ability.resolutionMethod() == ResolutionMethod.SAVING_THROW)
-                .mapToInt(AbilityDefinition::rangeFeet)
-                .max()
-                .orElse(0);
+    private int bestAutomatedRangedRange(
+            CombatState state,
+            String actorId,
+            CombatantState actor,
+            ActorMemory memory,
+            String focusTargetId,
+            Map<String, Boolean> tacticalAreas) {
+        int best = 0;
+        List<AbilityDefinition> abilities = actor.snapshot().abilities();
+        for (int abilityIndex = 0; abilityIndex < abilities.size(); abilityIndex++) {
+            AbilityDefinition ability = abilities.get(abilityIndex);
+            boolean supported = !ability.isArea()
+                    ? ability.resolutionMethod() == ResolutionMethod.ATTACK_ROLL
+                    : hasAutomatedAreaResolution(ability);
+            if (ability.passive()
+                    || ability.automationStatus() != AutomationStatus.AUTOMATED
+                    || ability.damage().isEmpty()
+                    || ability.rangeFeet() <= 5
+                    || !supported
+                    || !usableOffenseForPositioning(
+                            state, actorId, actor, ability, !ability.isArea(), memory)
+                    || (ability.isArea()
+                            && !tacticallyUsableAreaForPositioning(
+                                    state,
+                                    actorId,
+                                    ability,
+                                    abilityIndex,
+                                    focusTargetId,
+                                    tacticalAreas))) {
+                continue;
+            }
+            best = Math.max(best, ability.rangeFeet());
+        }
+        return best;
     }
 
     /** Gittata di supporto utile: una cura a distanza non trasforma il guaritore in un assaltatore melee. */
-    private static int bestAutomatedRangedHealingRange(CombatantState actor) {
+    private int bestAutomatedRangedHealingRange(
+            CombatState state,
+            String actorId,
+            CombatantState actor,
+            ActorMemory memory) {
         return actor.snapshot().abilities().stream()
                 .filter(ability -> !ability.passive())
                 .filter(ability -> ability.automationStatus() == AutomationStatus.AUTOMATED)
+                .filter(ability -> ability.resolutionMethod() == ResolutionMethod.AUTOMATIC)
                 .filter(ability -> ability.healing() != null)
                 .filter(ability -> ability.healing().target() != HealingTarget.SELF)
+                .filter(ability -> usableHealingForPositioning(
+                        state, actorId, actor, ability, memory))
                 .mapToInt(AbilityDefinition::rangeFeet)
                 .filter(range -> range > 5)
                 .max()
                 .orElse(0);
+    }
+
+    private boolean usableOffenseForPositioning(
+            CombatState state,
+            String actorId,
+            CombatantState actor,
+            AbilityDefinition ability,
+            boolean attack,
+            ActorMemory memory) {
+        // Un'opzione consumata dalla CPU in questo stesso turno continua a
+        // descriverne il ruolo: evita che un arciere carichi in melee subito dopo
+        // aver tirato. Un'opzione gia' esaurita all'inizio, invece, non conta.
+        return canAfford(state, actorId, actor, ability, attack, memory)
+                || memory.usedOnce.contains("ability:" + ability.id());
+    }
+
+    private boolean usableHealingForPositioning(
+            CombatState state,
+            String actorId,
+            CombatantState actor,
+            AbilityDefinition ability,
+            ActorMemory memory) {
+        if (memory.usedOnce.contains("ability:" + ability.id())) return true;
+        HealingDefinition healing = ability.healing();
+        boolean payable = healingCastOptions(actor, ability, healing).stream().anyMatch(option ->
+                option.expectedHealing() > 0.0
+                        && canAfford(
+                                state,
+                                actorId,
+                                actor,
+                                ability,
+                                false,
+                                memory,
+                                option.resourceId()));
+        if (!payable) return false;
+
+        // Una cura disponibile sulla scheda e' supporto tattico soltanto se puo'
+        // essere usata adesso. Altrimenti un ibrido con tutti gli alleati sani
+        // resterebbe a distanza pur avendo come unica azione utile il melee.
+        for (String targetId : state.rosterOrder()) {
+            CombatantState target = state.combatants().get(targetId);
+            if (target == null
+                    || target.dead()
+                    || !sameSide(state, actorId, targetId)
+                    || !healingTargetAllows(healing.target(), actorId, targetId)
+                    || target.currentHitPoints() >= target.snapshot().maxHitPoints()
+                    || (!target.defeated() && hitPointRatio(target) > profile.healing().dangerRatio())
+                    || !withinRange(state, actorId, targetId, ability.rangeFeet())) {
+                continue;
+            }
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -1060,12 +1448,24 @@ public final class EnemyCpu {
      */
     private boolean prefersRangedPositioning(
             CombatState state,
+            String actorId,
             CombatantState actor,
             String targetId,
+            String focusTargetId,
             boolean hasMelee,
-            int rangedRange) {
+            int rangedRange,
+            ActorMemory memory,
+            Map<String, Boolean> tacticalAreas) {
         if (rangedRange <= 5) return false;
-        boolean rangedSupport = bestAutomatedRangedHealingRange(actor) > 5;
+        boolean rangedSupport = actor.snapshot().abilities().stream()
+                .filter(ability -> !ability.passive())
+                .filter(ability -> ability.automationStatus() == AutomationStatus.AUTOMATED)
+                .filter(ability -> ability.resolutionMethod() == ResolutionMethod.AUTOMATIC)
+                .filter(ability -> ability.healing() != null)
+                .filter(ability -> ability.healing().target() != HealingTarget.SELF)
+                .filter(ability -> ability.rangeFeet() > 5)
+                .anyMatch(ability -> usableHealingForPositioning(
+                        state, actorId, actor, ability, memory));
         if (!hasMelee || rangedSupport) return true;
 
         CombatantState target = state.combatants().get(targetId);
@@ -1075,21 +1475,54 @@ public final class EnemyCpu {
                 .filter(ability -> ability.automationStatus() == AutomationStatus.AUTOMATED)
                 .filter(ability -> ability.resolutionMethod() == ResolutionMethod.ATTACK_ROLL)
                 .filter(ability -> ability.rangeFeet() <= 5)
+                .filter(ability -> usableOffenseForPositioning(
+                        state, actorId, actor, ability, true, memory))
                 .mapToDouble(ability -> expectedAttackDamage(actor, ability, target))
                 .max()
                 .orElse(0.0);
-        double bestRanged = actor.snapshot().abilities().stream()
-                .filter(ability -> !ability.passive())
-                .filter(ability -> ability.automationStatus() == AutomationStatus.AUTOMATED)
-                .filter(ability -> ability.rangeFeet() > 5)
-                .mapToDouble(ability -> switch (ability.resolutionMethod()) {
-                    case ATTACK_ROLL -> expectedAttackDamage(actor, ability, target);
-                    case SAVING_THROW -> expectedAreaDamage(actor, ability, target);
-                    default -> 0.0;
-                })
-                .max()
-                .orElse(0.0);
+        double bestRanged = 0.0;
+        List<AbilityDefinition> abilities = actor.snapshot().abilities();
+        for (int abilityIndex = 0; abilityIndex < abilities.size(); abilityIndex++) {
+            AbilityDefinition ability = abilities.get(abilityIndex);
+            boolean supported = !ability.isArea()
+                    ? ability.resolutionMethod() == ResolutionMethod.ATTACK_ROLL
+                    : hasAutomatedAreaResolution(ability);
+            if (ability.passive()
+                    || ability.automationStatus() != AutomationStatus.AUTOMATED
+                    || ability.rangeFeet() <= 5
+                    || ability.damage().isEmpty()
+                    || !supported
+                    || !usableOffenseForPositioning(
+                            state, actorId, actor, ability, !ability.isArea(), memory)
+                    || (ability.isArea()
+                            && !tacticallyUsableAreaForPositioning(
+                                    state,
+                                    actorId,
+                                    ability,
+                                    abilityIndex,
+                                    focusTargetId,
+                                    tacticalAreas))) {
+                continue;
+            }
+            double expected = ability.isArea()
+                    ? expectedAreaDamage(actor, ability, target)
+                    : expectedAttackDamage(actor, ability, target);
+            bestRanged = Math.max(bestRanged, expected);
+        }
         return bestRanged + SCORE_EPSILON >= bestMelee * 0.8;
+    }
+
+    private boolean tacticallyUsableAreaForPositioning(
+            CombatState state,
+            String actorId,
+            AbilityDefinition ability,
+            int abilityIndex,
+            String focusTargetId,
+            Map<String, Boolean> tacticalAreas) {
+        return tacticalAreas.computeIfAbsent(
+                ability.id(),
+                ignored -> bestAreaChoice(
+                        state, actorId, ability, abilityIndex, focusTargetId, false) != null);
     }
 
     private static int adjacentEnemyCount(CombatState state, String targetId, String exceptActorId) {
@@ -1162,6 +1595,16 @@ public final class EnemyCpu {
 
     private static double hitPointRatio(CombatantState combatant) {
         return (double) combatant.currentHitPoints() / combatant.snapshot().maxHitPoints();
+    }
+
+    private static long hitPointsToDefeat(CombatantState combatant) {
+        return (long) combatant.currentHitPoints() + combatant.temporaryHitPoints();
+    }
+
+    /** PF effettivi per le sole priorita' offensive; le cure continuano a usare i PF reali. */
+    private static double survivabilityRatio(CombatantState combatant) {
+        return Math.min(1.0,
+                (double) hitPointsToDefeat(combatant) / combatant.snapshot().maxHitPoints());
     }
 
     private static int distanceForOrdering(CombatState state, String first, String second) {
@@ -1249,6 +1692,8 @@ public final class EnemyCpu {
             double enemyDamage,
             double friendlyDamage,
             boolean containsFocus) { }
+
+    private record AreaChoice(GridPosition center, double score) { }
 
     /** Memoria di un attore per la durata del suo turno; la tiene chi guida il gruppo. */
     static final class ActorMemory {

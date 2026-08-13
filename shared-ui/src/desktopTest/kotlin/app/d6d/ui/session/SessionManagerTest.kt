@@ -7,6 +7,7 @@ import app.d6d.ui.content.SampleEncounter
 import app.d6d.ui.state.BattleViewModel
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -187,6 +188,46 @@ class SessionManagerTest {
         assertEquals(SessionSaveResult.SAVED, manager.flushAutosave())
         assertFalse(manager.hasUnsavedChanges)
         assertEquals(SessionSaveResult.NOT_NEEDED, manager.flushAutosave())
+    }
+
+    @Test
+    fun `il writer salva lo snapshot preparato e lascia dirty le mutazioni successive`() {
+        val battle = battle()
+        val manager = manager(battle)
+        assertEquals(SessionSaveResult.SAVED, manager.save("Snapshot stabile"))
+        battle.endTurn()
+        battle.rollMode = D20Mode.ADVANTAGE
+        val prepared = manager.prepareForPersistence()
+
+        // Simula il tavolo che continua mentre il clone viene scritto su I/O.
+        battle.endTurn()
+        battle.rollMode = D20Mode.DISADVANTAGE
+
+        assertEquals(SessionSaveResult.SAVED, manager.flushAutosave(prepared))
+        val archived = SessionArchiveStore(directory.resolve("sessions")).load("snapshot-stabile")
+
+        assertEquals(prepared.state, archived.session.currentState())
+        assertEquals(prepared.presentation, archived.presentation)
+        assertEquals("Snapshot stabile", archived.summary().displayName)
+        assertTrue(manager.hasUnsavedChanges)
+        assertNotEquals(archived.session.currentState(), battle.state)
+    }
+
+    @Test
+    fun `l autosave preparato conserva nome e slug catturati prima dell io`() {
+        val battle = battle()
+        val manager = manager(battle)
+        assertEquals(SessionSaveResult.SAVED, manager.save("Nome catturato"))
+        battle.endTurn()
+        val prepared = manager.prepareForPersistence()
+
+        manager.currentName = "Nome cambiato durante il writer"
+
+        assertEquals(SessionSaveResult.SAVED, manager.flushAutosave(prepared))
+        val archived = SessionArchiveStore(directory.resolve("sessions")).load("nome-catturato")
+        assertEquals("Nome catturato", archived.summary().displayName)
+        assertEquals("nome-catturato", manager.currentSlug)
+        assertTrue(manager.hasUnsavedChanges)
     }
 
     @Test

@@ -65,6 +65,20 @@ fun interface CombatResourceSink {
 }
 
 /**
+ * Fotografia autonoma usata dai writer di sessione e recovery.
+ *
+ * [session] non e' quella viva del tavolo: viene ricostruita dallo stesso stato
+ * e dallo stesso audit catturati sotto il lock della sessione originale. In
+ * questo modo il codec puo' lavorare su I/O mentre il tavolo continua a mutare.
+ */
+internal data class BattlePersistenceSnapshot(
+    val session: CombatSession,
+    val state: CombatState,
+    val presentation: Map<String, String>,
+    val generation: Long,
+)
+
+/**
  * Stato di presentazione del combattimento.
  *
  * Non contiene regole: valida e risolve sempre il motore. Qui vivono soltanto
@@ -245,7 +259,20 @@ class BattleViewModel(
     val displayName: String get() = encounterId
 
     /** Quando e' attiva, un doppio clic su un campo lo rende modificabile. */
-    var editMode by mutableStateOf(false)
+    private var editModeState by mutableStateOf(false)
+
+    var editMode: Boolean
+        get() = editModeState
+        set(value) {
+            if (editModeState == value) return
+            // Un runner gia' avviato ha pianificato sullo stato precedente. Le
+            // correzioni manuali non possono convivere con quel piano: entrando
+            // in Modifica il frammento CPU viene riavvolto e, all'uscita, sara'
+            // ripianificato sul nuovo stato.
+            if (value) enemyCpuPlayback?.pauseForEdit()
+            editModeState = value
+            if (!value) mapEditMode = false
+        }
 
     /**
      * Sotto-modalità della modifica: sposta e stira lo sfondo della mappa.
@@ -1159,6 +1186,23 @@ class BattleViewModel(
         val effect = undoEffects.lastOrNull() ?: UndoEffect.None
         try {
             if (effect is UndoEffect.EnemyCpuBatch) {
+                // Il confine di Undo, non la revisione corrente: ogni Undo ne
+                // assegna comunque una nuova, mentre il confine resta sopra
+                // endingRevision finche' un solo comando inserito sopra il batch
+                // e' ancora da rimuovere.
+                if (session.nextUndoRevision() >= effect.endingRevision) {
+                    // Il checkpoint CPU resta al suo posto: questo Undo rimuove
+                    // soltanto la revisione piu' recente inserita sopra di esso,
+                    // una per clic. Il batch torna annullabile in un colpo solo
+                    // quando anche l'ultima e' stata tolta.
+                    if (!session.undo()) {
+                        message = "La modifica successiva al batch CPU non può essere annullata."
+                        return
+                    }
+                    sync()
+                    message = "Modifica successiva al batch CPU annullata; il batch resta nella cronologia."
+                    return
+                }
                 if (!session.undoTo(effect.startingRevision)) {
                     throw IllegalStateException("Il batch CPU non può essere annullato completamente.")
                 }
@@ -1603,10 +1647,47 @@ class BattleViewModel(
         }
     }
 
+    /**
+     * Crea una sessione immutabile rispetto al documento aperto.
+     *
+     * `CombatSession.currentState()` e `auditTrail()` sono singolarmente
+     * sincronizzati, ma il writer ha bisogno che provengano dallo stesso istante:
+     * il lock esterno impedisce a un comando di inserirsi fra le due letture.
+     * Il piccolo retry copre anche un eventuale [adopt] concorrente.
+     */
+    internal fun persistenceSnapshot(): BattlePersistenceSnapshot {
+        while (true) {
+            val observedSession = session
+            val observedGeneration = sessionGeneration
+            synchronized(observedSession) {
+                if (session !== observedSession || sessionGeneration != observedGeneration) {
+                    return@synchronized
+                }
+                val capturedState = observedSession.currentState()
+                val capturedAudit = observedSession.auditTrail()
+                val capturedPresentation = presentationState().toMap()
+                if (session !== observedSession || sessionGeneration != observedGeneration) {
+                    return@synchronized
+                }
+                return BattlePersistenceSnapshot(
+                    session = CombatSession.restore(capturedState, capturedAudit),
+                    state = capturedState,
+                    presentation = capturedPresentation,
+                    generation = observedGeneration,
+                )
+            }
+        }
+    }
+
     /** Sostituisce il combattimento con quello caricato dal disco. */
     fun adopt(loaded: CombatSession, presentation: Map<String, String>) {
         session = loaded
         sessionGeneration++
+        // Il vecchio coroutine puo' ancora uscire dalla propria pausa. Staccarlo
+        // ora, insieme al controllo d'identita' nel playback, gli impedisce di
+        // azzerare busy o il riferimento di un turno appartenente alla sessione
+        // appena adottata.
+        enemyCpuPlayback = null
         undoEffects.clear()
         floating = emptyMap()
         actionResolution = null
@@ -1812,7 +1893,12 @@ class BattleViewModel(
         if (result.endingRevision() == result.startingRevision()) return
         val resourceConsumers = resourceChanges.mapValues { (_, delta) -> delta.definitionId }
         undoEffects.addLast(
-            UndoEffect.EnemyCpuBatch(result.startingRevision(), resourceConsumers, turnSignature),
+            UndoEffect.EnemyCpuBatch(
+                result.startingRevision(),
+                result.endingRevision(),
+                resourceConsumers,
+                turnSignature,
+            ),
         )
     }
 
@@ -1831,15 +1917,21 @@ class BattleViewModel(
         return null
     }
 
-    /** Se il salvataggio delle risorse fallisce, il turno CPU torna atomicamente allo stato iniziale. */
-    internal fun rollbackEnemyCpuCommands(
-        startingRevision: Long,
+    /** Riallinea la scheda dopo che il runner ha gia' riavvolto atomicamente il proprio batch. */
+    internal fun restoreEnemyCpuResourceChanges(
         resourceChanges: Map<String, EnemyCpuResourceDelta>,
-    ) {
-        session.undoTo(startingRevision)
+    ): String? {
+        var firstFailure: String? = null
         for ((_, delta) in resourceChanges) {
             runCatching { resourceSink.onChanged(delta.definitionId, delta.before) }
+                .exceptionOrNull()
+                ?.let { failure ->
+                    if (firstFailure == null) {
+                        firstFailure = failure.message ?: "ripristino risorse non riuscito"
+                    }
+                }
         }
+        return firstFailure
     }
 
     /**
@@ -1971,6 +2063,12 @@ class BattleViewModel(
         data class EnemyCpuBatch(
             /** Revisione precedente al primo comando del turno CPU. */
             val startingRevision: Long,
+            /**
+             * Ultima revisione appartenente al runner, esclusi eventuali comandi
+             * esterni. Resta fissa: e' il confine con cui l'Undo riconosce se
+             * sopra il batch e' rimasto qualcosa da togliere prima.
+             */
+            val endingRevision: Long,
             val resourceConsumers: Map<String, String>,
             val turnSignature: String,
         ) : UndoEffect
@@ -2050,7 +2148,7 @@ enum class EnemyCpuSpeed(val openingDelayMillis: Long, val stepDelayMillis: Long
     SLOW(700L, 1_200L),
     NORMAL(450L, 700L),
     FAST(300L, 380L),
-    INSTANT(200L, 0L),
+    INSTANT(0L, 0L),
 }
 
 val EnemyCpuSpeed.italianLabel: String

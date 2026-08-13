@@ -113,6 +113,29 @@ class WorkspaceRecoveryStoreTest {
     }
 
     @Test
+    fun `il recovery serializza il clone catturato anche se il tavolo poi avanza`() {
+        val source = SessionWorkspace(
+            store = SessionArchiveStore(directory.resolve("sessions-frozen-recovery")),
+            initialSession = SampleEncounter.startedSession(seed = 313L),
+            initialDisplayName = "Recovery congelato",
+            refreshManagersOnCreate = false,
+        )
+        val snapshot = source.recoverySnapshot()
+        val capturedState = snapshot.sessions.single().session.currentState()
+
+        // Prima del fix RecoveredGameSession conteneva la CombatSession viva e il
+        // codec, eseguito dopo su I/O, avrebbe visto questa revisione successiva.
+        source.activeSession.battle.endTurn()
+        val liveState = source.activeSession.battle.state
+        val recoveryStore = WorkspaceRecoveryStore(directory.resolve("frozen-recovery"))
+        recoveryStore.save(snapshot)
+
+        val restored = requireNotNull(recoveryStore.load()).sessions.single().session.currentState()
+        assertEquals(capturedState, restored)
+        assertTrue(restored != liveState)
+    }
+
+    @Test
     fun `il recovery conserva difficolta e sospensione cpu senza rieseguire il batch`() {
         val archive = SessionArchiveStore(directory.resolve("sessions-cpu"))
         val source = SessionWorkspace(

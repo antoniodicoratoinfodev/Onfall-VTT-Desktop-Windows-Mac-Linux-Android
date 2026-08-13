@@ -105,7 +105,10 @@ fun SessionMenuDialog(
 
     val saveSession: (String) -> Unit = { requestedName ->
         scope.launch {
-            val result = runDiskIo { manager.save(requestedName) }
+            // Il playback appartiene allo stato UI e va consolidato qui, prima
+            // che la sola scrittura bloccante passi al dispatcher del disco.
+            val prepared = manager.prepareForPersistence()
+            val result = runDiskIo { manager.save(prepared, requestedName) }
             workspace?.reconcileAutosaveWarning()
             if (result == SessionSaveResult.NAME_COLLISION) {
                 overwriteName = requestedName
@@ -332,7 +335,10 @@ fun SessionMenuDialog(
             confirmButton = {
                 GameButton("Sostituisci", accent = Palette.Enemy, onClick = {
                     scope.launch {
-                        runDiskIo { manager.save(requestedName, overwriteExisting = true) }
+                        val prepared = manager.prepareForPersistence()
+                        runDiskIo {
+                            manager.save(prepared, requestedName, overwriteExisting = true)
+                        }
                         workspace?.reconcileAutosaveWarning()
                         overwriteName = null
                     }

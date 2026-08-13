@@ -77,6 +77,9 @@ import app.d6d.ui.theme.AtmosphericBackground
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
 import java.nio.file.Path
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -223,7 +226,8 @@ fun AppRoot(
             if (exitRequested) {
                 // Prima prova a chiudere pulitamente gli autosave nominati. Se
                 // restano bozze o errori, la decisione torna all'utente.
-                runDiskIo { workspace.flushAutosaves() }
+                val prepared = workspace.prepareForPersistence()
+                runDiskIo { workspace.flushAutosaves(prepared) }
                 if (workspace.openSessions.none { it.manager.hasUnsavedChanges }) {
                     runDiskIo { runCatching { recoveryStore.clear() } }
                     onExitConfirmed()
@@ -264,16 +268,27 @@ fun AppRoot(
                     if (opened.manager.currentSlug != null && opened.manager.hasUnsavedChanges) {
                         delay(1_200)
                         opened.battle.awaitEnemyCpuTurnEnd()
-                        runDiskIo { workspace.flushAutosave(opened) }
+                        val prepared = opened.manager.prepareForPersistence()
+                        runDiskIo { workspace.flushAutosave(opened, prepared) }
                     }
                 }
             }
         }
 
-        // Un dispose della radice (chiusura desktop o ricreazione Activity) forza
-        // gli autosave già nominati; le bozze restano intenzionalmente da salvare.
+        // Una ricreazione della shell (in particolare Activity su Android) non
+        // passa dalla conferma desktop. Lo snapshot e l'eventuale settlement
+        // restano sul contesto Compose; lo scope indipendente sopravvive invece
+        // alla composizione abbastanza da completare il solo writer su I/O.
+        val disposalPersistenceScope = remember(workspace) {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        }
         DisposableEffect(workspace) {
-            onDispose { workspace.flushAutosaves() }
+            onDispose {
+                val prepared = workspace.prepareForPersistence()
+                disposalPersistenceScope.launch {
+                    runCatching { workspace.flushAutosaves(prepared) }
+                }
+            }
         }
 
         val openEncounter: (CombatSession, String, Map<String, String>) -> Unit =
