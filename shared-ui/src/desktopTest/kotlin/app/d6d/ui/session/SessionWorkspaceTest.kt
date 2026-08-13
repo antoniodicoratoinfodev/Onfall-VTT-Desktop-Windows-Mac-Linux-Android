@@ -1,5 +1,8 @@
 package app.d6d.ui.session
 
+import app.d6d.domain.combat.D20Mode
+import app.d6d.engine.CombatSession
+import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.ui.content.SampleEncounter
 import app.d6d.ui.state.BattleViewModel
@@ -17,6 +20,22 @@ class SessionWorkspaceTest {
     lateinit var directory: Path
 
     private fun store() = SessionArchiveStore(directory.resolve("sessions"))
+
+    private fun mixedCpuSession(seed: Long): CombatSession {
+        val hero = SampleEncounter.party().first()
+        val enemy = SampleEncounter.enemies().first()
+        return CombatSession.create("mixed-persistence", seed).also { session ->
+            session.addCombatant("enemy", enemy)
+            session.addCombatant("hero", hero)
+            session.setPartyCombatants(listOf("hero"))
+            session.setInitiative("enemy", 20)
+            session.setInitiative("hero", 20)
+            session.setInitiativeOrder(listOf("enemy", "hero"))
+            session.setSimultaneousTies(true)
+            session.markReady()
+            session.start()
+        }
+    }
 
     private fun workspace(store: SessionArchiveStore = store()) = SessionWorkspace(
         store = store,
@@ -54,6 +73,70 @@ class SessionWorkspaceTest {
         assertEquals(firstTurn, first.battle.turnIndex)
         assertEquals(secondTurn, second.battle.turnIndex)
         assertEquals(secondCanUndo, second.battle.canUndo)
+    }
+
+    @Test
+    fun `la presentazione iniziale viene adottata dalla prima scheda`() {
+        val workspace = SessionWorkspace(
+            store = store(),
+            initialSession = SampleEncounter.startedSession(seed = 12L),
+            initialDisplayName = "Con configurazione",
+            initialPresentation = mapOf("rollMode" to D20Mode.ADVANTAGE.name),
+        )
+
+        assertEquals(D20Mode.ADVANTAGE, workspace.activeSession.battle.rollMode)
+    }
+
+    @Test
+    fun `save e open ripristinano difficolta e sospensione cpu senza replay`() {
+        val store = store()
+        val source = SessionWorkspace(
+            store = store,
+            initialSession = mixedCpuSession(seed = 13L),
+            initialDisplayName = "CPU persistita",
+            initialPresentation = mapOf(
+                "enemyCpuDifficulty" to EnemyCpuDifficulty.SORRY_FOR_YOU.name,
+            ),
+        )
+        val sourceBattle = source.activeSession.battle
+        sourceBattle.playEnemyCpuTurn()
+        sourceBattle.undo()
+        assertTrue(sourceBattle.enemyCpuTurnSuppressed)
+        assertEquals(SessionSaveResult.SAVED, source.activeSession.manager.save("CPU persistita"))
+
+        val target = workspace(store)
+        val summary = store.list().single { it.slug == "cpu-persistita" }
+        assertEquals(WorkspaceOpenResult.OPENED, target.openSaved(summary))
+
+        val restored = target.activeSession.battle
+        assertEquals(EnemyCpuDifficulty.SORRY_FOR_YOU, restored.enemyCpuDifficulty)
+        assertTrue(restored.enemyCpuTurnSuppressed)
+        assertFalse(restored.shouldScheduleEnemyCpu)
+    }
+
+    @Test
+    fun `save e open conservano il guard del batch mixed completato`() {
+        val store = store()
+        val source = SessionWorkspace(
+            store = store,
+            initialSession = mixedCpuSession(14L),
+            initialDisplayName = "CPU mixed",
+            initialPresentation = mapOf(
+                "enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name,
+            ),
+        )
+        source.activeSession.battle.playEnemyCpuTurn()
+        assertTrue(source.activeSession.battle.enemyCpuBatchCompleted)
+        assertEquals(SessionSaveResult.SAVED, source.activeSession.manager.save("CPU mixed"))
+
+        val target = workspace(store)
+        val summary = store.list().single { it.slug == "cpu-mixed" }
+        assertEquals(WorkspaceOpenResult.OPENED, target.openSaved(summary))
+
+        val restored = target.activeSession.battle
+        assertTrue(restored.enemyCpuBatchCompleted)
+        assertFalse(restored.shouldScheduleEnemyCpu)
+        assertEquals("hero", restored.activeActorId)
     }
 
     @Test

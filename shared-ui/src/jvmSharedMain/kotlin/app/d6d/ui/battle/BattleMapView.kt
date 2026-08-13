@@ -974,10 +974,15 @@ private fun MapToken(
     val combatant = viewModel.combatant(id) ?: return
     val snapshot = combatant.snapshot()
     val faction = if (viewModel.isParty(id)) Faction.PARTY else Faction.ENEMY
-    val active = viewModel.isActive(id)
+    // Mentre la CPU gioca un gruppo nemico in parita' d'iniziativa, l'alone segue
+    // chi sta davvero eseguendo il comando: gli altri hanno gia' agito o devono
+    // ancora farlo, e pulsare tutti insieme direbbe il contrario.
+    val actingEnemy = viewModel.enemyCpuActingCombatantId
+    val active = viewModel.isActive(id) &&
+        (actingEnemy == null || actingEnemy == id || viewModel.isParty(id))
     val targeted = viewModel.selectedTargetId == id
     val inspected = viewModel.inspectedCombatantId == id
-    val defeated = combatant.defeated()
+    val defeated = combatant.defeated() || combatant.dead()
 
     val side = cellSize * placement.squaresPerSide()
     // Sotto una certa scala il token continua a occupare il corretto spazio della

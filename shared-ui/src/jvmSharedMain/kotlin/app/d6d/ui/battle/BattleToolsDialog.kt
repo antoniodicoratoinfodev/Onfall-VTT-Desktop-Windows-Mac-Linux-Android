@@ -84,7 +84,8 @@ fun BattleToolsDialog(
     val amount = amountText.toIntOrNull()?.coerceAtLeast(0) ?: 0
     val duration = durationText.toIntOrNull()?.coerceAtLeast(0) ?: 0
     val abilityCheckModifier = abilityCheckModifierText.toIntOrNull()
-    val commandsEnabled = viewModel.status == CombatStatus.ACTIVE && targetId != null
+    val cpuLocked = viewModel.enemyCpuBatchPending && !viewModel.editMode
+    val commandsEnabled = viewModel.status == CombatStatus.ACTIVE && targetId != null && !cpuLocked
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -107,6 +108,13 @@ fun BattleToolsDialog(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                if (cpuLocked) {
+                    Text(
+                        "Strumenti sospesi mentre la CPU risolve la parte nemica del turno.",
+                        color = Palette.Enemy,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

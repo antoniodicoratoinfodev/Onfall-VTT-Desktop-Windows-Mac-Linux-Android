@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.engine.CombatSession
+import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.ui.battle.BattleScreen
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.AppGlyph
@@ -51,6 +52,7 @@ import app.d6d.ui.cursors.CursorPreferences
 import app.d6d.ui.encounter.EncounterBuilderScreen
 import app.d6d.ui.encounter.EncounterBuilderViewModel
 import app.d6d.ui.encounter.EncounterMode
+import app.d6d.ui.encounter.newEncounterPresentation
 import app.d6d.sheet.SheetStore
 import app.d6d.ui.roster.RosterScreen
 import app.d6d.ui.roster.RosterKind
@@ -66,6 +68,7 @@ import app.d6d.ui.session.SessionWorkspace
 import app.d6d.ui.session.WorkspaceRecoveryStore
 import app.d6d.ui.session.WorkspaceOpenResult
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.state.awaitEnemyCpuTurnEnd
 import app.d6d.ui.state.CombatResourceSink
 import app.d6d.ui.state.CombatantEditSink
 import app.d6d.content.srd521it.SrdBeasts
@@ -173,6 +176,7 @@ fun AppRoot(
                 store = SessionArchiveStore(dataDirectory.resolve("sessions")),
                 initialSession = opening.startedSession(),
                 initialDisplayName = opening.name,
+                initialPresentation = mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name),
                 battleFactory = battleFactory,
                 refreshManagersOnCreate = false,
             )
@@ -202,6 +206,10 @@ fun AppRoot(
             if (!recoveryReady) return@LaunchedEffect
             snapshotFlow { workspace.recoveryKey() }.collectLatest {
                 delay(500)
+                // La bozza aspetta la fine di un eventuale turno CPU: un recupero
+                // che riparte da mezzo turno nemico non è quello che il tavolo
+                // stava guardando.
+                workspace.openSessions.forEach { it.battle.awaitEnemyCpuTurnEnd() }
                 val snapshot = workspace.recoverySnapshot()
                 runDiskIo { runCatching { recoveryStore.save(snapshot) } }
             }
@@ -255,6 +263,7 @@ fun AppRoot(
                 ) {
                     if (opened.manager.currentSlug != null && opened.manager.hasUnsavedChanges) {
                         delay(1_200)
+                        opened.battle.awaitEnemyCpuTurnEnd()
                         runDiskIo { workspace.flushAutosave(opened) }
                     }
                 }
@@ -267,11 +276,12 @@ fun AppRoot(
             onDispose { workspace.flushAutosaves() }
         }
 
-        val openEncounter: (CombatSession, String, EncounterMode) -> Unit = { session, name, mode ->
-            workspace.openNew(session, name, mapOf("encounterMode" to mode.name))
-            encounterBuilder.restartWizard()
-            destination = Destination.BATTAGLIA
-        }
+        val openEncounter: (CombatSession, String, Map<String, String>) -> Unit =
+            { session, name, presentation ->
+                workspace.openNew(session, name, presentation)
+                encounterBuilder.restartWizard()
+                destination = Destination.BATTAGLIA
+            }
 
         val openSavedSession: (app.d6d.persistence.session.SessionSummary) -> Unit = { summary ->
             uiScope.launch {
@@ -335,9 +345,7 @@ fun AppRoot(
                         viewModel = encounterBuilder,
                         compact = compact,
                         workspace = workspace,
-                        onStarted = { session, name, mode ->
-                            openEncounter(session, name, mode)
-                        },
+                        onStarted = openEncounter,
                         onOpenBattle = { destination = Destination.BATTAGLIA },
                         onOpenCompendium = {
                             requestedCompendiumItemId = null

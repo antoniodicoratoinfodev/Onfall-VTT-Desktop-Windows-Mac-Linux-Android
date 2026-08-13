@@ -81,7 +81,7 @@ fun CombatantRailCard(
     val active = viewModel.isActive(combatantId)
     val targeted = viewModel.selectedTargetId == combatantId
     val inspected = viewModel.inspectedCombatantId == combatantId
-    val defeated = combatant.defeated()
+    val defeated = combatant.defeated() || combatant.dead()
     val budget = viewModel.budget(combatantId)
 
     val shape = RoundedCornerShape(10.dp)

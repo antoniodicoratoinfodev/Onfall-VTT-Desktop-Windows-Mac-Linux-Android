@@ -32,14 +32,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.ActivationCost
+import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.HealingTarget
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.Ability
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CatalogDamage
+import app.d6d.sheet.CatalogHealing
+import app.d6d.sheet.CatalogHealingBonusSource
 import app.d6d.sheet.italianLabel
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
@@ -293,7 +297,7 @@ private fun AbilityDetails(
     } else {
         AbilityEditor(
             draft = draft,
-            onChange = onChange,
+            onChange = { updated -> onChange(updated.enforceHealingConstraints()) },
             onSave = onSave,
             onDelete = onDelete,
             modifier = modifier,
@@ -357,13 +361,27 @@ private fun ReadOnlyAbilityDetails(
                     Chip(ability.activationCost.label, Palette.Gold)
                     Chip(ability.resolutionMethod.label, Palette.Party)
                     if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
+                    ability.healing?.let { healing ->
+                        Chip(
+                            "Cura ${healing.amountText} · ${healing.target.label}",
+                            Palette.Heal,
+                        )
+                    }
                     if (ability.isArea) Chip("Area ${ability.areaRadiusFeet} ft", Palette.Crit)
                 }
-                PassiveSelector(
-                    passive = ability.passive,
-                    overridden = overridden,
-                    onChange = onPassiveChange,
-                )
+                if (ability.healing == null) {
+                    PassiveSelector(
+                        passive = ability.passive,
+                        overridden = overridden,
+                        onChange = onPassiveChange,
+                    )
+                } else {
+                    Text(
+                        "Cura attiva: viene risolta dall'app e non può essere resa passiva.",
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (ability.effects.isNotEmpty()) {
                     Text(
                         "APPLICATO DALL'APP",
@@ -427,8 +445,13 @@ private fun ReadOnlyAbilityDetails(
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Text(
-                text = "Questa voce proviene dal pacchetto SRD ed è protetta dalle modifiche. " +
-                    "Puoi comunque decidere tu se giocarla come attiva o come passiva.",
+                text = if (ability.healing != null) {
+                    "Questa cura proviene dal pacchetto SRD, è protetta dalle modifiche " +
+                        "e resta una capacità attiva automatizzata."
+                } else {
+                    "Questa voce proviene dal pacchetto SRD ed è protetta dalle modifiche. " +
+                        "Puoi comunque decidere tu se giocarla come attiva o come passiva."
+                },
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -541,11 +564,19 @@ private fun AbilityEditor(
             }
 
             SheetBox("Funzionamento") {
-                PassiveSelector(
-                    passive = draft.passive,
-                    overridden = false,
-                    onChange = { onChange(draft.copy(passive = it)) },
-                )
+                if (draft.healing == null) {
+                    PassiveSelector(
+                        passive = draft.passive,
+                        overridden = false,
+                        onChange = { onChange(draft.copy(passive = it)) },
+                    )
+                } else {
+                    Text(
+                        "Una cura è una capacità attiva e automatizzata.",
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
 
                 Text("COSTO", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                 FlowRow(
@@ -564,37 +595,41 @@ private fun AbilityEditor(
                 }
 
                 Text("RISOLUZIONE", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    verticalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    ResolutionMethod.entries.forEach { method ->
-                        GameButton(
-                            label = method.label,
-                            accent = if (draft.resolutionMethod == method) Palette.Party else Palette.TextMuted,
-                            selected = draft.resolutionMethod == method,
-                            dense = true,
-                            onClick = {
-                                onChange(
-                                    draft.copy(
-                                        resolutionMethod = method,
-                                        dealsDamage = draft.dealsDamage || method == ResolutionMethod.ATTACK_ROLL,
-                                        saveAbility = if (method == ResolutionMethod.SAVING_THROW) {
-                                            draft.saveAbility ?: Ability.DEXTERITY
-                                        } else {
-                                            draft.saveAbility
-                                        },
-                                        automationStatus = if (method == ResolutionMethod.MANUAL) {
-                                            AutomationStatus.MANUAL_REQUIRED
-                                        } else if (draft.automationStatus == AutomationStatus.MANUAL_REQUIRED) {
-                                            AutomationStatus.AUTOMATED
-                                        } else {
-                                            draft.automationStatus
-                                        },
-                                    ),
-                                )
-                            },
-                        )
+                if (draft.healing != null) {
+                    Chip(ResolutionMethod.AUTOMATIC.label, Palette.Heal)
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        ResolutionMethod.entries.forEach { method ->
+                            GameButton(
+                                label = method.label,
+                                accent = if (draft.resolutionMethod == method) Palette.Party else Palette.TextMuted,
+                                selected = draft.resolutionMethod == method,
+                                dense = true,
+                                onClick = {
+                                    onChange(
+                                        draft.copy(
+                                            resolutionMethod = method,
+                                            dealsDamage = draft.dealsDamage || method == ResolutionMethod.ATTACK_ROLL,
+                                            saveAbility = if (method == ResolutionMethod.SAVING_THROW) {
+                                                draft.saveAbility ?: Ability.DEXTERITY
+                                            } else {
+                                                draft.saveAbility
+                                            },
+                                            automationStatus = if (method == ResolutionMethod.MANUAL) {
+                                                AutomationStatus.MANUAL_REQUIRED
+                                            } else if (draft.automationStatus == AutomationStatus.MANUAL_REQUIRED) {
+                                                AutomationStatus.AUTOMATED
+                                            } else {
+                                                draft.automationStatus
+                                            },
+                                        ),
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
 
@@ -652,32 +687,221 @@ private fun AbilityEditor(
                     }
                 }
 
-                SheetCheck(
-                    "Risoluzione manuale al tavolo",
-                    draft.automationStatus == AutomationStatus.MANUAL_REQUIRED,
-                ) { manual ->
+                if (draft.healing == null) {
+                    SheetCheck(
+                        "Risoluzione manuale al tavolo",
+                        draft.automationStatus == AutomationStatus.MANUAL_REQUIRED,
+                    ) { manual ->
+                        onChange(
+                            draft.copy(
+                                automationStatus = if (manual) {
+                                    AutomationStatus.MANUAL_REQUIRED
+                                } else {
+                                    AutomationStatus.AUTOMATED
+                                },
+                            ),
+                        )
+                    }
+                }
+            }
+
+            SheetBox("Cura") {
+                SheetCheck("Recupera punti ferita", draft.healing != null) { enabled ->
                     onChange(
-                        draft.copy(
-                            automationStatus = if (manual) {
-                                AutomationStatus.MANUAL_REQUIRED
-                            } else {
-                                AutomationStatus.AUTOMATED
+                        if (enabled) {
+                            draft.copy(
+                                healing = CatalogHealing.dice(HealingTarget.SELF_OR_ALLY, 1, 8),
+                            ).enforceHealingConstraints()
+                        } else {
+                            draft.copy(healing = null)
+                        },
+                    )
+                }
+                draft.healing?.let { healing ->
+                    Text("BERSAGLIO", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        HealingTarget.entries.forEach { target ->
+                            GameButton(
+                                label = target.label,
+                                accent = if (healing.target == target) Palette.Heal else Palette.TextMuted,
+                                selected = healing.target == target,
+                                dense = true,
+                                onClick = { onChange(draft.copy(healing = healing.copy(target = target))) },
+                            )
+                        }
+                    }
+
+                    Text("QUANTITÀ", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        GameButton(
+                            label = "Dadi",
+                            accent = if (healing.dice != null) Palette.Heal else Palette.TextMuted,
+                            selected = healing.dice != null,
+                            dense = true,
+                            onClick = {
+                                if (healing.dice == null) {
+                                    onChange(
+                                        draft.copy(
+                                            healing = CatalogHealing.dice(healing.target, 1, 8),
+                                        ),
+                                    )
+                                }
                             },
-                        ),
+                        )
+                        GameButton(
+                            label = "Fissa",
+                            accent = if (healing.fixedAmount != null) Palette.Heal else Palette.TextMuted,
+                            selected = healing.fixedAmount != null,
+                            dense = true,
+                            onClick = {
+                                if (healing.fixedAmount == null) {
+                                    onChange(
+                                        draft.copy(
+                                            healing = CatalogHealing.fixed(healing.target, 1),
+                                        ),
+                                    )
+                                }
+                            },
+                        )
+                    }
+                    healing.dice?.let { dice ->
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            verticalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            SheetNumberField("Numero dadi", dice.count, Modifier.width(120.dp)) {
+                                onChange(
+                                    draft.copy(
+                                        healing = healing.copy(
+                                            dice = dice.copy(count = it.coerceAtLeast(1)),
+                                        ),
+                                    ),
+                                )
+                            }
+                            SheetNumberField("Facce", dice.sides, Modifier.width(105.dp)) {
+                                onChange(
+                                    draft.copy(
+                                        healing = healing.copy(
+                                            dice = dice.copy(sides = it.coerceAtLeast(2)),
+                                        ),
+                                    ),
+                                )
+                            }
+                            SheetNumberField("Modificatore", dice.modifier, Modifier.width(130.dp)) {
+                                onChange(
+                                    draft.copy(
+                                        healing = healing.copy(dice = dice.copy(modifier = it)),
+                                    ),
+                                )
+                            }
+                        }
+                        Text(
+                            "BONUS DINAMICO",
+                            color = Palette.TextMuted,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            CatalogHealingBonusSource.entries.forEach { source ->
+                                GameButton(
+                                    label = source.label,
+                                    accent = if (healing.bonusSource == source) Palette.Heal else Palette.TextMuted,
+                                    selected = healing.bonusSource == source,
+                                    dense = true,
+                                    onClick = {
+                                        onChange(
+                                            draft.copy(
+                                                healing = healing.copy(
+                                                    bonusSource = source,
+                                                    bonusClassId = if (
+                                                        source == CatalogHealingBonusSource.CLASS_LEVEL
+                                                    ) {
+                                                        healing.bonusClassId ?: CharacterClassId.FIGHTER
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        if (healing.bonusSource == CatalogHealingBonusSource.CLASS_LEVEL) {
+                            Text(
+                                "CLASSE DEL BONUS",
+                                color = Palette.TextMuted,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                CharacterClassId.entries.forEach { classId ->
+                                    GameButton(
+                                        label = classId.italianLabel,
+                                        accent = if (healing.bonusClassId == classId) {
+                                            Palette.Heal
+                                        } else {
+                                            Palette.TextMuted
+                                        },
+                                        selected = healing.bonusClassId == classId,
+                                        dense = true,
+                                        onClick = {
+                                            onChange(
+                                                draft.copy(
+                                                    healing = healing.copy(bonusClassId = classId),
+                                                ),
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    healing.fixedAmount?.let { amount ->
+                        SheetNumberField("Punti ferita", amount, Modifier.width(150.dp)) {
+                            onChange(
+                                draft.copy(
+                                    healing = CatalogHealing.fixed(healing.target, it.coerceAtLeast(1)),
+                                ),
+                            )
+                        }
+                    }
+                    Text(
+                        "La cura non infligge danno, non usa un'area e viene risolta automaticamente.",
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
 
             SheetBox("Danno") {
-                SheetCheck(
-                    "Infligge danno",
-                    draft.dealsDamage,
-                ) { enabled ->
-                    if (draft.resolutionMethod != ResolutionMethod.ATTACK_ROLL || enabled) {
-                        onChange(draft.copy(dealsDamage = enabled))
+                if (draft.healing != null) {
+                    Text(
+                        "Non applicabile: questa capacità recupera punti ferita.",
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    SheetCheck(
+                        "Infligge danno",
+                        draft.dealsDamage,
+                    ) { enabled ->
+                        if (draft.resolutionMethod != ResolutionMethod.ATTACK_ROLL || enabled) {
+                            onChange(draft.copy(dealsDamage = enabled))
+                        }
                     }
                 }
-                if (draft.dealsDamage) {
+                if (draft.dealsDamage && draft.healing == null) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp),
@@ -751,22 +975,33 @@ private fun AbilityEditor(
             }
 
             SheetBox("Area e tiro salvezza") {
-                SheetCheck("Effetto ad area", draft.isArea) { enabled ->
-                    onChange(
-                        draft.copy(
-                            areaRadiusFeet = if (enabled) draft.areaRadiusFeet.takeIf { it > 0 } ?: 20 else 0,
-                            resolutionMethod = if (enabled) ResolutionMethod.SAVING_THROW else draft.resolutionMethod,
-                            saveAbility = if (enabled) draft.saveAbility ?: Ability.DEXTERITY else draft.saveAbility,
-                            dealsDamage = if (enabled) true else draft.dealsDamage,
-                        ),
+                if (draft.healing != null) {
+                    Text(
+                        "Non applicabile: la cura sceglie un singolo bersaglio amico.",
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
                     )
+                } else {
+                    SheetCheck("Effetto ad area", draft.isArea) { enabled ->
+                        onChange(
+                            draft.copy(
+                                areaRadiusFeet = if (enabled) draft.areaRadiusFeet.takeIf { it > 0 } ?: 20 else 0,
+                                resolutionMethod = if (enabled) ResolutionMethod.SAVING_THROW else draft.resolutionMethod,
+                                saveAbility = if (enabled) draft.saveAbility ?: Ability.DEXTERITY else draft.saveAbility,
+                                dealsDamage = if (enabled) true else draft.dealsDamage,
+                            ),
+                        )
+                    }
                 }
-                if (draft.isArea) {
+                if (draft.isArea && draft.healing == null) {
                     SheetFeetField("Raggio", draft.areaRadiusFeet, Modifier.width(150.dp)) {
                         onChange(draft.copy(areaRadiusFeet = it.coerceAtLeast(1)))
                     }
                 }
-                if (draft.resolutionMethod == ResolutionMethod.SAVING_THROW || draft.isArea) {
+                if (
+                    draft.healing == null &&
+                    (draft.resolutionMethod == ResolutionMethod.SAVING_THROW || draft.isArea)
+                ) {
                     Text("TIRO SALVEZZA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -847,6 +1082,60 @@ private fun CatalogAbility.withAdditionalDamage(index: Int, component: CatalogDa
             if (index in items.indices) items[index] = component
         },
     )
+
+private fun CatalogAbility.enforceHealingConstraints(): CatalogAbility =
+    if (healing == null) {
+        this
+    } else {
+        copy(
+            passive = false,
+            resolutionMethod = ResolutionMethod.AUTOMATIC,
+            dealsDamage = false,
+            automationStatus = AutomationStatus.AUTOMATED,
+            areaRadiusFeet = 0,
+            maxTargets = 1,
+            effect = AbilityEffect.NONE,
+        )
+    }
+
+private val CatalogHealing.amountText: String
+    get() = dice?.let { value ->
+        buildString {
+            append(value.count).append('d').append(value.sides)
+            if (value.modifier > 0) append('+')
+            if (value.modifier != 0) append(value.modifier)
+            when (bonusSource) {
+                CatalogHealingBonusSource.NONE -> Unit
+                CatalogHealingBonusSource.SPELLCASTING_ABILITY -> append(" + mod. incantatore")
+                CatalogHealingBonusSource.CLASS_LEVEL -> append(
+                    " + livello ${bonusClassId?.italianLabel ?: "classe"}",
+                )
+            }
+            slotScaling?.let { scaling ->
+                append(" · +")
+                    .append(scaling.additionalDicePerSlotLevel)
+                    .append('d')
+                    .append(value.sides)
+                    .append("/livello oltre ")
+                    .append(scaling.baseSlotLevel)
+                    .append('°')
+            }
+        }
+    } ?: fixedAmount.toString()
+
+private val CatalogHealingBonusSource.label: String
+    get() = when (this) {
+        CatalogHealingBonusSource.NONE -> "Nessuno"
+        CatalogHealingBonusSource.SPELLCASTING_ABILITY -> "Mod. incantatore"
+        CatalogHealingBonusSource.CLASS_LEVEL -> "Livello di classe"
+    }
+
+private val HealingTarget.label: String
+    get() = when (this) {
+        HealingTarget.SELF -> "Solo sé"
+        HealingTarget.ALLY -> "Solo alleato"
+        HealingTarget.SELF_OR_ALLY -> "Sé o alleato"
+    }
 
 internal val ActivationCost.label: String
     get() = when (this) {

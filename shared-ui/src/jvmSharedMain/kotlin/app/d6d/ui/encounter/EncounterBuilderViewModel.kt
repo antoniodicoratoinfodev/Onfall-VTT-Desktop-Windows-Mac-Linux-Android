@@ -9,6 +9,8 @@ import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
+import app.d6d.engine.ai.EnemyCpuDifficulty
+import app.d6d.ui.state.EnemyCpuSpeed
 import app.d6d.ui.content.SessionTemplate
 import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.roster.RosterItem
@@ -27,6 +29,7 @@ enum class NewGameStep {
     PARTECIPANTI,
     GRIGLIA,
     MODALITA,
+    DIFFICOLTA,
 }
 
 /** Da dove arrivano personaggi e creature della nuova partita. */
@@ -46,6 +49,26 @@ enum class EncounterMode(val label: String, val description: String) {
         "Roleplay & Fight & Exploration",
         "Apre la schermata normale con la griglia pronta, lasciando libero il posizionamento dei token.",
     ),
+}
+
+/**
+ * Presentazione iniziale di una partita appena creata.
+ *
+ * In sandbox la chiave della difficolta' non viene scritta affatto: e' esattamente
+ * il modo in cui il combattimento riconosce le partite senza automazione, quindi
+ * non prende il controllo di nessuno schieramento e il tavolo muove anche gli
+ * avversari.
+ */
+internal fun newEncounterPresentation(
+    mode: EncounterMode,
+    difficulty: EnemyCpuDifficulty?,
+    speed: EnemyCpuSpeed = EnemyCpuSpeed.NORMAL,
+): Map<String, String> = buildMap {
+    put("encounterMode", mode.name)
+    difficulty?.let {
+        put("enemyCpuDifficulty", it.name)
+        put("enemyCpuSpeed", speed.name)
+    }
 }
 
 /** Una voce del Compendio con le scelte specifiche del prossimo incontro. */
@@ -87,6 +110,22 @@ class EncounterBuilderViewModel(
 
     var mode by mutableStateOf(EncounterMode.ROLEPLAY_FIGHT_EXPLORATION)
 
+    /**
+     * Profilo tattico con cui la CPU controllera' lo schieramento avversario.
+     *
+     * `null` e' la sandbox: nessuna automazione, gli avversari restano al tavolo
+     * esattamente come gli alleati.
+     */
+    var enemyCpuDifficulty by mutableStateOf<EnemyCpuDifficulty?>(EnemyCpuDifficulty.MEDIUM)
+
+    /**
+     * Ritmo con cui la partita mostrera' i turni della CPU.
+     *
+     * Si sceglie qui perche' e' la stessa domanda della difficolta' - come sara'
+     * l'avversario - e resta poi cambiabile a tavolo aperto dalla fascia nemica.
+     */
+    var enemyCpuSpeed by mutableStateOf(EnemyCpuSpeed.NORMAL)
+
     var gridColumns by mutableStateOf(DEFAULT_COLUMNS)
         private set
 
@@ -125,6 +164,16 @@ class EncounterBuilderViewModel(
         get() = participants.filter { it.selected && it.faction == EncounterFaction.AVVERSARI }
             .sumOf { it.quantity }
 
+    /** Le sessioni mono-fazione restano valide, ma non promettono una CPU che non puo' agire. */
+    val enemyCpuInactiveReason: String?
+        get() = when {
+            // In sandbox non c'e' nessuna automazione da avvertire: e' spenta per scelta.
+            enemyCpuDifficulty == null -> null
+            allyCount == 0 -> "CPU inattiva: aggiungi almeno un alleato che gli avversari possano affrontare."
+            opponentCount == 0 -> "CPU inattiva: non hai selezionato alcun avversario da controllare."
+            else -> null
+        }
+
     val canStart: Boolean
         get() = encounterName.isNotBlank() && selectedCount > 0
 
@@ -139,6 +188,8 @@ class EncounterBuilderViewModel(
         gridRows = DEFAULT_ROWS
         feetPerSquare = DEFAULT_FEET_PER_SQUARE
         mode = EncounterMode.ROLEPLAY_FIGHT_EXPLORATION
+        enemyCpuDifficulty = EnemyCpuDifficulty.MEDIUM
+        enemyCpuSpeed = EnemyCpuSpeed.NORMAL
         status = null
     }
 
@@ -206,6 +257,7 @@ class EncounterBuilderViewModel(
             NewGameStep.PARTECIPANTI -> NewGameStep.TEMPLATE
             NewGameStep.GRIGLIA -> NewGameStep.PARTECIPANTI
             NewGameStep.MODALITA -> NewGameStep.GRIGLIA
+            NewGameStep.DIFFICOLTA -> NewGameStep.MODALITA
         }
     }
 
@@ -221,6 +273,11 @@ class EncounterBuilderViewModel(
     fun continueFromGrid() {
         status = null
         step = NewGameStep.MODALITA
+    }
+
+    fun continueFromMode() {
+        status = null
+        step = NewGameStep.DIFFICOLTA
     }
 
     fun updateGridColumns(value: Int) {

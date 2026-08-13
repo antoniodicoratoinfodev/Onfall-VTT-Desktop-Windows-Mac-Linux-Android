@@ -55,6 +55,7 @@ import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.D20Mode
+import app.d6d.domain.combat.HealingTarget
 import app.d6d.sheet.feetWithMetres
 import app.d6d.sheet.rulesTextLead
 import app.d6d.sheet.withMetricFeet
@@ -212,6 +213,16 @@ private fun AbilityDefinition.damageSummary(): String =
         val amount = if (formula.usesDice()) formula.dice().notation() else formula.fixedAmount().toString()
         "$amount ${formula.type().italianLabel.lowercase()}"
     }
+
+private fun AbilityDefinition.healingSummary(): String? = healing()?.let { healing ->
+    val amount = if (healing.usesDice()) healing.dice().notation() else healing.fixedAmount().toString()
+    val target = when (healing.target()) {
+        HealingTarget.SELF -> "sé"
+        HealingTarget.ALLY -> "alleato"
+        HealingTarget.SELF_OR_ALLY -> "sé/alleato"
+    }
+    "$amount · $target"
+}
 
 /**
  * Targhetta di un tratto permanente: solo il nome, accanto a chi ha il turno.
@@ -390,7 +401,7 @@ private fun AbilityCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
-            if (!manual && !ability.isArea) {
+            if (!manual && !ability.isArea && ability.healing() == null) {
                 val bonus = ability.attackBonus()
                 AbilityStat("Colpire", if (bonus >= 0) "+$bonus" else bonus.toString(), enabled)
                 ability.attackAbility()?.let {
@@ -407,6 +418,9 @@ private fun AbilityCard(
             val damage = ability.damageSummary()
             if (damage.isNotBlank()) {
                 AbilityStat("Danno", damage, enabled)
+            }
+            ability.healingSummary()?.let { healing ->
+                AbilityStat("Cura", healing, enabled)
             }
             resourceLabel?.let { AbilityStat("Usi", it, enabled) }
         }
@@ -574,7 +588,7 @@ fun CommandBar(
 
         if (inspectedId != null && !displayedActorCanAct) {
             Text(
-                text = if (viewModel.combatant(inspectedId)?.defeated() == true) {
+                text = if (viewModel.combatant(inspectedId)?.let { it.defeated() || it.dead() } == true) {
                     "Solo consultazione · 0 PF, il suo turno viene saltato."
                 } else {
                     "Solo consultazione · non è il turno di ${viewModel.name(inspectedId)}."
@@ -697,6 +711,7 @@ fun CommandBar(
                 GameButton(
                     label = "Strumenti",
                     accent = Palette.TextMuted,
+                    enabled = !viewModel.enemyCpuBatchPending || viewModel.editMode,
                     dense = true,
                     onClick = { toolsOpen = true },
                 )
@@ -725,7 +740,8 @@ fun CommandBar(
             GameButton(
                 label = if (activeId == null) "Salta turno" else "Fine turno",
                 accent = Palette.Heal,
-                enabled = combatActive && viewModel.hasStandingCombatants,
+                enabled = combatActive && viewModel.hasStandingCombatants &&
+                    !viewModel.enemyCpuBatchPending && !viewModel.enemyCpuControlsCurrentTurn,
                 primary = true,
                 dense = true,
                 onClick = { viewModel.endTurn() },

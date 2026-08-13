@@ -89,7 +89,9 @@ private fun TurnChip(
     canMoveLater: Boolean,
 ) {
     val simultaneous = group.size > 1
-    val allDown = group.all { viewModel.combatant(it)?.defeated() == true }
+    val allDown = group.all {
+        viewModel.combatant(it)?.let { combatant -> combatant.defeated() || combatant.dead() } == true
+    }
     val selectedTarget = viewModel.selectedTargetId
     val targeted = selectedTarget != null && selectedTarget in group
     val inspected = viewModel.inspectedCombatantId in group
@@ -130,7 +132,9 @@ private fun TurnChip(
             else -> viewModel.onCombatantClicked(combatantId)
         }
     }
-    val primaryId = group.firstOrNull { viewModel.combatant(it)?.defeated() == false } ?: group.first()
+    val primaryId = group.firstOrNull {
+        viewModel.combatant(it)?.let { combatant -> !combatant.defeated() && !combatant.dead() } == true
+    } ?: group.first()
     val onChipClick: () -> Unit = { onMemberClick(primaryId) }
 
     Column(
@@ -198,7 +202,7 @@ private fun TurnChip(
                 if (index > 0) {
                     Text("+", color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
                 }
-                val memberDown = viewModel.combatant(id)?.defeated() == true
+                val memberDown = viewModel.combatant(id)?.let { it.defeated() || it.dead() } == true
                 Text(
                     text = viewModel.name(id),
                     color = when {

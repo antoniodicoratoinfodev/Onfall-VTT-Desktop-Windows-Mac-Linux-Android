@@ -4,6 +4,9 @@ compose = "1.11.1"
 composeMaterial3 = "1.9.0"
 agp = "9.2.1"
 junit = "5.11.4"
+# Allineata alla kotlinx-coroutines-core che Compose porta in dote: il tempo
+# virtuale dei test deve girare sullo stesso runtime del codice sotto esame.
+coroutines = "1.9.0"
 serialization = "1.9.0"
 activityCompose = "1.13.0"
 composeBom = "2026.06.00"
@@ -15,6 +18,7 @@ jvmTarget = "17"
 
 [libraries]
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }

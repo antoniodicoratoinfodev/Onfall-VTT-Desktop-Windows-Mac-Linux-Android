@@ -1,6 +1,8 @@
 package app.d6d.ui.session
 
 import app.d6d.persistence.session.SessionArchiveStore
+import app.d6d.engine.CombatSession
+import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.ui.content.SampleEncounter
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -16,6 +18,22 @@ class WorkspaceRecoveryStoreTest {
 
     @TempDir
     lateinit var directory: Path
+
+    private fun mixedCpuSession(seed: Long): CombatSession {
+        val hero = SampleEncounter.party().first()
+        val enemy = SampleEncounter.enemies().first()
+        return CombatSession.create("mixed-recovery", seed).also { session ->
+            session.addCombatant("enemy", enemy)
+            session.addCombatant("hero", hero)
+            session.setPartyCombatants(listOf("hero"))
+            session.setInitiative("enemy", 20)
+            session.setInitiative("hero", 20)
+            session.setInitiativeOrder(listOf("enemy", "hero"))
+            session.setSimultaneousTies(true)
+            session.markReady()
+            session.start()
+        }
+    }
 
     @Test
     fun `la bozza atomica conserva sessioni presentazione e scheda attiva`() {
@@ -92,5 +110,71 @@ class WorkspaceRecoveryStoreTest {
         assertNull(target.activeSession.manager.currentSlug)
         assertTrue(target.activeSession.manager.hasUnsavedChanges)
         assertFalse(target.status.isNullOrBlank())
+    }
+
+    @Test
+    fun `il recovery conserva difficolta e sospensione cpu senza rieseguire il batch`() {
+        val archive = SessionArchiveStore(directory.resolve("sessions-cpu"))
+        val source = SessionWorkspace(
+            store = archive,
+            initialSession = mixedCpuSession(seed = 321L),
+            initialDisplayName = "Recovery CPU",
+            initialPresentation = mapOf(
+                "enemyCpuDifficulty" to EnemyCpuDifficulty.EASY.name,
+            ),
+            refreshManagersOnCreate = false,
+        )
+        val sourceBattle = source.activeSession.battle
+        sourceBattle.playEnemyCpuTurn()
+        sourceBattle.undo()
+        assertTrue(sourceBattle.enemyCpuTurnSuppressed)
+
+        val recoveryStore = WorkspaceRecoveryStore(directory.resolve("recovery-cpu"))
+        recoveryStore.save(source.recoverySnapshot())
+        val recovered = requireNotNull(recoveryStore.load())
+        val target = SessionWorkspace(
+            store = archive,
+            initialSession = SampleEncounter.startedSession(seed = 999L),
+            initialDisplayName = "Temporanea",
+            refreshManagersOnCreate = false,
+        )
+
+        assertTrue(target.restoreRecovery(recovered))
+        val restored = target.activeSession.battle
+        assertEquals(EnemyCpuDifficulty.EASY, restored.enemyCpuDifficulty)
+        assertTrue(restored.enemyCpuTurnSuppressed)
+        assertFalse(restored.shouldScheduleEnemyCpu)
+    }
+
+    @Test
+    fun `il recovery conserva il guard mixed completato senza replay`() {
+        val archive = SessionArchiveStore(directory.resolve("sessions-cpu-mixed"))
+        val source = SessionWorkspace(
+            store = archive,
+            initialSession = mixedCpuSession(322L),
+            initialDisplayName = "Recovery CPU mixed",
+            initialPresentation = mapOf(
+                "enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name,
+            ),
+            refreshManagersOnCreate = false,
+        )
+        source.activeSession.battle.playEnemyCpuTurn()
+        assertTrue(source.activeSession.battle.enemyCpuBatchCompleted)
+
+        val recoveryStore = WorkspaceRecoveryStore(directory.resolve("recovery-cpu-mixed"))
+        recoveryStore.save(source.recoverySnapshot())
+        val recovered = requireNotNull(recoveryStore.load())
+        val target = SessionWorkspace(
+            store = archive,
+            initialSession = SampleEncounter.startedSession(seed = 999L),
+            initialDisplayName = "Temporanea",
+            refreshManagersOnCreate = false,
+        )
+
+        assertTrue(target.restoreRecovery(recovered))
+        val restored = target.activeSession.battle
+        assertTrue(restored.enemyCpuBatchCompleted)
+        assertFalse(restored.shouldScheduleEnemyCpu)
+        assertEquals("hero", restored.activeActorId)
     }
 }

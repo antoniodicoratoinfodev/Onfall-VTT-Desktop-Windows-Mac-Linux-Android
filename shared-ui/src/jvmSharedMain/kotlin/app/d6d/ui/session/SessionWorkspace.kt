@@ -66,6 +66,7 @@ class SessionWorkspace(
     private val store: SessionArchiveStore,
     initialSession: CombatSession,
     initialDisplayName: String,
+    initialPresentation: Map<String, String> = emptyMap(),
     private val battleFactory: (CombatSession) -> BattleViewModel = { BattleViewModel(it) },
     private val refreshManagersOnCreate: Boolean = true,
 ) {
@@ -96,7 +97,7 @@ class SessionWorkspace(
         }
 
     init {
-        openNew(initialSession, initialDisplayName)
+        openNew(initialSession, initialDisplayName, initialPresentation)
         // L'apertura iniziale è lo stato normale dell'app, non una notifica utile.
         status = null
     }
@@ -203,9 +204,16 @@ class SessionWorkspace(
         return WorkspaceCloseResult.CLOSED
     }
 
-    /** Autosave di tutte le partite collegate a un file, anche se non sono attive. */
+    /**
+     * Autosave di tutte le partite collegate a un file, anche se non sono attive.
+     *
+     * E' il percorso della chiusura: qui non si puo' aspettare il ritmo della CPU,
+     * quindi un turno nemico ancora in pausa viene concluso subito e il file
+     * conserva un turno intero invece che mezzo.
+     */
     fun flushAutosaves() {
         entries.forEach { opened ->
+            opened.battle.settleEnemyCpuTurn()
             if (opened.manager.currentSlug != null && opened.manager.hasUnsavedChanges) {
                 flushAutosave(opened)
             }

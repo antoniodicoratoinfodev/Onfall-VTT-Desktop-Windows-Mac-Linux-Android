@@ -20,8 +20,10 @@ import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.D20RollInput
 import app.d6d.domain.combat.DamageComponent
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.HealingTarget
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
+import app.d6d.domain.combat.SpellSlotResourceId
 import app.d6d.domain.combat.TurnBudget
 import app.d6d.domain.space.BattleMap
 import app.d6d.domain.space.GridPosition
@@ -29,11 +31,17 @@ import app.d6d.domain.space.MapGrid
 import app.d6d.domain.space.TokenPlacement
 import app.d6d.engine.CombatRuleException
 import app.d6d.engine.CombatSession
+import app.d6d.engine.ai.EnemyCpuActionReport
+import app.d6d.engine.ai.EnemyCpuActionType
+import app.d6d.engine.ai.EnemyCpuDifficulty
+import app.d6d.engine.ai.EnemyCpuResult
 import app.d6d.sheet.feetWithMetres
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumber
 import app.d6d.ui.components.italianLabel
 import app.d6d.ui.encounter.EncounterMode
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 
 /**
  * Riceve le correzioni fatte durante lo scontro perche' aggiornino anche il
@@ -138,7 +146,7 @@ class BattleViewModel(
     var rollMode by mutableStateOf(D20Mode.NORMAL)
 
     var floating by mutableStateOf<Map<String, List<FloatingNumber>>>(emptyMap())
-        private set
+        internal set
 
     /**
      * Esito persistente dell'ultima capacita' risolta.
@@ -148,7 +156,7 @@ class BattleViewModel(
      * quando il tiro manca e quindi i PF restano invariati.
      */
     var actionResolution by mutableStateOf<ActionResolution?>(null)
-        private set
+        internal set
 
     private var floatSequence = 0L
 
@@ -251,6 +259,48 @@ class BattleViewModel(
     var encounterMode by mutableStateOf(EncounterMode.ROLEPLAY_FIGHT_EXPLORATION)
         private set
 
+    /** Profilo tattico della CPU; viene applicato soltanto alle sessioni che lo dichiarano. */
+    var enemyCpuDifficulty by mutableStateOf(EnemyCpuDifficulty.MEDIUM)
+        private set
+
+    /**
+     * I salvataggi creati prima dell'introduzione della CPU restano manuali.
+     * Alcuni documenti molto vecchi non conservano neppure lo schieramento: un
+     * fallback automatico prenderebbe quindi il controllo di tutti i combattenti.
+     */
+    var enemyCpuEnabled by mutableStateOf(false)
+        private set
+
+    var enemyCpuBusy by mutableStateOf(false)
+        internal set
+
+    /**
+     * Ritmo con cui il tavolo vede giocare il turno nemico.
+     *
+     * Non tocca le regole ne' le decisioni: cambia soltanto la pausa fra un
+     * comando e il successivo. Vive accanto alla difficolta' perche' e' la stessa
+     * scelta di presentazione, e viene salvata con la sessione.
+     */
+    var enemyCpuSpeed by mutableStateOf(EnemyCpuSpeed.NORMAL)
+
+    /** Nemico che sta eseguendo il comando mostrato in questo istante. */
+    var enemyCpuActingCombatantId by mutableStateOf<String?>(null)
+        internal set
+
+    /** Ultimo comando CPU in parole, per la fascia in cima alla schermata. */
+    var enemyCpuActionLabel by mutableStateOf<String?>(null)
+        internal set
+
+    /**
+     * Firma trasportabile del gruppo corrente. A differenza di [enemyCpuTurnKey]
+     * non contiene [sessionGeneration], quindi puo' sopravvivere a save/load e al
+     * recovery del workspace senza far ripetere un batch gia' concluso.
+     */
+    internal var suppressedEnemyCpuTurnSignature by mutableStateOf<String?>(null)
+
+    /** Batch nemico gia' eseguito in un gruppo simultaneo che deve restare al party. */
+    internal var completedEnemyCpuTurnSignature by mutableStateOf<String?>(null)
+
     /** Attore scelto nel gruppo simultaneo; altrimenti il primo del turno. */
     val activeActorId: String?
         get() = activeActorSelection?.takeIf { it in activeCombatantIds }
@@ -272,6 +322,134 @@ class BattleViewModel(
     val turnGroups: List<List<String>> get() = state.turnGroups()
 
     val turnIndex: Int get() = state.turnIndex()
+
+    internal val enemyCpuTurnSignature: String?
+        get() {
+            if (status != CombatStatus.ACTIVE || state.partyCombatantIds().isEmpty()) return null
+            // Il gruppo strutturale conserva anche chi raggiunge 0 PF durante il
+            // batch. Usarlo rende la firma stabile mentre cambia l'insieme dei vivi.
+            val group = turnGroups.getOrNull(state.turnIndex()).orEmpty()
+            val enemies = group.filterNot(::isParty)
+            if (enemies.isEmpty()) return null
+            val hasActiveEnemy = activeCombatantIds.any { !isParty(it) }
+            // Un gruppo solo nemico completamente morto deve comunque essere
+            // consegnato al core, che lo salta e avanza. In un gruppo misto con
+            // party vivo e soli nemici morti, invece, resta soltanto il giocatore.
+            if (!hasActiveEnemy && activeCombatantIds.isNotEmpty()) return null
+            val structuralGroup = group.joinToString(",") { combatantId ->
+                "${if (isParty(combatantId)) "P" else "E"}:${combatantId.length}:$combatantId"
+            }
+            return "${state.round()}:${state.turnIndex()}:$structuralGroup"
+        }
+
+    /** Identita' runtime del turno CPU: le singole azioni non la cambiano. */
+    val enemyCpuTurnKey: String?
+        get() = enemyCpuTurnSignature?.let { "$sessionGeneration:$it" }
+
+    val enemyCpuTurnSuppressed: Boolean
+        get() = enemyCpuTurnSignature?.let { it == suppressedEnemyCpuTurnSignature } == true
+
+    /** Vero dopo che i nemici di un gruppo misto hanno agito e tocca ancora al party. */
+    val enemyCpuBatchCompleted: Boolean
+        get() = enemyCpuTurnSignature?.let { it == completedEnemyCpuTurnSignature } == true
+
+    /**
+     * Il gruppo non puo' essere chiuso finche' il breve scheduler non ha dato ai
+     * nemici la loro parte di turno. Gli alleati restano comunque utilizzabili.
+     */
+    val enemyCpuBatchPending: Boolean
+        get() = enemyCpuEnabled && !editMode && enemyCpuTurnSignature != null &&
+            !enemyCpuTurnSuppressed && !enemyCpuBatchCompleted
+
+    /** La CPU possiede soltanto gli attori nemici del gruppo, mai gli alleati in parita'. */
+    fun enemyCpuControlsActor(combatantId: String): Boolean =
+        enemyCpuEnabled && !editMode && !enemyCpuTurnSuppressed &&
+            combatantId in activeCombatantIds && !isParty(combatantId)
+
+    val enemyCpuControlsCurrentTurn: Boolean
+        get() = activeActorId?.let(::enemyCpuControlsActor) == true
+
+    /** La UI usa questo guard prima del breve ritardo che rende leggibile il cambio turno. */
+    val shouldScheduleEnemyCpu: Boolean
+        get() = !enemyCpuBusy && enemyCpuBatchPending
+
+    fun resumeEnemyCpuTurn() {
+        suppressedEnemyCpuTurnSignature = null
+        completedEnemyCpuTurnSignature = null
+    }
+
+    /** Esegue l'intero gruppo nemico corrente senza pause, in un solo passaggio. */
+    fun playEnemyCpuTurn() {
+        val playback = beginEnemyCpuTurn() ?: return
+        while (playback.advance()) {
+            // Nessuna attesa: al tavolo arriva soltanto lo stato finale.
+        }
+        playback.complete()
+    }
+
+    /**
+     * Gioca lo stesso turno lasciando vedere un comando alla volta.
+     *
+     * E' il percorso dell'interfaccia. La CPU incatena spesso spostamento e
+     * attacchi nello stesso turno: risolti tutti nello stesso fotogramma, i
+     * segnaposto sembrano teletrasportarsi e i numeri compaiono insieme. La pausa
+     * fra un comando e il successivo e' una preferenza di presentazione,
+     * [enemyCpuSpeed], riletta a ogni passo: cambiarla mentre la CPU gioca vale
+     * gia' dal comando dopo.
+     */
+    suspend fun playEnemyCpuTurnPaced() {
+        val playback = beginEnemyCpuTurn() ?: return
+        var interrupted: CancellationException? = null
+        try {
+            while (playback.advance()) {
+                val pause = enemyCpuSpeed.stepDelayMillis
+                if (interrupted != null || pause <= 0L) continue
+                try {
+                    delay(pause)
+                } catch (cancelled: CancellationException) {
+                    // Chi annulla l'attesa (cambio sessione, chiusura della finestra)
+                    // non deve lasciare il gruppo nemico a meta' turno: si smette di
+                    // aspettare, non di giocare.
+                    interrupted = cancelled
+                }
+            }
+        } finally {
+            playback.complete()
+        }
+        interrupted?.let { throw it }
+    }
+
+    /** Turno CPU in corso, se ce n'e' uno: serve a chi deve chiuderlo prima di salvare. */
+    internal var enemyCpuPlayback: EnemyCpuTurnPlayback? = null
+
+    /**
+     * Chiude subito un turno CPU rimasto fra una pausa e l'altra.
+     *
+     * Chi sta per salvare in modo definitivo - la chiusura dell'applicazione - non
+     * puo' aspettare il ritmo: meglio concludere il gruppo nemico e fotografare un
+     * turno intero, che e' anche quello che il tavolo si ritrovera' riaprendo.
+     */
+    fun settleEnemyCpuTurn() {
+        enemyCpuPlayback?.complete()
+    }
+
+    private fun beginEnemyCpuTurn(): EnemyCpuTurnPlayback? {
+        val scheduledSignature = enemyCpuTurnSignature ?: return null
+        if (!shouldScheduleEnemyCpu) return null
+        return EnemyCpuTurnPlayback(this, scheduledSignature).also { enemyCpuPlayback = it }
+    }
+
+    /**
+     * Porta scheda ed evidenza sull'attore indicato durante un turno CPU.
+     *
+     * Il bersaglio scelto dal tavolo sopravvive soltanto quando il turno torna al
+     * gruppo: mentre agisce un nemico non ha piu' senso tenerlo puntato.
+     */
+    internal fun followEnemyCpuActor(combatantId: String, keepTarget: Boolean) {
+        activeActorSelection = combatantId
+        inspectionSelection = combatantId
+        if (keepTarget) targetSelection = sanitizeTarget(targetSelection)
+    }
 
     var simultaneousTies: Boolean
         get() = state.simultaneousTies()
@@ -321,8 +499,10 @@ class BattleViewModel(
     /** Vero soltanto quando le capacita' mostrate appartengono all'attore che puo' agire ora. */
     fun canUseAbilitiesOf(combatantId: String): Boolean =
         status == CombatStatus.ACTIVE &&
+            !enemyCpuBatchPending &&
+            !enemyCpuControlsActor(combatantId) &&
             combatantId == activeActorId &&
-            combatant(combatantId)?.defeated() == false
+            combatant(combatantId)?.let { !it.defeated() && !it.dead() } == true
 
     /**
      * Punto unico per tutti i clic su una creatura.
@@ -400,6 +580,10 @@ class BattleViewModel(
             budget.actionSurgeUsedThisTurn()
         ) return false
         if (ability.resourceCost() == 0) return true
+        if (
+            SpellSlotResourceId.parse(ability.resourceId()).isPresent &&
+            budget.spellSlotSpentThisTurn()
+        ) return false
         return combatant(combatantId)?.resources()
             ?.firstOrNull { it.id() == ability.resourceId() }
             ?.remaining()
@@ -421,7 +605,7 @@ class BattleViewModel(
 
     /** Almeno un combattente puo' ancora ricevere un turno. */
     val hasStandingCombatants: Boolean
-        get() = state.combatants().values.any { !it.defeated() }
+        get() = state.combatants().values.any { !it.defeated() && !it.dead() }
 
     /** Bersaglio corrente, ripiegando sul primo avversario ancora in piedi. */
     fun effectiveTargetId(): String? {
@@ -429,7 +613,9 @@ class BattleViewModel(
         val chosen = sanitizeTarget(targetSelection)
         if (chosen != null) return chosen
         val hostile = if (isParty(active)) enemyIds else partyIds
-        return hostile.firstOrNull { it != active && combatant(it)?.defeated() == false }
+        return hostile.firstOrNull { candidate ->
+            candidate != active && combatant(candidate)?.let { !it.defeated() && !it.dead() } == true
+        }
     }
 
     // --- comandi ---------------------------------------------------------------------
@@ -462,14 +648,26 @@ class BattleViewModel(
 
     /** Esegue un attacco sul bersaglio esplicito, senza alcun ripiego automatico. */
     private fun attack(attacker: String, target: String, abilityId: String) {
-        command {
-            val abilityName = abilities(attacker)
-                .firstOrNull { it.id() == abilityId }
-                ?.name()
-                ?: abilityId
+        val definitionId = combatant(attacker)?.snapshot()?.definitionId() ?: return
+        val ability = abilities(attacker).firstOrNull { it.id() == abilityId }
+        val consumesResource = ability?.resourceCost()?.let { it > 0 } == true
+        val undoEffect = if (consumesResource) {
+            UndoEffect.ResourceChange(attacker, definitionId)
+        } else {
+            UndoEffect.None
+        }
+        command(undoEffect) {
+            val abilityName = ability?.name() ?: abilityId
             val targetName = name(target)
             val targetArmorClass = combatant(target)?.snapshot()?.armorClass()
             val result = session.attack(AttackRequest.digital(attacker, target, abilityId, rollMode))
+            if (consumesResource) {
+                persistCombatResourcesOrRollback(
+                    attacker,
+                    definitionId,
+                    "Il consumo della risorsa dell'attacco non è stato salvato nella scheda.",
+                )
+            }
             val damage = result.damageResult()
             when {
                 damage.isPresent -> {
@@ -551,6 +749,10 @@ class BattleViewModel(
             activateWildShape(attacker, ability, wildShape)
             return
         }
+        if (ability.healing() != null && ability.healing().target() == HealingTarget.SELF) {
+            useHealingAbility(attacker, attacker, ability)
+            return
+        }
         if (ability.effect() != AbilityEffect.NONE) {
             activateAbility(attacker, ability)
             return
@@ -622,17 +824,20 @@ class BattleViewModel(
     /** Attiva una capacità automatica che non richiede bersaglio, come Azione Impetuosa. */
     private fun activateAbility(combatantId: String, ability: AbilityDefinition) {
         val definitionId = combatant(combatantId)?.snapshot()?.definitionId() ?: return
+        val consumesResource = ability.resourceCost() > 0
+        val undoEffect = if (consumesResource) {
+            UndoEffect.ResourceChange(combatantId, definitionId)
+        } else {
+            UndoEffect.None
+        }
         var activated = false
-        command(UndoEffect.ResourceChange(combatantId, definitionId)) {
+        command(undoEffect) {
             session.activateAbility(combatantId, ability.id())
-            try {
-                val resources = session.currentState().combatant(combatantId).resources()
-                resourceSink.onChanged(definitionId, resources)
-            } catch (failure: Exception) {
-                session.undo()
-                throw IllegalStateException(
-                    failure.message ?: "Il consumo della risorsa non è stato salvato nella scheda.",
-                    failure,
+            if (consumesResource) {
+                persistCombatResourcesOrRollback(
+                    combatantId,
+                    definitionId,
+                    "Il consumo della risorsa non è stato salvato nella scheda.",
                 )
             }
             activated = true
@@ -659,10 +864,48 @@ class BattleViewModel(
             message = "Il turno è cambiato: seleziona di nuovo la capacità."
             return
         }
+        val ability = abilities(targeting.attackerId)
+            .firstOrNull { it.id() == targeting.abilityId }
+            ?: run {
+                singleTargeting = null
+                message = "Capacità non trovata."
+                return
+        }
+        if (ability.healing() != null) {
+            val target = combatant(targetId)
+            val healing = ability.healing()
+            val self = targeting.attackerId == targetId
+            if (target == null) {
+                message = "Bersaglio non valido."
+                return
+            }
+            if (target.dead()) {
+                message = "Una normale capacità di cura non può riportare in vita un bersaglio morto."
+                return
+            }
+            if (isParty(targeting.attackerId) != isParty(targetId)) {
+                message = "Questa cura può bersagliare soltanto la propria squadra."
+                return
+            }
+            if (healing.target() == HealingTarget.SELF && !self) {
+                message = "Questa cura può essere usata soltanto su di sé."
+                return
+            }
+            if (healing.target() == HealingTarget.ALLY && self) {
+                message = "Questa cura richiede un alleato diverso da chi la usa."
+                return
+            }
+            targetSelection = targetId
+            val revisionBefore = state.revision()
+            useHealingAbility(targeting.attackerId, targetId, ability)
+            if (state.revision() != revisionBefore) singleTargeting = null
+            return
+        }
         if (sanitizeTargetFor(targeting.attackerId, targetId) == null) {
             message = when {
                 targetId == targeting.attackerId -> "L'attore non può essere il proprio bersaglio."
-                combatant(targetId)?.defeated() == true -> "Il bersaglio è già a 0 punti ferita."
+                combatant(targetId)?.let { it.defeated() || it.dead() } == true ->
+                    "Il bersaglio è già sconfitto."
                 else -> "Bersaglio non valido."
             }
             return
@@ -673,6 +916,42 @@ class BattleViewModel(
         attack(targeting.attackerId, targetId, targeting.abilityId)
         if (state.revision() != revisionBefore) {
             singleTargeting = null
+        }
+    }
+
+    /** Cura strutturata: costo, risorsa, gittata e formula vengono risolti dal motore. */
+    private fun useHealingAbility(
+        healerId: String,
+        targetId: String,
+        ability: AbilityDefinition,
+    ) {
+        val definitionId = combatant(healerId)?.snapshot()?.definitionId() ?: return
+        val consumesResource = ability.resourceCost() > 0
+        val undoEffect = if (consumesResource) {
+            UndoEffect.ResourceChange(healerId, definitionId)
+        } else {
+            UndoEffect.None
+        }
+        var restored: Int? = null
+        command(undoEffect) {
+            val healed = session.useHealingAbility(healerId, targetId, ability.id())
+            if (consumesResource) {
+                persistCombatResourcesOrRollback(
+                    healerId,
+                    definitionId,
+                    "Il consumo della cura non è stato salvato nella scheda.",
+                )
+            }
+            restored = healed
+        }
+        restored?.let { amount ->
+            if (amount > 0) {
+                push(targetId, FloatingNumber(++floatSequence, "+$amount", FloatKind.HEAL))
+            }
+            actionResolution = ActionResolution(
+                text = "«${ability.name()}»: ${name(targetId)} recupera $amount punti ferita.",
+                isHit = true,
+            )
         }
     }
 
@@ -717,6 +996,7 @@ class BattleViewModel(
      * e' nell'area e lascia decidere al tavolo chi supera il tiro.
      */
     fun resolveAreaAt(column: Int, row: Int) {
+        if (rejectMutationWhileEnemyCpuPending()) return
         val targeting = areaTargeting ?: return
         val center = GridPosition(column, row)
         if (editMode) {
@@ -743,8 +1023,26 @@ class BattleViewModel(
                 "Segna chi supera il tiro salvezza, poi applica."
             }
         } else {
-            command {
-                pushAreaResult(session.castArea(targeting.casterId, center, targeting.abilityId))
+            val definitionId = combatant(targeting.casterId)?.snapshot()?.definitionId() ?: return
+            val consumesResource = abilities(targeting.casterId)
+                .firstOrNull { it.id() == targeting.abilityId }
+                ?.resourceCost()
+                ?.let { it > 0 } == true
+            val undoEffect = if (consumesResource) {
+                UndoEffect.ResourceChange(targeting.casterId, definitionId)
+            } else {
+                UndoEffect.None
+            }
+            command(undoEffect) {
+                val result = session.castArea(targeting.casterId, center, targeting.abilityId)
+                if (consumesResource) {
+                    persistCombatResourcesOrRollback(
+                        targeting.casterId,
+                        definitionId,
+                        "Il consumo della risorsa dell'area non è stato salvato nella scheda.",
+                    )
+                }
+                pushAreaResult(result)
             }
             areaTargeting = null
         }
@@ -762,10 +1060,29 @@ class BattleViewModel(
 
     /** Applica la risoluzione manuale con gli esiti dei tiri salvezza decisi al tavolo. */
     fun applyPendingArea() {
+        if (rejectMutationWhileEnemyCpuPending()) return
         val pending = pendingArea ?: return
-        command {
+        val definitionId = combatant(pending.casterId)?.snapshot()?.definitionId() ?: return
+        val consumesResource = abilities(pending.casterId)
+            .firstOrNull { it.id() == pending.abilityId }
+            ?.resourceCost()
+            ?.let { it > 0 } == true
+        val undoEffect = if (consumesResource) {
+            UndoEffect.ResourceChange(pending.casterId, definitionId)
+        } else {
+            UndoEffect.None
+        }
+        command(undoEffect) {
             val saved = pending.targets.associate { it.combatantId to it.saved }
-            pushAreaResult(session.castAreaManual(pending.casterId, pending.center, pending.abilityId, saved))
+            val result = session.castAreaManual(pending.casterId, pending.center, pending.abilityId, saved)
+            if (consumesResource) {
+                persistCombatResourcesOrRollback(
+                    pending.casterId,
+                    definitionId,
+                    "Il consumo della risorsa dell'area non è stato salvato nella scheda.",
+                )
+            }
+            pushAreaResult(result)
         }
         pendingArea = null
     }
@@ -789,7 +1106,17 @@ class BattleViewModel(
         }
     }
 
-    fun endTurn() = command { session.endTurn() }
+    fun endTurn() {
+        if (enemyCpuBatchPending) {
+            message = "Attendi che la CPU completi la parte nemica di questo turno."
+            return
+        }
+        if (activeActorId?.let(::enemyCpuControlsActor) == true) {
+            message = "Questo combattente è controllato dalla CPU nemica."
+            return
+        }
+        command { session.endTurn() }
+    }
 
     /** Sposta a mano il turno corrente su un combattente scelto (correzione da tavolo). */
     fun setCurrentTurn(combatantId: String) = command { session.setCurrentTurn(combatantId) }
@@ -826,13 +1153,20 @@ class BattleViewModel(
     }
 
     fun undo() {
+        if (rejectMutationWhileEnemyCpuPending()) return
         message = null
         actionResolution = null
         val effect = undoEffects.lastOrNull() ?: UndoEffect.None
         try {
-            if (!session.undo()) {
-                message = "Niente da annullare."
-                return
+            if (effect is UndoEffect.EnemyCpuBatch) {
+                if (!session.undoTo(effect.startingRevision)) {
+                    throw IllegalStateException("Il batch CPU non può essere annullato completamente.")
+                }
+            } else {
+                if (!session.undo()) {
+                    message = "Niente da annullare."
+                    return
+                }
             }
             if (undoEffects.isNotEmpty()) undoEffects.removeLast()
             sync()
@@ -843,8 +1177,26 @@ class BattleViewModel(
                     }
                 }
                 is UndoEffect.ResourceChange -> {
-                    combatant(effect.combatantId)?.resources()?.let { restored ->
-                        resourceSink.onChanged(effect.definitionId, restored)
+                    if (!hasClonedInstances(effect.definitionId)) {
+                        combatant(effect.combatantId)?.resources()?.let { restored ->
+                            resourceSink.onChanged(effect.definitionId, restored)
+                        }
+                    }
+                }
+                is UndoEffect.EnemyCpuBatch -> {
+                    completedEnemyCpuTurnSignature = null
+                    suppressedEnemyCpuTurnSignature = enemyCpuTurnSignature ?: effect.turnSignature
+                    val resourceFailure = effect.resourceConsumers.entries.firstNotNullOfOrNull {
+                        (combatantId, definitionId) ->
+                        val restored = combatant(combatantId)?.resources() ?: return@firstNotNullOfOrNull null
+                        runCatching { resourceSink.onChanged(definitionId, restored) }
+                            .exceptionOrNull()
+                    }
+                    message = if (resourceFailure == null) {
+                        "Intero batch CPU annullato: l'automazione resta sospesa finché non scegli di riprenderla."
+                    } else {
+                        "Batch CPU annullato, ma le risorse della scheda non sono state riallineate: " +
+                            (resourceFailure.message ?: "errore sconosciuto")
                     }
                 }
                 UndoEffect.None -> Unit
@@ -865,7 +1217,7 @@ class BattleViewModel(
         targetId: String,
         amount: Int,
         damageType: DamageType = DamageType.FORCE,
-    ) = command {
+    ) = cpuGuardedTableCommand {
         val result = session.applyDamage(
             activeActorId.orEmpty(),
             targetId,
@@ -877,7 +1229,7 @@ class BattleViewModel(
         }
     }
 
-    fun rollDeathSave(targetId: String) = command {
+    fun rollDeathSave(targetId: String) = cpuGuardedTableCommand {
         val result = session.rollDeathSave(targetId, D20RollInput.digital())
         val label = when {
             result.dead() -> "Morto"
@@ -893,7 +1245,7 @@ class BattleViewModel(
      * Usa la modalità d20 già scelta nella barra dei comandi; il motore aggiunge
      * Sfinimento e l'eventuale Svantaggio imposto dall'armatura.
      */
-    fun rollAbilityCheck(combatantId: String, ability: SaveAbility, modifier: Int) = command {
+    fun rollAbilityCheck(combatantId: String, ability: SaveAbility, modifier: Int) = cpuGuardedTableCommand {
         session.rollAbilityCheck(
             combatantId,
             ability,
@@ -902,12 +1254,12 @@ class BattleViewModel(
         )
     }
 
-    fun stabilize(targetId: String) = command {
+    fun stabilize(targetId: String) = cpuGuardedTableCommand {
         session.stabilize(targetId, "manuale")
         push(targetId, floatInfo("Stabile"))
     }
 
-    fun setExhaustion(targetId: String, level: Int) = command {
+    fun setExhaustion(targetId: String, level: Int) = cpuGuardedTableCommand {
         session.setExhaustion(targetId, level)
         push(targetId, floatInfo("Sfinimento $level"))
     }
@@ -918,7 +1270,7 @@ class BattleViewModel(
 
     fun resolve(outcome: String = "Concluso dal tavolo") = command { session.resolve(outcome) }
 
-    fun heal(targetId: String, amount: Int) = command {
+    fun heal(targetId: String, amount: Int) = cpuGuardedTableCommand {
         val healed = session.heal(targetId, amount)
         if (healed > 0) push(targetId, FloatingNumber(++floatSequence, "+$healed", FloatKind.HEAL))
     }
@@ -926,10 +1278,10 @@ class BattleViewModel(
     /** Correzione dei PF attuali disponibile solo ai controlli della modalità Modifica. */
     fun setCurrentHitPoints(combatantId: String, value: Int) {
         val maximum = combatant(combatantId)?.snapshot()?.maxHitPoints() ?: return
-        command { session.setCurrentHitPoints(combatantId, value.coerceIn(0, maximum)) }
+        cpuGuardedTableCommand { session.setCurrentHitPoints(combatantId, value.coerceIn(0, maximum)) }
     }
 
-    fun grantTemporary(targetId: String, amount: Int) = command {
+    fun grantTemporary(targetId: String, amount: Int) = cpuGuardedTableCommand {
         val granted = session.grantTemporaryHitPoints(targetId, amount)
         if (granted > 0) {
             push(targetId, FloatingNumber(++floatSequence, "+$granted PFT", FloatKind.TEMPORARY))
@@ -940,7 +1292,7 @@ class BattleViewModel(
      * `rounds` a zero significa durata manuale: la condizione resta finche' il
      * tavolo non la rimuove, che e' il caso piu' comune quando il DM improvvisa.
      */
-    fun addCondition(targetId: String, type: ConditionType, rounds: Int) = command {
+    fun addCondition(targetId: String, type: ConditionType, rounds: Int) = cpuGuardedTableCommand {
         val duration = if (rounds > 0) ConditionDuration.rounds(rounds) else ConditionDuration.manual()
         session.addCondition(
             "cond-${++floatSequence}",
@@ -955,7 +1307,7 @@ class BattleViewModel(
         push(targetId, floatInfo(type.italianLabel))
     }
 
-    fun removeCondition(targetId: String, conditionInstanceId: String) = command {
+    fun removeCondition(targetId: String, conditionInstanceId: String) = cpuGuardedTableCommand {
         session.removeCondition(targetId, conditionInstanceId)
     }
 
@@ -1034,6 +1386,8 @@ class BattleViewModel(
         get() {
             val active = activeActorId ?: return false
             return status == CombatStatus.ACTIVE &&
+                !enemyCpuBatchPending &&
+                !enemyCpuControlsCurrentTurn &&
                 placementOf(active) != null &&
                 movementSquaresRemaining(active) > 0
         }
@@ -1145,12 +1499,30 @@ class BattleViewModel(
         place(combatantId, column, row, squaresPerSideFor(combatantId))
     }
 
-    fun move(combatantId: String, column: Int, row: Int) = command {
-        val feet = session.moveCombatant(combatantId, GridPosition(column, row))
-        push(combatantId, FloatingNumber(++floatSequence, feetWithMetres(feet, "ft"), FloatKind.INFO))
+    fun move(combatantId: String, column: Int, row: Int) {
+        if (enemyCpuBatchPending) {
+            message = "Attendi che la CPU completi la parte nemica di questo turno."
+            return
+        }
+        if (enemyCpuControlsActor(combatantId)) {
+            message = "Questo combattente è controllato dalla CPU nemica."
+            return
+        }
+        command {
+            val feet = session.moveCombatant(combatantId, GridPosition(column, row))
+            push(combatantId, FloatingNumber(++floatSequence, feetWithMetres(feet, "ft"), FloatKind.INFO))
+        }
     }
 
     fun moveActive(column: Int, row: Int) {
+        if (enemyCpuBatchPending) {
+            message = "Attendi che la CPU completi la parte nemica di questo turno."
+            return
+        }
+        if (enemyCpuControlsCurrentTurn) {
+            message = "La CPU sta controllando questo turno."
+            return
+        }
         val actor = activeActorId ?: run {
             message = "Nessun attore attivo."
             return
@@ -1214,6 +1586,16 @@ class BattleViewModel(
         inspectionSelection?.takeIf { combatant(it) != null }?.let { put("inspectedCombatantId", it) }
         put("rollMode", rollMode.name)
         put("encounterMode", encounterMode.name)
+        if (enemyCpuEnabled) {
+            put("enemyCpuDifficulty", enemyCpuDifficulty.name)
+            put("enemyCpuSpeed", enemyCpuSpeed.name)
+        }
+        if (enemyCpuTurnSuppressed) {
+            enemyCpuTurnSignature?.let { put("enemyCpuSuppressedTurn", it) }
+        }
+        if (enemyCpuBatchCompleted) {
+            enemyCpuTurnSignature?.let { put("enemyCpuCompletedTurn", it) }
+        }
         put("editMode", editMode.toString())
         put("mapEditMode", mapEditMode.toString())
         if (footprints.isNotEmpty()) {
@@ -1234,6 +1616,11 @@ class BattleViewModel(
         singleTargeting = null
         movementReachVisible = false
         movementReachHover = false
+        enemyCpuBusy = false
+        enemyCpuActingCombatantId = null
+        enemyCpuActionLabel = null
+        suppressedEnemyCpuTurnSignature = null
+        completedEnemyCpuTurnSignature = null
         message = null
         editMode = presentation["editMode"] == "true"
         mapEditMode = editMode && presentation["mapEditMode"] == "true"
@@ -1254,6 +1641,13 @@ class BattleViewModel(
         encounterMode = presentation["encounterMode"]
             ?.let { name -> runCatching { EncounterMode.valueOf(name) }.getOrNull() }
             ?: EncounterMode.ROLEPLAY_FIGHT_EXPLORATION
+        val restoredCpuDifficulty = presentation["enemyCpuDifficulty"]
+            ?.let { name -> runCatching { EnemyCpuDifficulty.valueOf(name) }.getOrNull() }
+        enemyCpuEnabled = restoredCpuDifficulty != null
+        enemyCpuDifficulty = restoredCpuDifficulty ?: EnemyCpuDifficulty.MEDIUM
+        enemyCpuSpeed = presentation["enemyCpuSpeed"]
+            ?.let { name -> runCatching { EnemyCpuSpeed.valueOf(name) }.getOrNull() }
+            ?: EnemyCpuSpeed.NORMAL
         footprints = presentation["footprints"]
             ?.split(',')
             ?.mapNotNull { entry ->
@@ -1268,6 +1662,11 @@ class BattleViewModel(
             ?.toMap()
             .orEmpty()
         sync()
+        val currentCpuTurn = enemyCpuTurnSignature
+        suppressedEnemyCpuTurnSignature = presentation["enemyCpuSuppressedTurn"]
+            ?.takeIf { it == currentCpuTurn }
+        completedEnemyCpuTurnSignature = presentation["enemyCpuCompletedTurn"]
+            ?.takeIf { it == currentCpuTurn && suppressedEnemyCpuTurnSignature == null }
     }
 
     fun expire(combatantId: String, floatId: Long) {
@@ -1314,9 +1713,132 @@ class BattleViewModel(
 
     private fun floatInfo(text: String) = FloatingNumber(++floatSequence, text, FloatKind.INFO)
 
+    /** Traduce ogni esito CPU in feedback locale sul token interessato. */
+    internal fun pushEnemyCpuActionFeedback(action: EnemyCpuActionReport) {
+        when (action.type()) {
+            EnemyCpuActionType.ATTACK -> {
+                if (action.targetId().isNotBlank()) {
+                    push(
+                        action.targetId(),
+                        when {
+                            action.amount() > 0 ->
+                                FloatingNumber(++floatSequence, "-${action.amount()}", FloatKind.DAMAGE)
+                            action.hit() -> FloatingNumber(++floatSequence, "0/Immune", FloatKind.INFO)
+                            else -> FloatingNumber(++floatSequence, "Mancato", FloatKind.MISS)
+                        },
+                    )
+                }
+            }
+            EnemyCpuActionType.HEAL -> {
+                if (action.targetId().isNotBlank() && action.amount() > 0) {
+                    val slotSuffix = action.slotLevel()
+                        .takeIf { it > 0 }
+                        ?.let { " · slot di $it° livello" }
+                        .orEmpty()
+                    push(
+                        action.targetId(),
+                        FloatingNumber(
+                            ++floatSequence,
+                            "+${action.amount()}$slotSuffix",
+                            FloatKind.HEAL,
+                        ),
+                    )
+                }
+            }
+            EnemyCpuActionType.AREA_ATTACK -> {
+                action.targets().forEach { target ->
+                    when {
+                        target.amount() > 0 -> push(
+                            target.targetId(),
+                            FloatingNumber(
+                                ++floatSequence,
+                                "-${target.amount()}",
+                                if (target.saved()) FloatKind.INFO else FloatKind.DAMAGE,
+                            ),
+                        )
+                        target.saved() -> push(target.targetId(), floatInfo("Salvo"))
+                        else -> push(target.targetId(), floatInfo("0/Immune"))
+                    }
+                }
+            }
+            else -> Unit
+        }
+    }
+
     private fun push(combatantId: String, number: FloatingNumber) {
         floating = floating.toMutableMap().apply {
             put(combatantId, this[combatantId].orEmpty() + number)
+        }
+    }
+
+    /**
+     * Vale per il tavolo la stessa regola del batch CPU: più istanze della stessa
+     * definizione hanno risorse indipendenti in sessione ma una sola scheda
+     * esterna, quindi nessun valore da scrivere sarebbe quello giusto.
+     */
+    private fun hasClonedInstances(definitionId: String): Boolean =
+        session.currentState().combatants().values
+            .count { it.snapshot().definitionId() == definitionId } > 1
+
+    /** Mantiene la scheda autorevole allineata; se fallisce, annulla il comando appena eseguito. */
+    private fun persistCombatResourcesOrRollback(
+        combatantId: String,
+        definitionId: String,
+        failureMessage: String,
+    ) {
+        if (hasClonedInstances(definitionId)) return
+        try {
+            resourceSink.onChanged(
+                definitionId,
+                session.currentState().combatant(combatantId).resources(),
+            )
+        } catch (failure: Exception) {
+            session.undo()
+            throw IllegalStateException(failure.message ?: failureMessage, failure)
+        }
+    }
+
+    /**
+     * Un turno CPU produce piu' comandi nel motore, ma per il tavolo e' una sola
+     * operazione. Il marcatore e' la revisione da cui il turno e' partito: Undo
+     * ripristina tutto quello che e' arrivato dopo, senza dover contare i comandi
+     * ne' indovinare quanti checkpoint ne abbia prodotti ciascuno.
+     */
+    internal fun recordEnemyCpuUndoBatch(
+        result: EnemyCpuResult,
+        resourceChanges: Map<String, EnemyCpuResourceDelta>,
+        turnSignature: String,
+    ) {
+        if (result.endingRevision() == result.startingRevision()) return
+        val resourceConsumers = resourceChanges.mapValues { (_, delta) -> delta.definitionId }
+        undoEffects.addLast(
+            UndoEffect.EnemyCpuBatch(result.startingRevision(), resourceConsumers, turnSignature),
+        )
+    }
+
+    /** Propaga una sola volta lo stato finale di ogni risorsa realmente mutata dal turno CPU. */
+    internal fun persistEnemyCpuResourceChanges(
+        resourceChanges: Map<String, EnemyCpuResourceDelta>,
+    ): String? {
+        for ((_, delta) in resourceChanges) {
+            try {
+                resourceSink.onChanged(delta.definitionId, delta.after)
+            } catch (failure: Exception) {
+                return failure.message
+                    ?: "Il turno CPU è concluso, ma le risorse non sono state salvate nella scheda."
+            }
+        }
+        return null
+    }
+
+    /** Se il salvataggio delle risorse fallisce, il turno CPU torna atomicamente allo stato iniziale. */
+    internal fun rollbackEnemyCpuCommands(
+        startingRevision: Long,
+        resourceChanges: Map<String, EnemyCpuResourceDelta>,
+    ) {
+        session.undoTo(startingRevision)
+        for ((_, delta) in resourceChanges) {
+            runCatching { resourceSink.onChanged(delta.definitionId, delta.before) }
         }
     }
 
@@ -1326,10 +1848,25 @@ class BattleViewModel(
      * Una violazione delle regole diventa un messaggio, non un errore fatale: il
      * motore ha gia' annullato il proprio comando, quindi lo stato resta coerente.
      */
+    private fun cpuGuardedTableCommand(block: () -> Unit) {
+        command(block = block)
+    }
+
+    /**
+     * Il breve ritardo dello scheduler è parte del batch: nessun comando del
+     * tavolo deve poter cambiare lo stato che la CPU sta per valutare.
+     */
+    private fun rejectMutationWhileEnemyCpuPending(): Boolean {
+        if (!enemyCpuBatchPending || editMode) return false
+        message = "Attendi che la CPU completi la parte nemica di questo turno."
+        return true
+    }
+
     private fun command(
         undoEffect: UndoEffect = UndoEffect.None,
         block: () -> Unit,
     ) {
+        if (rejectMutationWhileEnemyCpuPending()) return
         val revisionBefore = state.revision()
         var completed = false
         try {
@@ -1349,7 +1886,7 @@ class BattleViewModel(
         }
     }
 
-    private fun sync(forceTurnReset: Boolean = false) {
+    internal fun sync(forceTurnReset: Boolean = false) {
         val previousTurn = turnIdentity(state)
         val updated = session.currentState()
         state = updated
@@ -1367,9 +1904,9 @@ class BattleViewModel(
             inspectionSelection = inspectionSelection?.takeIf { combatant(it) != null }
             targetSelection = sanitizeTarget(targetSelection)
             singleTargeting = singleTargeting?.takeIf {
-                it.attackerId == activeActorId &&
+                    it.attackerId == activeActorId &&
                     it.attackerId in activeCombatantIds &&
-                    combatant(it.attackerId)?.defeated() == false &&
+                    combatant(it.attackerId)?.let { actor -> !actor.defeated() && !actor.dead() } == true &&
                     abilities(it.attackerId).any { ability -> ability.id() == it.abilityId }
             }
         }
@@ -1386,7 +1923,7 @@ class BattleViewModel(
     private fun sanitizeTargetFor(attacker: String, candidate: String?): String? {
         return candidate?.takeIf {
             it != attacker &&
-                combatant(it)?.defeated() == false
+                combatant(it)?.let { target -> !target.defeated() && !target.dead() } == true
         }
     }
 
@@ -1431,6 +1968,12 @@ class BattleViewModel(
         data object None : UndoEffect
         data class CombatantEdit(val combatantId: String, val definitionId: String) : UndoEffect
         data class ResourceChange(val combatantId: String, val definitionId: String) : UndoEffect
+        data class EnemyCpuBatch(
+            /** Revisione precedente al primo comando del turno CPU. */
+            val startingRevision: Long,
+            val resourceConsumers: Map<String, String>,
+            val turnSignature: String,
+        ) : UndoEffect
     }
 
     private val undoEffects = ArrayDeque<UndoEffect>()
@@ -1487,3 +2030,33 @@ data class PendingArea(
 /** Ultimi eventi in ordine cronologico inverso, per il registro a schermo. */
 fun List<CombatEvent>.latest(count: Int): List<CombatEvent> =
     asReversed().take(count)
+
+val EnemyCpuDifficulty.italianLabel: String
+    get() = when (this) {
+        EnemyCpuDifficulty.EASY -> "Facile"
+        EnemyCpuDifficulty.MEDIUM -> "Medio"
+        EnemyCpuDifficulty.SORRY_FOR_YOU -> "Mi dispiace per te!"
+    }
+
+/**
+ * Ritmo di riproduzione del turno nemico.
+ *
+ * [openingDelayMillis] e' la pausa fra il passaggio del turno e il primo comando,
+ * [stepDelayMillis] quella fra un comando e il successivo. A zero il turno resta
+ * quello di prima: tutto risolto in un fotogramma, per chi preferisce la velocita'
+ * alla leggibilita'.
+ */
+enum class EnemyCpuSpeed(val openingDelayMillis: Long, val stepDelayMillis: Long) {
+    SLOW(700L, 1_200L),
+    NORMAL(450L, 700L),
+    FAST(300L, 380L),
+    INSTANT(200L, 0L),
+}
+
+val EnemyCpuSpeed.italianLabel: String
+    get() = when (this) {
+        EnemyCpuSpeed.SLOW -> "Lenta"
+        EnemyCpuSpeed.NORMAL -> "Normale"
+        EnemyCpuSpeed.FAST -> "Veloce"
+        EnemyCpuSpeed.INSTANT -> "Istantanea"
+    }

@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,15 +64,37 @@ import app.d6d.ui.session.SessionMenuButton
 import app.d6d.ui.session.SessionMenuDialog
 import app.d6d.ui.session.SessionWorkspace
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.state.EnemyCpuSpeed
+import app.d6d.ui.state.italianLabel
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
+import kotlinx.coroutines.delay
 
 private val TURN_ORDER_LABEL_SPACE = 24.dp
 private val TURN_ORDER_EDIT_EXTRA_HEIGHT = 28.dp
 private val TURN_ORDER_COMPACT_BREAKPOINT = 960.dp
 private val TURN_ORDER_MIN_HEIGHT = 56.dp
 private val TURN_ORDER_MAX_HEIGHT = 240.dp
+
+/**
+ * Seam testabile dello scheduler: dopo l'attesa ricontrolla sia guard sia identita' del turno.
+ *
+ * L'attesa iniziale separa il passaggio del turno dal primo comando nemico; le
+ * pause fra un comando e il successivo appartengono invece alla riproduzione
+ * ritmata del ViewModel.
+ */
+internal suspend fun scheduleEnemyCpuTurnIfStillCurrent(
+    viewModel: BattleViewModel,
+    scheduledTurnKey: String?,
+    delayMillis: Long = viewModel.enemyCpuSpeed.openingDelayMillis,
+) {
+    if (!viewModel.shouldScheduleEnemyCpu || viewModel.enemyCpuTurnKey != scheduledTurnKey) return
+    delay(delayMillis.coerceAtLeast(0L))
+    if (viewModel.shouldScheduleEnemyCpu && viewModel.enemyCpuTurnKey == scheduledTurnKey) {
+        viewModel.playEnemyCpuTurnPaced()
+    }
+}
 
 /**
  * Schermata di combattimento.
@@ -96,6 +119,18 @@ fun BattleScreen(
 ) {
     val layout = LocalUiLayout.current
     val density = LocalDensity.current
+    val cpuTurnKey = viewModel.enemyCpuTurnKey
+    LaunchedEffect(
+        viewModel.sessionGeneration,
+        cpuTurnKey,
+        viewModel.enemyCpuEnabled,
+        viewModel.editMode,
+        viewModel.status,
+        viewModel.enemyCpuTurnSuppressed,
+        viewModel.enemyCpuBatchCompleted,
+    ) {
+        scheduleEnemyCpuTurnIfStillCurrent(viewModel, cpuTurnKey)
+    }
     // Il fondale resta trasparente in tutta la cornice di battaglia. BattleStage
     // isola invece mappa, griglia e relativi controlli con una superficie opaca.
     Column(modifier.fillMaxSize()) {
@@ -109,6 +144,7 @@ fun BattleScreen(
         // Filo d'oro sotto l'intestazione: chiude la fascia dei turni come il
         // bordo inciso di un pannello, senza il peso di un bordo pieno.
         GoldenRule()
+        EnemyCpuBanner(viewModel, compact)
         // Il bordo inferiore della fascia turni: trascinandolo verso il basso la
         // fascia cresce. Solo sul desktop e solo quando l'ordine turni e' visibile.
         if (!compact && layout.turnOrderDisplayMode != TurnOrderDisplayMode.HIDDEN) {
@@ -478,7 +514,9 @@ private fun Rail(
     modifier: Modifier = Modifier,
     dropTarget: TokenPlacementDrag? = null,
 ) {
-    val standing = ids.count { viewModel.combatant(it)?.defeated() == false }
+    val standing = ids.count {
+        viewModel.combatant(it)?.let { combatant -> !combatant.defeated() && !combatant.dead() } == true
+    }
     val accent = if (faction == Faction.PARTY) Palette.Party else Palette.Enemy
     var rosterDialogOpen by remember { mutableStateOf(false) }
     Column(
@@ -754,10 +792,103 @@ private fun BattleTopBar(
                     openSessionCount = openSessionCount,
                     autosaveWarning = autosaveWarning,
                 )
+                // Senza CPU la fascia nemica non compare mai: senza questo segno
+                // nulla direbbe al tavolo che gli avversari li muove lui.
+                if (!viewModel.enemyCpuEnabled) {
+                    Chip(text = "Sandbox", color = Palette.Party)
+                }
                 if (viewModel.status != CombatStatus.ACTIVE) {
                     Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EnemyCpuBanner(viewModel: BattleViewModel, compact: Boolean) {
+    if (!viewModel.enemyCpuEnabled || viewModel.enemyCpuTurnKey == null) return
+    val suspended = viewModel.enemyCpuTurnSuppressed
+    val completed = viewModel.enemyCpuBatchCompleted
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.Enemy.copy(alpha = if (suspended) 0.08f else 0.13f))
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (suspended) {
+                "Batch CPU annullato e sospeso per questo turno."
+            } else if (viewModel.editMode) {
+                "CPU in pausa mentre la modalità Modifica è attiva."
+            } else if (completed) {
+                "I nemici hanno agito · completa il turno con gli alleati."
+            } else {
+                // Mentre il turno scorre la fascia racconta il comando in corso:
+                // e' l'unico posto dove un'azione gia' risolta resta leggibile.
+                viewModel.enemyCpuActionLabel?.takeIf { viewModel.enemyCpuBusy }
+                    ?: "CPU · ${viewModel.enemyCpuDifficulty.italianLabel} sta decidendo…"
+            },
+            color = if (suspended) Palette.TextMuted else Palette.Enemy,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (suspended) {
+            GameButton(
+                label = "Riprendi CPU",
+                accent = Palette.Enemy,
+                dense = true,
+                onClick = viewModel::resumeEnemyCpuTurn,
+            )
+        }
+        EnemyCpuSpeedPicker(viewModel, compact)
+    }
+}
+
+/**
+ * Ritmo con cui la CPU mostra il proprio turno.
+ *
+ * Sta nella fascia perche' e' li' che il tavolo si accorge di non star vedendo
+ * nulla: la scelta vale subito, anche a turno gia' avviato, e viene salvata con
+ * la sessione. Sulla shell stretta un solo comando cicla fra i ritmi.
+ */
+@Composable
+private fun EnemyCpuSpeedPicker(viewModel: BattleViewModel, compact: Boolean) {
+    if (compact) {
+        val speeds = EnemyCpuSpeed.values()
+        GameButton(
+            label = "Ritmo · ${viewModel.enemyCpuSpeed.italianLabel}",
+            accent = Palette.Gold,
+            dense = true,
+            onClick = {
+                viewModel.enemyCpuSpeed = speeds[(viewModel.enemyCpuSpeed.ordinal + 1) % speeds.size]
+            },
+        )
+        return
+    }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "Ritmo",
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        EnemyCpuSpeed.values().forEach { speed ->
+            val selected = viewModel.enemyCpuSpeed == speed
+            GameButton(
+                label = speed.italianLabel,
+                accent = if (selected) Palette.Gold else Palette.TextMuted,
+                selected = selected,
+                dense = true,
+                onClick = { viewModel.enemyCpuSpeed = speed },
+            )
         }
     }
 }

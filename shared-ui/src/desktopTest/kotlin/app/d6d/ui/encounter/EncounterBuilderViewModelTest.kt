@@ -1,6 +1,8 @@
 package app.d6d.ui.encounter
 
 import app.d6d.domain.combat.CombatStatus
+import app.d6d.engine.ai.EnemyCpuDifficulty
+import app.d6d.ui.state.EnemyCpuSpeed
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.SheetStore
@@ -146,10 +148,111 @@ class EncounterBuilderViewModelTest {
     }
 
     @Test
-    fun `nuova partita guida da template a partecipanti griglia e modalita`() {
+    fun `una sessione mono fazione resta valida ma dichiara la cpu inattiva`() {
+        val builder = EncounterBuilderViewModel(roster(), seedProvider = { 1L })
+        val hero = builder.participants.first { it.kind == RosterKind.PERSONAGGIO }
+        val creature = builder.participants.first { it.kind == RosterKind.CREATURA }
+        builder.clearSelection()
+
+        builder.setSelected(hero.id, true)
+        assertTrue(builder.canStart)
+        val noEnemies = requireNotNull(builder.enemyCpuInactiveReason)
+        assertTrue(noEnemies.contains("alcun avversario"))
+        assertTrue(enemyCpuInactiveWarning(noEnemies).contains("sessione mono-fazione"))
+        assertFalse(enemyCpuInactiveWarning(noEnemies).contains("esplorativa"))
+
+        builder.setSelected(hero.id, false)
+        builder.setSelected(creature.id, true)
+        assertTrue(builder.canStart)
+        assertTrue(builder.enemyCpuInactiveReason.orEmpty().contains("almeno un alleato"))
+
+        builder.setSelected(hero.id, true)
+        assertNull(builder.enemyCpuInactiveReason)
+    }
+
+    @Test
+    fun `la sandbox avvia la partita senza alcuna cpu nemica`() {
+        val builder = EncounterBuilderViewModel(roster(), seedProvider = { 1L })
+        val creature = builder.participants.first { it.kind == RosterKind.CREATURA }
+
+        builder.enemyCpuDifficulty = null
+        val presentation = newEncounterPresentation(builder.mode, builder.enemyCpuDifficulty)
+        assertFalse("enemyCpuDifficulty" in presentation)
+        assertEquals(builder.mode.name, presentation["encounterMode"])
+
+        // Senza CPU non ha senso avvertire che la CPU non potrebbe agire.
+        builder.clearSelection()
+        builder.setSelected(creature.id, true)
+        assertNull(builder.enemyCpuInactiveReason)
+
+        val battle = BattleViewModel(builder.startedSession())
+        battle.adopt(battle.session, presentation)
+        assertFalse(battle.enemyCpuEnabled)
+        assertFalse(battle.shouldScheduleEnemyCpu)
+        assertNull(battle.enemyCpuTurnKey)
+    }
+
+    @Test
+    fun `scegliere una difficolta riaccende la cpu nella partita creata`() {
+        val builder = EncounterBuilderViewModel(roster(), seedProvider = { 1L })
+
+        builder.enemyCpuDifficulty = null
+        builder.enemyCpuDifficulty = EnemyCpuDifficulty.SORRY_FOR_YOU
+        val presentation = newEncounterPresentation(builder.mode, builder.enemyCpuDifficulty)
+
+        assertEquals(EnemyCpuDifficulty.SORRY_FOR_YOU.name, presentation["enemyCpuDifficulty"])
+
+        val battle = BattleViewModel(builder.startedSession())
+        battle.adopt(battle.session, presentation)
+        assertTrue(battle.enemyCpuEnabled)
+        assertEquals(EnemyCpuDifficulty.SORRY_FOR_YOU, battle.enemyCpuDifficulty)
+    }
+
+    @Test
+    fun `il ritmo scelto nella procedura arriva nella partita`() {
+        val builder = EncounterBuilderViewModel(roster(), seedProvider = { 1L })
+        assertEquals(EnemyCpuSpeed.NORMAL, builder.enemyCpuSpeed)
+
+        builder.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+        val battle = BattleViewModel(builder.startedSession())
+        battle.adopt(
+            battle.session,
+            newEncounterPresentation(builder.mode, builder.enemyCpuDifficulty, builder.enemyCpuSpeed),
+        )
+        assertEquals(EnemyCpuSpeed.SLOW, battle.enemyCpuSpeed)
+
+        // Senza CPU non c'e' ritmo da salvare: la partita e' tutta del tavolo.
+        val sandbox = newEncounterPresentation(builder.mode, null, builder.enemyCpuSpeed)
+        assertFalse("enemyCpuSpeed" in sandbox)
+
+        builder.restartWizard()
+        assertEquals(EnemyCpuSpeed.NORMAL, builder.enemyCpuSpeed)
+    }
+
+    @Test
+    fun `il copy difficolta confronta i livelli senza promettere piani tra turni`() {
+        val easy = EnemyCpuDifficulty.EASY.italianComparison
+        val medium = EnemyCpuDifficulty.MEDIUM.italianComparison
+        val hard = EnemyCpuDifficulty.SORRY_FOR_YOU.italianComparison
+
+        assertTrue(easy.contains("Rispetto a Medio"))
+        assertTrue(easy.contains("scelte semplici"))
+        assertTrue(easy.contains("slot minimo"))
+        assertTrue(medium.contains("Rispetto a Facile"))
+        assertTrue(medium.contains("Mi dispiace per te!"))
+        assertTrue(medium.contains("potenzia una cura"))
+        assertTrue(hard.contains("Rispetto al normale"))
+        assertTrue(hard.contains("slot superiori"))
+        assertFalse(listOf(easy, medium, hard).any { it.contains("oltre il turno", ignoreCase = true) })
+        assertFalse(listOf(easy, medium, hard).any { it.contains("un turno alla volta", ignoreCase = true) })
+    }
+
+    @Test
+    fun `nuova partita guida fino alla difficolta e il reset ripristina medio`() {
         val builder = EncounterBuilderViewModel(roster(), seedProvider = { 1L })
 
         assertEquals(NewGameStep.TEMPLATE, builder.step)
+        assertEquals(EnemyCpuDifficulty.MEDIUM, builder.enemyCpuDifficulty)
         builder.useExistingTemplates()
         assertEquals(TemplateSource.ESISTENTI, builder.templateSource)
         assertEquals(NewGameStep.PARTECIPANTI, builder.step)
@@ -166,12 +269,21 @@ class EncounterBuilderViewModelTest {
         assertEquals(20, builder.gridRows)
         assertEquals(10, builder.feetPerSquare)
 
+        builder.continueFromMode()
+        assertEquals(NewGameStep.DIFFICOLTA, builder.step)
+        builder.enemyCpuDifficulty = EnemyCpuDifficulty.SORRY_FOR_YOU
+        builder.back()
+        assertEquals(NewGameStep.MODALITA, builder.step)
+        builder.continueFromMode()
+        assertEquals(EnemyCpuDifficulty.SORRY_FOR_YOU, builder.enemyCpuDifficulty)
+
         builder.restartWizard()
         assertEquals(NewGameStep.TEMPLATE, builder.step)
         assertNull(builder.templateSource)
         assertEquals(20, builder.gridColumns)
         assertEquals(15, builder.gridRows)
         assertEquals(5, builder.feetPerSquare)
+        assertEquals(EnemyCpuDifficulty.MEDIUM, builder.enemyCpuDifficulty)
     }
 
     @Test

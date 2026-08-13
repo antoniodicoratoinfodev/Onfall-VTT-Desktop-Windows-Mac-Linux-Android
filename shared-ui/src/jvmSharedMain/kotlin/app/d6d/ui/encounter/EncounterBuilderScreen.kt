@@ -33,6 +33,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.engine.CombatSession
+import app.d6d.engine.ai.EnemyCpuDifficulty
+import app.d6d.ui.state.EnemyCpuSpeed
+import app.d6d.ui.state.italianLabel
 import app.d6d.sheet.metresFromFeet
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
@@ -55,7 +58,9 @@ fun EncounterBuilderScreen(
     viewModel: EncounterBuilderViewModel,
     compact: Boolean,
     workspace: SessionWorkspace,
-    onStarted: (CombatSession, String, EncounterMode) -> Unit,
+    // La presentazione iniziale arriva gia' composta: difficolta' e ritmo sono
+    // scelte della procedura, non di chi apre la scheda.
+    onStarted: (CombatSession, String, Map<String, String>) -> Unit,
     onOpenBattle: () -> Unit,
     onOpenCompendium: () -> Unit,
     modifier: Modifier = Modifier,
@@ -125,6 +130,7 @@ fun EncounterBuilderScreen(
 
             NewGameStep.GRIGLIA -> GridStep(viewModel, compact, Modifier.weight(1f))
             NewGameStep.MODALITA -> ModeStep(viewModel, compact, Modifier.weight(1f))
+            NewGameStep.DIFFICOLTA -> DifficultyStep(viewModel, compact, Modifier.weight(1f))
         }
 
         if (viewModel.step != NewGameStep.TEMPLATE) GoldenRule()
@@ -149,10 +155,12 @@ private fun EncounterHeader(step: NewGameStep, compact: Boolean) {
         )
         Text(
             text = when (step) {
-                NewGameStep.TEMPLATE -> "1 di 4 · Parti da una partita inclusa, dai tuoi template o da zero."
-                NewGameStep.PARTECIPANTI -> "2 di 4 · Scegli personaggi, mob, quantità e schieramenti."
-                NewGameStep.GRIGLIA -> "3 di 4 · Imposta dimensioni e scala metrica della griglia."
-                NewGameStep.MODALITA -> "4 di 4 · Scegli l'esperienza e avvia la partita."
+                NewGameStep.TEMPLATE -> "1 di 5 · Parti da una partita inclusa, dai tuoi template o da zero."
+                NewGameStep.PARTECIPANTI -> "2 di 5 · Scegli personaggi, mob, quantità e schieramenti."
+                NewGameStep.GRIGLIA -> "3 di 5 · Imposta dimensioni e scala metrica della griglia."
+                NewGameStep.MODALITA -> "4 di 5 · Scegli l'esperienza con cui iniziare."
+                NewGameStep.DIFFICOLTA ->
+                    "5 di 5 · Scegli l'avversario: nessuna CPU, oppure quanto sarà spietata e con che ritmo."
             },
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
@@ -594,12 +602,182 @@ private fun ModeStep(
     }
 }
 
+/** Ultimo passaggio: rende esplicito quanto la CPU coordina lo schieramento nemico. */
+@Composable
+private fun DifficultyStep(
+    viewModel: EncounterBuilderViewModel,
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(if (compact) 12.dp else 24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                "Quanto devono essere pericolosi i nemici?",
+                color = Palette.Text,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                "Medio è il livello normale. La difficoltà cambia le decisioni della CPU, " +
+                    "non le statistiche delle creature né le regole del combattimento. " +
+                    "Con Sandbox la CPU resta spenta e comandi tu anche gli avversari.",
+                color = Palette.TextMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            viewModel.enemyCpuInactiveReason?.let { warning ->
+                Text(
+                    enemyCpuInactiveWarning(warning),
+                    color = Palette.Enemy,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth()
+                        .background(Palette.Enemy.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                )
+            }
+            // La sandbox apre l'elenco perche' e' l'unica voce che spegne la CPU:
+            // le tre sotto scelgono soltanto quanto sara' tattica.
+            val sandbox = viewModel.enemyCpuDifficulty == null
+            GameButton(
+                label = SANDBOX_LABEL,
+                subtitle = SANDBOX_DESCRIPTION,
+                accent = if (sandbox) Palette.Party else Palette.TextMuted,
+                selected = sandbox,
+                onClick = { viewModel.enemyCpuDifficulty = null },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            EnemyCpuDifficulty.values().forEach { difficulty ->
+                val selected = viewModel.enemyCpuDifficulty == difficulty
+                GameButton(
+                    label = difficulty.italianLabel,
+                    subtitle = difficulty.italianComparison,
+                    accent = if (selected) difficulty.accent else Palette.TextMuted,
+                    selected = selected,
+                    onClick = { viewModel.enemyCpuDifficulty = difficulty },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (!sandbox) EnemyCpuSpeedStep(viewModel, compact)
+        }
+    }
+}
+
+/**
+ * Ritmo con cui si vedra' giocare la CPU.
+ *
+ * Sta sotto la difficolta' perche' e' la seconda meta' della stessa domanda: non
+ * quanto sara' brava, ma quanto in fretta la vedrai muovere. Resta poi cambiabile
+ * durante la partita dalla fascia nemica.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EnemyCpuSpeedStep(viewModel: EncounterBuilderViewModel, compact: Boolean) {
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "Con che ritmo vuoi vedere i turni nemici?",
+            color = Palette.Text,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            "La CPU incatena spesso spostamento e attacchi nello stesso turno: la pausa fra un " +
+                "comando e il successivo serve a vederli uno per uno. Non cambia le regole.",
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            EnemyCpuSpeed.values().forEach { speed ->
+                val selected = viewModel.enemyCpuSpeed == speed
+                GameButton(
+                    label = speed.italianLabel,
+                    subtitle = if (compact) null else speed.italianPace,
+                    accent = if (selected) Palette.Gold else Palette.TextMuted,
+                    selected = selected,
+                    dense = compact,
+                    onClick = { viewModel.enemyCpuSpeed = speed },
+                )
+            }
+        }
+    }
+}
+
+internal val EnemyCpuSpeed.italianPace: String
+    get() = when (this) {
+        EnemyCpuSpeed.SLOW -> "Una pausa lunga fra un comando e l'altro."
+        EnemyCpuSpeed.NORMAL -> "Il ritmo consigliato per seguire lo scontro."
+        EnemyCpuSpeed.FAST -> "Si vede ogni comando, ma senza attese."
+        EnemyCpuSpeed.INSTANT -> "Nessuna pausa: il turno nemico si risolve tutto insieme."
+    }
+
+internal fun enemyCpuInactiveWarning(reason: String): String =
+    "$reason Puoi comunque avviare questa sessione mono-fazione."
+
+internal const val SANDBOX_LABEL = "Sandbox"
+
+/**
+ * Il testo dice cosa cambia davvero: chi decide le mosse nemiche. Le regole, i
+ * tiri e i budget del turno restano quelli del motore anche qui.
+ */
+internal const val SANDBOX_DESCRIPTION =
+    "Nessuna CPU: gli avversari li muovi e li fai agire tu, come gli alleati. " +
+        "Utile per arbitrare a mano, provare una scena o preparare un incontro. " +
+        "Le regole restano quelle del motore: cambia solo chi sceglie le mosse nemiche."
+
+internal val EnemyCpuDifficulty.italianLabel: String
+    get() = when (this) {
+        EnemyCpuDifficulty.EASY -> "Facile"
+        EnemyCpuDifficulty.MEDIUM -> "Medio"
+        EnemyCpuDifficulty.SORRY_FOR_YOU -> "Mi dispiace per te!"
+    }
+
+internal val EnemyCpuDifficulty.italianComparison: String
+    get() = when (this) {
+        EnemyCpuDifficulty.EASY ->
+            "Rispetto a Medio usa scelte semplici: attacca il bersaglio più vicino e cura solo " +
+                "nelle emergenze, con lo slot minimo sufficiente e senza focus o accerchiamenti. " +
+                "È molto meno efficiente di «Mi dispiace per te!»."
+        EnemyCpuDifficulty.MEDIUM ->
+            "Il livello normale: coordina attacchi e cure e cerca buone posizioni. Rispetto a Facile gioca " +
+                "di squadra e potenzia una cura quanto basta per uscire dal pericolo; rispetto a " +
+                "«Mi dispiace per te!» insiste meno sul bersaglio prioritario e accetta scelte più prudenti."
+        EnemyCpuDifficulty.SORRY_FOR_YOU ->
+            "Rispetto al normale concentra il fuoco sui bersagli vulnerabili, accerchia, evita il fuoco " +
+                "amico e investe slot superiori per rimettere subito in sicurezza la squadra. " +
+                "È la CPU più aggressiva e coordinata."
+    }
+
+private val EnemyCpuDifficulty.accent
+    get() = when (this) {
+        EnemyCpuDifficulty.EASY -> Palette.Heal
+        EnemyCpuDifficulty.MEDIUM -> Palette.GoldBright
+        EnemyCpuDifficulty.SORRY_FOR_YOU -> Palette.Enemy
+    }
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NewGameFooter(
     viewModel: EncounterBuilderViewModel,
     compact: Boolean,
-    onStarted: (CombatSession, String, EncounterMode) -> Unit,
+    // La presentazione iniziale arriva gia' composta: difficolta' e ritmo sono
+    // scelte della procedura, non di chi apre la scheda.
+    onStarted: (CombatSession, String, Map<String, String>) -> Unit,
     onOpenCompendium: () -> Unit,
 ) {
     if (viewModel.step == NewGameStep.TEMPLATE) return
@@ -639,13 +817,32 @@ private fun NewGameFooter(
             NewGameStep.MODALITA -> {
                 GameButton("Indietro", accent = Palette.TextMuted, onClick = { viewModel.back() })
                 GameButton(
+                    label = "Avanti · Difficoltà",
+                    subtitle = "Poi scegli se e quanto sarà tattica la CPU nemica",
+                    accent = Palette.Heal,
+                    onClick = { viewModel.continueFromMode() },
+                )
+            }
+            NewGameStep.DIFFICOLTA -> {
+                GameButton("Indietro", accent = Palette.TextMuted, onClick = { viewModel.back() })
+                GameButton(
                     label = "Avvia partita",
-                    subtitle = viewModel.mode.label,
+                    subtitle = viewModel.enemyCpuInactiveReason
+                        ?: "${viewModel.mode.label} · " +
+                        (viewModel.enemyCpuDifficulty?.let { "CPU ${it.italianLabel}" } ?: SANDBOX_LABEL),
                     accent = Palette.Heal,
                     enabled = viewModel.canStart,
                     onClick = {
                         viewModel.tryStart()?.let { session ->
-                            onStarted(session, viewModel.encounterName.trim(), viewModel.mode)
+                            onStarted(
+                                session,
+                                viewModel.encounterName.trim(),
+                                newEncounterPresentation(
+                                    viewModel.mode,
+                                    viewModel.enemyCpuDifficulty,
+                                    viewModel.enemyCpuSpeed,
+                                ),
+                            )
                         }
                     },
                 )

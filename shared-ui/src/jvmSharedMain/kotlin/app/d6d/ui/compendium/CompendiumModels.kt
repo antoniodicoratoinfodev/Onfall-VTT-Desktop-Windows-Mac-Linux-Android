@@ -10,6 +10,7 @@ import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.HealingDefinition
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import java.math.BigDecimal
@@ -35,28 +36,20 @@ data class AbilityDraft(
     val spellOrCantrip: Boolean = false,
     val rangeFeet: Int = 5,
     val maxTargets: Int = 1,
+    val dealsDamage: Boolean = true,
     val diceCount: Int = 1,
     val diceSides: Int = 6,
     val diceModifier: Int = 2,
     val damageType: DamageType = DamageType.SLASHING,
     val automationStatus: AutomationStatus = AutomationStatus.AUTOMATED,
     val rulesText: String = "",
+    val resourceId: String = "",
+    val resourceCost: Int = 0,
+    val healing: HealingDefinition? = null,
 ) {
-    fun toDefinition(): AbilityDefinition = AbilityDefinition.builder(
-        id.ifBlank { "cap-senza-nome" },
-        name.ifBlank { "Senza nome" },
-    )
-        .version(VERSION)
-        .source(SOURCE)
-        .rulesetVersion(RULESET)
-        .activationCost(activationCost)
-        .resolutionMethod(resolutionMethod)
-        .attackBonus(attackBonus)
-        .attackAbility(attackAbility)
-        .spellOrCantrip(spellOrCantrip)
-        .rangeFeet(rangeFeet)
-        .maxTargets(maxTargets.coerceAtLeast(1))
-        .damage(
+    fun toDefinition(): AbilityDefinition {
+        val structuredHealing = healing
+        val damage = if (dealsDamage && structuredHealing == null) {
             listOf(
                 DamageFormula.dice(
                     damageType,
@@ -64,11 +57,35 @@ data class AbilityDraft(
                     diceSides.coerceAtLeast(2),
                     diceModifier,
                 ),
-            ),
+            )
+        } else {
+            emptyList()
+        }
+        return AbilityDefinition.builder(
+            id.ifBlank { "cap-senza-nome" },
+            name.ifBlank { "Senza nome" },
         )
-        .automationStatus(automationStatus)
-        .rulesText(rulesText)
-        .build()
+            .version(VERSION)
+            .source(SOURCE)
+            .rulesetVersion(RULESET)
+            .activationCost(activationCost)
+            .resolutionMethod(
+                if (structuredHealing != null) ResolutionMethod.AUTOMATIC else resolutionMethod,
+            )
+            .attackBonus(attackBonus)
+            .attackAbility(attackAbility)
+            .spellOrCantrip(spellOrCantrip)
+            .rangeFeet(rangeFeet)
+            .maxTargets(if (structuredHealing != null) 1 else maxTargets.coerceAtLeast(1))
+            .damage(damage)
+            .automationStatus(
+                if (structuredHealing != null) AutomationStatus.AUTOMATED else automationStatus,
+            )
+            .rulesText(rulesText)
+            .resource(resourceId, resourceCost)
+            .healing(structuredHealing)
+            .build()
+    }
 
     companion object {
         fun from(definition: AbilityDefinition): AbilityDraft {
@@ -84,12 +101,16 @@ data class AbilityDraft(
                 spellOrCantrip = definition.spellOrCantrip(),
                 rangeFeet = definition.rangeFeet(),
                 maxTargets = definition.maxTargets(),
+                dealsDamage = definition.damage().isNotEmpty(),
                 diceCount = dice?.count() ?: 1,
                 diceSides = dice?.sides() ?: 6,
                 diceModifier = dice?.modifier() ?: 0,
                 damageType = formula?.type() ?: DamageType.SLASHING,
                 automationStatus = definition.automationStatus(),
                 rulesText = definition.rulesText(),
+                resourceId = definition.resourceId(),
+                resourceCost = definition.resourceCost(),
+                healing = definition.healing(),
             )
         }
     }

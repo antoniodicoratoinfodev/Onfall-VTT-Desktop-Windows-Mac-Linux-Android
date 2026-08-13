@@ -11,16 +11,33 @@ import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
+import app.d6d.domain.combat.DiceExpression
 import app.d6d.domain.combat.EventType
+import app.d6d.domain.combat.HealingDefinition
+import app.d6d.domain.combat.HealingSlotScaling
+import app.d6d.domain.combat.HealingTarget
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
+import app.d6d.domain.combat.SpellSlotResourceId
 import app.d6d.engine.CombatSession
+import app.d6d.engine.ai.EnemyCpuActionReport
+import app.d6d.engine.ai.EnemyCpuActionType
+import app.d6d.engine.ai.EnemyCpuDifficulty
+import app.d6d.engine.ai.EnemyCpuReason
+import app.d6d.engine.ai.EnemyCpuTargetReport
+import app.d6d.domain.space.GridPosition
+import app.d6d.domain.space.MapGrid
 import app.d6d.ui.content.SampleEncounter
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -34,11 +51,49 @@ class BattleViewModelTest {
     private companion object {
         const val ACTION_SURGE_ID = "srd521-it:feature:guerriero:azione-impetuosa"
         const val ACTION_SURGE_RESOURCE = "srd521-it:resource:guerriero:azione-impetuosa"
+        const val CPU_ATTACK_ID = "cpu-attacco-limitato"
+        const val CPU_ATTACK_RESOURCE = "cpu-risorsa-attacco"
     }
 
     private fun viewModel() = BattleViewModel(SampleEncounter.startedSession(seed = 4242L))
 
-    private fun guaranteedHitViewModel(): BattleViewModel {
+    @Test
+    fun `la difficolta cpu fa round trip nella presentation`() {
+        val session = SampleEncounter.startedSession(seed = 4242L)
+        val model = BattleViewModel(session)
+
+        model.adopt(
+            session,
+            mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.SORRY_FOR_YOU.name),
+        )
+
+        assertTrue(model.enemyCpuEnabled)
+        assertEquals(EnemyCpuDifficulty.SORRY_FOR_YOU, model.enemyCpuDifficulty)
+        assertEquals(
+            EnemyCpuDifficulty.SORRY_FOR_YOU.name,
+            model.presentationState()["enemyCpuDifficulty"],
+        )
+    }
+
+    @Test
+    fun `una sessione legacy o con difficolta sconosciuta non abilita la cpu`() {
+        val legacySession = SampleEncounter.startedSession(seed = 4242L)
+        val legacy = BattleViewModel(legacySession)
+        legacy.adopt(legacySession, emptyMap())
+        assertFalse(legacy.enemyCpuEnabled)
+        assertFalse("enemyCpuDifficulty" in legacy.presentationState())
+
+        val unknownSession = SampleEncounter.startedSession(seed = 4243L)
+        val unknown = BattleViewModel(unknownSession)
+        unknown.adopt(unknownSession, mapOf("enemyCpuDifficulty" to "IMPOSSIBILE"))
+        assertFalse(unknown.enemyCpuEnabled)
+        assertEquals(EnemyCpuDifficulty.MEDIUM, unknown.enemyCpuDifficulty)
+    }
+
+    private fun guaranteedHitViewModel(
+        resourceSink: CombatResourceSink = CombatResourceSink { _, _ -> },
+        extraTarget: Boolean = false,
+    ): BattleViewModel {
         val ability = AbilityDefinition.attack(
             "colpo-certo",
             "Colpo certo",
@@ -66,14 +121,22 @@ class BattleViewModelTest {
         session.addCombatant("attaccante", attacker)
         session.addCombatant("alleato", ally)
         session.addCombatant("bersaglio", target)
+        if (extraTarget) session.addCombatant("riserva", target)
         session.setPartyCombatants(listOf("attaccante", "alleato"))
         session.setInitiative("attaccante", 20)
         session.setInitiative("alleato", 15)
         session.setInitiative("bersaglio", 10)
-        session.setInitiativeOrder(listOf("attaccante", "alleato", "bersaglio"))
+        if (extraTarget) session.setInitiative("riserva", 5)
+        session.setInitiativeOrder(
+            if (extraTarget) {
+                listOf("attaccante", "alleato", "bersaglio", "riserva")
+            } else {
+                listOf("attaccante", "alleato", "bersaglio")
+            },
+        )
         session.markReady()
         session.start()
-        return BattleViewModel(session)
+        return BattleViewModel(session, resourceSink = resourceSink)
     }
 
     private fun actionSurgeSession(): CombatSession {
@@ -106,6 +169,706 @@ class BattleViewModelTest {
             session.markReady()
             session.start()
         }
+    }
+
+    /** Due segnalini dalla stessa scheda: la quantita' scelta nel wizard dell'incontro. */
+    private fun clonedActionSurgeSession(): CombatSession {
+        val surge = AbilityDefinition.builder(ACTION_SURGE_ID, "Azione impetuosa")
+            .activationCost(ActivationCost.NONE)
+            .resolutionMethod(ResolutionMethod.AUTOMATIC)
+            .automationStatus(AutomationStatus.AUTOMATED)
+            .effect(AbilityEffect.GRANT_NON_MAGIC_ACTION)
+            .resource(ACTION_SURGE_RESOURCE, 1)
+            .build()
+        val fighter = ActorDefinition.builder("fighter-def", "Guerriero")
+            .armorClass(18)
+            .maxHitPoints(30)
+            .initiativeScore(20)
+            .abilities(listOf(surge))
+            .resources(listOf(CombatResourceState(ACTION_SURGE_RESOURCE, "Azione impetuosa", 1, 0)))
+            .build()
+        val target = ActorDefinition.builder("target-def", "Bersaglio")
+            .armorClass(12)
+            .maxHitPoints(20)
+            .initiativeScore(10)
+            .build()
+        return CombatSession.create("cloni-ui", 4242L).also { session ->
+            session.addCombatant("fighter-1", fighter)
+            session.addCombatant("fighter-2", fighter)
+            session.addCombatant("target", target)
+            session.setPartyCombatants(listOf("fighter-1", "fighter-2"))
+            session.setInitiative("fighter-1", 20)
+            session.setInitiative("fighter-2", 15)
+            session.setInitiative("target", 10)
+            session.setInitiativeOrder(listOf("fighter-1", "fighter-2", "target"))
+            session.markReady()
+            session.start()
+        }
+    }
+
+    private fun atWillAbilitySession(ability: AbilityDefinition, currentHitPoints: Int = 20): CombatSession {
+        val hero = ActorDefinition.builder("at-will-hero-def", "Eroe")
+            .armorClass(15)
+            .maxHitPoints(20)
+            .currentHitPoints(currentHitPoints)
+            .initiativeScore(20)
+            .abilities(listOf(ability))
+            .build()
+        val enemy = ActorDefinition.builder("at-will-enemy-def", "Nemico")
+            .armorClass(10)
+            .maxHitPoints(20)
+            .initiativeScore(10)
+            .build()
+        return CombatSession.create("at-will-ui", 4242L).also { session ->
+            session.addCombatant("hero", hero)
+            session.addCombatant("enemy", enemy)
+            session.setPartyCombatants(listOf("hero"))
+            session.setInitiative("hero", 20)
+            session.setInitiative("enemy", 10)
+            session.setInitiativeOrder(listOf("hero", "enemy"))
+            session.markReady()
+            session.start()
+        }
+    }
+
+    private fun enemyCpuResourceSession(
+        simultaneousWithParty: Boolean = false,
+        extraEnemy: Boolean = false,
+        heroHitPoints: Int = 20,
+        // Allontanare il bersaglio costringe la CPU a spostarsi prima di colpire:
+        // e' il turno a piu' comandi che serve per osservare il ritmo.
+        heroColumn: Int = 2,
+    ): CombatSession {
+        val attack = AbilityDefinition.builder(CPU_ATTACK_ID, "Colpo CPU")
+            .activationCost(ActivationCost.ACTION)
+            .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+            .attackBonus(100)
+            .damage(listOf(DamageFormula.fixed(DamageType.FORCE, 5)))
+            .resource(CPU_ATTACK_RESOURCE, 1)
+            .build()
+        val enemy = ActorDefinition.builder("cpu-enemy-def", "CPU")
+            .armorClass(12)
+            .maxHitPoints(20)
+            .initiativeScore(20)
+            .abilities(listOf(attack))
+            .resources(listOf(CombatResourceState(CPU_ATTACK_RESOURCE, "Colpo CPU", 1, 0)))
+            .build()
+        val hero = ActorDefinition.builder("cpu-hero-def", "Eroe")
+            .armorClass(10)
+            .maxHitPoints(heroHitPoints)
+            .initiativeScore(10)
+            .build()
+        return CombatSession.create("cpu-ui", 4242L).also { session ->
+            session.addCombatant("enemy", enemy)
+            if (extraEnemy) session.addCombatant("enemy-2", enemy)
+            session.addCombatant("hero", hero)
+            session.setPartyCombatants(listOf("hero"))
+            session.configureMap(MapGrid(10, 10, 5))
+            session.placeCombatant("enemy", GridPosition(1, 1), 1)
+            if (extraEnemy) session.placeCombatant("enemy-2", GridPosition(1, 2), 1)
+            session.placeCombatant("hero", GridPosition(heroColumn, 1), 1)
+            session.setInitiative("enemy", 20)
+            if (extraEnemy) session.setInitiative("enemy-2", 20)
+            session.setInitiative("hero", if (simultaneousWithParty) 20 else 10)
+            session.setInitiativeOrder(
+                if (extraEnemy) listOf("enemy", "enemy-2", "hero") else listOf("enemy", "hero"),
+            )
+            if (simultaneousWithParty) session.setSimultaneousTies(true)
+            session.markReady()
+            session.start()
+        }
+    }
+
+    private fun enemyCpuAreaSession(): CombatSession {
+        val area = AbilityDefinition.builder("cpu-area", "Onda CPU")
+            .activationCost(ActivationCost.ACTION)
+            .resolutionMethod(ResolutionMethod.SAVING_THROW)
+            .automationStatus(AutomationStatus.AUTOMATED)
+            .rangeFeet(60)
+            .areaRadiusFeet(5)
+            .saveAbility(SaveAbility.DEXTERITY)
+            .damage(listOf(DamageFormula.fixed(DamageType.FORCE, 7)))
+            .build()
+        val enemy = ActorDefinition.builder("cpu-area-enemy", "CPU area")
+            .maxHitPoints(20)
+            .abilities(listOf(area))
+            .build()
+        val hero = ActorDefinition.builder("cpu-area-hero", "Eroe area")
+            .maxHitPoints(30)
+            .build()
+        return CombatSession.create("cpu-area-ui", 4242L).also { session ->
+            session.addCombatant("enemy", enemy)
+            session.addCombatant("hero", hero)
+            session.setPartyCombatants(listOf("hero"))
+            session.configureMap(MapGrid(10, 10, 5))
+            session.placeCombatant("enemy", GridPosition(1, 1), 1)
+            session.placeCombatant("hero", GridPosition(3, 1), 1)
+            session.setInitiative("enemy", 20)
+            session.setInitiative("hero", 10)
+            session.setInitiativeOrder(listOf("enemy", "hero"))
+            session.markReady()
+            session.start()
+        }
+    }
+
+    private fun enemyCpuAlternativeSlotHealingSession(): CombatSession {
+        val nominalSlot = SpellSlotResourceId.standard(1).id()
+        val alternateSlot = SpellSlotResourceId.pact(2).id()
+        val healing = AbilityDefinition.builder("cpu-cura-slot", "Cura CPU")
+            .activationCost(ActivationCost.ACTION)
+            .resolutionMethod(ResolutionMethod.AUTOMATIC)
+            .automationStatus(AutomationStatus.AUTOMATED)
+            .spellOrCantrip(true)
+            .healing(
+                HealingDefinition.dice(
+                    HealingTarget.SELF,
+                    DiceExpression(1, 4, 2),
+                    HealingSlotScaling(1, 1),
+                ),
+            )
+            .resource(nominalSlot, 1)
+            .build()
+        val healer = ActorDefinition.builder("cpu-healer-def", "Guaritore CPU")
+            .armorClass(12)
+            .maxHitPoints(20)
+            .currentHitPoints(1)
+            .initiativeScore(20)
+            .abilities(listOf(healing))
+            .resources(
+                listOf(
+                    CombatResourceState(nominalSlot, "Slot 1", 1, 1),
+                    CombatResourceState(alternateSlot, "Slot del patto 2", 1, 0),
+                ),
+            )
+            .build()
+        val hero = ActorDefinition.builder("cpu-slot-hero-def", "Eroe")
+            .armorClass(12)
+            .maxHitPoints(20)
+            .initiativeScore(10)
+            .build()
+        return CombatSession.create("cpu-slot-ui", 4242L).also { session ->
+            session.addCombatant("healer", healer)
+            session.addCombatant("hero", hero)
+            session.setPartyCombatants(listOf("hero"))
+            session.setInitiative("healer", 20)
+            session.setInitiative("hero", 10)
+            session.setInitiativeOrder(listOf("healer", "hero"))
+            session.markReady()
+            session.start()
+        }
+    }
+
+    @Test
+    fun `nel gruppo misto la cpu agisce una volta blocca solo il nemico e seleziona il party`() {
+        val session = enemyCpuResourceSession(simultaneousWithParty = true)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+
+        assertTrue(model.shouldScheduleEnemyCpu)
+        assertTrue(model.enemyCpuControlsActor("enemy"))
+        assertFalse(model.enemyCpuControlsActor("hero"))
+
+        model.selectActiveActor("hero")
+        assertFalse(model.canUseAbilitiesOf("hero"))
+        assertTrue(model.enemyCpuBatchPending)
+        model.move("hero", 3, 1)
+        assertEquals(GridPosition(2, 1), model.placementOf("hero")!!.origin())
+        assertTrue(model.message.orEmpty().contains("Attendi"))
+        model.applyManualDamage("hero", 3)
+        model.grantTemporary("hero", 5)
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(0, model.combatant("hero")!!.temporaryHitPoints())
+        model.selectActiveActor("enemy")
+        assertFalse(model.canUseAbilitiesOf("enemy"))
+
+        model.playEnemyCpuTurn()
+
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(listOf("enemy", "hero"), model.activeCombatantIds)
+        assertEquals("hero", model.activeActorId)
+        assertTrue(model.enemyCpuBatchCompleted)
+        assertFalse(model.shouldScheduleEnemyCpu)
+        assertFalse(model.enemyCpuBatchPending)
+        assertTrue(model.canUseAbilitiesOf("hero"))
+        model.move("hero", 3, 1)
+        assertEquals(GridPosition(3, 1), model.placementOf("hero")!!.origin())
+
+        model.playEnemyCpuTurn()
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+    }
+
+    @Test
+    fun `la riproduzione ritmata mostra un comando alla volta`() = runTest {
+        val session = enemyCpuResourceSession(heroColumn = 5)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.enemyCpuSpeed = EnemyCpuSpeed.FAST
+        val startingSquare = model.placementOf("enemy")!!.origin()
+
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+
+        // Sospesa sulla prima pausa: il nemico si e' avvicinato ma non ha ancora colpito.
+        assertTrue(model.enemyCpuBusy)
+        assertNotEquals(startingSquare, model.placementOf("enemy")!!.origin())
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+        assertEquals("enemy", model.enemyCpuActingCombatantId)
+        assertTrue(model.enemyCpuActionLabel.orEmpty().contains("si sposta"))
+
+        turn.join()
+
+        assertFalse(model.enemyCpuBusy)
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        assertEquals("hero", model.activeActorId)
+        assertNull(model.enemyCpuActingCombatantId)
+    }
+
+    @Test
+    fun `annullare l attesa non lascia il turno nemico a meta`() = runTest {
+        val session = enemyCpuResourceSession(heroColumn = 5)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+        turn.cancelAndJoin()
+
+        // Chi annulla l'attesa rinuncia alle pause, non al resto del turno.
+        assertFalse(model.enemyCpuBusy)
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        assertEquals("hero", model.activeActorId)
+        assertFalse(model.enemyCpuBatchPending)
+    }
+
+    @Test
+    fun `caricare un altra partita durante la pausa non contamina quella nuova`() = runTest {
+        val session = enemyCpuResourceSession(heroColumn = 5)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+        // Il tavolo apre un'altra partita mentre la CPU e' ferma sulla pausa: il
+        // turno rimasto indietro appartiene a una sessione che non esiste piu'.
+        val loaded = enemyCpuResourceSession()
+        model.adopt(loaded, emptyMap())
+        turn.cancelAndJoin()
+
+        assertSame(loaded, model.session)
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+        model.undo()
+        assertFalse(model.message.orEmpty().contains("batch CPU"))
+        assertFalse(model.enemyCpuTurnSuppressed)
+    }
+
+    @Test
+    fun `chi salva chiude il turno cpu invece di fotografarne meta`() = runTest {
+        val session = enemyCpuResourceSession(heroColumn = 5)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+        assertTrue(model.enemyCpuBusy)
+
+        // La chiusura dell'applicazione non puo' aspettare il ritmo.
+        model.settleEnemyCpuTurn()
+
+        assertFalse(model.enemyCpuBusy)
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        assertEquals("hero", model.activeActorId)
+        turn.cancelAndJoin()
+        // La riproduzione che riprende non deve rigiocare nulla né raddoppiare l'Undo.
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        model.undo()
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+    }
+
+    @Test
+    fun `il ritmo della cpu fa round trip nella presentation`() {
+        val session = enemyCpuResourceSession()
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        assertEquals(EnemyCpuSpeed.NORMAL, model.enemyCpuSpeed)
+
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+        val restored = BattleViewModel(session)
+        restored.adopt(session, model.presentationState())
+
+        assertEquals(EnemyCpuSpeed.SLOW, restored.enemyCpuSpeed)
+    }
+
+    @Test
+    fun `il guard mixed non viene segnato se dopo la cpu non resta un party attivo`() {
+        val session = enemyCpuResourceSession(
+            simultaneousWithParty = true,
+            heroHitPoints = 5,
+        )
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+
+        model.playEnemyCpuTurn()
+
+        assertTrue(model.combatant("hero")!!.defeated())
+        assertFalse(model.enemyCpuBatchCompleted)
+        assertFalse(model.presentationState().containsKey("enemyCpuCompletedTurn"))
+    }
+
+    @Test
+    fun `un attore morto per sfinimento con punti ferita non puo usare capacita`() {
+        val session = enemyCpuResourceSession(simultaneousWithParty = true)
+        session.setExhaustion("hero", 6)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.selectActiveActor("hero")
+
+        assertTrue(model.combatant("hero")!!.dead())
+        assertFalse(model.combatant("hero")!!.defeated())
+        assertFalse(model.canUseAbilitiesOf("hero"))
+    }
+
+    @Test
+    fun `la cpu salta un gruppo solo nemico senza attori vivi`() {
+        val session = enemyCpuResourceSession()
+        session.setExhaustion("enemy", 6)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+
+        assertTrue(model.activeCombatantIds.isEmpty())
+        assertTrue(model.shouldScheduleEnemyCpu)
+
+        model.playEnemyCpuTurn()
+
+        assertEquals("hero", model.activeActorId)
+        assertFalse(model.shouldScheduleEnemyCpu)
+    }
+
+    @Test
+    fun `la cpu non si avvia nel mixed se resta solo il party vivo`() {
+        val session = enemyCpuResourceSession(simultaneousWithParty = true)
+        session.setExhaustion("enemy", 6)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+
+        assertEquals(listOf("hero"), model.activeCombatantIds)
+        assertFalse(model.shouldScheduleEnemyCpu)
+        assertFalse(model.enemyCpuBatchPending)
+        assertTrue(model.canUseAbilitiesOf("hero"))
+    }
+
+    @Test
+    fun `un morto per sfinimento non viene scelto ne confermato come bersaglio`() {
+        val model = guaranteedHitViewModel(extraTarget = true)
+        model.setExhaustion("bersaglio", 6)
+        val ability = model.abilities("attaccante").single()
+
+        assertTrue(model.combatant("bersaglio")!!.dead())
+        assertTrue(model.combatant("bersaglio")!!.currentHitPoints() > 0)
+        model.selectedTargetId = "bersaglio"
+        assertNull(model.selectedTargetId)
+        assertEquals("riserva", model.effectiveTargetId())
+
+        model.beginAbilityTargeting(ability.id())
+        val revisionBefore = model.state.revision()
+        model.onCombatantClicked("bersaglio")
+
+        assertEquals(revisionBefore, model.state.revision())
+        assertNotNull(model.singleTargeting)
+        assertTrue(model.message.orEmpty().contains("già sconfitto"))
+    }
+
+    @Test
+    fun `guard completato e sospensione cpu sopravvivono alla presentation`() {
+        val session = enemyCpuResourceSession(simultaneousWithParty = true)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.SORRY_FOR_YOU.name))
+        model.playEnemyCpuTurn()
+
+        val completedPresentation = model.presentationState()
+        val completed = BattleViewModel(model.session)
+        completed.adopt(model.session, completedPresentation)
+
+        assertEquals(EnemyCpuDifficulty.SORRY_FOR_YOU, completed.enemyCpuDifficulty)
+        assertTrue(completed.enemyCpuBatchCompleted)
+        assertFalse(completed.shouldScheduleEnemyCpu)
+
+        model.undo()
+        val suppressedPresentation = model.presentationState()
+        val suppressed = BattleViewModel(model.session)
+        suppressed.adopt(model.session, suppressedPresentation)
+
+        assertTrue(suppressed.enemyCpuTurnSuppressed)
+        assertFalse(suppressed.shouldScheduleEnemyCpu)
+        assertEquals(20, suppressed.combatant("hero")!!.currentHitPoints())
+    }
+
+    @Test
+    fun `il guard mixed resta stabile se cambia l insieme dei nemici vivi`() {
+        val session = enemyCpuResourceSession(simultaneousWithParty = true, extraEnemy = true)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.playEnemyCpuTurn()
+        assertTrue(model.enemyCpuBatchCompleted)
+
+        model.applyManualDamage("enemy", 100)
+
+        assertTrue(model.combatant("enemy")!!.defeated())
+        assertTrue("enemy-2" in model.activeCombatantIds)
+        assertTrue(model.enemyCpuBatchCompleted)
+        assertFalse(model.shouldScheduleEnemyCpu)
+    }
+
+    @Test
+    fun `un area cpu produce feedback sul singolo token colpito`() {
+        val session = enemyCpuAreaSession()
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+
+        model.playEnemyCpuTurn()
+
+        assertTrue(model.floating["hero"].orEmpty().isNotEmpty())
+        assertTrue(model.actionResolution?.text.orEmpty().contains("1 attacchi"))
+    }
+
+    @Test
+    fun `un bersaglio immune a un area cpu mostra danno zero`() {
+        val model = BattleViewModel(enemyCpuAreaSession())
+
+        model.pushEnemyCpuActionFeedback(
+            EnemyCpuActionReport(
+                EnemyCpuActionType.AREA_ATTACK,
+                "enemy",
+                "",
+                "cpu-area",
+                0,
+                EnemyCpuReason.AREA_COVERAGE,
+                listOf(EnemyCpuTargetReport("hero", 0, false)),
+            ),
+        )
+
+        assertEquals("0/Immune", model.floating["hero"]?.single()?.text)
+    }
+
+    @Test
+    fun `un attacco cpu a segno contro un immune non appare mancato`() {
+        val model = BattleViewModel(enemyCpuAreaSession())
+
+        model.pushEnemyCpuActionFeedback(
+            EnemyCpuActionReport(
+                EnemyCpuActionType.ATTACK,
+                "enemy",
+                "hero",
+                "cpu-attack",
+                0,
+                EnemyCpuReason.BEST_ATTACK,
+                true,
+            ),
+        )
+
+        val feedback = model.floating["hero"]?.single()
+        assertEquals("0/Immune", feedback?.text)
+        assertEquals(app.d6d.ui.components.FloatKind.INFO, feedback?.kind)
+    }
+
+    @Test
+    fun `la cura cpu mostra il livello dello slot scelto`() {
+        val model = BattleViewModel(enemyCpuAreaSession())
+
+        model.pushEnemyCpuActionFeedback(
+            EnemyCpuActionReport(
+                EnemyCpuActionType.HEAL,
+                "enemy",
+                "hero",
+                "cura-cpu",
+                8,
+                EnemyCpuReason.PROTECT_ALLY,
+                "",
+                emptyList(),
+                false,
+                "slot-incantesimo-3",
+                3,
+            ),
+        )
+
+        assertEquals("+8 · slot di 3° livello", model.floating["hero"]?.single()?.text)
+    }
+
+    @Test
+    fun `la cura cpu senza slot mantiene il feedback compatto`() {
+        val model = BattleViewModel(enemyCpuAreaSession())
+
+        model.pushEnemyCpuActionFeedback(
+            EnemyCpuActionReport(
+                EnemyCpuActionType.HEAL,
+                "enemy",
+                "hero",
+                "cura-cpu",
+                5,
+                EnemyCpuReason.PROTECT_ALLY,
+            ),
+        )
+
+        assertEquals("+5", model.floating["hero"]?.single()?.text)
+    }
+
+    @Test
+    fun `il turno cpu persiste la risorsa e undo annulla atomicamente tutto il batch`() {
+        val persistedSpent = mutableListOf<Int>()
+        val session = enemyCpuResourceSession()
+        val model = BattleViewModel(
+            session,
+            resourceSink = CombatResourceSink { _, resources ->
+                persistedSpent += resources.single { it.id() == CPU_ATTACK_RESOURCE }.spent()
+            },
+        )
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+
+        assertTrue(model.shouldScheduleEnemyCpu)
+        model.playEnemyCpuTurn()
+
+        assertEquals(15, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(1, model.combatant("enemy")!!.resources().single().spent())
+        assertEquals(listOf(1), persistedSpent)
+        assertEquals("hero", model.activeCombatantId)
+
+        model.undo()
+
+        assertEquals("enemy", model.activeCombatantId)
+        assertTrue(model.enemyCpuTurnSuppressed)
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(0, model.combatant("enemy")!!.resources().single().spent())
+        assertEquals(listOf(1, 0), persistedSpent)
+        assertTrue(model.message.orEmpty().contains("Intero batch CPU annullato"))
+    }
+
+    @Test
+    fun `la cura cpu persiste e annulla il pool alternativo scelto`() {
+        val nominalSlot = SpellSlotResourceId.standard(1).id()
+        val alternateSlot = SpellSlotResourceId.pact(2).id()
+        val persisted = mutableListOf<Pair<String, Map<String, Int>>>()
+        val session = enemyCpuAlternativeSlotHealingSession()
+        val model = BattleViewModel(
+            session,
+            resourceSink = CombatResourceSink { definitionId, resources ->
+                persisted.add(definitionId to resources.associate { it.id() to it.spent() })
+            },
+        )
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+
+        model.playEnemyCpuTurn()
+
+        val spentAfter = model.combatant("healer")!!.resources().associate { it.id() to it.spent() }
+        assertEquals(mapOf(nominalSlot to 1, alternateSlot to 1), spentAfter)
+        assertEquals(listOf("cpu-healer-def" to spentAfter), persisted)
+        assertTrue(model.floating["healer"]?.single()?.text.orEmpty().contains("slot di 2° livello"))
+
+        model.undo()
+
+        val spentBefore = model.combatant("healer")!!.resources().associate { it.id() to it.spent() }
+        assertEquals(mapOf(nominalSlot to 1, alternateSlot to 0), spentBefore)
+        assertEquals(
+            listOf(
+                "cpu-healer-def" to spentAfter,
+                "cpu-healer-def" to spentBefore,
+            ),
+            persisted,
+        )
+    }
+
+    @Test
+    fun `se la persistenza cpu fallisce il turno intero viene annullato`() {
+        val persistedSpent = mutableListOf<Int>()
+        val session = enemyCpuResourceSession()
+        val model = BattleViewModel(
+            session,
+            resourceSink = CombatResourceSink { _, resources ->
+                val spent = resources.single { it.id() == CPU_ATTACK_RESOURCE }.spent()
+                persistedSpent += spent
+                if (spent > 0) error("risorsa CPU non salvata")
+            },
+        )
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+
+        model.playEnemyCpuTurn()
+
+        assertEquals("enemy", model.activeCombatantId)
+        assertEquals(20, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(0, model.combatant("enemy")!!.resources().single().spent())
+        assertEquals(listOf(1, 0), persistedSpent)
+        assertFalse(model.canUndo)
+        assertTrue(model.enemyCpuTurnSuppressed)
+        assertTrue(model.message.orEmpty().contains("risorsa CPU non salvata"))
+    }
+
+    @Test
+    fun `il delta cpu segue il pool alternativo realmente consumato`() {
+        val nominalSlot = CombatResourceState("slot-incantesimo-1", "Slot 1", 3, 0)
+        val alternateSlot = CombatResourceState("slot-patto-2", "Slot del patto 2", 1, 0)
+        val spentAlternateSlot = CombatResourceState("slot-patto-2", "Slot del patto 2", 1, 1)
+        val before = mapOf(
+            "healer" to ("healer-definition" to listOf(nominalSlot, alternateSlot)),
+        )
+
+        val changes = changedEnemyCpuResources(
+            before = before,
+            // L'ordine cambia intenzionalmente: il delta deve dipendere dai pool, non dalla lista.
+            after = mapOf("healer" to listOf(spentAlternateSlot, nominalSlot)),
+        )
+
+        val delta = requireNotNull(changes["healer"])
+        assertEquals("healer-definition", delta.definitionId)
+        assertEquals(listOf(nominalSlot, alternateSlot), delta.before)
+        assertEquals(listOf(spentAlternateSlot, nominalSlot), delta.after)
+        assertTrue(
+            changedEnemyCpuResources(
+                before = before,
+                after = mapOf("healer" to listOf(alternateSlot, nominalSlot)),
+            ).isEmpty(),
+        )
+    }
+
+    @Test
+    fun `le risorse di istanze clone restano locali alla sessione`() {
+        val available = CombatResourceState("carica", "Carica", 2, 0)
+        val spent = CombatResourceState("carica", "Carica", 2, 1)
+        val before = mapOf(
+            "clone-a" to ("stessa-definizione" to listOf(available)),
+            "clone-b" to ("stessa-definizione" to listOf(available)),
+        )
+
+        val changes = changedEnemyCpuResources(
+            before = before,
+            after = mapOf(
+                "clone-a" to listOf(spent),
+                "clone-b" to listOf(available),
+            ),
+        )
+
+        assertTrue(changes.isEmpty())
+    }
+
+    @Test
+    fun `anche il consumo manuale di un clone resta locale alla sessione`() {
+        var sinkCalls = 0
+        val model = BattleViewModel(
+            clonedActionSurgeSession(),
+            resourceSink = CombatResourceSink { _, _ ->
+                sinkCalls++
+                error("la scheda condivisa non ha un valore corretto da ricevere")
+            },
+        )
+
+        model.beginAbilityTargeting(ACTION_SURGE_ID)
+
+        assertTrue(model.budget("fighter-1")!!.additionalActionAvailable())
+        assertEquals(1, model.combatant("fighter-1")!!.resources().single().spent())
+        assertEquals(0, model.combatant("fighter-2")!!.resources().single().spent())
+        assertEquals(0, sinkCalls)
+        assertNull(model.message)
+
+        model.undo()
+
+        assertEquals(0, model.combatant("fighter-1")!!.resources().single().spent())
+        assertEquals(0, sinkCalls)
     }
 
     private fun extraAttackViewModel(): BattleViewModel {
@@ -181,6 +944,62 @@ class BattleViewModelTest {
         assertEquals(0, model.combatant("fighter")!!.resources().single().spent())
         assertNull(model.actionResolution)
         assertTrue(model.message.orEmpty().contains("salvataggio non disponibile"))
+    }
+
+    @Test
+    fun `una cura senza costo non chiama il sink risorse e resta annullabile`() {
+        val healing = AbilityDefinition.builder("cura-at-will", "Cura at-will")
+            .activationCost(ActivationCost.BONUS_ACTION)
+            .resolutionMethod(ResolutionMethod.AUTOMATIC)
+            .automationStatus(AutomationStatus.AUTOMATED)
+            .healing(HealingDefinition.fixed(HealingTarget.SELF, 4))
+            .build()
+        var sinkCalls = 0
+        val model = BattleViewModel(
+            atWillAbilitySession(healing, currentHitPoints = 10),
+            resourceSink = CombatResourceSink { _, _ ->
+                sinkCalls++
+                error("sink non pertinente")
+            },
+        )
+
+        model.beginAbilityTargeting(healing.id())
+
+        assertEquals(14, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(0, sinkCalls)
+        assertNull(model.message)
+
+        model.undo()
+        assertEquals(10, model.combatant("hero")!!.currentHitPoints())
+        assertEquals(0, sinkCalls)
+    }
+
+    @Test
+    fun `una attivazione senza costo non chiama il sink risorse e resta annullabile`() {
+        val activation = AbilityDefinition.builder("slancio-at-will", "Slancio at-will")
+            .activationCost(ActivationCost.NONE)
+            .resolutionMethod(ResolutionMethod.AUTOMATIC)
+            .automationStatus(AutomationStatus.AUTOMATED)
+            .effect(AbilityEffect.GRANT_NON_MAGIC_ACTION)
+            .build()
+        var sinkCalls = 0
+        val model = BattleViewModel(
+            atWillAbilitySession(activation),
+            resourceSink = CombatResourceSink { _, _ ->
+                sinkCalls++
+                error("sink non pertinente")
+            },
+        )
+
+        model.beginAbilityTargeting(activation.id())
+
+        assertTrue(model.budget("hero")!!.additionalActionAvailable())
+        assertEquals(0, sinkCalls)
+        assertNull(model.message)
+
+        model.undo()
+        assertFalse(model.budget("hero")!!.additionalActionAvailable())
+        assertEquals(0, sinkCalls)
     }
 
     @Test
@@ -528,6 +1347,27 @@ class BattleViewModelTest {
         model.undo()
 
         assertEquals(hitPointsBefore, model.combatant(target)!!.currentHitPoints())
+    }
+
+    @Test
+    fun `un attacco senza costo non chiama il sink risorse e resta annullabile`() {
+        var sinkCalls = 0
+        val model = guaranteedHitViewModel(
+            resourceSink = CombatResourceSink { _, _ ->
+                sinkCalls++
+                error("sink non pertinente")
+            },
+        )
+
+        model.attack("colpo-certo")
+
+        assertEquals(15, model.combatant("bersaglio")!!.currentHitPoints())
+        assertEquals(0, sinkCalls)
+        assertNull(model.message)
+
+        model.undo()
+        assertEquals(20, model.combatant("bersaglio")!!.currentHitPoints())
+        assertEquals(0, sinkCalls)
     }
 
     @Test

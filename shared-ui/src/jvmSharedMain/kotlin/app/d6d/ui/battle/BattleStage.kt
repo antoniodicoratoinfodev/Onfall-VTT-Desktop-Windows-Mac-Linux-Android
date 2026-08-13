@@ -366,7 +366,7 @@ private fun StagePlate(
         if (isActive) append(" Turno attivo.")
         if (isInspected) append(" Scheda in esame, solo consultazione.")
         if (combatant.dead()) append(" Morto.")
-        else if (combatant.defeated()) append(" Sconfitto.")
+        else if (combatant.defeated() || combatant.dead()) append(" Sconfitto.")
     }
 
     val plateShape = RoundedCornerShape(10.dp)
@@ -436,7 +436,7 @@ private fun StagePlate(
                 ) {
                     Chip("${combatant.currentHitPoints()}/${snapshot.maxHitPoints()} PF", Palette.Text)
                     Chip("CA ${snapshot.armorClass()}", Palette.Gold)
-                    if (combatant.bloodied() && !combatant.defeated()) {
+                    if (combatant.bloodied() && !combatant.defeated() && !combatant.dead()) {
                         Chip("INSANGUINATO", Palette.Bloodied)
                     }
                 }
