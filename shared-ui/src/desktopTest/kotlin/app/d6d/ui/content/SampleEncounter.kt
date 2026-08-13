@@ -137,12 +137,12 @@ object SampleEncounter {
                 attack(
                     "arma-spadone", "Spadone", 6, 5,
                     listOf(DamageFormula.dice(DamageType.SLASHING, 2, 6, 4)),
-                    rulesText = "Attacco in mischia con arma. Portata 5 piedi.",
+                    rulesText = "Attacco in mischia con arma. Portata 1,5 m.",
                 ),
                 attack(
                     "arma-giavellotto", "Giavellotto", 5, 30,
                     listOf(DamageFormula.dice(DamageType.PIERCING, 1, 6, 3)),
-                    rulesText = "Attacco a distanza. Gittata 30/120 piedi.",
+                    rulesText = "Attacco a distanza. Gittata 9/36 m.",
                 ),
             ),
         ),
@@ -167,7 +167,7 @@ object SampleEncounter {
                     rangeFeet = 150, radiusFeet = 20, save = SaveAbility.DEXTERITY,
                     damage = listOf(DamageFormula.dice(DamageType.FIRE, 8, 6, 0)),
                     rulesText = "Invocazione di 3° livello. Ogni creatura entro una sfera di raggio " +
-                        "6 metri (20 piedi) centrata sul punto scelto effettua un tiro salvezza su " +
+                        "6 m centrata sul punto scelto effettua un tiro salvezza su " +
                         "Destrezza: 8d6 danni da fuoco, metà con TS superato. Ai livelli superiori: " +
                         "+1d6 per ogni slot oltre il 3°.",
                 ),
@@ -207,7 +207,7 @@ object SampleEncounter {
                 attack(
                     "arma-arco", "Arco Lungo", 7, 150,
                     listOf(DamageFormula.dice(DamageType.PIERCING, 1, 8, 4)),
-                    rulesText = "Attacco a distanza. Gittata 150/600 piedi.",
+                    rulesText = "Attacco a distanza. Gittata 45/180 m.",
                 ),
                 attack(
                     "arma-pugnale", "Pugnale", 6, 5,

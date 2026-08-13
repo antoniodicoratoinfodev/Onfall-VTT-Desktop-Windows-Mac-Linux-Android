@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.d6d.sheet.metresLabel
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.CatalogAbility
@@ -232,7 +233,7 @@ private fun AbilityListRow(ability: CatalogAbility, selected: Boolean, onClick: 
             Chip(ability.activationCost.label, Palette.Gold)
             Chip(ability.resolutionMethod.label, Palette.Party)
             if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
-            if (ability.isArea) Chip("Area ${ability.areaRadiusFeet} ft", Palette.Crit)
+            if (ability.isArea) Chip("Area ${metresLabel(ability.areaRadiusFeet)}", Palette.Crit)
         }
         AbilityMetadataChips(ability)
     }

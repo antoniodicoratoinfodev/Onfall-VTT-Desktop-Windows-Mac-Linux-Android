@@ -23,9 +23,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import app.d6d.sheet.feetWithMetres
+import app.d6d.domain.space.MapGrid
+import app.d6d.sheet.metresLabel
 import app.d6d.ui.components.Chip
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.maps.GridLimits
 import app.d6d.ui.maps.MapPickerDialog
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
@@ -68,7 +70,7 @@ fun MapControls(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("MAPPA", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
-                Chip("${grid.columns()} × ${grid.rows()} · ${feetWithMetres(grid.feetPerSquare())}/casella", Palette.TextMuted)
+                Chip("${grid.columns()} × ${grid.rows()} · ${metresLabel(grid.feetPerSquare())}/casella", Palette.TextMuted)
             }
             GameButton("−", accent = Palette.TextMuted, dense = true, onClick = {
                 onCellSizeChange((cellSize - 6.dp).coerceIn(MIN_CELL, MAX_CELL))
@@ -109,22 +111,50 @@ fun MapControls(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                GameButton("− colonne", accent = Palette.TextMuted, dense = true, onClick = {
-                    viewModel.configureMap(grid.columns() - 1, grid.rows(), grid.feetPerSquare())
-                })
-                GameButton("+ colonne", accent = Palette.TextMuted, dense = true, onClick = {
-                    viewModel.configureMap(grid.columns() + 1, grid.rows(), grid.feetPerSquare())
-                })
-                GameButton("− righe", accent = Palette.TextMuted, dense = true, onClick = {
-                    viewModel.configureMap(grid.columns(), grid.rows() - 1, grid.feetPerSquare())
-                })
-                GameButton("+ righe", accent = Palette.TextMuted, dense = true, onClick = {
-                    viewModel.configureMap(grid.columns(), grid.rows() + 1, grid.feetPerSquare())
-                })
+                // Rimpicciolire la griglia toglie dalla mappa i segnaposti rimasti
+                // fuori bordo: i comandi si fermano quindi al minimo che la
+                // procedura Nuova partita consente, e al massimo che il motore
+                // accetta, invece di produrre un rifiuto o una griglia inservibile.
+                GameButton(
+                    label = "− colonne",
+                    accent = Palette.TextMuted,
+                    dense = true,
+                    enabled = grid.columns() > GridLimits.MIN_SIDE,
+                    onClick = {
+                        viewModel.configureMap(grid.columns() - 1, grid.rows(), grid.feetPerSquare())
+                    },
+                )
+                GameButton(
+                    label = "+ colonne",
+                    accent = Palette.TextMuted,
+                    dense = true,
+                    enabled = grid.columns() < MapGrid.MAX_SIDE,
+                    onClick = {
+                        viewModel.configureMap(grid.columns() + 1, grid.rows(), grid.feetPerSquare())
+                    },
+                )
+                GameButton(
+                    label = "− righe",
+                    accent = Palette.TextMuted,
+                    dense = true,
+                    enabled = grid.rows() > GridLimits.MIN_SIDE,
+                    onClick = {
+                        viewModel.configureMap(grid.columns(), grid.rows() - 1, grid.feetPerSquare())
+                    },
+                )
+                GameButton(
+                    label = "+ righe",
+                    accent = Palette.TextMuted,
+                    dense = true,
+                    enabled = grid.rows() < MapGrid.MAX_SIDE,
+                    onClick = {
+                        viewModel.configureMap(grid.columns(), grid.rows() + 1, grid.feetPerSquare())
+                    },
+                )
 
                 listOf(5, 10, 20, 50).forEach { feet ->
                     GameButton(
-                        label = "${feetWithMetres(feet)}/casella",
+                        label = "${metresLabel(feet)}/casella",
                         accent = if (grid.feetPerSquare() == feet) Palette.GoldBright else Palette.TextFaint,
                         selected = grid.feetPerSquare() == feet,
                         dense = true,

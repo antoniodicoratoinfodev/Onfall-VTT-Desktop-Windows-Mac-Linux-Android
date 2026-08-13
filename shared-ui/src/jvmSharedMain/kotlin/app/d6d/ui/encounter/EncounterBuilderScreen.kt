@@ -516,7 +516,7 @@ private fun GridStep(
                 val selected = viewModel.feetPerSquare == feet
                 GameButton(
                     label = "${metresFromFeet(feet)} m / quadratino",
-                    subtitle = "$feet piedi${if (feet == 5) " · Predefinito" else ""}",
+                    subtitle = if (feet == 5) "Predefinito" else null,
                     accent = if (selected) Palette.Gold else Palette.TextMuted,
                     selected = selected,
                     onClick = { viewModel.updateFeetPerSquare(feet) },
@@ -527,11 +527,11 @@ private fun GridStep(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            GameButton("− 0,3048 m", accent = Palette.TextMuted, onClick = {
+            GameButton("− 0,3 m", accent = Palette.TextMuted, onClick = {
                 viewModel.updateFeetPerSquare(viewModel.feetPerSquare - 1)
             })
             Chip("Scala scelta: ${metresFromFeet(viewModel.feetPerSquare)} m", Palette.GoldBright)
-            GameButton("+ 0,3048 m", accent = Palette.TextMuted, onClick = {
+            GameButton("+ 0,3 m", accent = Palette.TextMuted, onClick = {
                 viewModel.updateFeetPerSquare(viewModel.feetPerSquare + 1)
             })
         }

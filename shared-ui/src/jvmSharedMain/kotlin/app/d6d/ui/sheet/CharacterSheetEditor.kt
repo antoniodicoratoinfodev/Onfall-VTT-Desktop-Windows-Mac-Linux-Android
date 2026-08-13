@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.d6d.sheet.metresLabel
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.Ability
@@ -630,12 +631,12 @@ private fun CombatColumn(
                 },
                 adaptiveFormItem { itemModifier ->
                     SheetBox("Velocita'", itemModifier) {
-                        SheetFeetField("Piedi", sheet.speedFeet) {
+                        SheetMetreField("Base", sheet.speedFeet) {
                             update(sheet.copy(speedFeet = it.coerceAtLeast(0)))
                         }
                         if (sheet.armorSpeedPenaltyFeet > 0) {
                             Text(
-                                "Effettiva: ${sheet.effectiveSpeedFeet} piedi",
+                                "Effettiva: ${metresLabel(sheet.effectiveSpeedFeet)}",
                                 color = Palette.Bloodied,
                                 style = MaterialTheme.typography.labelSmall,
                             )
@@ -1013,10 +1014,10 @@ private fun WeaponAreaSection(weapon: WeaponEntry, onChange: (WeaponEntry) -> Un
     }
     if (!weapon.isArea) return
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        SheetNumberField("Raggio (piedi)", weapon.areaRadiusFeet, Modifier.weight(1f)) {
+        SheetMetreField("Raggio", weapon.areaRadiusFeet, Modifier.weight(1f)) {
             onChange(weapon.copy(areaRadiusFeet = it.coerceAtLeast(1)))
         }
-        SheetNumberField("Gittata (piedi)", weapon.rangeFeet, Modifier.weight(1f)) {
+        SheetMetreField("Gittata", weapon.rangeFeet, Modifier.weight(1f)) {
             onChange(weapon.copy(rangeFeet = it.coerceAtLeast(0)))
         }
     }
@@ -1079,7 +1080,7 @@ private fun CharacterAbilityRow(ability: CatalogAbility, onRemove: () -> Unit) {
         ) {
             Chip(ability.activationCost.characterLabel, Palette.Gold)
             if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
-            if (ability.isArea) Chip("Area ${ability.areaRadiusFeet} ft", Palette.Crit)
+            if (ability.isArea) Chip("Area ${metresLabel(ability.areaRadiusFeet)}", Palette.Crit)
             Chip("Dal catalogo Abilità", Palette.Party)
         }
     }
@@ -1151,7 +1152,7 @@ private fun AbilityPickerDialog(
                                     buildString {
                                         append(ability.activationCost.characterLabel)
                                         if (ability.dealsDamage) append(" · ${ability.damageText}")
-                                        if (ability.isArea) append(" · area ${ability.areaRadiusFeet} ft")
+                                        if (ability.isArea) append(" · area ${metresLabel(ability.areaRadiusFeet)}")
                                     },
                                     color = Palette.TextMuted,
                                     style = MaterialTheme.typography.bodySmall,

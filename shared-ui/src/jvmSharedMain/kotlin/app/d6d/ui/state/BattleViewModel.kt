@@ -8,7 +8,6 @@ import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.AreaSpellResult
 import app.d6d.domain.combat.AttackRequest
 import app.d6d.domain.combat.ActorDefinition
-import app.d6d.domain.combat.CombatEvent
 import app.d6d.domain.combat.CombatState
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.CombatantSnapshot
@@ -35,11 +34,14 @@ import app.d6d.engine.ai.EnemyCpuActionReport
 import app.d6d.engine.ai.EnemyCpuActionType
 import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.engine.ai.EnemyCpuResult
-import app.d6d.sheet.feetWithMetres
+import app.d6d.sheet.metresLabel
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumber
 import app.d6d.ui.components.italianLabel
 import app.d6d.ui.encounter.EncounterMode
+import app.d6d.ui.maps.PendingToken
+import app.d6d.ui.maps.arrangeTokens
+import app.d6d.ui.maps.gridTooSmallMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
@@ -1031,7 +1033,7 @@ class BattleViewModel(
             val ids = try {
                 session.areaTargets(targeting.casterId, center, targeting.abilityId)
             } catch (failure: RuntimeException) {
-                message = failure.message
+                message = italianRuleMessage(failure.message)
                 return
             }
             pendingArea = PendingArea(
@@ -1246,11 +1248,11 @@ class BattleViewModel(
                 UndoEffect.None -> Unit
             }
         } catch (failure: CombatRuleException) {
-            message = failure.message
+            message = italianRuleMessage(failure.message)
         } catch (failure: IllegalArgumentException) {
-            message = failure.message
+            message = italianRuleMessage(failure.message)
         } catch (failure: IllegalStateException) {
-            message = failure.message
+            message = italianRuleMessage(failure.message)
         } finally {
             sync()
         }
@@ -1261,7 +1263,7 @@ class BattleViewModel(
         targetId: String,
         amount: Int,
         damageType: DamageType = DamageType.FORCE,
-    ) = cpuGuardedTableCommand {
+    ) = command {
         val result = session.applyDamage(
             activeActorId.orEmpty(),
             targetId,
@@ -1273,7 +1275,7 @@ class BattleViewModel(
         }
     }
 
-    fun rollDeathSave(targetId: String) = cpuGuardedTableCommand {
+    fun rollDeathSave(targetId: String) = command {
         val result = session.rollDeathSave(targetId, D20RollInput.digital())
         val label = when {
             result.dead() -> "Morto"
@@ -1289,7 +1291,7 @@ class BattleViewModel(
      * Usa la modalità d20 già scelta nella barra dei comandi; il motore aggiunge
      * Sfinimento e l'eventuale Svantaggio imposto dall'armatura.
      */
-    fun rollAbilityCheck(combatantId: String, ability: SaveAbility, modifier: Int) = cpuGuardedTableCommand {
+    fun rollAbilityCheck(combatantId: String, ability: SaveAbility, modifier: Int) = command {
         session.rollAbilityCheck(
             combatantId,
             ability,
@@ -1298,12 +1300,12 @@ class BattleViewModel(
         )
     }
 
-    fun stabilize(targetId: String) = cpuGuardedTableCommand {
+    fun stabilize(targetId: String) = command {
         session.stabilize(targetId, "manuale")
         push(targetId, floatInfo("Stabile"))
     }
 
-    fun setExhaustion(targetId: String, level: Int) = cpuGuardedTableCommand {
+    fun setExhaustion(targetId: String, level: Int) = command {
         session.setExhaustion(targetId, level)
         push(targetId, floatInfo("Sfinimento $level"))
     }
@@ -1314,7 +1316,7 @@ class BattleViewModel(
 
     fun resolve(outcome: String = "Concluso dal tavolo") = command { session.resolve(outcome) }
 
-    fun heal(targetId: String, amount: Int) = cpuGuardedTableCommand {
+    fun heal(targetId: String, amount: Int) = command {
         val healed = session.heal(targetId, amount)
         if (healed > 0) push(targetId, FloatingNumber(++floatSequence, "+$healed", FloatKind.HEAL))
     }
@@ -1322,10 +1324,10 @@ class BattleViewModel(
     /** Correzione dei PF attuali disponibile solo ai controlli della modalità Modifica. */
     fun setCurrentHitPoints(combatantId: String, value: Int) {
         val maximum = combatant(combatantId)?.snapshot()?.maxHitPoints() ?: return
-        cpuGuardedTableCommand { session.setCurrentHitPoints(combatantId, value.coerceIn(0, maximum)) }
+        command { session.setCurrentHitPoints(combatantId, value.coerceIn(0, maximum)) }
     }
 
-    fun grantTemporary(targetId: String, amount: Int) = cpuGuardedTableCommand {
+    fun grantTemporary(targetId: String, amount: Int) = command {
         val granted = session.grantTemporaryHitPoints(targetId, amount)
         if (granted > 0) {
             push(targetId, FloatingNumber(++floatSequence, "+$granted PFT", FloatKind.TEMPORARY))
@@ -1336,7 +1338,7 @@ class BattleViewModel(
      * `rounds` a zero significa durata manuale: la condizione resta finche' il
      * tavolo non la rimuove, che e' il caso piu' comune quando il DM improvvisa.
      */
-    fun addCondition(targetId: String, type: ConditionType, rounds: Int) = cpuGuardedTableCommand {
+    fun addCondition(targetId: String, type: ConditionType, rounds: Int) = command {
         val duration = if (rounds > 0) ConditionDuration.rounds(rounds) else ConditionDuration.manual()
         session.addCondition(
             "cond-${++floatSequence}",
@@ -1351,7 +1353,7 @@ class BattleViewModel(
         push(targetId, floatInfo(type.italianLabel))
     }
 
-    fun removeCondition(targetId: String, conditionInstanceId: String) = cpuGuardedTableCommand {
+    fun removeCondition(targetId: String, conditionInstanceId: String) = command {
         session.removeCondition(targetId, conditionInstanceId)
     }
 
@@ -1554,7 +1556,7 @@ class BattleViewModel(
         }
         command {
             val feet = session.moveCombatant(combatantId, GridPosition(column, row))
-            push(combatantId, FloatingNumber(++floatSequence, feetWithMetres(feet, "ft"), FloatKind.INFO))
+            push(combatantId, FloatingNumber(++floatSequence, metresLabel(feet), FloatKind.INFO))
         }
     }
 
@@ -1588,10 +1590,15 @@ class BattleViewModel(
     }
 
     /**
-     * Dispone chi non e' ancora sulla mappa in due file contrapposte.
+     * Dispone chi non e' ancora sulla mappa in due schieramenti contrapposti.
      *
      * Serve solo a partire in fretta: e' una comodita' di preparazione, non una
-     * regola, e ogni segnaposto resta poi spostabile a mano.
+     * regola, e ogni segnaposto resta poi spostabile a mano. La disposizione e' la
+     * stessa della procedura Nuova partita, cosi' una mappa completata al tavolo
+     * non si distingue da una preparata dalla procedura guidata.
+     *
+     * Chi e' gia' sulla mappa non viene toccato, ma il suo ingombro conta: il
+     * piazzatore aggira i segnaposti presenti invece di sovrapporvisi.
      */
     fun autoPlaceMissing(squaresFor: (String) -> Int = { 1 }) {
         if (!mapConfigured) {
@@ -1599,17 +1606,21 @@ class BattleViewModel(
             return
         }
         val grid = battleMap.grid()
-        var partyColumn = 1
-        var enemyColumn = 1
-        partyIds.forEach { id ->
-            if (battleMap.isPlaced(id)) return@forEach
-            place(id, partyColumn.coerceAtMost(grid.columns() - 1), grid.rows() - 2, squaresFor(id))
-            partyColumn += 2
+        val pending = (partyIds + enemyIds)
+            .filterNot { battleMap.isPlaced(it) }
+            .map { PendingToken(it, isParty(it), squaresFor(it).coerceIn(1, 4)) }
+        if (pending.isEmpty()) {
+            message = "Tutti i segnaposti sono già sulla mappa."
+            return
         }
-        enemyIds.forEach { id ->
-            if (battleMap.isPlaced(id)) return@forEach
-            place(id, enemyColumn.coerceAtMost(grid.columns() - 1), 1, squaresFor(id))
-            enemyColumn += 2
+        val occupied = battleMap.orderedPlacements().flatMap { it.occupiedSquares() }.toSet()
+        val placements = arrangeTokens(grid, pending, occupied) ?: run {
+            message = gridTooSmallMessage(grid)
+            return
+        }
+        val sideOf = pending.associate { it.combatantId to it.squaresPerSide }
+        placements.forEach { (combatantId, origin) ->
+            place(combatantId, origin.column(), origin.row(), sideOf.getValue(combatantId))
         }
     }
 
@@ -1935,16 +1946,6 @@ class BattleViewModel(
     }
 
     /**
-     * Esegue un comando del motore e risincronizza.
-     *
-     * Una violazione delle regole diventa un messaggio, non un errore fatale: il
-     * motore ha gia' annullato il proprio comando, quindi lo stato resta coerente.
-     */
-    private fun cpuGuardedTableCommand(block: () -> Unit) {
-        command(block = block)
-    }
-
-    /**
      * Il breve ritardo dello scheduler è parte del batch: nessun comando del
      * tavolo deve poter cambiare lo stato che la CPU sta per valutare.
      */
@@ -1967,11 +1968,11 @@ class BattleViewModel(
             block()
             completed = true
         } catch (failure: CombatRuleException) {
-            message = failure.message
+            message = italianRuleMessage(failure.message)
         } catch (failure: IllegalArgumentException) {
-            message = failure.message
+            message = italianRuleMessage(failure.message)
         } catch (failure: IllegalStateException) {
-            message = failure.message
+            message = italianRuleMessage(failure.message)
         } finally {
             sync()
             if (completed && state.revision() != revisionBefore) undoEffects.addLast(undoEffect)
@@ -2124,10 +2125,6 @@ data class PendingArea(
     val saveDc: Int,
     val targets: List<AreaSaveChoice>,
 )
-
-/** Ultimi eventi in ordine cronologico inverso, per il registro a schermo. */
-fun List<CombatEvent>.latest(count: Int): List<CombatEvent> =
-    asReversed().take(count)
 
 val EnemyCpuDifficulty.italianLabel: String
     get() = when (this) {

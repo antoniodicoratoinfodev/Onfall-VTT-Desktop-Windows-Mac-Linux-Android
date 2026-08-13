@@ -16,7 +16,14 @@ public record MapGrid(int columns, int rows, int feetPerSquare) {
     /** Passo standard del regolamento: una casella, cinque piedi. */
     public static final int STANDARD_FEET_PER_SQUARE = 5;
 
-    private static final int MAX_SIDE = 400;
+    /**
+     * Lato massimo gestito.
+     *
+     * <p>E' pubblico perche' l'interfaccia deve poterlo rispettare: un comando che
+     * supera il limite viene rifiutato, e un pulsante che lo sa puo' fermarsi prima
+     * invece di far comparire un avviso.</p>
+     */
+    public static final int MAX_SIDE = 400;
 
     public MapGrid {
         if (columns < 0 || rows < 0) {

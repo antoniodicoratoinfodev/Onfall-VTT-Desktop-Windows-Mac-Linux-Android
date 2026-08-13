@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,7 +44,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.d6d.sheet.formatModifier
+import app.d6d.sheet.feetFromMetres
 import app.d6d.sheet.metresFromFeet
+import app.d6d.sheet.parseMetres
 import app.d6d.ui.theme.Palette
 
 /**
@@ -85,6 +88,8 @@ fun SheetField(
     value: String,
     modifier: Modifier = Modifier,
     numeric: Boolean = false,
+    /** Ammette anche i decimali: sul tocco cambia la tastiera che si apre. */
+    decimal: Boolean = false,
     onFocusLost: (() -> Unit)? = null,
     onChange: (String) -> Unit,
 ) {
@@ -99,10 +104,10 @@ fun SheetField(
                 fontWeight = FontWeight.Medium,
             ),
             cursorBrush = SolidColor(Palette.Gold),
-            keyboardOptions = if (numeric) {
-                KeyboardOptions(keyboardType = KeyboardType.Number)
-            } else {
-                KeyboardOptions.Default
+            keyboardOptions = when {
+                decimal -> KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                numeric -> KeyboardOptions(keyboardType = KeyboardType.Number)
+                else -> KeyboardOptions.Default
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -147,14 +152,57 @@ fun SheetNumberField(
     }
 }
 
-/** Campo in piedi con il valore metrico aggiornato mentre si modifica la scheda. */
+/**
+ * Distanza in metri.
+ *
+ * Il motore misura in piedi interi, ma quella e' una sua contabilita' interna:
+ * qui si scrive e si legge in metri, con la conversione del regolamento. I
+ * decimali servono davvero — 1,5 e 4,5 sono misure ordinarie — quindi il campo
+ * accetta la virgola oltre al punto.
+ */
 @Composable
-fun SheetFeetField(
+fun SheetMetreField(
     label: String,
-    value: Int,
+    feet: Int,
     modifier: Modifier = Modifier,
     onChange: (Int) -> Unit,
-) = SheetNumberField("$label · ${metresFromFeet(value)} m", value, modifier, onChange)
+) {
+    var draft by remember { mutableStateOf(metresFromFeet(feet)) }
+    // Il testo NON puo' essere ricreato a ogni cambio di `feet`: il valore che
+    // arriva qui e' spesso il risultato della battitura in corso, e riscriverlo
+    // in forma canonica sotto le dita cancellerebbe la misura a meta'. Chi digita
+    // «1,5» passa per «1», che vale 3 piedi: rigenerare il testo lo riporterebbe
+    // a «0,9» al secondo carattere. Si riallinea solo quando il valore cambia
+    // davvero da fuori — un Undo, il caricamento di un'altra scheda.
+    LaunchedEffect(feet) {
+        if (metreDraftIsStale(draft, feet)) draft = metresFromFeet(feet)
+    }
+    SheetField(
+        label = "$label (m)",
+        value = draft,
+        modifier = modifier,
+        decimal = true,
+        // Uscendo dal campo la misura torna in forma canonica: «1,» diventa «0,9»
+        // e «1.5» diventa «1,5», cosi' a schermo resta cio' che la scheda conserva.
+        onFocusLost = { draft = metresFromFeet(feet) },
+    ) { text ->
+        val cleaned = text.trim()
+        if (cleaned.matches(Regex("""-?\d*(?:[,.]\d*)?"""))) {
+            draft = cleaned
+            parseMetres(cleaned)?.let { onChange(feetFromMetres(it)) }
+        }
+    }
+}
+
+/**
+ * Vero quando il testo a schermo non descrive piu' la misura della scheda.
+ *
+ * Il confronto avviene in piedi, non fra stringhe: «1.5», «1,5» e «1,50» sono la
+ * stessa misura scritta in tre modi, e nessuna delle tre va sostituita mentre
+ * l'utente sta scrivendo.
+ */
+internal fun metreDraftIsStale(draft: String, feet: Int): Boolean =
+    parseMetres(draft)?.let(::feetFromMetres) != feet
 
 /**
  * Valore derivato e non modificabile, mostrato in risalto.

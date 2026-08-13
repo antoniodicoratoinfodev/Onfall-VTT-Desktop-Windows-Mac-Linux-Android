@@ -47,7 +47,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
-import app.d6d.sheet.feetWithMetres
+import app.d6d.sheet.metresLabel
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.ConditionChip
 import app.d6d.ui.components.Faction
@@ -306,9 +306,9 @@ private fun MapLegend(viewModel: BattleViewModel, modifier: Modifier = Modifier)
     val target = viewModel.selectedTargetId
     val distance = if (active != null && target != null) viewModel.distanceFeet(active, target) else null
     val description = buildString {
-        append("Scala della mappa: una casella equivale a ${feetWithMetres(grid.feetPerSquare())}.")
+        append("Scala della mappa: una casella equivale a ${metresLabel(grid.feetPerSquare())}.")
         append(
-            distance?.let { " Distanza dal bersaglio: ${feetWithMetres(it)}." }
+            distance?.let { " Distanza dal bersaglio: ${metresLabel(it)}." }
                 ?: " Distanza dal bersaglio non determinata.",
         )
     }
@@ -323,13 +323,13 @@ private fun MapLegend(viewModel: BattleViewModel, modifier: Modifier = Modifier)
         horizontalAlignment = Alignment.End,
     ) {
         Text(
-            text = "1 casella = ${feetWithMetres(grid.feetPerSquare())}",
+            text = "1 casella = ${metresLabel(grid.feetPerSquare())}",
             color = Palette.Gold,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
-            text = distance?.let { "Distanza dal bersaglio: ${feetWithMetres(it)}" }
+            text = distance?.let { "Distanza dal bersaglio: ${metresLabel(it)}" }
                 ?: "Distanza non determinata",
             color = if (distance != null) Palette.Text else Palette.TextFaint,
             style = MaterialTheme.typography.bodySmall,

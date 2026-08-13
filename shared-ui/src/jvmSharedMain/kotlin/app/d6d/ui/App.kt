@@ -34,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -64,6 +66,7 @@ import app.d6d.ui.layout.LayoutStore
 import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.layout.UiLayoutState
 import app.d6d.persistence.session.SessionArchiveStore
+import app.d6d.ui.session.OpenGameSession
 import app.d6d.ui.session.SessionWorkspace
 import app.d6d.ui.session.WorkspaceRecoveryStore
 import app.d6d.ui.session.WorkspaceOpenResult
@@ -259,20 +262,7 @@ fun AppRoot(
         // Ogni scheda conserva il proprio effetto di autosave anche quando non e'
         // attiva: passare a un'altra mappa non cancella il debounce della prima.
         workspace.openSessions.forEach { opened ->
-            key(opened.id) {
-                LaunchedEffect(
-                    opened.battle.state,
-                    opened.battle.presentationState(),
-                    opened.manager.currentSlug,
-                ) {
-                    if (opened.manager.currentSlug != null && opened.manager.hasUnsavedChanges) {
-                        delay(1_200)
-                        opened.battle.awaitEnemyCpuTurnEnd()
-                        val prepared = opened.manager.prepareForPersistence()
-                        runDiskIo { workspace.flushAutosave(opened, prepared) }
-                    }
-                }
-            }
+            key(opened.id) { SessionAutosaveEffect(workspace, opened) }
         }
 
         // Una ricreazione della shell (in particolare Activity su Android) non
@@ -486,6 +476,31 @@ fun AppRoot(
     }
 }
 
+/**
+ * Autosave con debounce di una singola scheda aperta.
+ *
+ * Vive in una composable propria per un motivo preciso: `key` apre un gruppo ma
+ * non un nuovo ambito di ricomposizione, quindi leggere `state` e
+ * `presentationState()` accanto agli altri effetti faceva ricomporre l'intera
+ * radice a ogni attacco, spostamento e clic sul bersaglio. Qui le stesse letture
+ * invalidano soltanto questa foglia, che non disegna nulla.
+ */
+@Composable
+private fun SessionAutosaveEffect(workspace: SessionWorkspace, opened: OpenGameSession) {
+    LaunchedEffect(
+        opened.battle.state,
+        opened.battle.presentationState(),
+        opened.manager.currentSlug,
+    ) {
+        if (opened.manager.currentSlug != null && opened.manager.hasUnsavedChanges) {
+            delay(1_200)
+            opened.battle.awaitEnemyCpuTurnEnd()
+            val prepared = opened.manager.prepareForPersistence()
+            runDiskIo { workspace.flushAutosave(opened, prepared) }
+        }
+    }
+}
+
 @Composable
 private fun NavRail(
     current: Destination,
@@ -505,12 +520,14 @@ private fun NavRail(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        // Tasto per chiudere la barra: in cima, dove non copre le voci.
+        // Tasto per chiudere la barra: in cima, dove non copre le voci. Il chevron
+        // da solo non e' un nome pronunciabile, quindi lo dichiara la semantica.
         Box(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(7.dp))
                 .clickable(role = Role.Button, onClick = onCollapse)
+                .semantics { contentDescription = "Chiudi la barra di navigazione" }
                 .padding(vertical = 4.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -558,6 +575,7 @@ private fun CollapsedRail(onExpand: () -> Unit) {
             Modifier
                 .clip(RoundedCornerShape(7.dp))
                 .clickable(role = Role.Button, onClick = onExpand)
+                .semantics { contentDescription = "Apri la barra di navigazione" }
                 .padding(vertical = 6.dp, horizontal = 4.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -618,7 +636,14 @@ private fun NavItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        GlyphIcon(destination.icon, tint = tint, size = 20.dp)
+        // Con l'etichetta visibile il nome lo dice gia' il testo sotto al glifo:
+        // ripeterlo qui lo farebbe annunciare due volte.
+        GlyphIcon(
+            glyph = destination.icon,
+            tint = tint,
+            size = 20.dp,
+            contentDescription = destination.label.takeUnless { showLabel },
+        )
         if (showLabel) {
             Text(
                 text = destination.label,

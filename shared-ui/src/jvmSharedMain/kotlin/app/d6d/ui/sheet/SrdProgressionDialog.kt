@@ -457,7 +457,7 @@ internal fun RuleEffect.readableText(): String = buildString {
     append(
         when (target) {
             EffectTarget.ARMOR_CLASS -> "alla ${target.italianLabel}"
-            EffectTarget.SPEED_FEET -> "piedi di ${target.italianLabel.lowercase()}"
+            EffectTarget.SPEED_FEET -> "metri di ${target.italianLabel.lowercase()}"
             else -> "ai ${target.italianLabel.lowercase()}"
         },
     )

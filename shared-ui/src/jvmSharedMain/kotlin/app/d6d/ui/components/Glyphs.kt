@@ -11,6 +11,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.cos
@@ -31,8 +33,20 @@ fun GlyphIcon(
     tint: Color,
     modifier: Modifier = Modifier,
     size: Dp = 18.dp,
+    /**
+     * Nome letto dalle tecnologie assistive.
+     *
+     * Un tracciato su tela non ha testo: senza questo, un comando fatto di solo
+     * glifo — la barra ridotta alle icone — non ha alcun nome da annunciare. Va
+     * lasciato nullo quando accanto c'e' gia' un'etichetta visibile, altrimenti
+     * lo stesso nome verrebbe letto due volte.
+     */
+    contentDescription: String? = null,
 ) {
-    Canvas(modifier.size(size)) {
+    val described = contentDescription?.let { label ->
+        modifier.semantics { this.contentDescription = label }
+    } ?: modifier
+    Canvas(described.size(size)) {
         val stroke = Stroke(
             width = this.size.minDimension * 0.085f,
             cap = StrokeCap.Round,

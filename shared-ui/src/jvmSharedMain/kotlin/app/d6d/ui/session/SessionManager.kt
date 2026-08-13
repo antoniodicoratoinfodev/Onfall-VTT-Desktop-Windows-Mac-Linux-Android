@@ -87,11 +87,9 @@ class SessionManager(
             savedGeneration != battle.sessionGeneration ||
             (savedDisplayName != null && currentName != savedDisplayName)
 
-    val isDirty: Boolean get() = hasUnsavedChanges
     val hasCurrentSave: Boolean
         get() = currentSlug != null && savedGeneration == battle.sessionGeneration
     val currentDirty: Boolean get() = hasCurrentSave && hasUnsavedChanges
-    val unsaved: Boolean get() = hasUnsavedChanges
 
     var menuOpen by mutableStateOf(false)
 

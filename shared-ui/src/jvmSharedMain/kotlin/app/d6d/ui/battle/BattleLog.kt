@@ -29,7 +29,7 @@ import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.EventType
 import app.d6d.sheet.italianLabel
-import app.d6d.sheet.feetWithMetres
+import app.d6d.sheet.metresLabel
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
@@ -259,8 +259,8 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
         EventType.ACTION_GRANTED ->
             "$actor ottiene un'azione aggiuntiva, non utilizzabile per l'azione di Magia"
         EventType.MOVEMENT_SPENT ->
-            "$actor usa ${detail("feet").asFeet()} di movimento; " +
-                "ne restano ${detail("remaining").asFeet()}"
+            "$actor usa ${detail("feet").asDistance()} di movimento; " +
+                "ne restano ${detail("remaining").asDistance()}"
         EventType.SPELL_SLOT_SPENT -> "$actor consuma uno slot"
         EventType.ATTACK_ROLLED ->
             "$actor tira per colpire $target$ability: $d20 contro CA ${detail("armorClass")}"
@@ -278,7 +278,7 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
         }
         EventType.AREA_SPELL_CAST ->
             "$actor usa ${abilityName.ifBlank { "un'area" }} al centro ${detail("center")} — " +
-                "raggio ${detail("radiusFeet").asFeet()}, CD ${detail("saveDc")}, " +
+                "raggio ${detail("radiusFeet").asDistance()}, CD ${detail("saveDc")}, " +
                 "${detail("targets")} creature coinvolte"
         EventType.SAVING_THROW_ROLLED -> {
             val esito = if (detail("saved") == "true") "supera" else "fallisce"
@@ -393,7 +393,7 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
         }
         EventType.EXHAUSTION_CHANGED ->
             "$actor: sfinimento ${detail("before")} → ${detail("after")} " +
-                "(${detail("d20Penalty")} ai D20, ${detail("speedPenaltyFeet").asFeet()})"
+                "(${detail("d20Penalty")} ai D20, ${detail("speedPenaltyFeet").asDistance()})"
 
         EventType.COMBATANT_EDITED -> {
             val previousName = detail("previousName")
@@ -413,7 +413,7 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
                 Triple("TS Cos", detail("previousConstitutionSaveBonus"), detail("constitutionSaveBonus")),
             ).filter { (_, before, after) -> before != after && after.isNotBlank() }
                 .joinToString(", ") { (label, before, after) ->
-                    if (label == "Velocità") "$label ${before.asFeet()}→${after.asFeet()}" else "$label $before→$after"
+                    if (label == "Velocità") "$label ${before.asDistance()}→${after.asDistance()}" else "$label $before→$after"
                 }
 
             buildString {
@@ -428,7 +428,7 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
 
         EventType.MAP_CONFIGURED -> buildString {
             append("Mappa ").append(detail("columns")).append('×').append(detail("rows"))
-            append(", ").append(detail("feetPerSquare").asFeet()).append(" per casella")
+            append(", ").append(detail("feetPerSquare").asDistance()).append(" per casella")
             val dropped = detail("droppedPlacements").toIntOrNull() ?: 0
             if (dropped > 0) append(" — $dropped segnaposti fuori bordo rimossi")
         }
@@ -440,13 +440,14 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
 
         EventType.COMBATANT_MOVED ->
             "$actor si sposta ${detail("from")} → ${detail("to")} " +
-                "(${detail("feet").asFeet()}, ne restano ${detail("remainingFeet").asFeet()})"
+                "(${detail("feet").asDistance()}, ne restano ${detail("remainingFeet").asDistance()})"
 
         EventType.COMBATANT_REMOVED_FROM_MAP -> "$actor tolto dalla mappa"
     }
 }
 
-private fun String.asFeet(): String = toIntOrNull()?.let(::feetWithMetres) ?: "$this piedi"
+/** Il registro riceve i piedi del motore e li mostra in metri come tutto il resto. */
+private fun String.asDistance(): String = toIntOrNull()?.let(::metresLabel) ?: "$this m"
 
 /** Formula completa di un tiro d20, inclusi entrambi i dadi di Vantaggio/Svantaggio. */
 private fun Map<String, String>.d20Breakdown(): String {

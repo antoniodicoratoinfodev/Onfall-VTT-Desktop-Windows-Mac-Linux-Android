@@ -7,6 +7,8 @@ import app.d6d.rules.character.WeaponProperty
 import app.d6d.rules.character.WeaponReach
 import app.d6d.rules.character.WeaponTrainingGrant
 import app.d6d.sheet.italianLabel
+import app.d6d.sheet.metresFromFeet
+import app.d6d.sheet.metresLabel
 
 private const val WEAPON_PREFIX = "srd521-it:weapon"
 
@@ -50,7 +52,10 @@ val WeaponDefinition.summary: String
         append(damageText)
         when {
             reach == WeaponReach.RANGED ->
-                append(" · gittata $normalRangeFeet/$longRangeFeet piedi")
+                append(" · gittata ")
+                    .append(metresFromFeet(normalRangeFeet))
+                    .append('/')
+                    .append(metresLabel(longRangeFeet))
             WeaponProperty.REACH in properties -> append(" · portata")
         }
         append(" · Padronanza: ").append(mastery)
@@ -63,8 +68,9 @@ val WeaponDefinition.summary: String
  * Tabella Armi dello SRD 5.2.1: dieci semplici da mischia, quattro semplici a
  * distanza, diciotto da guerra da mischia e sei da guerra a distanza.
  *
- * Il PDF italiano stampa le gittate in metri; qui sono in piedi come nel resto
- * del motore, con la conversione ufficiale (1,5 m = 5 piedi).
+ * Il PDF italiano stampa le gittate in metri, e in metri le mostra anche questa
+ * tabella. In memoria restano piedi come nel resto del motore, con la
+ * conversione ufficiale (1,5 m = 5 piedi).
  */
 object SrdWeapons {
 

@@ -6,13 +6,16 @@ import androidx.compose.runtime.setValue
 import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.CombatantSetup
 import app.d6d.domain.combat.D20Mode
-import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
 import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.ui.state.EnemyCpuSpeed
 import app.d6d.ui.content.SessionTemplate
 import app.d6d.ui.content.SessionTemplates
+import app.d6d.ui.maps.GridLimits
+import app.d6d.ui.maps.PendingToken
+import app.d6d.ui.maps.arrangeTokens
+import app.d6d.ui.maps.gridTooSmallMessage
 import app.d6d.ui.roster.RosterItem
 import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
@@ -464,43 +467,16 @@ class EncounterBuilderViewModel(
         grid: MapGrid,
         combatants: List<PreparedCombatant>,
     ) {
-        val occupied = mutableSetOf<Pair<Int, Int>>()
-        val middle = grid.columns() / 2
-        val centerRow = grid.rows() / 2
+        val placements = arrangeTokens(
+            grid = grid,
+            tokens = combatants.map {
+                PendingToken(it.instanceId, it.faction == EncounterFaction.ALLEATI, it.squaresPerSide)
+            },
+        ) ?: throw IllegalStateException(gridTooSmallMessage(grid))
 
-        combatants.sortedBy { it.faction.ordinal }.forEach { combatant ->
-            val side = combatant.squaresPerSide
-            val candidates = buildList {
-                for (row in 0..grid.rows() - side) {
-                    for (column in 0..grid.columns() - side) {
-                        add(GridPosition(column, row))
-                    }
-                }
-            }.sortedBy { position ->
-                val wrongHalf = when (combatant.faction) {
-                    EncounterFaction.ALLEATI -> if (position.column() + side <= middle) 0 else 1_000
-                    EncounterFaction.AVVERSARI -> if (position.column() >= middle) 0 else 1_000
-                }
-                val anchorColumn = when (combatant.faction) {
-                    EncounterFaction.ALLEATI -> (middle - side - 1).coerceAtLeast(0)
-                    EncounterFaction.AVVERSARI -> (middle + 1).coerceAtMost(grid.columns() - side)
-                }
-                wrongHalf + kotlin.math.abs(position.column() - anchorColumn) * 4 +
-                    kotlin.math.abs(position.row() - centerRow)
-            }
-
-            val origin = candidates.firstOrNull { position ->
-                (position.column() until position.column() + side).all { column ->
-                    (position.row() until position.row() + side).all { row -> column to row !in occupied }
-                }
-            } ?: throw IllegalStateException(
-                "La griglia ${grid.columns()}×${grid.rows()} è troppo piccola per tutti i token selezionati.",
-            )
-
-            session.placeCombatant(combatant.instanceId, origin, side)
-            for (column in origin.column() until origin.column() + side) {
-                for (row in origin.row() until origin.row() + side) occupied += column to row
-            }
+        val sideOf = combatants.associate { it.instanceId to it.squaresPerSide }
+        placements.forEach { (instanceId, origin) ->
+            session.placeCombatant(instanceId, origin, sideOf.getValue(instanceId))
         }
     }
 
@@ -513,8 +489,8 @@ class EncounterBuilderViewModel(
     private companion object {
         const val MIN_QUANTITY = 1
         const val MAX_QUANTITY = 99
-        const val MIN_GRID_SIDE = 5
-        const val MAX_GRID_SIDE = 100
+        const val MIN_GRID_SIDE = GridLimits.MIN_SIDE
+        const val MAX_GRID_SIDE = GridLimits.MAX_BUILDER_SIDE
         const val DEFAULT_COLUMNS = 20
         const val DEFAULT_ROWS = 15
         const val DEFAULT_FEET_PER_SQUARE = 5

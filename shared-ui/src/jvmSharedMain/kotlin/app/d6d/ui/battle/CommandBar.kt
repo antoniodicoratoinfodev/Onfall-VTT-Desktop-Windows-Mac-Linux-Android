@@ -56,9 +56,9 @@ import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.HealingTarget
-import app.d6d.sheet.feetWithMetres
+import app.d6d.sheet.metresLabel
 import app.d6d.sheet.rulesTextLead
-import app.d6d.sheet.withMetricFeet
+import app.d6d.sheet.withMetricDistances
 import app.d6d.ui.compendium.italianAbbreviation
 import app.d6d.ui.compendium.italianLabel
 import app.d6d.ui.components.Chip
@@ -282,7 +282,7 @@ private fun PassiveTraitChip(ability: AbilityDefinition) {
                         style = MaterialTheme.typography.labelSmall,
                     )
                     Text(
-                        text = ability.rulesText().rulesTextLead().withMetricFeet().ifBlank {
+                        text = ability.rulesText().rulesTextLead().withMetricDistances().ifBlank {
                             "Vale sempre, senza spendere nulla nel turno."
                         },
                         color = Palette.Text,
@@ -409,11 +409,11 @@ private fun AbilityCard(
                 }
             }
             if (ability.isArea) {
-                AbilityStat("Area", feetWithMetres(ability.areaRadiusFeet()), enabled)
+                AbilityStat("Area", metresLabel(ability.areaRadiusFeet()), enabled)
                 ability.saveAbility()?.let { AbilityStat("TS", it.italianAbbreviation, enabled) }
             }
             if (ability.rangeFeet() > 0) {
-                AbilityStat("Gittata", feetWithMetres(ability.rangeFeet()), enabled)
+                AbilityStat("Gittata", metresLabel(ability.rangeFeet()), enabled)
             }
             val damage = ability.damageSummary()
             if (damage.isNotBlank()) {
@@ -654,7 +654,7 @@ fun CommandBar(
                             onClick = {
                                 if (manual) {
                                     viewModel.showMessage(
-                                        ability.rulesText().withMetricFeet().ifBlank {
+                                        ability.rulesText().withMetricDistances().ifBlank {
                                             "«${ability.name()}» richiede una risoluzione manuale al tavolo."
                                         },
                                     )
@@ -726,7 +726,7 @@ fun CommandBar(
             GameButton(
                 label = "Movimento residuo",
                 subtitle = movementRemaining
-                    ?.let { feetWithMetres(it) }
+                    ?.let { metresLabel(it) }
                     ?: "Non disponibile",
                 accent = Palette.Party,
                 enabled = viewModel.movementReachAvailable,

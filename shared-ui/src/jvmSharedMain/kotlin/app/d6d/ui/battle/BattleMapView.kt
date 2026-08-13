@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import app.d6d.sheet.feetWithMetres
+import app.d6d.sheet.metresLabel
 import app.d6d.ui.components.Chip
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -1431,7 +1431,7 @@ private fun AreaTargetingBanner(
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
-                text = "Area ${feetWithMetres(targeting.radiusFeet)} · gittata ${feetWithMetres(targeting.rangeFeet)}" +
+                text = "Area ${metresLabel(targeting.radiusFeet)} · gittata ${metresLabel(targeting.rangeFeet)}" +
                     " · clicca sulla mappa per centrare",
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.labelSmall,

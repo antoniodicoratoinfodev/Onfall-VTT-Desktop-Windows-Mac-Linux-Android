@@ -333,11 +333,11 @@ data class CatalogHealing(
 fun defaultAbilityCatalog(): List<CatalogAbility> = listOf(
     catalogAttack(
         "arma-spadone", "Spadone", 6, 5, 2, 6, 4, DamageType.SLASHING,
-        "Attacco in mischia con arma. Portata 5 piedi.",
+        "Attacco in mischia con arma. Portata 1,5 m.",
     ),
     catalogAttack(
         "arma-giavellotto", "Giavellotto", 5, 30, 1, 6, 3, DamageType.PIERCING,
-        "Attacco a distanza. Gittata 30/120 piedi.",
+        "Attacco a distanza. Gittata 9/36 m.",
         attackAbility = Ability.STRENGTH,
     ),
     catalogAttack(
@@ -360,7 +360,7 @@ fun defaultAbilityCatalog(): List<CatalogAbility> = listOf(
         areaRadiusFeet = 20,
         saveAbility = Ability.DEXTERITY,
         halfOnSave = true,
-        rulesText = "Invocazione di 3° livello. Sfera di 6 m (20 piedi); tiro salvezza su " +
+        rulesText = "Invocazione di 3° livello. Sfera di 6 m di raggio; tiro salvezza su " +
             "Destrezza, metà danni se superato. Ai livelli superiori: +1d6 per ogni " +
             "slot oltre il 3°.",
     ),
@@ -374,7 +374,7 @@ fun defaultAbilityCatalog(): List<CatalogAbility> = listOf(
     ),
     catalogAttack(
         "arma-arco", "Arco Lungo", 7, 150, 1, 8, 4, DamageType.PIERCING,
-        "Attacco a distanza. Gittata 150/600 piedi.",
+        "Attacco a distanza. Gittata 45/180 m.",
     ),
     catalogAttack(
         "arma-pugnale", "Pugnale", 6, 5, 1, 4, 4, DamageType.PIERCING,

@@ -36,7 +36,7 @@ The builder then walks through four steps: where to start from, who takes part, 
 begin. In the participants step each template gets a **faction** and a **quantity**, so the same
 stat block can enter the fight four times without being duplicated in the archive. The grid step
 sets columns, rows and the distance one square represents; every distance in the application is then
-shown in feet and in metres together. The last step chooses between **Fight mode**, which lays allies
+shown in metres, using the conversion the Italian rules print (5 feet = 1.5 m). The last step chooses between **Fight mode**, which lays allies
 and enemies out facing each other and ready to roll, and **Roleplay & Fight & Exploration**, which
 opens the same grid empty and leaves placement to the table.
 

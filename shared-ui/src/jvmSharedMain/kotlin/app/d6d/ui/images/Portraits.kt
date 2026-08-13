@@ -137,22 +137,6 @@ class PortraitRepository(
 
     fun portraitName(definitionId: String): String? = library.portraits[definitionId]
 
-    /**
-     * Chiede un file all'utente e lo assegna come ritratto.
-     *
-     * Restituisce true se l'immagine e' stata assegnata. Un errore diventa un
-     * messaggio: caricare un ritratto non deve poter far cadere l'applicazione.
-     */
-    fun assignPortrait(definitionId: String): Boolean = guard {
-        val chosen = picker.pick() ?: return@guard false
-        try {
-            applyPortraitImport(persistPortrait(definitionId, chosen))
-            true
-        } finally {
-            picker.release(chosen)
-        }
-    }
-
     /** Assegna un ritratto tramite il selettore asincrono della piattaforma. */
     fun assignPortraitAsync(definitionId: String, onComplete: (Boolean) -> Unit = {}) {
         message = null
@@ -181,23 +165,6 @@ class PortraitRepository(
                 onComplete(false)
             },
         )
-    }
-
-    /** Chiede un file all'utente e lo restituisce come sfondo di mappa. */
-    fun pickBackground(): String? {
-        var result: String? = null
-        guard {
-            val chosen = picker.pick() ?: return@guard false
-            try {
-                result = store.importImage(chosen)
-                revision++
-                message = "Sfondo caricato."
-                true
-            } finally {
-                picker.release(chosen)
-            }
-        }
-        return result
     }
 
     /** Sceglie e importa uno sfondo senza bloccare il thread dell'interfaccia. */
@@ -458,16 +425,6 @@ class PortraitRepository(
         synchronized(decoded) {
             decoded.remove(name)?.let { decodedBytes -= it.estimatedBytes }
         }
-    }
-
-    private inline fun guard(block: () -> Boolean): Boolean = try {
-        block()
-    } catch (failure: IllegalArgumentException) {
-        message = failure.message
-        false
-    } catch (failure: java.io.IOException) {
-        message = "Errore su disco: ${failure.message}"
-        false
     }
 
     companion object {

@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.d6d.sheet.metresLabel
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.AutomationStatus
@@ -50,7 +51,7 @@ import app.d6d.ui.components.Chip
 import app.d6d.ui.sheet.SheetBox
 import app.d6d.ui.sheet.SheetCheck
 import app.d6d.ui.sheet.SheetField
-import app.d6d.ui.sheet.SheetFeetField
+import app.d6d.ui.sheet.SheetMetreField
 import app.d6d.ui.sheet.SheetNumberField
 import app.d6d.ui.sheet.SheetTextArea
 import app.d6d.ui.sheet.SheetViewModel
@@ -367,7 +368,7 @@ private fun ReadOnlyAbilityDetails(
                             Palette.Heal,
                         )
                     }
-                    if (ability.isArea) Chip("Area ${ability.areaRadiusFeet} ft", Palette.Crit)
+                    if (ability.isArea) Chip("Area ${metresLabel(ability.areaRadiusFeet)}", Palette.Crit)
                 }
                 if (ability.healing == null) {
                     PassiveSelector(
@@ -642,7 +643,7 @@ private fun AbilityEditor(
                             onChange(draft.copy(attackBonus = it))
                         }
                     }
-                    SheetFeetField("Gittata", draft.rangeFeet, Modifier.width(150.dp)) {
+                    SheetMetreField("Gittata", draft.rangeFeet, Modifier.width(150.dp)) {
                         onChange(draft.copy(rangeFeet = it.coerceAtLeast(0)))
                     }
                     if (!draft.isArea) {
@@ -994,7 +995,7 @@ private fun AbilityEditor(
                     }
                 }
                 if (draft.isArea && draft.healing == null) {
-                    SheetFeetField("Raggio", draft.areaRadiusFeet, Modifier.width(150.dp)) {
+                    SheetMetreField("Raggio", draft.areaRadiusFeet, Modifier.width(150.dp)) {
                         onChange(draft.copy(areaRadiusFeet = it.coerceAtLeast(1)))
                     }
                 }

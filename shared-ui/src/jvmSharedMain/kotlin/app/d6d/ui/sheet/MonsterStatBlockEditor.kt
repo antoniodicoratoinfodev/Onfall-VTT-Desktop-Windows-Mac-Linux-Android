@@ -207,27 +207,27 @@ fun MonsterStatBlockEditor(
                 compactColumns = 2,
                 items = arrayOf(
                     adaptiveFormItem { fieldModifier ->
-                        SheetFeetField("A piedi", block.speeds.walk, fieldModifier) {
+                        SheetMetreField("A piedi", block.speeds.walk, fieldModifier) {
                             update(block.copy(speeds = block.speeds.copy(walk = it.coerceAtLeast(0))))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetFeetField("Volo", block.speeds.fly, fieldModifier) {
+                        SheetMetreField("Volo", block.speeds.fly, fieldModifier) {
                             update(block.copy(speeds = block.speeds.copy(fly = it.coerceAtLeast(0))))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetFeetField("Nuoto", block.speeds.swim, fieldModifier) {
+                        SheetMetreField("Nuoto", block.speeds.swim, fieldModifier) {
                             update(block.copy(speeds = block.speeds.copy(swim = it.coerceAtLeast(0))))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetFeetField("Scalata", block.speeds.climb, fieldModifier) {
+                        SheetMetreField("Scalata", block.speeds.climb, fieldModifier) {
                             update(block.copy(speeds = block.speeds.copy(climb = it.coerceAtLeast(0))))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetFeetField("Scavo", block.speeds.burrow, fieldModifier) {
+                        SheetMetreField("Scavo", block.speeds.burrow, fieldModifier) {
                             update(block.copy(speeds = block.speeds.copy(burrow = it.coerceAtLeast(0))))
                         }
                     },
@@ -583,7 +583,7 @@ private fun EntrySection(
                                 }
                             },
                             adaptiveFormItem { fieldModifier ->
-                                SheetFeetField("Portata", attack.rangeFeet, fieldModifier) {
+                                SheetMetreField("Portata", attack.rangeFeet, fieldModifier) {
                                     onChange(
                                         entries.toMutableList().also { l ->
                                             l[index] = entry.copy(attack = attack.copy(rangeFeet = it))

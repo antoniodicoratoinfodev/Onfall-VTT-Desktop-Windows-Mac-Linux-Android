@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.d6d.sheet.metresLabel
 import app.d6d.rules.character.EffectTarget
 import app.d6d.sheet.Ability
 import app.d6d.sheet.ArmorCategory
@@ -144,7 +145,7 @@ private fun ArmorRuleWarnings(sheet: CharacterSheet) {
             Text(
                 "Forza ${sheet.score(Ability.STRENGTH)} inferiore al requisito " +
                     "${sheet.effectiveArmorMinimumStrength}: velocità ridotta di 3 m " +
-                    "(${sheet.armorSpeedPenaltyFeet} piedi).",
+                    "(${metresLabel(sheet.armorSpeedPenaltyFeet)}).",
                 color = Palette.Bloodied,
                 style = MaterialTheme.typography.bodySmall,
             )
