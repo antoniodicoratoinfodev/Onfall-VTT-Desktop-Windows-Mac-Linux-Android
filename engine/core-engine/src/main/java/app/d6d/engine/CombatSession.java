@@ -33,8 +33,11 @@ import app.d6d.domain.combat.DamageResult;
 import app.d6d.domain.combat.DeathSaveState;
 import app.d6d.domain.combat.DiceRollResult;
 import app.d6d.domain.combat.EventType;
+import app.d6d.domain.combat.HealingDefinition;
+import app.d6d.domain.combat.HealingTarget;
 import app.d6d.domain.combat.ResolutionMethod;
 import app.d6d.domain.combat.RollSource;
+import app.d6d.domain.combat.SpellSlotResourceId;
 import app.d6d.domain.combat.TurnBudget;
 import app.d6d.domain.space.TokenPlacement;
 import app.d6d.domain.space.MapGrid;
@@ -390,8 +393,14 @@ public final class CombatSession {
         Objects.requireNonNull(request, "request");
         MutableCombatant attacker = combatant(request.attackerId());
         MutableCombatant target = combatant(request.targetId());
+        if (isDead(attacker)) {
+            throw rule("A dead combatant cannot attack");
+        }
         if (attacker.currentHitPoints == 0) {
             throw rule("A combatant at zero hit points cannot attack");
+        }
+        if (isDead(target)) {
+            throw rule("A dead combatant cannot be targeted by an attack");
         }
         if (attacker.conditions.stream().anyMatch(condition -> incapacitates(condition.type()))) {
             throw rule("An incapacitated combatant cannot attack");
@@ -414,11 +423,13 @@ public final class CombatSession {
         validateRange(request.attackerId(), request.targetId(), ability);
         validateAttackActivationCost(
                 request.attackerId(), ability.activationCost(), ability.spellOrCantrip());
+        validateAbilityResource(request.attackerId(), attacker, ability);
 
         beginCommand();
         try {
             consumeAttackActivationCost(
                     request.attackerId(), ability.activationCost(), ability.spellOrCantrip());
+            consumeAbilityResource(request.attackerId(), attacker, ability);
             D20RollInput attackInput = imposeDisadvantage(
                     request.attackRoll(),
                     attacker.snapshot.strengthDexterityD20Disadvantage()
@@ -500,6 +511,9 @@ public final class CombatSession {
         Objects.requireNonNull(center, "center");
         requireConfiguredMap();
         MutableCombatant caster = combatant(casterId);
+        if (isDead(caster)) {
+            throw rule("A dead combatant cannot cast");
+        }
         if (caster.currentHitPoints == 0) {
             throw rule("A combatant at zero hit points cannot cast");
         }
@@ -518,10 +532,12 @@ public final class CombatSession {
         }
         validateAreaRange(casterId, center, ability);
         validateActivationCost(casterId, ability.activationCost(), ability.spellOrCantrip());
+        validateAbilityResource(casterId, caster, ability);
 
         beginCommand();
         try {
             consumeActivationCost(casterId, ability.activationCost(), ability.spellOrCantrip());
+            consumeAbilityResource(casterId, caster, ability);
             // Un solo tiro di danno per tutta l'area; i critici non toccano i tiri
             // salvezza, quindi i dadi non si raddoppiano mai qui.
             List<DamageComponent> rolled = resolveAttackDamage(ability, List.of(), false, casterId, "");
@@ -632,6 +648,8 @@ public final class CombatSession {
         double centerY = center.row() + 0.5;
         List<String> caught = new ArrayList<>();
         for (TokenPlacement placement : map.orderedPlacements()) {
+            MutableCombatant target = state.combatants.get(placement.combatantId());
+            if (target == null || isDead(target)) continue;
             boolean within = placement.occupiedSquares().stream().anyMatch(square -> {
                 double dx = (square.column() + 0.5) - centerX;
                 double dy = (square.row() + 0.5) - centerY;
@@ -671,15 +689,161 @@ public final class CombatSession {
 
     public synchronized int heal(String targetCombatantId, int amount) {
         requireStatus(CombatStatus.ACTIVE);
-        MutableCombatant target = combatant(targetCombatantId);
+        combatant(targetCombatantId);
         if (amount <= 0) throw rule("Healing must be positive");
         beginCommand();
+        return healInternal("", targetCombatantId, amount, Map.of());
+    }
+
+    /**
+     * Uses an automated healing ability as one atomic, undoable command.
+     *
+     * <p>Target legality, range, turn cost and limited resources are validated
+     * before the command begins. Any failure after that point restores combat,
+     * audit and deterministic RNG state.</p>
+     */
+    public synchronized int useHealingAbility(String healerId, String targetId, String abilityId) {
+        return useHealingAbilityInternal(healerId, targetId, abilityId, null);
+    }
+
+    /**
+     * Uses an upcastable healing spell with the exact standard or Pact slot
+     * selected by the caller. The slot and its scaled formula are validated by
+     * the engine before any command state is mutated.
+     */
+    public synchronized int useHealingAbility(
+            String healerId,
+            String targetId,
+            String abilityId,
+            String selectedResourceId) {
+        if (selectedResourceId == null || selectedResourceId.isBlank()) {
+            throw rule("A selected healing resource id cannot be blank");
+        }
+        return useHealingAbilityInternal(healerId, targetId, abilityId, selectedResourceId);
+    }
+
+    private int useHealingAbilityInternal(
+            String healerId,
+            String targetId,
+            String abilityId,
+            String selectedResourceId) {
+        requireStatus(CombatStatus.ACTIVE);
+        MutableCombatant healer = combatant(healerId);
+        MutableCombatant target = combatant(targetId);
+        AbilityDefinition ability = ability(healer, abilityId);
+        HealingDefinition healing = ability.healing();
+        if (healing == null) {
+            throw rule("Ability does not heal: " + ability.id());
+        }
+        if (healer.currentHitPoints == 0
+                || healer.deathSaves.dead()
+                || healer.exhaustionLevel >= CombatantState.MAX_EXHAUSTION
+                || healer.conditions.stream().anyMatch(condition -> incapacitates(condition.type()))) {
+            throw rule("An incapacitated combatant cannot use a healing ability");
+        }
+        boolean self = healerId.equals(targetId);
+        boolean sameFaction = state.partyCombatantIds.contains(healerId)
+                == state.partyCombatantIds.contains(targetId);
+        if (!sameFaction) {
+            throw rule("A healing ability can target only the healer's faction");
+        }
+        if (target.deathSaves.dead()
+                || target.exhaustionLevel >= CombatantState.MAX_EXHAUSTION) {
+            throw rule("A dead combatant cannot be healed");
+        }
+        if (healing.target() == HealingTarget.SELF && !self) {
+            throw rule("This healing ability can target only its user");
+        }
+        if (healing.target() == HealingTarget.ALLY && self) {
+            throw rule("This healing ability requires a different ally");
+        }
+        if (healer.snapshot.strengthDexterityD20Disadvantage() && ability.spellOrCantrip()) {
+            throw rule("The combatant cannot cast spells while wearing armor without training");
+        }
+
+        String resourceId = selectedResourceId == null ? ability.resourceId() : selectedResourceId;
+        int slotLevel = 0;
+        HealingDefinition resolvedHealing = healing;
+        if (healing.scalesWithSlot()) {
+            if (!ability.spellOrCantrip() || ability.resourceCost() != 1) {
+                throw rule("An upcast healing spell must consume exactly one spell slot");
+            }
+            SpellSlotResourceId baseSlot = SpellSlotResourceId.parse(ability.resourceId())
+                    .orElseThrow(() -> rule("The healing ability has no valid base spell slot"));
+            if (baseSlot.level() != healing.slotScaling().baseSlotLevel()) {
+                throw rule("The healing ability base slot does not match its scaling");
+            }
+            SpellSlotResourceId selectedSlot = SpellSlotResourceId.parse(resourceId)
+                    .orElseThrow(() -> rule("The selected resource is not a spell slot"));
+            if (selectedSlot.level() < baseSlot.level()) {
+                throw rule("The selected spell slot is below the ability's base level");
+            }
+            slotLevel = selectedSlot.level();
+            resolvedHealing = healing.resolveAtSlotLevel(slotLevel);
+        } else if (selectedResourceId != null && !selectedResourceId.equals(ability.resourceId())) {
+            throw rule("This healing ability cannot use a different resource");
+        }
+
+        validateRange(healerId, targetId, ability);
+        validateActivationCost(healerId, ability.activationCost(), ability.spellOrCantrip());
+        validateAbilityResource(healerId, healer, ability, resourceId);
+
+        beginCommand();
+        try {
+            consumeActivationCost(healerId, ability.activationCost(), ability.spellOrCantrip());
+            consumeAbilityResource(healerId, healer, ability, resourceId);
+
+            int requested;
+            Map<String, String> healingDetails;
+            if (resolvedHealing.usesDice()) {
+                DiceRollResult roll = dice.roll(resolvedHealing.dice(), false);
+                requested = Math.max(0, roll.total());
+                healingDetails = details(
+                        "abilityId", ability.id(),
+                        "abilityName", ability.name(),
+                        "formula", resolvedHealing.dice().notation(),
+                        "dice", roll.dice(),
+                        "modifier", roll.modifier(),
+                        "resourceId", resourceId,
+                        "slotLevel", slotLevel,
+                        "source", "digital");
+            } else {
+                requested = resolvedHealing.fixedAmount();
+                healingDetails = details(
+                        "abilityId", ability.id(),
+                        "abilityName", ability.name(),
+                        "formula", resolvedHealing.fixedAmount(),
+                        "resourceId", resourceId,
+                        "source", "fixed");
+            }
+            int restored = healInternal(healerId, targetId, requested, healingDetails);
+            append(EventType.ABILITY_ACTIVATED, healerId, targetId, details(
+                    "abilityId", ability.id(),
+                    "abilityName", ability.name(),
+                    "resourceId", resourceId,
+                    "slotLevel", slotLevel,
+                    "requested", requested,
+                    "restored", restored));
+            return restored;
+        } catch (RuntimeException | Error failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    private int healInternal(
+            String sourceCombatantId,
+            String targetCombatantId,
+            int amount,
+            Map<String, String> extraDetails) {
+        MutableCombatant target = combatant(targetCombatantId);
         int before = target.currentHitPoints;
         int room = target.snapshot.maxHitPoints() - before;
         target.currentHitPoints = before + Math.min(room, amount);
         int restored = target.currentHitPoints - before;
-        append(EventType.HEALED, "", targetCombatantId, details(
-                "requested", amount, "restored", restored, "hitPointsAfter", target.currentHitPoints));
+        append(EventType.HEALED, sourceCombatantId, targetCombatantId, merge(
+                extraDetails,
+                details("requested", amount, "restored", restored, "hitPointsAfter", target.currentHitPoints)));
         // Recuperare punti ferita azzera successi e fallimenti contro morte e
         // annulla lo stato Stable: la creatura torna cosciente.
         if (restored > 0 && before == 0) {
@@ -970,7 +1134,7 @@ public final class CombatSession {
         if (ability.passive()) throw rule("A passive trait cannot transform a combatant");
         if (temporaryHitPoints < 0) throw rule("Temporary hit points cannot be negative");
         validateActivationCost(combatantId, ability.activationCost(), ability.spellOrCantrip());
-        validateAbilityResource(existing, ability);
+        validateAbilityResource(combatantId, existing, ability);
 
         beginCommand();
         try {
@@ -1275,7 +1439,7 @@ public final class CombatSession {
             throw rule("Ability requires a different resolution: " + ability.id());
         }
         validateActivationCost(combatantId, ability.activationCost(), ability.spellOrCantrip());
-        validateAbilityResource(combatant, ability);
+        validateAbilityResource(combatantId, combatant, ability);
         if (ability.effect() == AbilityEffect.GRANT_NON_MAGIC_ACTION) {
             requireCurrentCombatant(combatantId);
             if (budget(combatantId).actionSurgeUsedThisTurn()) {
@@ -1387,7 +1551,11 @@ public final class CombatSession {
         if (state.status != CombatStatus.ACTIVE && state.status != CombatStatus.PAUSED) {
             throw rule("The current turn can only be changed during active play");
         }
-        if (combatant(combatantId).currentHitPoints == 0) {
+        MutableCombatant selected = combatant(combatantId);
+        if (isDead(selected)) {
+            throw rule("A dead combatant cannot take a turn");
+        }
+        if (selected.currentHitPoints == 0) {
             throw rule("A combatant at zero hit points cannot take a turn");
         }
         List<List<String>> groups = turnGroups();
@@ -1404,6 +1572,7 @@ public final class CombatSession {
         }
         beginCommand();
         state.turnIndex = target;
+        resetSpellSlotBudgetsForNewTurn();
         for (String id : livingCombatants(groups.get(target))) {
             MutableCombatant occupant = combatant(id);
             int speed = Math.max(0, occupant.snapshot.speedFeet() - 5 * occupant.exhaustionLevel);
@@ -1460,6 +1629,26 @@ public final class CombatSession {
      * Restores the last pre-command game snapshot and exact RNG state. Previous audit events are retained and an
      * UNDO_PERFORMED event is appended, so the audit itself is never rewritten.
      */
+    /**
+     * Undoes every command applied after the given revision.
+     *
+     * <p>For callers that treat several commands as a single table operation - the
+     * enemy CPU turn - keeping the revision they started from is safer than counting
+     * checkpoints: a command that produces more (or fewer) checkpoints than expected
+     * cannot move the boundary. The revision is the one read from the state before
+     * the first command of the group.</p>
+     *
+     * @return true when at least one command was undone
+     */
+    public synchronized boolean undoTo(long revision) {
+        boolean undone = false;
+        while (!undoStack.isEmpty() && undoStack.peek().state.revision >= revision) {
+            if (!undo()) break;
+            undone = true;
+        }
+        return undone;
+    }
+
     public synchronized boolean undo() {
         if (undoStack.isEmpty()) return false;
         long revertedRevision = state.revision;
@@ -1651,6 +1840,10 @@ public final class CombatSession {
 
     /** Avvia il turno per ogni membro del gruppo corrente. */
     private void startTurnInternal() {
+        // Il limite agli slot e' del turno globale, non del periodo fra due
+        // turni dello stesso lanciatore. Azzerarlo per tutti consente quindi una
+        // reazione a slot nel turno successivo senza ricaricare la reazione.
+        resetSpellSlotBudgetsForNewTurn();
         List<String> active = currentCombatantIds();
         for (String combatantId : currentTurnGroup()) {
             // Un membro a 0 PF non riceve budget ne' evento di turno, ma la soglia
@@ -1666,6 +1859,11 @@ public final class CombatSession {
             processConditionBoundary(combatantId, true);
             append(EventType.TURN_STARTED, combatantId, "", details("round", state.round));
         }
+    }
+
+    private void resetSpellSlotBudgetsForNewTurn() {
+        state.turnBudgets.replaceAll(
+                (combatantId, turnBudget) -> turnBudget.resetSpellSlotSpentForNewTurn());
     }
 
     private void processConditionBoundary(String activeCombatantId, boolean start) {
@@ -1724,7 +1922,11 @@ public final class CombatSession {
 
     private void validateActivationCost(String combatantId, ActivationCost cost, boolean magicAction) {
         Objects.requireNonNull(cost, "cost");
-        if (combatant(combatantId).currentHitPoints == 0) {
+        MutableCombatant combatant = combatant(combatantId);
+        if (isDead(combatant)) {
+            throw rule("A dead combatant cannot act");
+        }
+        if (combatant.currentHitPoints == 0) {
             throw rule("A combatant at zero hit points cannot act");
         }
         TurnBudget budget = budget(combatantId);
@@ -1756,6 +1958,9 @@ public final class CombatSession {
             return;
         }
         MutableCombatant combatant = combatant(combatantId);
+        if (isDead(combatant)) {
+            throw rule("A dead combatant cannot act");
+        }
         if (combatant.currentHitPoints == 0) {
             throw rule("A combatant at zero hit points cannot act");
         }
@@ -1806,21 +2011,44 @@ public final class CombatSession {
         }
     }
 
-    private void validateAbilityResource(MutableCombatant combatant, AbilityDefinition ability) {
+    private void validateAbilityResource(
+            String combatantId,
+            MutableCombatant combatant,
+            AbilityDefinition ability) {
+        validateAbilityResource(combatantId, combatant, ability, ability.resourceId());
+    }
+
+    private void validateAbilityResource(
+            String combatantId,
+            MutableCombatant combatant,
+            AbilityDefinition ability,
+            String resourceId) {
         if (ability.resourceCost() == 0) return;
-        CombatResourceState resource = combatant.resources.get(ability.resourceId());
+        CombatResourceState resource = combatant.resources.get(resourceId);
         if (resource == null) {
-            throw rule("Ability resource is missing: " + ability.resourceId());
+            throw rule("Ability resource is missing: " + resourceId);
         }
         if (resource.remaining() < ability.resourceCost()) {
             throw rule("Not enough uses of " + resource.name());
+        }
+        if (SpellSlotResourceId.parse(resourceId).isPresent()
+                && budget(combatantId).spellSlotSpentThisTurn()) {
+            throw rule("A spell slot was already spent this turn");
         }
     }
 
     private void consumeAbilityResource(
             String combatantId, MutableCombatant combatant, AbilityDefinition ability) {
+        consumeAbilityResource(combatantId, combatant, ability, ability.resourceId());
+    }
+
+    private void consumeAbilityResource(
+            String combatantId,
+            MutableCombatant combatant,
+            AbilityDefinition ability,
+            String resourceId) {
         if (ability.resourceCost() == 0) return;
-        CombatResourceState resource = combatant.resources.get(ability.resourceId());
+        CombatResourceState resource = combatant.resources.get(resourceId);
         CombatResourceState updated = resource.spend(ability.resourceCost());
         combatant.resources.put(updated.id(), updated);
         append(EventType.RESOURCE_SPENT, combatantId, "", details(
@@ -1831,6 +2059,14 @@ public final class CombatSession {
                 "cost", ability.resourceCost(),
                 "remaining", updated.remaining(),
                 "maximum", updated.maximum()));
+        SpellSlotResourceId.parse(resourceId).ifPresent(slot -> {
+            state.turnBudgets.put(combatantId, budget(combatantId).markSpellSlotSpent());
+            append(EventType.SPELL_SLOT_SPENT, combatantId, "", details(
+                    "abilityId", ability.id(),
+                    "abilityName", ability.name(),
+                    "resourceId", updated.id(),
+                    "slotLevel", slot.level()));
+        });
     }
 
     private D20RollResult rollD20(D20RollInput input, int modifier) {
@@ -2005,7 +2241,11 @@ public final class CombatSession {
 
     /** In un turno simultaneo ognuno dei combattenti in parita' puo' agire. */
     private void requireCurrentCombatant(String combatantId) {
-        if (combatant(combatantId).currentHitPoints == 0) {
+        MutableCombatant combatant = combatant(combatantId);
+        if (isDead(combatant)) {
+            throw rule("A dead combatant cannot act");
+        }
+        if (combatant.currentHitPoints == 0) {
             throw rule("A combatant at zero hit points cannot act");
         }
         if (!currentCombatantIds().contains(combatantId)) {
@@ -2016,8 +2256,17 @@ public final class CombatSession {
     /** Membri ancora in piedi di un gruppo strutturale d'iniziativa. */
     private List<String> livingCombatants(List<String> group) {
         return group.stream()
-                .filter(id -> combatant(id).currentHitPoints > 0)
+                .filter(id -> {
+                    MutableCombatant combatant = combatant(id);
+                    return combatant.currentHitPoints > 0 && !isDead(combatant);
+                })
                 .collect(Collectors.toList());
+    }
+
+    /** La morte e' indipendente dai PF: Exhaustion 6 puo' lasciare un valore positivo. */
+    private static boolean isDead(MutableCombatant combatant) {
+        return combatant.deathSaves.dead()
+                || combatant.exhaustionLevel >= CombatantState.MAX_EXHAUSTION;
     }
 
     /** Primo attore vivo del gruppo, oppure il suo primo membro per le sole correzioni d'ordine. */

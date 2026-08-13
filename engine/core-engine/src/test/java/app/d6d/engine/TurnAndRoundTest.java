@@ -50,6 +50,23 @@ class TurnAndRoundTest {
     }
 
     @Test
+    void spellSlotLimitResetsForEveryoneWhenTheGlobalTurnChanges() {
+        CombatSession session = CombatFixtures.active(410L);
+
+        session.markSpellSlotSpent("hero");
+        assertTrue(session.currentState().turnBudgets().get("hero").spellSlotSpentThisTurn());
+
+        session.endTurn();
+
+        assertFalse(session.currentState().turnBudgets().get("hero").spellSlotSpentThisTurn());
+        assertEquals("goblin", session.currentState().currentCombatantId().orElseThrow());
+
+        assertTrue(session.undo());
+        assertEquals("hero", session.currentState().currentCombatantId().orElseThrow());
+        assertTrue(session.currentState().turnBudgets().get("hero").spellSlotSpentThisTurn());
+    }
+
+    @Test
     void wrappingInitiativeEndsAndStartsRoundsAndRefreshesTurnFlags() {
         CombatSession session = CombatFixtures.active(42L);
         session.markSpellSlotSpent("hero");

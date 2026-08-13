@@ -47,6 +47,47 @@ class UndoAndPersistenceTest {
     }
 
     @Test
+    void undoToRevisionRollsBackAWholeGroupOfCommandsWithoutCountingThem() {
+        CombatSession session = CombatFixtures.active(123456L);
+        CombatState before = session.currentState();
+        long startingRevision = before.revision();
+
+        session.attack(AttackRequest.digital("hero", "goblin", "sword", D20Mode.NORMAL));
+        session.endTurn();
+        session.endTurn();
+        assertTrue(session.currentState().revision() > startingRevision);
+
+        assertTrue(session.undoTo(startingRevision));
+
+        CombatState restored = session.currentState();
+        assertEquals(before.randomState(), restored.randomState());
+        assertEquals(before.combatant("goblin").currentHitPoints(),
+                restored.combatant("goblin").currentHitPoints());
+        assertEquals(before.round(), restored.round());
+        assertEquals(before.turnIndex(), restored.turnIndex());
+        assertFalse(session.canUndo(), "the group was the whole live-play history");
+    }
+
+    @Test
+    void undoToRevisionLeavesEarlierCommandsAloneAndReportsAnEmptyRollback() {
+        CombatSession session = CombatFixtures.active(123456L);
+        session.attack(AttackRequest.digital("hero", "goblin", "sword", D20Mode.NORMAL));
+        CombatState afterFirst = session.currentState();
+        long boundary = afterFirst.revision();
+
+        session.endTurn();
+        assertTrue(session.undoTo(boundary));
+
+        assertEquals(afterFirst.combatant("goblin").currentHitPoints(),
+                session.currentState().combatant("goblin").currentHitPoints());
+        assertEquals(afterFirst.turnIndex(), session.currentState().turnIndex());
+        assertTrue(session.canUndo(), "the command before the boundary survives");
+
+        // Una revisione mai raggiunta non deve svuotare la pila per eccesso di zelo.
+        assertFalse(session.undoTo(session.currentState().revision() + 100L));
+    }
+
+    @Test
     void anOverflowingAttackIsRejectedAtomically() {
         var oversized = app.d6d.domain.combat.AbilityDefinition.attack(
                 "oversized", "Oversized", app.d6d.domain.combat.ActivationCost.ACTION,

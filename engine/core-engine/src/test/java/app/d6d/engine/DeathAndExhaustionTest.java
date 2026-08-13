@@ -1,6 +1,11 @@
 package app.d6d.engine;
 
 import app.d6d.domain.combat.CombatantState;
+import app.d6d.domain.combat.AbilityDefinition;
+import app.d6d.domain.combat.ActivationCost;
+import app.d6d.domain.combat.ActorDefinition;
+import app.d6d.domain.combat.AttackRequest;
+import app.d6d.domain.combat.AutomationStatus;
 import app.d6d.domain.combat.D20Mode;
 import app.d6d.domain.combat.D20RollInput;
 import app.d6d.domain.combat.DamageComponent;
@@ -8,6 +13,10 @@ import app.d6d.domain.combat.DamageType;
 import app.d6d.domain.combat.DeathSaveState;
 import app.d6d.domain.combat.EventType;
 import app.d6d.domain.combat.RollSource;
+import app.d6d.domain.combat.ResolutionMethod;
+import app.d6d.domain.combat.SaveAbility;
+import app.d6d.domain.space.GridPosition;
+import app.d6d.domain.space.MapGrid;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -219,6 +228,59 @@ class DeathAndExhaustionTest {
         assertTrue(session.auditTrail().stream()
                 .anyMatch(event -> event.type() == EventType.DIED
                         && "exhaustion".equals(event.details().get("cause"))));
+    }
+
+    @Test
+    void unMortoPerExhaustionConPfPositiviNonPuoAgireONeppureEssereBersagliato() {
+        CombatSession session = CombatFixtures.active(17L);
+        session.setExhaustion("hero", CombatantState.MAX_EXHAUSTION);
+
+        assertFalse(session.currentState().currentCombatantIds().contains("hero"));
+        assertThrows(CombatRuleException.class, () -> session.attack(
+                AttackRequest.digital("hero", "goblin", "sword", D20Mode.NORMAL)));
+        assertThrows(CombatRuleException.class, () -> session.setCurrentTurn("hero"));
+
+        session.endTurn();
+        assertEquals("goblin", session.currentState().currentCombatantId().orElseThrow());
+        assertThrows(CombatRuleException.class, () -> session.attack(
+                AttackRequest.digital("goblin", "hero", "sword", D20Mode.NORMAL)));
+    }
+
+    @Test
+    void leAreeIgnoranoUnMortoPerExhaustionAncheSeHaPfEToken() {
+        AbilityDefinition burst = AbilityDefinition.builder("burst", "Burst")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.SAVING_THROW)
+                .automationStatus(AutomationStatus.AUTOMATED)
+                .rangeFeet(60)
+                .areaRadiusFeet(5)
+                .saveAbility(SaveAbility.DEXTERITY)
+                .damage(List.of(app.d6d.domain.combat.DamageFormula.fixed(DamageType.FORCE, 5)))
+                .build();
+        ActorDefinition caster = ActorDefinition.builder("caster-def", "Caster")
+                .maxHitPoints(20)
+                .abilities(List.of(burst))
+                .build();
+        ActorDefinition target = ActorDefinition.builder("target-def", "Target")
+                .maxHitPoints(20)
+                .build();
+        CombatSession session = CombatSession.create("dead-area", 18L);
+        session.addCombatant("caster", caster);
+        session.addCombatant("target", target);
+        session.configureMap(new MapGrid(10, 10, 5));
+        session.placeCombatant("caster", new GridPosition(0, 0), 1);
+        session.placeCombatant("target", new GridPosition(3, 0), 1);
+        session.setInitiative("caster", 20);
+        session.setInitiative("target", 10);
+        session.setInitiativeOrder(List.of("caster", "target"));
+        session.markReady();
+        session.start();
+        session.setExhaustion("target", CombatantState.MAX_EXHAUSTION);
+
+        GridPosition center = new GridPosition(3, 0);
+        assertTrue(session.areaTargets("caster", center, "burst").isEmpty());
+        assertTrue(session.castArea("caster", center, "burst").targets().isEmpty());
+        assertEquals(20, session.currentState().combatant("target").currentHitPoints());
     }
 
     @Test
