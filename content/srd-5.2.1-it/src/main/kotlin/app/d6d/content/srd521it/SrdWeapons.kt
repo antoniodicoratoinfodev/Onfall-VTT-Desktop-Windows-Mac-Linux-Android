@@ -1,14 +1,16 @@
 package app.d6d.content.srd521it
 
 import app.d6d.domain.combat.DamageType
+import app.d6d.i18n.AppLanguage
 import app.d6d.rules.character.WeaponCategory
 import app.d6d.rules.character.WeaponDefinition
 import app.d6d.rules.character.WeaponProperty
 import app.d6d.rules.character.WeaponReach
 import app.d6d.rules.character.WeaponTrainingGrant
-import app.d6d.sheet.italianLabel
-import app.d6d.sheet.metresFromFeet
-import app.d6d.sheet.metresLabel
+import app.d6d.i18n.inlineLabel
+import app.d6d.i18n.label
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.sheet.i18n.distanceValue
 
 private const val WEAPON_PREFIX = "srd521-it:weapon"
 
@@ -43,24 +45,29 @@ private fun weapon(
 )
 
 /** Colonna "Danni" come stampata sulla tabella, senza il modificatore. */
-val WeaponDefinition.damageText: String
-    get() = "${if (fixedDamage > 0) fixedDamage else "${diceCount}d$diceSides"} ${damageType.italianLabel}"
+fun WeaponDefinition.damageText(language: AppLanguage): String =
+    "${if (fixedDamage > 0) fixedDamage else "${diceCount}d$diceSides"} ${damageType.inlineLabel(language)}"
 
-/** Riga leggibile usata dai selettori: danno, gittata, Padronanza e proprietà. */
-val WeaponDefinition.summary: String
-    get() = buildString {
-        append(damageText)
+/**
+ * Riga leggibile usata dai selettori: danno, gittata, Padronanza e proprieta'.
+ *
+ * La gittata non si traduce, si converte: metri per l'edizione italiana, piedi
+ * per quella inglese, con il motore che continua a contare in piedi.
+ */
+fun WeaponDefinition.summary(language: AppLanguage): String =
+    buildString {
+        append(damageText(language))
         when {
-            reach == WeaponReach.RANGED ->
-                append(" · gittata ")
-                    .append(metresFromFeet(normalRangeFeet))
+            reach == WeaponReach.RANGED || WeaponProperty.THROWN in properties ->
+                append(SrdWords.of(language).rangePrefix)
+                    .append(distanceValue(normalRangeFeet, language))
                     .append('/')
-                    .append(metresLabel(longRangeFeet))
-            WeaponProperty.REACH in properties -> append(" · portata")
+                    .append(distanceLabel(longRangeFeet, language))
+            WeaponProperty.REACH in properties -> append(SrdWords.of(language).reachSuffix)
         }
-        append(" · Padronanza: ").append(mastery)
+        append(SrdWords.of(language).masteryPrefix).append(mastery)
         if (properties.isNotEmpty()) {
-            append(" · ").append(properties.joinToString { it.italianLabel })
+            append(" · ").append(properties.joinToString { it.label(language) })
         }
     }
 
@@ -74,7 +81,7 @@ val WeaponDefinition.summary: String
  */
 object SrdWeapons {
 
-    val all: List<WeaponDefinition> = listOf(
+    private val italian: List<WeaponDefinition> = listOf(
         // --- Armi da mischia semplici ---
         weapon(
             "ascia", "Ascia", WeaponCategory.SIMPLE, WeaponReach.MELEE,
@@ -330,11 +337,98 @@ object SrdWeapons {
         ),
     )
 
-    private val indexed: Map<String, WeaponDefinition> = all.associateBy { it.id }
+    /**
+     * La tabella nella lingua richiesta.
+     *
+     * L'edizione inglese non e' una seconda tabella: e' la stessa, con nome e
+     * Padronanza sostituiti. Tenerla derivata invece che duplicata vuol dire
+     * che una correzione ai danni o alla gittata vale per entrambe, e che
+     * un'arma aggiunta senza la sua resa inglese non compila piu' — la
+     * `getValue` qui sotto solleva, invece di lasciar passare un nome italiano
+     * in mezzo a una scheda inglese.
+     */
+    fun all(language: AppLanguage = AppLanguage.ITALIAN): List<WeaponDefinition> = when (language) {
+        AppLanguage.ITALIAN -> italian
+        AppLanguage.ENGLISH -> english
+    }
 
-    fun byId(id: String): WeaponDefinition? = indexed[id]
+    private val english: List<WeaponDefinition> by lazy {
+        italian.map { weapon ->
+            val slug = weapon.id.substringAfterLast(':')
+            weapon.copy(
+                name = ENGLISH_WEAPON_NAMES.getValue(slug),
+                mastery = ENGLISH_MASTERY.getValue(weapon.mastery),
+            )
+        }
+    }
+
+    private val indexed: Map<AppLanguage, Map<String, WeaponDefinition>> by lazy {
+        AppLanguage.entries.associateWith { language -> all(language).associateBy { it.id } }
+    }
+
+    fun byId(id: String, language: AppLanguage = AppLanguage.ITALIAN): WeaponDefinition? =
+        indexed.getValue(language)[id]
 
     /** Le armi che la classe sa impugnare, nell'ordine della tabella dello SRD. */
-    fun trainedBy(grant: WeaponTrainingGrant): List<WeaponDefinition> =
-        all.filter { grant.allows(it.category, it.properties) }
+    fun trainedBy(
+        grant: WeaponTrainingGrant,
+        language: AppLanguage = AppLanguage.ITALIAN,
+    ): List<WeaponDefinition> =
+        all(language).filter { grant.allows(it.category, it.properties) }
 }
+
+// Chiave: lo slug dell'identificativo, che resta italiano in entrambe le edizioni.
+private val ENGLISH_WEAPON_NAMES = mapOf(
+    "ascia" to "Handaxe",
+    "bastone-ferrato" to "Quarterstaff",
+    "falcetto" to "Sickle",
+    "giavellotto" to "Javelin",
+    "lancia" to "Spear",
+    "martello-leggero" to "Light Hammer",
+    "mazza" to "Mace",
+    "pugnale" to "Dagger",
+    "randello-pesante" to "Greatclub",
+    "randello" to "Club",
+    "arco-corto" to "Shortbow",
+    "balestra-leggera" to "Light Crossbow",
+    "dardo" to "Dart",
+    "fionda" to "Sling",
+    "alabarda" to "Halberd",
+    "ascia-bipenne" to "Greataxe",
+    "ascia-da-battaglia" to "Battleaxe",
+    "falcione" to "Glaive",
+    "frusta" to "Whip",
+    "lancia-da-cavaliere" to "Lance",
+    "maglio" to "Maul",
+    "martello-da-guerra" to "Warhammer",
+    "mazza-chiodata" to "Morningstar",
+    "mazzafrusto" to "Flail",
+    "picca" to "Pike",
+    "piccone-da-guerra" to "War Pick",
+    "scimitarra" to "Scimitar",
+    "spada-corta" to "Shortsword",
+    "spada-lunga" to "Longsword",
+    "spadone" to "Greatsword",
+    "stocco" to "Rapier",
+    "tridente" to "Trident",
+    "arco-lungo" to "Longbow",
+    "balestra-a-mano" to "Hand Crossbow",
+    "balestra-pesante" to "Heavy Crossbow",
+    "cerbottana" to "Blowgun",
+    "moschetto" to "Musket",
+    "pistola" to "Pistol",
+)
+
+// Le otto proprieta' di Padronanza. Verificate contro l'arma che le porta:
+// il Falcetto ha Graffio e in inglese ha Nick, il Bastone ferrato Rovesciamento
+// e Topple — una coppia sbagliata qui si vedrebbe sulla tabella delle armi.
+private val ENGLISH_MASTERY = mapOf(
+    "Colpo di striscio" to "Graze",
+    "Doppio fendente" to "Cleave",
+    "Fiaccare" to "Sap",
+    "Graffio" to "Nick",
+    "Lentezza" to "Slow",
+    "Rovesciamento" to "Topple",
+    "Spinta" to "Push",
+    "Vessazione" to "Vex",
+)

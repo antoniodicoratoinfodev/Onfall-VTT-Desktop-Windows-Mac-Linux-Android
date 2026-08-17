@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.healthColor
 import app.d6d.ui.theme.shaded
@@ -89,15 +90,16 @@ fun HealthBar(
         label = "temporaryHitPoints",
     )
     val fill = healthColor(current, safeMax)
+    val words = strings.battle
 
     Canvas(
         modifier
             .fillMaxWidth()
             .height(height)
             .semantics {
-                contentDescription = "Punti ferita"
-                stateDescription = "$current su $safeMax" +
-                    if (temporary > 0) ", più $temporary temporanei" else ""
+                contentDescription = words.hitPoints
+                stateDescription = words.hitPointsOf(current, safeMax) +
+                    if (temporary > 0) words.plusTemporary(temporary) else ""
                 progressBarRangeInfo = ProgressBarRangeInfo(ratio, 0f..1f)
             },
     ) {
@@ -160,22 +162,24 @@ fun ResourcePips(
     reactionAvailable: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.battle
+    val activation = strings.glossary
     Row(
         modifier = modifier.semantics {
             stateDescription = buildString {
-                append(if (actionAvailable) "Azione disponibile" else "Azione spesa")
+                append(if (actionAvailable) words.actionAvailable else words.actionSpent)
                 append(", ")
-                append(if (bonusAvailable) "azione bonus disponibile" else "azione bonus spesa")
+                append(if (bonusAvailable) words.bonusActionAvailable else words.bonusActionSpent)
                 append(", ")
-                append(if (reactionAvailable) "reazione disponibile" else "reazione spesa")
+                append(if (reactionAvailable) words.reactionAvailable else words.reactionSpent)
             }
         },
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Pip("A", actionAvailable, Palette.Gold, "Azione")
-        Pip("B", bonusAvailable, Palette.Party, "Azione Bonus")
-        Pip("R", reactionAvailable, Palette.Heal, "Reazione")
+        Pip(activation.actionInitial, actionAvailable, Palette.Gold, activation.action)
+        Pip(activation.bonusActionInitial, bonusAvailable, Palette.Party, words.bonusActionLabel)
+        Pip(activation.reactionInitial, reactionAvailable, Palette.Heal, activation.reaction)
     }
 }
 

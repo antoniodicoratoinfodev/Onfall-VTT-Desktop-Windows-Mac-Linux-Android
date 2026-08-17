@@ -1,5 +1,7 @@
 package app.d6d.ui.cursors
 
+import app.d6d.ui.i18n.Strings
+
 import androidx.compose.ui.graphics.ImageBitmap
 
 /** Le finiture disponibili per il guanto-cursore del desktop. */
@@ -17,14 +19,22 @@ enum class CursorPair {
  * Il canvas non cambia: a scalare sono guanto e hotspot, così il punto attivo
  * resta sulla stessa parte del dito a qualunque dimensione.
  */
-enum class CursorSize(
-    val scale: Float,
-    val label: String,
-    val description: String,
-) {
-    SMALL(0.65f, "Piccolo", "65% · più discreto"),
-    MEDIUM(0.82f, "Medio", "82% · compatto"),
-    ORIGINAL(1f, "Originale", "100% · massima presenza"),
+enum class CursorSize(val scale: Float) {
+    SMALL(0.65f),
+    MEDIUM(0.82f),
+    ORIGINAL(1f),
+}
+
+fun CursorSize.label(strings: Strings): String = when (this) {
+    CursorSize.SMALL -> strings.cursors.sizeSmallName
+    CursorSize.MEDIUM -> strings.cursors.sizeMediumName
+    CursorSize.ORIGINAL -> strings.cursors.sizeOriginalName
+}
+
+fun CursorSize.description(strings: Strings): String = when (this) {
+    CursorSize.SMALL -> strings.cursors.sizeSmall
+    CursorSize.MEDIUM -> strings.cursors.sizeMedium
+    CursorSize.ORIGINAL -> strings.cursors.sizeLarge
 }
 
 /**
@@ -43,7 +53,7 @@ data class CursorPairPreview(
  * Preferenza del cursore offerta dalla piattaforma.
  *
  * `AppRoot` la riceve solo sul desktop. Un valore nullo nasconde completamente
- * la sezione Cursori dal Compendio condiviso.
+ * la sezione Cursori dalle Impostazioni condivise.
  */
 data class CursorPreferences(
     val selected: CursorPair,

@@ -1,5 +1,6 @@
 package app.d6d.content.srd521it
 
+import app.d6d.i18n.AppLanguage
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.ArmorTrainingGrant
 import app.d6d.rules.character.CharacterClassId
@@ -92,7 +93,7 @@ object SrdClasses {
         )
     }
 
-    val all: List<ClassDefinition> = listOf(
+    private val italian: List<ClassDefinition> = listOf(
         barbarian(),
         bard(),
         cleric(),
@@ -106,10 +107,20 @@ object SrdClasses {
         sorcerer(),
         warlock(),
     )
+
+    private val english: List<ClassDefinition> by lazy {
+        italian.map { it.translatedTo(AppLanguage.ENGLISH) }
+    }
+
+    /** Le dodici classi nella lingua richiesta; la struttura e' la stessa. */
+    fun all(language: AppLanguage = AppLanguage.ITALIAN): List<ClassDefinition> = when (language) {
+        AppLanguage.ITALIAN -> italian
+        AppLanguage.ENGLISH -> english
+    }
 }
 
 val srdClasses: List<ClassDefinition>
-    get() = SrdClasses.all
+    get() = SrdClasses.all(AppLanguage.ITALIAN)
 
 private fun barbarian(): ClassDefinition {
     val classSlug = "barbaro"

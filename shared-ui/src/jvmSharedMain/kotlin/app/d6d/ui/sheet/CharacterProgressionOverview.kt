@@ -26,6 +26,9 @@ import app.d6d.content.srd521it.SrdBeastForm
 import app.d6d.sheet.CharacterSheet
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
+import app.d6d.i18n.label
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -36,17 +39,17 @@ internal fun ProgressionOverview(
     compact: Boolean,
     onOpenProgression: () -> Unit,
 ) {
+    val words = strings.sheet
+    val language = currentLanguage
     if (!sheet.progression.configured) {
-        SheetBox("Creazione e livelli SRD 5.2.1", Modifier.fillMaxWidth()) {
+        SheetBox(words.srdCreationTitle, Modifier.fillMaxWidth()) {
             Text(
-                "La modalità guidata propone classe, competenze, privilegi, talenti, trucchetti, " +
-                    "incantesimi e risorse nelle quantità previste dallo SRD. Le schede manuali " +
-                    "esistenti restano invariate finché non la attivi.",
+                words.srdCreationBody,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
             GameButton(
-                "Avvia creazione guidata",
+                words.startGuidedCreation,
                 accent = Palette.Gold,
                 onClick = onOpenProgression,
             )
@@ -56,16 +59,16 @@ internal fun ProgressionOverview(
 
     var showWildShapeReplacement by remember(sheet.id) { mutableStateOf(false) }
 
-    SheetBox("Progressione SRD 5.2.1", Modifier.fillMaxWidth()) {
+    SheetBox(words.srdProgressionTitle, Modifier.fillMaxWidth()) {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             sheet.progression.classLevels.forEach {
-                Chip("${it.classId.italianLabel} ${it.level}", Palette.Party)
+                Chip(words.classAndLevel(it.classId.label(language), it.level), Palette.Party)
             }
-            Chip("Bonus competenza ${signed(sheet.proficiencyBonus)}", Palette.Gold)
-            Chip("${sheet.experiencePoints} PE", Palette.Temporary)
+            Chip(words.proficiencyBonusIs(signed(sheet.proficiencyBonus)), Palette.Gold)
+            Chip(words.experiencePoints(sheet.experiencePoints), Palette.Temporary)
         }
 
         if (sheet.canLevelUp) {
@@ -78,13 +81,13 @@ internal fun ProgressionOverview(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    "Passaggio disponibile: i PE consentono il livello ${sheet.effectiveLevel + 1}.",
+                    words.levelUpAvailable(sheet.effectiveLevel + 1),
                     color = Palette.GoldBright,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 GameButton(
-                    "Sali al livello ${sheet.effectiveLevel + 1}",
+                    words.levelUpTo(sheet.effectiveLevel + 1),
                     accent = Palette.Gold,
                     onClick = onOpenProgression,
                 )
@@ -92,7 +95,7 @@ internal fun ProgressionOverview(
         } else {
             sheet.nextLevelExperienceThreshold?.let { threshold ->
                 Text(
-                    "Prossimo livello a $threshold PE · ne mancano ${sheet.experienceToNextLevel}.",
+                    words.nextLevelAt(threshold, sheet.experienceToNextLevel),
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -101,7 +104,7 @@ internal fun ProgressionOverview(
 
         val visibleResourcePools = sheet.progression.resourcePools.filter { it.maximum > 0 }
         if (visibleResourcePools.isNotEmpty()) {
-            Text("RISORSE DI CLASSE", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+            Text(words.classResourcesCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
@@ -117,14 +120,14 @@ internal fun ProgressionOverview(
                         Text(
                             buildString {
                                 append(pool.name)
-                                if (pool.dieSides > 0) append(" · d${pool.dieSides}")
+                                if (pool.dieSides > 0) append(words.dieSuffix(pool.dieSides))
                             },
                             color = Palette.Text,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            "${pool.remaining}/${pool.maximum} · ${pool.recovery.italianLabel}",
+                            words.resourcePool(pool.remaining, pool.maximum, pool.recovery.label(language)),
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.labelSmall,
                         )
@@ -139,13 +142,13 @@ internal fun ProgressionOverview(
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 GameButton(
-                    "Riposo breve",
+                    words.shortRest,
                     accent = Palette.Temporary,
                     dense = true,
                     onClick = { viewModel.recoverCharacterResources(RecoveryPeriod.SHORT_REST) },
                 )
                 GameButton(
-                    "Riposo lungo",
+                    words.longRest,
                     accent = Palette.Heal,
                     dense = true,
                     onClick = { viewModel.recoverCharacterResources(RecoveryPeriod.LONG_REST) },
@@ -155,7 +158,7 @@ internal fun ProgressionOverview(
                     viewModel.wildShapeReplacementOptions().isNotEmpty()
                 ) {
                     GameButton(
-                        "Riposo lungo + sostituisci forma",
+                        words.longRestAndSwapForm,
                         accent = Palette.Gold,
                         dense = true,
                         onClick = { showWildShapeReplacement = true },
@@ -187,6 +190,7 @@ private fun WildShapeReplacementDialog(
     onConfirm: (String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val words = strings.sheet
     var oldFormId by remember(knownForms) { mutableStateOf(knownForms.firstOrNull()?.id.orEmpty()) }
     var newFormId by remember(availableForms) {
         mutableStateOf(availableForms.firstOrNull()?.id.orEmpty())
@@ -194,15 +198,15 @@ private fun WildShapeReplacementDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.Surface,
-        title = { Text("Sostituisci una forma conosciuta", color = Palette.Text) },
+        title = { Text(words.swapKnownFormTitle, color = Palette.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Il comando completa un riposo lungo e sostituisce esattamente una forma, come previsto da Forma Selvatica.",
+                    words.swapKnownFormBody,
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
-                Text("FORMA DA DIMENTICARE", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                Text(words.formToForgetCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -217,14 +221,14 @@ private fun WildShapeReplacementDialog(
                         )
                     }
                 }
-                Text("NUOVA FORMA", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                Text(words.newFormCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     availableForms.forEach { form ->
                         GameButton(
-                            "${form.name} · ${form.summary}",
+                            words.formSummary(form.name, form.summary),
                             accent = if (form.id == newFormId) Palette.Heal else Palette.TextMuted,
                             selected = form.id == newFormId,
                             dense = true,
@@ -236,7 +240,7 @@ private fun WildShapeReplacementDialog(
         },
         confirmButton = {
             GameButton(
-                "Completa riposo e sostituisci",
+                words.finishRestAndSwap,
                 accent = Palette.Heal,
                 onClick = {
                     if (oldFormId.isNotBlank() && newFormId.isNotBlank()) {
@@ -245,6 +249,6 @@ private fun WildShapeReplacementDialog(
                 },
             )
         },
-        dismissButton = { GameButton("Annulla", onClick = onDismiss) },
+        dismissButton = { GameButton(strings.common.cancel, onClick = onDismiss) },
     )
 }

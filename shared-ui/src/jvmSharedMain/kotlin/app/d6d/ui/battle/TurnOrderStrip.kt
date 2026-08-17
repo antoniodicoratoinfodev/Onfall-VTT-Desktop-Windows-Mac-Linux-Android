@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import app.d6d.ui.components.Faction
 import app.d6d.ui.components.color
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 
 /**
@@ -115,13 +116,14 @@ private fun TurnChip(
         inspected -> Modifier.border(1.5.dp, Palette.Text.copy(alpha = 0.8f), shape)
         else -> Modifier.border(1.dp, Palette.Line, shape)
     }
+    val words = strings.battle
     val chipState = buildList {
-        if (current) add("Turno corrente")
-        if (targeted) add("Bersaglio selezionato")
-        if (inspected) add("Scheda in esame")
-        if (simultaneous) add("Turno simultaneo")
-        if (allDown) add("Tutti a zero punti ferita, turno saltato")
-    }.ifEmpty { listOf("Turno successivo") }.joinToString(". ")
+        if (current) add(words.currentTurn)
+        if (targeted) add(words.selectedTarget)
+        if (inspected) add(words.inspectedSheet)
+        if (simultaneous) add(words.simultaneousTurn)
+        if (allDown) add(words.allAtZeroTurnSkipped)
+    }.ifEmpty { listOf(words.nextTurn) }.joinToString(". ")
 
     // La mira ha precedenza sulla modifica: dopo aver scelto un'abilita', il clic
     // deve sempre significare "questo e' il bersaglio". Fuori dalla mira ispeziona.
@@ -170,18 +172,18 @@ private fun TurnChip(
             }
             .then(outline)
             .semantics {
-                contentDescription = "Turno di $names"
+                contentDescription = words.turnOf(names)
                 stateDescription = chipState
                 selected = inspected
             }
             .clickable(
                 role = Role.Button,
                 onClickLabel = if (viewModel.singleTargeting != null) {
-                    "Scegli ${viewModel.name(primaryId)} come bersaglio"
+                    words.chooseAsTarget(viewModel.name(primaryId))
                 } else if (editing) {
-                    "Rendi corrente il turno di ${viewModel.name(group.first())}"
+                    words.makeTurnCurrent(viewModel.name(group.first()))
                 } else {
-                    "Mostra capacita' e informazioni di ${viewModel.name(primaryId)}"
+                    words.showAbilitiesOf(viewModel.name(primaryId))
                 },
                 onClick = onChipClick,
             )
@@ -220,7 +222,7 @@ private fun TurnChip(
                     modifier = if (simultaneous) {
                         Modifier.clickable(
                             role = Role.Button,
-                            onClickLabel = "Seleziona ${viewModel.name(id)}",
+                            onClickLabel = words.select(viewModel.name(id)),
                         ) { onMemberClick(id) }
                     } else {
                         Modifier
@@ -229,10 +231,12 @@ private fun TurnChip(
             }
         }
         val secondaryText = buildList {
-            if (showInitiative) add("Iniziativa ${viewModel.initiativeScore(group.first()) ?: "—"}")
-            if (simultaneous) add("insieme")
-            if (targeted) add("bersaglio")
-            if (allDown) add("0 PF · turno saltato")
+            if (showInitiative) {
+                add(words.initiativeIs(viewModel.initiativeScore(group.first())?.toString() ?: "—"))
+            }
+            if (simultaneous) add(words.togetherShort)
+            if (targeted) add(words.targetedShort)
+            if (allDown) add(words.zeroHitPointsTurnSkipped)
         }.joinToString(" · ")
         if (secondaryText.isNotEmpty()) {
             Text(
@@ -257,7 +261,7 @@ private fun TurnChip(
                     viewModel.moveTurn(group.first(), -1)
                 }
                 Text(
-                    text = if (allDown) "turno saltato" else if (current) "corrente" else "rendi corrente",
+                    text = if (allDown) words.turnSkipped else if (current) words.isCurrent else words.makeCurrent,
                     color = if (allDown) Palette.TextFaint else if (current) Palette.GoldBright else Palette.TextMuted,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier

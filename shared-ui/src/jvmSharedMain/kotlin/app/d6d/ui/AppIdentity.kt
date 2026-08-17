@@ -1,5 +1,8 @@
 package app.d6d.ui
 
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.pick
+
 /**
  * Identita' visibile dell'applicazione, raccolta in un punto solo.
  *
@@ -21,8 +24,17 @@ object AppIdentity {
      * Il documento impone la formula prudente: si dichiara la compatibilita', non
      * l'approvazione ufficiale, e non si usano loghi o marchi.
      */
-    const val compatibilityLine: String = "Compatibile con 5.5e / SRD"
+    fun compatibilityLine(language: AppLanguage): String =
+        language.pick("Compatibile con 5.5e / SRD", "Compatible with 5.5e / SRD")
 
-    /** Titolo completo per finestre e intestazioni. */
-    val windowTitle: String get() = "$displayName — $compatibilityLine"
+    /**
+     * Titolo completo per finestre e intestazioni.
+     *
+     * La finestra nasce prima della composizione, quindi il titolo si fissa con la
+     * lingua di allora. Cambiarla ridisegna tutto lo schermo ma non ribattezza la
+     * finestra: e' l'unico testo dell'applicazione che aspetta il prossimo avvio, e
+     * vale la pena saperlo invece di scoprirlo.
+     */
+    fun windowTitle(language: AppLanguage): String =
+        "$displayName — ${compatibilityLine(language)}"
 }

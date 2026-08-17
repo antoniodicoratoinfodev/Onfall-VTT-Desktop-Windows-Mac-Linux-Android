@@ -31,10 +31,11 @@ import androidx.compose.ui.unit.dp
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.theme.GoldenRule
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 
 /**
- * Sezione desktop del Compendio dedicata al guanto-cursore.
+ * Sezione desktop delle Impostazioni dedicata al guanto-cursore.
  *
  * Ogni scheda mostra entrambe le pose della coppia. Le bitmap sono quelle
  * decodificate direttamente dai file del cursore, quindi l'anteprima non può
@@ -46,6 +47,8 @@ fun CursorArchive(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val strings = strings
+    val words = strings.cursors
     val previews = CursorPair.entries.mapNotNull { pair ->
         preferences.previews.firstOrNull { it.pair == pair }
     }
@@ -61,16 +64,15 @@ fun CursorArchive(
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Eyebrow("PERSONALIZZAZIONE DESKTOP", Palette.Gold)
+            Eyebrow(words.eyebrow, Palette.Gold)
             Text(
-                text = "Cursori",
+                text = strings.cursors.title,
                 color = Palette.Text,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                text = "Scegli fra tutte le finiture disponibili. Ogni coppia include " +
-                    "la posa normale e quella che afferra la mappa.",
+                text = words.subtitle,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -130,12 +132,13 @@ fun CursorArchive(
 
 @Composable
 private fun CursorSizeSelector(preferences: CursorPreferences) {
+    val strings = strings
     Column(
         Modifier.fillMaxWidth().padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
-            text = "DIMENSIONE",
+            text = strings.cursors.sizeLabel.uppercase(),
             color = Palette.TextMuted,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
@@ -146,8 +149,8 @@ private fun CursorSizeSelector(preferences: CursorPreferences) {
         ) {
             CursorSize.entries.forEach { size ->
                 GameButton(
-                    label = size.label,
-                    subtitle = size.description,
+                    label = size.label(strings),
+                    subtitle = size.description(strings),
                     accent = Palette.Gold,
                     selected = preferences.size == size,
                     onClick = { preferences.onSizeChange(size) },
@@ -166,6 +169,8 @@ private fun CursorPairCard(
     onSelect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = strings
+    val words = strings.cursors
     val accent = when (preview.pair) {
         CursorPair.COLD -> Palette.Party
         CursorPair.WARM -> Palette.RangePreview
@@ -174,18 +179,18 @@ private fun CursorPairCard(
         CursorPair.STEEL -> Palette.GoldBright
     }
     val title = when (preview.pair) {
-        CursorPair.COLD -> "Coppia A · Fredda"
-        CursorPair.WARM -> "Coppia B · Calda"
-        CursorPair.CLASSIC -> "Coppia C · Cuoio"
-        CursorPair.RUNIC -> "Coppia D · Runica"
-        CursorPair.STEEL -> "Coppia E · Acciaio"
+        CursorPair.COLD -> words.pairA
+        CursorPair.WARM -> words.pairB
+        CursorPair.CLASSIC -> words.pairC
+        CursorPair.RUNIC -> words.pairD
+        CursorPair.STEEL -> words.pairE
     }
     val subtitle = when (preview.pair) {
-        CursorPair.COLD -> "Acciaio blu e riflessi lunari"
-        CursorPair.WARM -> "Bronzo, rame e riflessi d'ambra"
-        CursorPair.CLASSIC -> "Cuoio scuro e piastre brunite"
-        CursorPair.RUNIC -> "Sigillo azzurro su metallo brunito"
-        CursorPair.STEEL -> "Acciaio freddo e bagliori di zaffiro"
+        CursorPair.COLD -> words.pairAHint
+        CursorPair.WARM -> words.pairBHint
+        CursorPair.CLASSIC -> words.pairCHint
+        CursorPair.RUNIC -> words.pairDHint
+        CursorPair.STEEL -> words.pairEHint
     }
     val shape = RoundedCornerShape(10.dp)
 
@@ -223,16 +228,16 @@ private fun CursorPairCard(
         ) {
             CursorPosePreview(
                 image = preview.pointer,
-                label = "Puntatore",
-                description = "$title, posa normale",
+                label = words.pointerPose,
+                description = words.normalPose(title),
                 compact = compact,
                 accent = accent,
                 modifier = Modifier.weight(1f),
             )
             CursorPosePreview(
                 image = preview.grab,
-                label = "Presa sulla mappa",
-                description = "$title, posa di trascinamento",
+                label = words.grabPose,
+                description = words.dragPose(title),
                 compact = compact,
                 accent = accent,
                 modifier = Modifier.weight(1f),
@@ -240,8 +245,8 @@ private fun CursorPairCard(
         }
 
         GameButton(
-            label = if (selected) "Coppia selezionata" else "Usa questa coppia",
-            subtitle = if (selected) "In uso nella finestra" else "Applica subito e ricorda la scelta",
+            label = if (selected) words.pairSelected else words.usePair,
+            subtitle = if (selected) words.inUse else words.applyAndRemember,
             accent = accent,
             selected = selected,
             onClick = onSelect,

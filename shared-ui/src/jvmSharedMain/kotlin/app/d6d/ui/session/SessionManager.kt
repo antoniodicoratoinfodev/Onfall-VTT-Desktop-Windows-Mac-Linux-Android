@@ -8,6 +8,8 @@ import app.d6d.engine.CombatSession
 import app.d6d.persistence.session.SessionArchive
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.persistence.session.SessionSummary
+import app.d6d.ui.i18n.AppLocale
+import app.d6d.ui.i18n.localizedSessionError
 import app.d6d.ui.state.BattleViewModel
 import java.io.IOException
 
@@ -58,10 +60,17 @@ class SessionManager(
     refreshOnCreate: Boolean = true,
 ) {
 
+    /** Vocabolario in uso: qui non arriva `LocalStrings`, siamo fuori da Compose. */
+    private val words get() = AppLocale.current.session
+
     var sessions by mutableStateOf<List<SessionSummary>>(emptyList())
         private set
 
     var status by mutableStateOf<String?>(null)
+
+    internal fun clearLocalizedStatus() {
+        status = null
+    }
 
     /** Nome dell'ultima sessione salvata o caricata, proposto al salvataggio successivo. */
     var currentName by mutableStateOf("")
@@ -133,13 +142,13 @@ class SessionManager(
         if (!owns(prepared)) return SessionSaveResult.FAILED
         val requestedSlug = SessionArchiveStore.slugify(displayName)
         if (slugOwnedByAnotherTab(requestedSlug)) {
-            status = "Questa sessione è già aperta in un'altra scheda. Attivala oppure scegli un altro nome."
+            status = words.alreadyOpenPickAnotherName
             return SessionSaveResult.OPEN_IN_ANOTHER_TAB
         }
         val ownsRequestedFile =
             prepared.currentSlug == requestedSlug && prepared.savedGeneration == prepared.generation
         if (store.exists(requestedSlug) && !ownsRequestedFile && !overwriteExisting) {
-            status = "Esiste già una sessione con questo nome. Scegli un altro nome o conferma la sovrascrittura."
+            status = words.nameTakenConfirmOverwrite
             return SessionSaveResult.NAME_COLLISION
         }
         return persist(prepared, displayName, requestedSlug, showSuccess = true)
@@ -154,7 +163,7 @@ class SessionManager(
         discardUnsavedChanges: Boolean = false,
     ): SessionLoadResult {
         if (hasUnsavedChanges && !discardUnsavedChanges) {
-            status = "La sessione corrente contiene modifiche non salvate."
+            status = words.currentSessionHasUnsavedChanges
             return SessionLoadResult.UNSAVED_CHANGES
         }
         return loadInternal(summary)
@@ -177,16 +186,16 @@ class SessionManager(
         if (!owns(prepared)) return SessionSaveResult.FAILED
         val slug = prepared.currentSlug
         if (slug == null || prepared.savedGeneration != prepared.generation) {
-            status = "Salva prima la sessione con un nome per attivare il salvataggio automatico."
+            status = words.saveWithNameToEnableAutosave
             return SessionSaveResult.NO_CURRENT_SESSION
         }
         if (slugOwnedByAnotherTab(slug)) {
-            status = "Salvataggio sospeso: il file è collegato a un'altra scheda aperta."
+            status = words.autosavePausedFileInAnotherTab
             return SessionSaveResult.OPEN_IN_ANOTHER_TAB
         }
         if (!prepared.hasUnsavedChanges) return SessionSaveResult.NOT_NEEDED
         if (SessionArchiveStore.slugify(prepared.currentName) != slug) {
-            status = "Il nome della sessione è cambiato: usa Salva per scegliere il nuovo file."
+            status = words.nameChangedUseSave
             return SessionSaveResult.NAME_COLLISION
         }
         return persist(prepared, prepared.currentName, slug, showSuccess = false)
@@ -201,10 +210,10 @@ class SessionManager(
 
     fun delete(summary: SessionSummary) {
         if (slugOwnedByAnotherTab(summary.slug)) {
-            status = "Chiudi prima la scheda che usa «${summary.displayName}»."
+            status = words.closeTabUsingFile(summary.displayName)
             return
         }
-        guard("Sessione eliminata.") {
+        guard(words.sessionDeleted) {
             store.delete(summary.slug)
             if (currentSlug == summary.slug) clearCurrentSave()
             sessions = store.list()
@@ -226,15 +235,15 @@ class SessionManager(
             block()
             if (successMessage != null) status = successMessage
         } catch (failure: IOException) {
-            status = "Errore su disco: ${failure.message}"
+            status = words.diskError(localizedDetail(failure))
         } catch (failure: IllegalArgumentException) {
-            status = "Sessione non valida: ${failure.message}"
+            status = words.invalidSession(localizedDetail(failure))
         }
     }
 
     private fun loadInternal(summary: SessionSummary): SessionLoadResult {
         if (slugOwnedByAnotherTab(summary.slug)) {
-            status = "Questa sessione è già aperta in un'altra scheda."
+            status = words.alreadyOpenInAnotherTab
             return SessionLoadResult.FAILED
         }
         return try {
@@ -242,10 +251,10 @@ class SessionManager(
             attachLoaded(archive, announce = true)
             SessionLoadResult.LOADED
         } catch (failure: IOException) {
-            status = "Errore su disco: ${failure.message}"
+            status = words.diskError(localizedDetail(failure))
             SessionLoadResult.FAILED
         } catch (failure: IllegalArgumentException) {
-            status = "Sessione non valida: ${failure.message}"
+            status = words.invalidSession(localizedDetail(failure))
             SessionLoadResult.FAILED
         }
     }
@@ -264,7 +273,7 @@ class SessionManager(
         markSaved()
         menuOpen = false
         status = if (announce) {
-            "Sessione «${archive.summary().displayName}» caricata."
+            words.sessionLoaded(archive.summary().displayName)
         } else {
             null
         }
@@ -309,25 +318,27 @@ class SessionManager(
                 currentName = persistedName
                 markSaved(prepared, persistedName)
             } else {
-                status = "Snapshot salvato; il tavolo e' cambiato durante la scrittura e resta da salvare."
+                status = words.snapshotSavedTableMovedOn
             }
             // Il file e' gia' salvo se l'aggiornamento dell'elenco dovesse fallire.
             sessions = try {
                 store.list()
             } catch (failure: IOException) {
-                status = "Sessione salvata, ma l'elenco non è aggiornabile: ${failure.message}"
+                status = words.savedButListNotRefreshed(
+                    localizedDetail(failure),
+                )
                 return SessionSaveResult.SAVED
             }
-            if (showSuccess && stillSameDocument) status = "Sessione salvata."
+            if (showSuccess && stillSameDocument) status = words.sessionSaved
             SessionSaveResult.SAVED
         } catch (failure: IOException) {
-            status = "Errore su disco: ${failure.message}"
+            status = words.diskError(localizedDetail(failure))
             SessionSaveResult.FAILED
         } catch (failure: IllegalArgumentException) {
-            status = "Sessione non valida: ${failure.message}"
+            status = words.invalidSession(localizedDetail(failure))
             SessionSaveResult.FAILED
         } catch (failure: IllegalStateException) {
-            status = "Sessione non valida: ${failure.message}"
+            status = words.invalidSession(localizedDetail(failure))
             SessionSaveResult.FAILED
         }
     }
@@ -335,9 +346,12 @@ class SessionManager(
     /** Ultima difesa: il codice I/O non completa mai un playback dal proprio thread. */
     private fun persistenceReady(): Boolean {
         if (!battle.enemyCpuBusy) return true
-        status = "Salvataggio rimandato: il turno CPU deve essere consolidato dall'interfaccia."
+        status = words.savePostponedForCpuTurn
         return false
     }
+
+    private fun localizedDetail(failure: Throwable): String =
+        localizedSessionError(failure.message.orEmpty(), AppLocale.language)
 
     /** Snapshot senza settlement, per fallback sincroni gia' dichiarati ready. */
     internal fun snapshotForPersistence(): PreparedSessionPersistence = capturePersistenceSnapshot()
@@ -365,7 +379,7 @@ class SessionManager(
 
     private fun owns(prepared: PreparedSessionPersistence): Boolean {
         if (prepared.owner === this) return true
-        status = "Snapshot di salvataggio non valido per questa sessione."
+        status = words.invalidSnapshotForThisSession
         return false
     }
 

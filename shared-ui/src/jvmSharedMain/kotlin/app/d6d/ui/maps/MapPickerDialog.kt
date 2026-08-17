@@ -35,6 +35,7 @@ import app.d6d.sheet.ImageStore
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.theme.OrnateDivider
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
@@ -55,6 +56,7 @@ fun MapPickerDialog(
     onRemove: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val words = strings.maps
     // Legare a `revision`: una mappa appena caricata compare senza riaprire.
     @Suppress("UNUSED_EXPRESSION")
     portraits.revision
@@ -88,21 +90,21 @@ fun MapPickerDialog(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = "Scegli sfondo",
+                            text = words.chooseBackground,
                             color = Palette.Text,
                             fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            text = "Dall'archivio delle mappe del Compendio.",
+                            text = words.chooseBackgroundSubtitle,
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                     GameButton(
-                        label = "＋ Carica",
+                        label = words.upload,
                         accent = Palette.Party,
-                        subtitle = "${ImageStore.acceptedFormatsLabel} · max ${ImageStore.maxSizeLabel}",
+                        subtitle = words.formatsAndLimit(ImageStore.acceptedFormatsLabel, ImageStore.maxSizeLabel),
                         onClick = {
                             portraits.importMapAsync { created ->
                                 created?.let {
@@ -130,8 +132,7 @@ fun MapPickerDialog(
 
                 if (maps.isEmpty()) {
                     Text(
-                        text = "L'archivio è vuoto. Carica una mappa per usarla come sfondo, " +
-                            "poi la ritroverai qui in ogni partita.",
+                        text = words.pickerEmpty,
                         color = Palette.TextFaint,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(vertical = 8.dp),
@@ -179,7 +180,7 @@ fun MapPickerDialog(
                                 )
                                 if (selected) {
                                     Text(
-                                        text = "Sfondo attuale",
+                                        text = words.currentBackground,
                                         color = Palette.Gold,
                                         style = MaterialTheme.typography.labelSmall,
                                     )
@@ -196,13 +197,13 @@ fun MapPickerDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (currentImage.isNotBlank()) {
-                        GameButton("Togli sfondo", accent = Palette.TextFaint, onClick = {
+                        GameButton(words.removeBackground, accent = Palette.TextFaint, onClick = {
                             onRemove()
                             onDismiss()
                         })
                     }
                     Box(Modifier.weight(1f))
-                    GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
+                    GameButton(strings.common.close, accent = Palette.TextMuted, onClick = onDismiss)
                 }
             }
         }

@@ -37,17 +37,28 @@ import androidx.compose.ui.unit.dp
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.theme.OrnateDivider
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
 
 /** Categorie dell'inventario da combattimento. */
-enum class ItemCategory(val label: String, val tint: androidx.compose.ui.graphics.Color) {
-    POZIONI("Pozioni", Palette.Heal),
-    ARMI("Armi", Palette.Enemy),
-    ARMATURE("Armature", Palette.Party),
-    PERGAMENE("Pergamene", Palette.Gold),
-    VARIE("Varie", Palette.TextMuted),
+enum class ItemCategory(val tint: androidx.compose.ui.graphics.Color) {
+    POZIONI(Palette.Heal),
+    ARMI(Palette.Enemy),
+    ARMATURE(Palette.Party),
+    PERGAMENE(Palette.Gold),
+    VARIE(Palette.TextMuted),
+}
+
+fun ItemCategory.label(strings: Strings): String = when (this) {
+    ItemCategory.POZIONI -> strings.items.categoryPotions
+    ItemCategory.ARMI -> strings.items.categoryWeapons
+    ItemCategory.ARMATURE -> strings.items.categoryArmor
+    ItemCategory.PERGAMENE -> strings.items.categoryScrolls
+    ItemCategory.VARIE -> strings.items.categoryMisc
 }
 
 /**
@@ -70,52 +81,61 @@ data class BattleItem(
  *
  * Sono voci illustrative, non contenuto definitivo: servono a mostrare come si
  * leggeranno descrizione ed effetti. Sostituiscile (o svuota la lista) quando
- * arrivera' l'inventario reale.
+ * arrivera' l'inventario reale. Sono scritte da noi, quindi si traducono: il
+ * testo vive in `strings.items` e la lista si ricostruisce a ogni cambio lingua.
  */
-val sampleBattleItems: List<BattleItem> = listOf(
-    BattleItem(
-        id = "pozione-guarigione",
-        name = "Pozione di guarigione",
-        category = ItemCategory.POZIONI,
-        description = "Una fiala di liquido scarlatto che luccica quando la si agita.",
-        effects = listOf("Recupera 2d4 + 2 punti ferita", "Berla costa un'azione bonus"),
-    ),
-    BattleItem(
-        id = "pozione-forza",
-        name = "Pozione di forza smisurata",
-        category = ItemCategory.POZIONI,
-        description = "Denso intruglio che sa di ferro e tuono.",
-        effects = listOf("Vantaggio alle prove di Forza per 10 minuti", "Concentrazione non richiesta"),
-    ),
-    BattleItem(
-        id = "spada-lunga",
-        name = "Spada lunga affilata",
-        category = ItemCategory.ARMI,
-        description = "Lama a un taglio ben bilanciata, adatta a una o due mani.",
-        effects = listOf("1d8 danni taglienti (1d10 a due mani)", "Proprieta': versatile"),
-    ),
-    BattleItem(
-        id = "arco-corto",
-        name = "Arco corto da caccia",
-        category = ItemCategory.ARMI,
-        description = "Arco leggero in legno di tasso, buono per il tiro rapido.",
-        effects = listOf("1d6 danni perforanti", "Gittata 24 / 96 metri"),
-    ),
-    BattleItem(
-        id = "pergamena-scudo",
-        name = "Pergamena dello scudo arcano",
-        category = ItemCategory.PERGAMENE,
-        description = "Sottile foglio runato che si sbriciola dopo l'uso.",
-        effects = listOf("Reazione: +5 alla Classe Armatura", "Dura fino all'inizio del tuo turno"),
-    ),
-    BattleItem(
-        id = "cuoio-borchiato",
-        name = "Cuoio borchiato",
-        category = ItemCategory.ARMATURE,
-        description = "Armatura leggera rinforzata da borchie metalliche.",
-        effects = listOf("CA 12 + modificatore di Destrezza", "Nessuna penalita' alla furtivita'"),
-    ),
-)
+fun sampleBattleItems(strings: Strings): List<BattleItem> {
+    val words = strings.items
+    val language = strings.language
+    return listOf(
+        BattleItem(
+            id = "pozione-guarigione",
+            name = words.healingPotionName,
+            category = ItemCategory.POZIONI,
+            description = words.healingPotionDescription,
+            effects = listOf(words.healingPotionEffect1, words.healingPotionEffect2),
+        ),
+        BattleItem(
+            id = "pozione-forza",
+            name = words.strengthPotionName,
+            category = ItemCategory.POZIONI,
+            description = words.strengthPotionDescription,
+            effects = listOf(words.strengthPotionEffect1, words.strengthPotionEffect2),
+        ),
+        BattleItem(
+            id = "spada-lunga",
+            name = words.longswordName,
+            category = ItemCategory.ARMI,
+            description = words.longswordDescription,
+            effects = listOf(words.longswordEffect1, words.longswordEffect2),
+        ),
+        BattleItem(
+            id = "arco-corto",
+            name = words.shortbowName,
+            category = ItemCategory.ARMI,
+            description = words.shortbowDescription,
+            effects = listOf(
+                words.shortbowEffect1,
+                // 80/320 piedi e' la gittata SRD: in italiano diventano metri.
+                words.shortbowRange(distanceLabel(80, language), distanceLabel(320, language)),
+            ),
+        ),
+        BattleItem(
+            id = "pergamena-scudo",
+            name = words.shieldScrollName,
+            category = ItemCategory.PERGAMENE,
+            description = words.shieldScrollDescription,
+            effects = listOf(words.shieldScrollEffect1, words.shieldScrollEffect2),
+        ),
+        BattleItem(
+            id = "cuoio-borchiato",
+            name = words.studdedLeatherName,
+            category = ItemCategory.ARMATURE,
+            description = words.studdedLeatherDescription,
+            effects = listOf(words.studdedLeatherEffect1, words.studdedLeatherEffect2),
+        ),
+    )
+}
 
 /**
  * Inventario da combattimento.
@@ -133,6 +153,8 @@ fun BattleItemsDialog(
 ) {
     if (!open) return
 
+    val strings = strings
+    val words = strings.items
     var category by remember { mutableStateOf<ItemCategory?>(null) }
     var selected by remember { mutableStateOf<BattleItem?>(null) }
     var hovered by remember { mutableStateOf<BattleItem?>(null) }
@@ -168,18 +190,18 @@ fun BattleItemsDialog(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            "Oggetti",
+                            words.title,
                             color = Palette.Text,
                             fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            "Pozioni, armi ed equipaggiamento del gruppo.",
+                            strings.battle.itemsSubtitle,
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
+                    GameButton(strings.common.close, accent = Palette.TextMuted, onClick = onDismiss)
                 }
                 OrnateDivider(color = Palette.GoldDim)
 
@@ -189,14 +211,14 @@ fun BattleItemsDialog(
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     GameButton(
-                        label = "Tutti",
+                        label = strings.common.all,
                         accent = if (category == null) Palette.Gold else Palette.TextFaint,
                         selected = category == null,
                         onClick = { category = null },
                     )
                     ItemCategory.entries.forEach { entry ->
                         GameButton(
-                            label = entry.label,
+                            label = entry.label(strings),
                             accent = if (category == entry) entry.tint else Palette.TextFaint,
                             selected = category == entry,
                             onClick = { category = entry },
@@ -251,11 +273,11 @@ private fun ItemList(
             .padding(9.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Eyebrow("Inventario")
+        Eyebrow(strings.items.inventoryCaps)
         if (items.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    "Nessun oggetto qui ancora.",
+                    strings.battle.noItemsYet,
                     color = Palette.TextFaint,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -285,6 +307,7 @@ private fun ItemRow(
     onSelect: () -> Unit,
     onHover: (Boolean) -> Unit,
 ) {
+    val strings = strings
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     LaunchedEffect(hovered) { onHover(hovered) }
@@ -317,7 +340,7 @@ private fun ItemRow(
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                item.category.label,
+                item.category.label(strings),
                 color = item.category.tint,
                 style = MaterialTheme.typography.labelSmall,
             )
@@ -327,6 +350,7 @@ private fun ItemRow(
 
 @Composable
 private fun ItemDetail(item: BattleItem?, modifier: Modifier = Modifier) {
+    val strings = strings
     Column(
         modifier
             .background(Palette.Night, RoundedCornerShape(10.dp))
@@ -338,7 +362,7 @@ private fun ItemDetail(item: BattleItem?, modifier: Modifier = Modifier) {
         if (item == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    "Passa il mouse su un oggetto — o cliccalo — per leggerne qui descrizione ed effetti.",
+                    strings.battle.hoverItemHint,
                     color = Palette.TextFaint,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -357,11 +381,11 @@ private fun ItemDetail(item: BattleItem?, modifier: Modifier = Modifier) {
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
-            Chip(item.category.label, item.category.tint)
+            Chip(item.category.label(strings), item.category.tint)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Eyebrow("Descrizione")
+            Eyebrow(strings.items.descriptionCaps)
             Text(
                 item.description,
                 color = Palette.TextMuted,
@@ -370,10 +394,10 @@ private fun ItemDetail(item: BattleItem?, modifier: Modifier = Modifier) {
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Eyebrow("Effetti")
+            Eyebrow(strings.items.effectsCaps)
             if (item.effects.isEmpty()) {
                 Text(
-                    "Nessun effetto indicato.",
+                    strings.battle.noEffectListed,
                     color = Palette.TextFaint,
                     style = MaterialTheme.typography.bodySmall,
                 )

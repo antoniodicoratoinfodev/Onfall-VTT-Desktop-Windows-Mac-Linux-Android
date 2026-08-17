@@ -1,5 +1,7 @@
 package app.d6d.content.srd521it
 
+import app.d6d.content.srd521it.SrdIdentity.Companion.CANONICAL_PREFIX
+import app.d6d.i18n.AppLanguage
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ArmorTrainingGrant
 import app.d6d.rules.character.ClassEligibility
@@ -45,18 +47,24 @@ private data class ClassFeatureRecord(
 /** Privilegi, opzioni, Metamagie e Suppliche delle dodici classi SRD. */
 object SrdClassFeatures {
     private val json = Json { ignoreUnknownKeys = true }
+    private val cache = HashMap<AppLanguage, List<RuleElementDefinition>>()
 
-    val all: List<RuleElementDefinition> by lazy {
-        val stream = checkNotNull(
-            SrdClassFeatures::class.java
-                .getResourceAsStream("/srd/5.2.1-it/class-features.json"),
-        ) { "Risorsa SRD dei privilegi di classe non trovata." }
+    fun all(language: AppLanguage = AppLanguage.ITALIAN): List<RuleElementDefinition> = synchronized(cache) {
+        cache.getOrPut(language) { load(language) }
+    }
+
+    private fun load(language: AppLanguage): List<RuleElementDefinition> {
+        val identity = SrdIdentity.of(language)
+        val path = "/srd/${identity.resourceDirectory}/class-features.json"
+        val stream = checkNotNull(SrdClassFeatures::class.java.getResourceAsStream(path)) {
+            "Risorsa SRD dei privilegi di classe non trovata: $path."
+        }
         val document = stream.bufferedReader(Charsets.UTF_8).use {
             json.decodeFromString<ClassFeatureDocument>(it.readText())
         }
         check(document.schemaVersion == 1)
         check(document.records.size == document.counts.records)
-        document.records.map(ClassFeatureRecord::toRuleElement).also { elements ->
+        return document.records.map { it.toRuleElement(language, identity) }.also { elements ->
             check(elements.size == 408) {
                 "Attesi 408 record di privilegi/opzioni SRD, trovati ${elements.size}."
             }
@@ -67,9 +75,16 @@ object SrdClassFeatures {
     }
 }
 
-val srdClassFeatures: List<RuleElementDefinition> get() = SrdClassFeatures.all
+val srdClassFeatures: List<RuleElementDefinition> get() = SrdClassFeatures.all(AppLanguage.ITALIAN)
 
-private fun ClassFeatureRecord.toRuleElement(): RuleElementDefinition {
+private fun ClassFeatureRecord.toRuleElement(
+    language: AppLanguage,
+    identity: SrdIdentity,
+): RuleElementDefinition {
+    // L'identificativo canonico si adotta *subito*: da qui in giu' ogni
+    // riconoscimento avviene sugli slug italiani, e vale percio' per entrambe
+    // le edizioni senza un solo ramo dedicato alla lingua.
+    val id = identity.featureId(this.id)
     val classId = requireNotNull(CharacterClassId.entries.firstOrNull { it.contentId == classSlug }) {
         "Classe SRD sconosciuta nel privilegio $id: $classSlug."
     }
@@ -82,10 +97,12 @@ private fun ClassFeatureRecord.toRuleElement(): RuleElementDefinition {
         else -> error("Tipo di privilegio SRD sconosciuto: $kind.")
     }
     val normalizedId = when (ruleKind) {
-        RuleElementKind.METAMAGIC -> "srd521-it:metamagic:${name.toContentSlug()}"
+        // Dallo slug dell'identificativo canonico, non dal nome: in inglese il
+        // nome e' «Subtle Spell» e coniarci sopra darebbe un secondo id.
+        RuleElementKind.METAMAGIC -> "$CANONICAL_PREFIX:metamagic:${id.substringAfterLast(':')}"
         else -> id
     }
-    val classDefinition = SrdClasses.all.first { it.id == classId }
+    val classDefinition = SrdClasses.all(language).first { it.id == classId }
     val explicitResourceSlug = when {
         id.endsWith(":feature:guerriero:recuperare-energie") -> "recuperare-energie"
         id.endsWith(":feature:guerriero:azione-impetuosa") -> "azione-impetuosa"
@@ -99,27 +116,26 @@ private fun ClassFeatureRecord.toRuleElement(): RuleElementDefinition {
         else -> null
     }
     val resourceId = explicitResourceSlug
-        ?.let { "srd521-it:resource:${classId.contentId}:$it" }
+        ?.let { "$CANONICAL_PREFIX:resource:${classId.contentId}:$it" }
         ?: resource?.name?.let { resourceName ->
             classDefinition.resources.firstOrNull {
                 it.name.toContentSlug() == resourceName.toContentSlug()
             }?.id
         }
-    val statedCost = Regex("""Costo:\s*(\d+)""", RegexOption.IGNORE_CASE)
-        .find(description)
-        ?.groupValues
-        ?.get(1)
-        ?.toIntOrNull()
-    val effectiveMinimumLevel = if (id.endsWith(":conoscenze-degli-antichi")) {
-        minimumLevel.coerceAtLeast(2)
-    } else {
-        minimumLevel
-    }
-    val effectivePrerequisite = if (id.endsWith(":conoscenze-degli-antichi")) {
-        "Warlock di 2º livello o superiore"
-    } else {
-        prerequisite.orEmpty()
-    }
+    // Solo quando la descrizione dichiara *un* costo. Un privilegio che ne
+    // elenca piu' d'uno e' un menu — «Colpi infidi» presenta tre opzioni da
+    // 2d6, 3d6 e 6d6 — e il costo appartiene alle opzioni, non a lui. Prendere
+    // il primo dava per giunta un numero diverso nelle due edizioni, perche'
+    // le opzioni sono in ordine alfabetico e l'alfabeto cambia con la lingua.
+    val declaredCosts = SrdWords.of(language).statedCost.findAll(description).toList()
+    val statedCost = declaredCosts.singleOrNull()?.groupValues?.get(1)?.toIntOrNull()
+    // Qui c'era una toppa che alzava a 2 il livello di «Conoscenze degli Antichi»
+    // e ne riscriveva il prerequisito a mano. Serviva perche' l'estrattore
+    // perdeva quel livello; ora lo legge, in entrambe le edizioni, e la toppa
+    // non solo e' inutile ma avrebbe infilato una frase italiana nel pacchetto
+    // inglese. Il dato corretto sta nel JSON: `tools/srd/extract_srd_class_features.py`.
+    val effectiveMinimumLevel = minimumLevel
+    val effectivePrerequisite = prerequisite.orEmpty()
     val armorGrant = when {
         id.endsWith(":feature:chierico:protettore") -> ArmorTrainingGrant(heavy = true)
         id.endsWith(":feature:druido:custode") -> ArmorTrainingGrant(medium = true)
@@ -127,7 +143,7 @@ private fun ClassFeatureRecord.toRuleElement(): RuleElementDefinition {
     }
     val weaponGrant = when {
         id.endsWith(":feature:chierico:protettore") ||
-            id.endsWith(":feature:druido:custode") -> "Armi da guerra"
+            id.endsWith(":feature:druido:custode") -> SrdWords.of(language).martialWeapons
         else -> ""
     }
     val grantedSpellNames = when {
@@ -156,15 +172,21 @@ private fun ClassFeatureRecord.toRuleElement(): RuleElementDefinition {
         sourcePage = page,
         activation = if (id.endsWith(":feature:guerriero:azione-impetuosa")) "" else activation.orEmpty(),
         resourceId = resourceId,
+        // Un costo senza risorsa non vuol dire nulla, e il motore lo rifiuta:
+        // il testo puo' nominare una spesa la cui risorsa questa classe non
+        // possiede, e in quel caso il numero va lasciato cadere.
         resourceCost = when {
+            resourceId == null -> 0
             id.endsWith(":feature:paladino:tocco-rigenerante") -> 5
             id.endsWith(":feature:guerriero:azione-impetuosa") -> 1
             else -> resource?.cost?.takeIf { it > 0 } ?: statedCost ?: 0
         },
         armorTrainingGrant = armorGrant,
         weaponTrainingGrant = weaponGrant,
+        // I nomi qui sopra sono italiani di proposito: sono chiavi, non testo da
+        // mostrare, e producono l'identificativo canonico in entrambe le edizioni.
         grantedSpellIds = grantedSpellNames.map {
-            "srd521-it:spell:${it.toContentSlug()}"
+            "$CANONICAL_PREFIX:spell:${it.toContentSlug()}"
         },
     )
 }

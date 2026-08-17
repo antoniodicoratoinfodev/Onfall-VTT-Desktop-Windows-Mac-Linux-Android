@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.d6d.ui.battle.GameButton
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
@@ -35,6 +36,7 @@ fun UnsavedSessionDialog(
     onSaveFirst: () -> Unit,
     onDiscard: () -> Unit,
 ) {
+    val words = strings.session
     if (!open) return
     Dialog(
         onDismissRequest = onDismiss,
@@ -54,13 +56,13 @@ fun UnsavedSessionDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    "La battaglia corrente non è salvata",
+                    words.currentBattleNotSaved,
                     color = Palette.Text,
                     fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Text(
-                    "Avviando il nuovo incontro perderai lo stato corrente. Puoi tornare alla battaglia e salvarla con un nome.",
+                    words.currentBattleNotSavedBody,
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -68,9 +70,9 @@ fun UnsavedSessionDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    GameButton("Continua a preparare", accent = Palette.TextMuted, onClick = onDismiss)
-                    GameButton("Torna e salva", accent = Palette.Heal, onClick = onSaveFirst)
-                    GameButton("Scarta e avvia", accent = Palette.Critical, onClick = onDiscard)
+                    GameButton(words.keepPreparing, accent = Palette.TextMuted, onClick = onDismiss)
+                    GameButton(words.goBackAndSave, accent = Palette.Heal, onClick = onSaveFirst)
+                    GameButton(words.discardAndStart, accent = Palette.Critical, onClick = onDiscard)
                 }
             }
         }

@@ -10,16 +10,24 @@ import app.d6d.domain.combat.CombatResourceState
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.SheetStore
 import app.d6d.sheet.isPactSpellSlot
+import app.d6d.sheet.i18n.localizedSheetError
 import app.d6d.sheet.spellSlotLevelOrNull
 import app.d6d.ui.content.SessionTemplate
 import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.sheet.SheetKind
 import app.d6d.ui.sheet.SheetViewModel
+import app.d6d.ui.i18n.AppLocale
+import app.d6d.ui.i18n.Strings
 
 /** Tipo di attore nel roster: le due categorie ora coincidono con i due editor. */
-enum class RosterKind(val label: String) {
-    PERSONAGGIO("Personaggi"),
-    CREATURA("Creature"),
+enum class RosterKind {
+    PERSONAGGIO,
+    CREATURA,
+}
+
+fun RosterKind.label(strings: Strings): String = when (this) {
+    RosterKind.PERSONAGGIO -> strings.compendium.characters
+    RosterKind.CREATURA -> strings.compendium.creatures
 }
 
 /** Riga del roster unificato. */
@@ -49,10 +57,18 @@ class RosterViewModel(
     loadOnCreate: Boolean = true,
 ) {
 
+    /** Vocabolario in uso: qui non arriva `LocalStrings`, siamo fuori da Compose. */
+    private val words get() = AppLocale.current.compendium
+
     /** Editor delle schede, passato agli editor esistenti senza modificarli. */
     val sheets = SheetViewModel(sheetStore, loadOnCreate)
 
     var status by mutableStateOf<String?>(null)
+
+    internal fun onLanguageChanged() {
+        status = null
+        sheets.onLanguageChanged()
+    }
 
     init {
         // La scheda e' autorevole: ogni salvataggio o eliminazione rigenera il catalogo.
@@ -73,24 +89,24 @@ class RosterViewModel(
         val people = sheets.library.characters.map {
             RosterItem(
                 it.id,
-                it.characterName.ifBlank { "Senza nome" },
+                it.characterName.ifBlank { words.unnamed },
                 RosterKind.PERSONAGGIO,
                 // Una scheda guidata scrive gia' i livelli dentro la classe
                 // ("Guerriero 3 / Ladro 2"): ripeterli darebbe "Guerriero 3 3".
                 // Quelle manuali tengono il livello in un campo a parte.
                 if (it.progression.configured) {
-                    it.className.trim().ifBlank { "Personaggio" }
+                    sheets.displayedClassName(it).trim().ifBlank { words.characterLabel }
                 } else {
-                    "${it.className} ${it.level}".trim().ifBlank { "Personaggio" }
+                    words.classAndLevel(it.className, it.level).trim().ifBlank { words.characterLabel }
                 },
             )
         }
         val creatures = sheets.library.monsters.map {
             RosterItem(
                 it.id,
-                it.name.ifBlank { "Senza nome" },
+                it.name.ifBlank { words.unnamed },
                 RosterKind.CREATURA,
-                "GS ${it.challengeRating}",
+                words.challengeRating(it.challengeRating),
             )
         }
         people + creatures
@@ -106,10 +122,19 @@ class RosterViewModel(
      * fonte effettiva dei PF, dell'iniziativa e delle capacita' del combattente.
      */
     fun definitionFor(id: String): ActorDefinition? {
+        // La lingua va passata: il valore predefinito e' l'italiano, e senza di
+        // essa un attore senza nome tornerebbe «Senza nome» dentro una partita
+        // in inglese.
+        val language = AppLocale.language
         sheets.library.characters.firstOrNull { it.id == id }
-            ?.let { return it.toActorDefinition(abilityCatalog = sheets.abilityCatalog) }
+            ?.let {
+                return it.toActorDefinition(
+                    abilityCatalog = sheets.abilityCatalog,
+                    language = language,
+                )
+            }
         sheets.library.monsters.firstOrNull { it.id == id }
-            ?.let { return it.toActorDefinition() }
+            ?.let { return it.toActorDefinition(language = language) }
         return null
     }
 
@@ -150,7 +175,7 @@ class RosterViewModel(
     internal fun installIncludedContent() {
         val known = sheets.library.characters.mapTo(mutableSetOf()) { it.id }
         val missingCharacters = buildList {
-            SessionTemplates.all.forEach { template ->
+            SessionTemplates.of(AppLocale.language).all.forEach { template ->
                 val built = template.buildMissingParty(known)
                 addAll(built)
                 built.forEach { known += it.id }
@@ -158,7 +183,7 @@ class RosterViewModel(
         }
         sheets.restoreMissing(
             missingCharacters,
-            SessionTemplates.all.flatMap { it.monsters },
+            SessionTemplates.of(AppLocale.language).all.flatMap { it.monsters },
         )
     }
 
@@ -315,9 +340,11 @@ class RosterViewModel(
             catalogStore.save(entries)
             null
         } catch (failure: java.io.IOException) {
-            "Errore nel catalogo: ${failure.message}"
+            words.catalogError(failure.message.orEmpty())
         } catch (failure: IllegalArgumentException) {
-            "Scheda non valida per il catalogo: ${failure.message}"
+            words.invalidSheetForCatalog(
+                localizedSheetError(failure.message.orEmpty(), AppLocale.language),
+            )
         }
     }
 }

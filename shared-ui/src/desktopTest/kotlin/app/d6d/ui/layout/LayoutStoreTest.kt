@@ -151,4 +151,43 @@ class LayoutStoreTest {
         state.cycleTurnOrderDisplayMode()
         assertEquals(TurnOrderDisplayMode.HIDDEN, state.turnOrderDisplayMode)
     }
+
+    @Test
+    fun `le impostazioni portano direttamente a una delle tre modalita`() {
+        val state = UiLayoutState()
+
+        TurnOrderDisplayMode.entries.forEach { mode ->
+            state.applyTurnOrderDisplayMode(mode)
+            assertEquals(mode, state.turnOrderDisplayMode)
+        }
+    }
+
+    @Test
+    fun `nascondere la fascia ricorda quale visualizzazione riaprire`() {
+        val state = UiLayoutState(UiLayout(turnsCollapsed = false, turnsShowInitiative = false))
+
+        state.applyTurnOrderDisplayMode(TurnOrderDisplayMode.HIDDEN)
+        state.applyTurnOrderDisplayMode(TurnOrderDisplayMode.ORDER_ONLY)
+
+        assertEquals(TurnOrderDisplayMode.ORDER_ONLY, state.turnOrderDisplayMode)
+        assertFalse(state.turnsShowInitiative)
+    }
+
+    @Test
+    fun `il ripristino riporta i pannelli alle misure di fabbrica`() {
+        val state = UiLayoutState(
+            UiLayout(
+                railWidthDp = 200f,
+                railOpen = false,
+                logCollapsed = true,
+                mapCellSizeDp = 80f,
+                targetPlate = PlateFraction(0.9f, 0.1f),
+                activePlateScale = 1.8f,
+            ),
+        )
+
+        state.resetToDefaults()
+
+        assertEquals(UiLayout(), state.snapshot())
+    }
 }

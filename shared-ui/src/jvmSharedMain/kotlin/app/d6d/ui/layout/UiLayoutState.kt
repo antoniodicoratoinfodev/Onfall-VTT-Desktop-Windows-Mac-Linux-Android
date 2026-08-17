@@ -71,6 +71,21 @@ class UiLayoutState(
         }
     }
 
+    /**
+     * Porta direttamente a una delle tre modalita'.
+     *
+     * La usa chi le presenta tutte insieme — le Impostazioni — invece di farle
+     * attraversare a giri come l'etichetta sulla fascia dei turni.
+     */
+    fun applyTurnOrderDisplayMode(mode: TurnOrderDisplayMode) {
+        turnsCollapsed = mode == TurnOrderDisplayMode.HIDDEN
+        // Fuori dalla modalita' nascosta il flag distingue le altre due; dentro,
+        // conserva quale delle due si ritrovera' riaprendo la fascia.
+        if (mode != TurnOrderDisplayMode.HIDDEN) {
+            turnsShowInitiative = mode == TurnOrderDisplayMode.WITH_INITIATIVE
+        }
+    }
+
     private var lastSaved = initial.sanitized()
 
     /** Fotografia serializzabile dello stato attuale, gia' entro i limiti validi. */
@@ -101,6 +116,36 @@ class UiLayoutState(
         if (current == lastSaved) return
         store?.save(current)
         lastSaved = current
+    }
+
+    /**
+     * Riporta ogni pannello alla misura di fabbrica.
+     *
+     * Non passa dal disco: cambia gli stati vivi, e il salvataggio con ritardo che
+     * gia' osserva [snapshot] scrive il risultato come per qualsiasi altra
+     * modifica. Cosi' un ripristino si puo' ancora annullare a mano, riaggiustando
+     * i pannelli, prima che il file venga toccato.
+     */
+    fun resetToDefaults() {
+        val defaults = UiLayout()
+        railWidth = defaults.railWidthDp.dp
+        railOpen = defaults.railOpen
+        squadWidth = defaults.squadWidthDp.dp
+        enemyWidth = defaults.enemyWidthDp.dp
+        logHeight = defaults.logHeightDp.dp
+        logCollapsed = defaults.logCollapsed
+        turnsCollapsed = defaults.turnsCollapsed
+        turnsShowInitiative = defaults.turnsShowInitiative
+        topBarHeight = defaults.topBarHeightDp.dp
+        commandBarHeight = defaults.commandBarHeightDp.dp
+        commandsCollapsed = defaults.commandsCollapsed
+        mapCellSize = defaults.mapCellSizeDp.dp
+        mapShowGrid = defaults.mapShowGrid
+        mapGridBrightness = defaults.mapGridBrightness
+        targetPlate = defaults.targetPlate?.toOffset()
+        activePlate = defaults.activePlate?.toOffset()
+        targetPlateScale = defaults.targetPlateScale
+        activePlateScale = defaults.activePlateScale
     }
 
     /** Applica una disposizione caricata in background senza risalvarla. */

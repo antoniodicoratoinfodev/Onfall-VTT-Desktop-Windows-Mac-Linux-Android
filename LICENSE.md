@@ -56,9 +56,9 @@ any claim, damage, or other liability arising from the Material or its use.
 ## Third-Party Content and Trademarks
 
 The permissions and restrictions in this license apply only to Material for
-which the author holds the relevant rights. The Italian SRD 5.2.1 content in
-`content/srd-5.2.1-it` is licensed separately under Creative Commons Attribution
-4.0 International (CC BY 4.0); see `NOTICE-SRD.md`.
+which the author holds the relevant rights. The Italian and English SRD 5.2.1
+content in `content/srd-5.2.1-it` is licensed separately under Creative Commons
+Attribution 4.0 International (CC BY 4.0); see `NOTICE-SRD.md`.
 
 "Onfall" is not affiliated with, sponsored by, or endorsed by Wizards of the
 Coast or any other role-playing game trademark owner. All third-party names and

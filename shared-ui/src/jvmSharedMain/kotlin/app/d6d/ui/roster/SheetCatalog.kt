@@ -8,6 +8,7 @@ import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.ActorDefinition
 import app.d6d.sheet.Ability
 import app.d6d.sheet.CatalogAbility
+import app.d6d.ui.i18n.AppLocale
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.CreatureSize
 import app.d6d.sheet.MonsterSpeeds
@@ -41,12 +42,17 @@ val CreatureSize.squaresPerSide: Int
 
 /** Entrata di catalogo derivata da una scheda di personaggio. */
 fun CharacterSheet.toCatalogEntry(abilityCatalog: List<CatalogAbility> = emptyList()): ActorCatalogEntry {
-    // Nome e definizione devono coincidere: uso la stessa forma di ripiego che
-    // usa toActorDefinition, altrimenti il costruttore di ActorCatalogEntry rifiuta.
-    val safeName = characterName.ifBlank { "Senza nome" }
+    // Il nome si legge *dalla definizione*, non si ricalcola. ActorCatalogEntry
+    // esige che i due coincidano, e finche' erano due espressioni separate
+    // bastava tradurne una perche' una scheda senza nome si salvasse e poi il
+    // catalogo non si lasciasse piu' rigenerare. Cosi' non possono divergere.
+    val definition = toActorDefinition(
+        abilityCatalog = abilityCatalog,
+        language = AppLocale.language,
+    )
     return ActorCatalogEntry(
-        ActorTemplate(id, safeName, ActorKind.PLAYER_CHARACTER, level.coerceIn(1, 20)),
-        toActorDefinition(abilityCatalog = abilityCatalog),
+        ActorTemplate(id, definition.name, ActorKind.PLAYER_CHARACTER, level.coerceIn(1, 20)),
+        definition,
         // Un personaggio giocante appartiene per impostazione predefinita alla squadra.
         true,
         // I personaggi non usano un Grado di Sfida: il costruttore lo esige a zero.
@@ -57,11 +63,12 @@ fun CharacterSheet.toCatalogEntry(abilityCatalog: List<CatalogAbility> = emptyLi
 
 /** Entrata di catalogo derivata da uno stat block. */
 fun MonsterStatBlock.toCatalogEntry(): ActorCatalogEntry {
-    val safeName = name.ifBlank { "Creatura senza nome" }
+    // Come sopra: una sola espressione per il nome.
+    val definition = toActorDefinition(language = AppLocale.language)
     val challengeRating = runCatching { BigDecimal(challengeRating.trim()) }.getOrElse { BigDecimal.ZERO }
     return ActorCatalogEntry(
-        ActorTemplate(id, safeName, ActorKind.CREATURE, 0),
-        toActorDefinition(),
+        ActorTemplate(id, definition.name, ActorKind.CREATURE, 0),
+        definition,
         false,
         challengeRating.max(BigDecimal.ZERO),
         baseXp.coerceAtLeast(0),
@@ -90,6 +97,9 @@ fun characterSheetFrom(
     val catalogIds = abilityCatalog.mapTo(mutableSetOf()) { it.id }
     return CharacterSheet(
         id = definition.id(),
+        // Promuovere una proiezione a scheda la scrive adesso, nella lingua di
+        // adesso: e' li' che nasce il suo testo.
+        contentLanguage = AppLocale.language,
         characterName = definition.name(),
         level = 1,
         armorClass = definition.armorClass(),

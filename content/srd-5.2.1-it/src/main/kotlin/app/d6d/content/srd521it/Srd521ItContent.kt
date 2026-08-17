@@ -1,5 +1,6 @@
 package app.d6d.content.srd521it
 
+import app.d6d.i18n.AppLanguage
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ClassEligibility
 import app.d6d.rules.character.RuleElementDefinition
@@ -7,19 +8,46 @@ import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.RulesContentPack
 import app.d6d.sheet.CatalogAbility
 
-/** Punto di ingresso unico del pacchetto italiano SRD 5.2.1. */
+/**
+ * Punto di ingresso unico del pacchetto SRD 5.2.1, in entrambe le edizioni.
+ *
+ * Un modulo solo per due lingue e non due moduli gemelli: le cinquemila righe
+ * di regole qui dentro sono identiche: cambiano i nomi e le descrizioni, che
+ * arrivano dai JSON estratti dai due PDF, e il poco testo che il modulo compone
+ * da se', che sta in [SrdWords]. Gli identificativi non cambiano affatto — vedi
+ * [SrdIdentity] per il perche'.
+ */
 object Srd521ItContent {
-    val pack: RulesContentPack by lazy {
-        val sourceElements = SrdFeatsAndActions.all + SrdSpells.all +
-            SrdClassFeatures.all.filterNot {
+    private val packs = HashMap<AppLanguage, RulesContentPack>()
+    private val catalogs = HashMap<AppLanguage, List<CatalogAbility>>()
+
+    fun packFor(language: AppLanguage): RulesContentPack = synchronized(packs) {
+        packs.getOrPut(language) { build(language) }
+    }
+
+    fun catalogFor(language: AppLanguage): List<CatalogAbility> = synchronized(catalogs) {
+        catalogs.getOrPut(language) {
+            val pack = packFor(language)
+            pack.elements.map { it.toCatalogAbility(pack) }
+        }
+    }
+
+    /** L'edizione italiana, che resta il riferimento per prove e regressioni. */
+    val pack: RulesContentPack get() = packFor(AppLanguage.ITALIAN)
+
+    val catalog: List<CatalogAbility> get() = catalogFor(AppLanguage.ITALIAN)
+
+    private fun build(language: AppLanguage): RulesContentPack {
+        val sourceElements = SrdFeatsAndActions.all(language) + SrdSpells.all(language) +
+            SrdClassFeatures.all(language).filterNot {
                 it.id.startsWith("srd521-it:feature:warlock:ripetibile")
-            } + SrdBeasts.elements
+            } + SrdBeasts.elements(language)
         val elementsById = sourceElements.associateBy { it.id }.toMutableMap()
-        val requiredIds = requiredElementIds()
+        val requiredIds = requiredElementIds(language)
         val redirectedSourceIds = mutableSetOf<String>()
         requiredIds.forEach { requiredId ->
             if (requiredId !in elementsById) {
-                val resolution = resolveRequiredElement(requiredId, sourceElements)
+                val resolution = resolveRequiredElement(requiredId, sourceElements, language)
                 elementsById[requiredId] = resolution.element
                 resolution.sourceId?.let(redirectedSourceIds::add)
             }
@@ -27,27 +55,23 @@ object Srd521ItContent {
         redirectedSourceIds
             .filterNot { it in requiredIds }
             .forEach(elementsById::remove)
-        RulesContentPack(
-            manifest = Srd521ItManifest.value,
-            classes = SrdClasses.all.map { definition ->
+        return RulesContentPack(
+            manifest = Srd521ItManifest.forLanguage(language),
+            classes = SrdClasses.all(language).map { definition ->
                 definition.copy(
                     startingWeaponChoice = null,
-                    startingEquipmentChoice = SrdStartingEquipment.choiceFor(definition.id),
+                    startingEquipmentChoice = SrdStartingEquipment.choiceFor(definition.id, language),
                 )
             },
             elements = elementsById.values.sortedBy { it.id },
-            weapons = SrdWeapons.all,
-            backgrounds = SrdBackgrounds.all,
-            equipmentPackages = SrdStartingEquipment.all,
+            weapons = SrdWeapons.all(language),
+            backgrounds = SrdBackgrounds.all(language),
+            equipmentPackages = SrdStartingEquipment.all(language),
         )
     }
 
-    val catalog: List<CatalogAbility> by lazy {
-        pack.elements.map { it.toCatalogAbility(pack) }
-    }
-
-    private fun requiredElementIds(): Set<String> = buildSet {
-        SrdClasses.all.forEach { definition ->
+    private fun requiredElementIds(language: AppLanguage): Set<String> = buildSet {
+        SrdClasses.all(language).forEach { definition ->
             addAll(definition.subclassIds)
             definition.levels.forEach { level ->
                 addAll(level.featureIds)
@@ -61,10 +85,12 @@ object Srd521ItContent {
     private fun resolveRequiredElement(
         requiredId: String,
         sourceElements: List<RuleElementDefinition>,
+        language: AppLanguage,
     ): ElementResolution {
+        val words = SrdWords.of(language)
         if (requiredId.startsWith("srd521-it:subclass:")) {
             val slug = requiredId.substringAfterLast(':')
-            val classDefinition = SrdClasses.all.first { slug in it.subclassIds.single() }
+            val classDefinition = SrdClasses.all(language).first { slug in it.subclassIds.single() }
             val subclassFeatures = sourceElements.filter {
                 it.kind == RuleElementKind.SUBCLASS_FEATURE &&
                     it.classEligibility.any { eligibility -> eligibility.classId == classDefinition.id }
@@ -72,12 +98,12 @@ object Srd521ItContent {
             return ElementResolution(
                 RuleElementDefinition(
                     id = requiredId,
-                    name = subclassDisplayNames[slug] ?: slug.toDisplayName(),
+                    name = words.displayName(slug),
                     kind = RuleElementKind.CLASS_OPTION,
                     description = buildString {
-                        append("Sottoclasse SRD del ${classDefinition.name}.")
+                        append(words.subclassDescription(classDefinition.name))
                         if (subclassFeatures.isNotEmpty()) {
-                            append(" Privilegi: ")
+                            append(words.subclassFeaturesPrefix)
                             append(subclassFeatures.joinToString { it.name })
                             append('.')
                         }
@@ -87,7 +113,7 @@ object Srd521ItContent {
                 ),
             )
         }
-        explicitChoiceElement(requiredId)?.let { return ElementResolution(it) }
+        explicitChoiceElement(requiredId, words)?.let { return ElementResolution(it) }
 
         val segments = requiredId.split(':')
         val classSlug = segments.getOrNull(2)
@@ -102,7 +128,10 @@ object Srd521ItContent {
                 element.spell == null &&
                     (classId == null || element.classEligibility.any { it.classId == classId })
             }
-            .map { it to it.name.toContentSlug() }
+            // Sullo slug dell'identificativo, non su quello del nome: gli
+            // identificativi sono canonici in entrambe le edizioni, mentre il
+            // nome inglese non somiglia allo slug italiano che stiamo cercando.
+            .map { it to it.id.substringAfterLast(':') }
             .filter { (_, nameSlug) ->
                 requiredSlug.normalizedKey() == nameSlug.normalizedKey() ||
                     requiredSlug.normalizedKey().endsWith(nameSlug.normalizedKey())
@@ -116,7 +145,7 @@ object Srd521ItContent {
         val element = candidate.copy(
             id = requiredId,
             name = if (minimumLevel != null) {
-                "Arcanum mistico (${requiredSlug.substringAfterLast('-')}º)"
+                words.mysticArcanum(requiredSlug.substringAfterLast('-').toInt())
             } else {
                 candidate.name
             },
@@ -153,41 +182,46 @@ private fun String.normalizedKey(): String =
         .removePrefix("draconica")
         .removePrefix("immondo")
 
-private fun String.toDisplayName(): String =
-    replace('-', ' ').replaceFirstChar { it.uppercase() }
-
 private data class ElementResolution(
     val element: RuleElementDefinition,
     val sourceId: String? = null,
 )
 
-private fun explicitChoiceElement(id: String): RuleElementDefinition? {
+private fun explicitChoiceElement(id: String, words: SrdWords): RuleElementDefinition? {
     val parts = id.split(':')
     val classSlug = parts.getOrNull(2) ?: return null
     val slug = parts.last()
     val classId = CharacterClassId.entries.firstOrNull { it.contentId == classSlug } ?: return null
     val description = when {
         id.startsWith("srd521-it:feature:druido:terra-") -> {
+            // Gli slug restano italiani perche' sono chiavi; la parola mostrata
+            // no, e viene dal fascicolo.
             val resistance = when (slug) {
-                "terra-arida" -> "fuoco"
-                "terra-polare" -> "freddo"
-                "terra-temperata" -> "fulmine"
-                "terra-tropicale" -> "veleno"
+                "terra-arida" -> words.fire
+                "terra-polare" -> words.cold
+                "terra-temperata" -> words.lightning
+                "terra-tropicale" -> words.poison
                 else -> return null
             }
-            "Tipo di terra del Circolo della Terra. Conferisce la relativa lista di " +
-                "incantesimi del Circolo e, dall'Interdizione della Natura, resistenza ai danni da $resistance."
+            words.landChoice(resistance)
         }
         id.startsWith("srd521-it:feature:stregone:affinita-") -> {
-            val damage = slug.removePrefix("affinita-")
-            if (damage !in setOf("acido", "freddo", "fulmine", "fuoco", "veleno")) return null
-            "Tipo di danno scelto per Affinità elementale: $damage."
+            val slugged = slug.removePrefix("affinita-")
+            val damage = when (slugged) {
+                "acido" -> words.acid
+                "freddo" -> words.cold
+                "fulmine" -> words.lightning
+                "fuoco" -> words.fire
+                "veleno" -> words.poison
+                else -> return null
+            }
+            words.elementalAffinity(damage)
         }
         else -> return null
     }
     return RuleElementDefinition(
         id = id,
-        name = slug.toDisplayName(),
+        name = words.displayName(slug),
         kind = RuleElementKind.CLASS_OPTION,
         description = description,
         classEligibility = listOf(ClassEligibility(classId, if (classId == CharacterClassId.DRUID) 3 else 6)),
@@ -226,18 +260,3 @@ private val canonicalSourceIds = buildMap {
         put(it, "srd521-it:feature:warlock:arcanum-mistico")
     }
 }
-
-private val subclassDisplayNames = mapOf(
-    "cammino-del-berserker" to "Cammino del berserker",
-    "collegio-della-sapienza" to "Collegio della Sapienza",
-    "dominio-della-vita" to "Dominio della Vita",
-    "circolo-della-terra" to "Circolo della Terra",
-    "campione" to "Campione",
-    "furfante" to "Furfante",
-    "invocatore" to "Invocatore",
-    "guerriero-della-mano-aperta" to "Guerriero della Mano Aperta",
-    "giuramento-di-devozione" to "Giuramento di devozione",
-    "cacciatore" to "Cacciatore",
-    "stregoneria-draconica" to "Stregoneria draconica",
-    "patrono-immondo" to "Patrono immondo",
-)

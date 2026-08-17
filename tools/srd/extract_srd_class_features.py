@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract the Italian SRD 5.2.1 class features from the official PDF.
+"""Extract SRD 5.2.1 class features from either official language PDF.
 
 The class chapter mixes full-width tables and two independent text columns.
 Reading the page as one plain-text stream interleaves those columns, so this
@@ -7,7 +7,8 @@ extractor uses Poppler's XML output, reconstructs each column independently,
 and then follows the visual reading order (left column, then right column).
 
 Only Python's standard library and Poppler's ``pdftohtml`` executable are
-required. The generated JSON intentionally keeps the original Italian prose.
+required. The generated JSON intentionally keeps the prose and source identity
+of the selected edition; the content-pack loader applies the bilingual crosswalk.
 """
 
 from __future__ import annotations
@@ -26,7 +27,9 @@ from typing import Iterable, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PDF = ROOT / "tmp/pdfs/IT_SRD_CC_v5.2.1.pdf"
+# I due PDF stanno nella radice del progetto, versionati: senza di loro
+# l'estrazione non e' riproducibile da un clone pulito.
+DEFAULT_PDF = ROOT / "IT_SRD_CC_v5.2.1.pdf"
 DEFAULT_OUTPUT = (
     ROOT
     / "content/srd-5.2.1-it/src/main/resources/srd/5.2.1-it/class-features.json"
@@ -41,7 +44,12 @@ FOOTER_TOP = 1080
 # table and resumes below it or on the following page. Their text is useful to
 # the progression extractor, but it is not part of an individual feature's
 # description, so exclude only these visually verified table rectangles.
-PROGRESSION_TABLE_RANGES: dict[int, tuple[int, int]] = {
+# Le due edizioni escono dallo stesso impianto InDesign: stessi colori, stessa
+# larghezza di pagina, stesso piede. Cambiano le pagine, i nomi e le parole con
+# cui il testo dice «reazione» o «riposo breve» — e basta quello a fare un
+# profilo. Le bande delle tabelle di progressione restano verificate a vista,
+# una per classe, perche' il testo dentro non appartiene a nessun privilegio.
+ITALIAN_PROGRESSION_TABLES: dict[int, tuple[int, int]] = {
     32: (560, 1080),
     36: (50, 725),
     42: (50, 745),
@@ -54,6 +62,21 @@ PROGRESSION_TABLE_RANGES: dict[int, tuple[int, int]] = {
     75: (510, 1080),
     80: (50, 900),
     86: (50, 750),
+}
+
+ENGLISH_PROGRESSION_TABLES: dict[int, tuple[int, int]] = {
+    28: (578, 1087),
+    31: (538, 1086),
+    36: (578, 1087),
+    41: (530, 1076),
+    47: (578, 1087),
+    50: (68, 596),
+    53: (558, 1086),
+    58: (74, 602),
+    62: (68, 577),
+    65: (74, 714),
+    71: (68, 577),
+    77: (559, 1087),
 }
 
 
@@ -83,7 +106,7 @@ def page_parts(
     return tuple(parts)
 
 
-CLASSES: tuple[ClassSpec, ...] = (
+ITALIAN_CLASSES: tuple[ClassSpec, ...] = (
     ClassSpec("barbaro", "Barbaro", "Cammino del berserker", page_parts(32, 35, last_column="L")),
     ClassSpec("bardo", "Bardo", "Collegio della Sapienza", page_parts(35, 40, first_column="R")),
     ClassSpec("chierico", "Chierico", "Dominio della Vita", page_parts(41, 46, last_column="L")),
@@ -97,6 +120,176 @@ CLASSES: tuple[ClassSpec, ...] = (
     ClassSpec("stregone", "Stregone", "Stregoneria draconica", page_parts(79, 85, last_column="L")),
     ClassSpec("warlock", "Warlock", "Patrono immondo", page_parts(85, 92, first_column="R")),
 )
+
+
+ENGLISH_CLASSES: tuple[ClassSpec, ...] = (
+    ClassSpec("barbaro", "Barbarian", "Path of the Berserker", page_parts(28, 30)),
+    ClassSpec("bardo", "Bard", "College of Lore", page_parts(31, 35)),
+    ClassSpec("chierico", "Cleric", "Life Domain", page_parts(36, 40)),
+    ClassSpec("druido", "Druid", "Circle of the Land", page_parts(41, 46)),
+    ClassSpec("guerriero", "Fighter", "Champion", page_parts(47, 49, last_column="L")),
+    ClassSpec("monaco", "Monk", "Warrior of the Open Hand", page_parts(49, 52, first_column="R")),
+    ClassSpec("paladino", "Paladin", "Oath of Devotion", page_parts(53, 57, last_column="L")),
+    ClassSpec("ranger", "Ranger", "Hunter", page_parts(57, 61, first_column="R", last_column="L")),
+    ClassSpec("ladro", "Rogue", "Thief", page_parts(61, 64, first_column="R", last_column="L")),
+    ClassSpec("stregone", "Sorcerer", "Draconic Sorcery", page_parts(64, 70, first_column="R", last_column="L")),
+    ClassSpec("warlock", "Warlock", "Fiend Patron", page_parts(70, 76, first_column="R")),
+    ClassSpec("mago", "Wizard", "Evoker", page_parts(77, 83)),
+)
+
+
+@dataclass(frozen=True)
+class LanguageProfile:
+    """Cio' che del capitolo delle classi cambia con l'edizione dell'SRD.
+
+    Gli identificativi di classe restano quelli italiani anche nel profilo
+    inglese: sono chiavi di dominio (`CharacterClassId.contentId`), non testo, e
+    cambiarle scollegherebbe i due pacchetti dalle stesse regole.
+    """
+
+    tag: str
+    pdf_name: str
+    source_pages: str
+    pdf_url: str
+    classes: tuple[ClassSpec, ...]
+    progression_tables: dict[int, tuple[int, int]]
+    level_heading: "re.Pattern[str]"
+    subclass_heading: "re.Pattern[str]"
+    spell_list_prefix: str
+    non_feature_prefixes: tuple[str, ...]
+    metamagic_heading: str
+    invocation_heading: str
+    level_slug_word: str
+    expected_level_counts: dict[str, int]
+    # Il prerequisito di una supplica occulta. Serve in due pezzi: dove finisce
+    # la riga di prerequisito e comincia il testo, e quale livello richiede.
+    # Senza il secondo, ogni supplica risulta accessibile dal primo livello.
+    prerequisite_head: "re.Pattern[str]"
+    prerequisite_level: "re.Pattern[str]"
+    # Le risorse che un privilegio spende. I nomi canonici devono combaciare con
+    # quelli che il modulo Kotlin da' alle risorse di classe nella stessa lingua:
+    # l'aggancio all'identificativo della risorsa passa dal nome.
+    resource_patterns: tuple[tuple[str, str], ...]
+    consumption: "re.Pattern[str]"
+    without_spending: "re.Pattern[str]"
+    # «consumare uno slot per *ottenere* punti stregoneria»: qui la risorsa si
+    # guadagna, non si spende, e senza questa guardia il privilegio che li
+    # produce risulterebbe costarne uno.
+    gains: "re.Pattern[str]"
+    cost: "re.Pattern[str]"
+    short_rest: str
+    long_rest: str
+    # Il titolo del capitolo che segue quello delle classi. L'ultima classe non
+    # finisce a fine pagina, e senza questo confine l'estrattore continuava ad
+    # aggiungere testo all'ultimo privilegio: «Overchannel» si portava dentro
+    # background e specie, arrivando a quattromila caratteri.
+    next_chapter: "re.Pattern[str]"
+
+
+ITALIAN = LanguageProfile(
+    tag="it",
+    pdf_name="IT_SRD_CC_v5.2.1.pdf",
+    source_pages="32-92",
+    pdf_url="https://media.dndbeyond.com/compendium-images/srd/5.2/IT_SRD_CC_v5.2.1.pdf",
+    classes=ITALIAN_CLASSES,
+    progression_tables=ITALIAN_PROGRESSION_TABLES,
+    level_heading=re.compile(r"^Livello\s+(\d+):\s*(.+)$", re.IGNORECASE),
+    subclass_heading=re.compile(r"^Sottoclasse\s+(?:del|dello)\s+", re.IGNORECASE),
+    spell_list_prefix="lista degli incantesimi da ",
+    metamagic_heading="opzioni di metamagia",
+    invocation_heading="opzioni di suppliche occulte",
+    non_feature_prefixes=("come personaggio", "privilegi di classe"),
+    level_slug_word="livello",
+    expected_level_counts={
+        "barbaro": 24, "bardo": 16, "chierico": 16, "druido": 18,
+        "guerriero": 21, "ladro": 23, "mago": 15, "monaco": 26,
+        "paladino": 22, "ranger": 22, "stregone": 15, "warlock": 14,
+    },
+    # Senza IGNORECASE di proposito: sono aperture di *frase*, e valgono solo
+    # maiuscole. Con l'insensibilita' alle maiuscole «Un » agganciava anche «un
+    # trucchetto da warlock…» dentro al prerequisito stesso, troncandolo.
+    prerequisite_head=re.compile(
+        r"^Prerequisit[oi]:\s*(.+?)"
+        r"(?=\s+(?:Il |La |Lo |L['’]|Un['’]|Un |Una |Gli |Le |Come |Quando |Se |"
+        r"Questo |Questa |Mentre )|$)",
+    ),
+    prerequisite_level=re.compile(r"warlock di\s+(\d+)[º°]?\s+livello", re.IGNORECASE),
+    resource_patterns=(
+        (r"punt[oi] stregoneria", "punti stregoneria"),
+        (r"punt[oi] concentrazione", "punti concentrazione"),
+        (r"ispirazione bardica", "Ispirazione bardica"),
+        (r"forma selvatica", "Forma selvatica"),
+        (r"incanalare divinità", "Incanalare divinità"),
+        (r"slot incantesimo", "slot incantesimo"),
+        (r"imposizione delle mani", "Imposizione delle mani"),
+        (r"\bira\b", "Ira"),
+    ),
+    consumption=re.compile(
+        r"\b(?:spende(?:re)?|consuma(?:re)?|utilizz[ao](?:re)?|uso|utilizzo|utilizzi|riserva)\b",
+    ),
+    without_spending=re.compile(r"senza\s+(?:spendere|consumare)\b"),
+    gains=re.compile(r"\bper\s+(?:ottenere|recuperare|guadagnare)\b"),
+    # Il gerundio conta: l'SRD italiano scrive «ignorare questo limite
+    # spendendo 3 punti stregoneria», e senza «spendendo» sei privilegi
+    # risultavano gratuiti — fra cui Ali di drago, che costa tre punti.
+    cost=re.compile(r"(?:spend(?:e|ere|endo)|consum(?:a|are|ando))\s+(\d+|un[oa]?)\s+"),
+    short_rest="riposo breve",
+    long_rest="riposo lungo",
+    next_chapter=re.compile(r"^Origini del Personaggio\b", re.IGNORECASE),
+)
+
+ENGLISH = LanguageProfile(
+    tag="en",
+    pdf_name="SRD_CC_v5.2.1.pdf",
+    source_pages="28-83",
+    pdf_url="https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf",
+    classes=ENGLISH_CLASSES,
+    progression_tables=ENGLISH_PROGRESSION_TABLES,
+    level_heading=re.compile(r"^Level\s+(\d+):\s*(.+)$", re.IGNORECASE),
+    # "Barbarian Subclass:", "Cleric Subclass: Life Domain" — il nome puo' finire
+    # sulla riga dopo, quindi il titolo si riconosce dal solo prefisso.
+    subclass_heading=re.compile(r"^\w+\s+Subclass\b", re.IGNORECASE),
+    spell_list_prefix="spell list",
+    metamagic_heading="metamagic options",
+    invocation_heading="eldritch invocation options",
+    non_feature_prefixes=("as a level", "as a multiclass", "class features", "becoming a"),
+    level_slug_word="level",
+    # Gli stessi conteggi dell'italiano: e' lo stesso libro, e due estrazioni
+    # indipendenti che concordano su ventiquattro numeri sono la prova migliore
+    # che nessuna delle due sta perdendo pezzi per strada.
+    expected_level_counts={
+        "barbaro": 24, "bardo": 16, "chierico": 16, "druido": 18,
+        "guerriero": 21, "ladro": 23, "mago": 15, "monaco": 26,
+        "paladino": 22, "ranger": 22, "stregone": 15, "warlock": 14,
+    },
+    # "Prerequisite: Level 5+ Warlock, Pact of the Blade Invocation You can…" —
+    # il testo riparte da una parola che apre una frase, ed e' li' che il
+    # prerequisito finisce.
+    prerequisite_head=re.compile(
+        r"^Prerequisite[s]?:\s*(.+?)"
+        r"(?=\s+(?:You |Your |The |When |Whenever |Once |Choose |As |While |If |Immediately )|$)",
+    ),
+    prerequisite_level=re.compile(r"Level\s+(\d+)\+?\s+Warlock", re.IGNORECASE),
+    resource_patterns=(
+        (r"sorcery points?", "Sorcery Points"),
+        (r"focus points?", "Focus Points"),
+        (r"bardic inspiration", "Bardic Inspiration"),
+        (r"wild shape", "Wild Shape"),
+        (r"channel divinity", "Channel Divinity"),
+        (r"spell slot", "spell slot"),
+        (r"lay on hands", "Lay On Hands"),
+        (r"\brages?\b", "Rage"),
+    ),
+    consumption=re.compile(r"\b(?:expend(?:s|ing)?|spend(?:s|ing)?|uses?|using|expenditure)\b"),
+    without_spending=re.compile(r"without\s+(?:expending|spending)\b"),
+    gains=re.compile(r"\bto\s+(?:gain|regain|recover)\b"),
+    cost=re.compile(r"(?:expend|spend)(?:s|ing)?\s+(\d+|an?|one)\s+"),
+    short_rest="short rest",
+    long_rest="long rest",
+    next_chapter=re.compile(r"^Character Origins\b"),
+)
+
+PROFILES = {"it": ITALIAN, "en": ENGLISH}
 
 
 @dataclass(frozen=True)
@@ -154,22 +347,25 @@ def bold_prefix(element: ET.Element, full_text: str) -> str | None:
     return None
 
 
-def parse_poppler_xml(pdf: Path) -> dict[tuple[int, str], list[Line]]:
+def parse_poppler_xml(pdf: Path, profile: LanguageProfile) -> dict[tuple[int, str], list[Line]]:
     if not pdf.is_file():
         raise FileNotFoundError(f"PDF SRD non trovato: {pdf}")
     executable = shutil.which("pdftohtml")
     if not executable:
         raise RuntimeError("pdftohtml (Poppler) non è disponibile nel PATH")
 
+    # L'intervallo si ricava dalle classi del profilo invece di essere fisso:
+    # le due edizioni mettono il capitolo a pagine diverse.
+    pages = [page for spec in profile.classes for page, _ in spec.parts]
     command = [
         executable,
         "-xml",
         "-hidden",
         "-i",
         "-f",
-        "32",
+        str(min(pages)),
         "-l",
-        "92",
+        str(max(pages)),
         "-stdout",
         str(pdf),
     ]
@@ -186,7 +382,7 @@ def parse_poppler_xml(pdf: Path) -> dict[tuple[int, str], list[Line]]:
             left = int(text_element.attrib["left"])
             if top >= FOOTER_TOP:
                 continue
-            table_range = PROGRESSION_TABLE_RANGES.get(page)
+            table_range = profile.progression_tables.get(page)
             if table_range and table_range[0] <= top <= table_range[1]:
                 continue
             raw_text = "".join(text_element.itertext()).replace("\u00ad", "")
@@ -258,23 +454,23 @@ def group_fragments(page: int, column: str, fragments: Sequence[Fragment]) -> li
     return lines
 
 
-LEVEL_HEADING = re.compile(r"^Livello\s+(\d+):\s*(.+)$", re.IGNORECASE)
-SUBCLASS_HEADING = re.compile(r"^Sottoclasse\s+(?:del|dello)\s+", re.IGNORECASE)
 
 
-def merge_wrapped_level_headings(lines: Sequence[Line]) -> list[Line]:
+def merge_wrapped_level_headings(
+    lines: Sequence[Line], profile: LanguageProfile
+) -> list[Line]:
     merged: list[Line] = []
     index = 0
     while index < len(lines):
         line = lines[index]
         if (
-            LEVEL_HEADING.match(line.text)
+            profile.level_heading.match(line.text)
             and index + 1 < len(lines)
             and lines[index + 1].is_red_heading
             and lines[index + 1].page == line.page
             and lines[index + 1].column == line.column
             and 0 < lines[index + 1].top - line.top <= 25
-            and not LEVEL_HEADING.match(lines[index + 1].text)
+            and not profile.level_heading.match(lines[index + 1].text)
         ):
             continuation = lines[index + 1]
             line = Line(
@@ -294,11 +490,15 @@ def merge_wrapped_level_headings(lines: Sequence[Line]) -> list[Line]:
     return merged
 
 
-def class_stream(spec: ClassSpec, page_lines: dict[tuple[int, str], list[Line]]) -> list[Line]:
+def class_stream(
+    spec: ClassSpec,
+    page_lines: dict[tuple[int, str], list[Line]],
+    profile: LanguageProfile,
+) -> list[Line]:
     stream: list[Line] = []
     for part in spec.parts:
         stream.extend(page_lines.get(part, ()))
-    return merge_wrapped_level_headings(stream)
+    return merge_wrapped_level_headings(stream, profile)
 
 
 def append_joined(output: list[str], text: str, separator: str) -> None:
@@ -351,18 +551,27 @@ def activation_from(description: str) -> str | None:
     # Le eccezioni descrivono ciò che l'azione concessa non può fare, non il
     # costo di attivazione del privilegio (Azione Impetuosa è il caso SRD).
     lowered = re.sub(
-        r"(?:fatta eccezione per|tranne|eccetto)\s+l['’]azione di magia",
+        r"(?:fatta eccezione per|tranne|eccetto)\s+l['’]azione di magia"
+        r"|except\s+the\s+magic\s+action",
         "",
         lowered,
     )
     if re.search(r"\b(?:usa(?:re)?|usare la propria|come)\s+(?:la sua |una |un')?reazione\b", lowered):
         return "reazione"
+    if re.search(r"\b(?:use|uses|using)\s+(?:your|its|their|a)\s+reaction\b|\bas a reaction\b", lowered):
+        return "Reaction"
     if "azione bonus" in lowered:
         return "azione bonus"
+    if "bonus action" in lowered:
+        return "Bonus Action"
     if re.search(r"\bazione di magia\b", lowered):
         return "azione di Magia"
+    if re.search(r"\bmagic action\b", lowered):
+        return "Magic action"
     if re.search(r"\bcome (?:un'|una )azione\b|\busare (?:un'|una )azione\b", lowered):
         return "azione"
+    if re.search(r"\bas an action\b|\b(?:use|uses|using|take|takes|taking) an action\b", lowered):
+        return "Action"
     return None
 
 
@@ -378,26 +587,37 @@ RESOURCE_PATTERNS: tuple[tuple[str, str], ...] = (
 )
 
 
-def resource_from(description: str) -> dict[str, object] | None:
+def resource_from(description: str, profile: LanguageProfile) -> dict[str, object] | None:
     lowered = description.lower()
-    consumption = re.search(
-        r"\b(?:spende(?:re)?|consuma(?:re)?|utilizz[ao](?:re)?|uso|utilizzo|utilizzi|riserva)\b",
-        lowered,
-    )
+    consumption = profile.consumption.search(lowered)
     recovery: list[str] = []
-    if "riposo breve" in lowered:
-        recovery.append("riposo breve")
-    if "riposo lungo" in lowered:
-        recovery.append("riposo lungo")
+    if profile.short_rest in lowered:
+        recovery.append(profile.short_rest)
+    if profile.long_rest in lowered:
+        recovery.append(profile.long_rest)
 
-    for pattern, name in RESOURCE_PATTERNS:
+    for pattern, name in profile.resource_patterns:
         match = re.search(pattern, lowered)
         if not match or (not consumption and not recovery):
             continue
-        nearby = lowered[max(0, match.start() - 45) : match.end() + 25]
-        if re.search(r"senza\s+(?:spendere|consumare)\b", nearby):
+        # La finestra guarda indietro fin dove puo' stare il verbo: l'italiano
+        # interpone piu' parole fra la spesa e la risorsa («spendere uno slot
+        # incantesimo o un utilizzo di Forma selvatica»), e con quaranta
+        # caratteri il costo restava fuori.
+        window_start = max(0, match.start() - 75)
+        nearby = lowered[window_start : match.end() + 25]
+        if profile.without_spending.search(nearby):
             continue
-        cost_match = re.search(r"(?:spende(?:re)?|consuma(?:re)?)\s+(\d+|un[oa]?)\s+", nearby)
+        cost_match = profile.cost.search(nearby)
+        # La guardia guarda il testo intero, non la finestra: quest'ultima si
+        # chiude presto e, quando il nome della risorsa compare gia' nel titolo
+        # del privilegio, «to gain» resterebbe fuori. Allargare la finestra non
+        # e' un'alternativa — serve a delimitare *quale* spesa riguarda questa
+        # risorsa, e allargandola aggancia spese di altre frasi.
+        if cost_match:
+            after = window_start + cost_match.end()
+            if profile.gains.search(lowered[after : after + 80]):
+                cost_match = None
         cost: int | None = None
         if cost_match:
             raw_cost = cost_match.group(1)
@@ -413,20 +633,30 @@ def resource_from(description: str) -> dict[str, object] | None:
     return None
 
 
-def invocation_prerequisite(description: str) -> tuple[str | None, int | None]:
-    match = re.search(
-        r"^Prerequisit[oi]:\s*(.+?)(?=\s+(?:Il |La |Lo |L'|Come |Quando |Se |Questo |Questa |Una volta |Mentre )|$)",
-        description,
-        re.IGNORECASE,
-    )
+def invocation_prerequisite(
+    description: str, profile: LanguageProfile
+) -> tuple[str | None, int | None]:
+    """Il prerequisito di una supplica, e il livello minimo che ne discende.
+
+    Le due letture sono indipendenti di proposito. Ritagliare la *frase* di
+    prerequisito e' fragile — finisce dove comincia il testo, e riconoscere
+    quel confine vuol dire elencare i modi in cui una frase puo' iniziare —
+    mentre trovare il livello e' solido. Legandoli, un confine non riconosciuto
+    faceva sparire anche il livello: «Conoscenze degli Antichi» dichiara
+    «warlock di 2º livello» e risultava accessibile dal primo, perche' il testo
+    riparte con «Un'antica entita'…» e nessuna delle aperture attese combaciava.
+    """
+    level_match = profile.prerequisite_level.search(description)
+    level = int(level_match.group(1)) if level_match else None
+    match = profile.prerequisite_head.search(description)
     if not match:
-        return None, None
-    prerequisite = normalize_spaces(match.group(1))
-    level_match = re.search(r"warlock di\s+(\d+)[º°]?\s+livello", description, re.IGNORECASE)
-    return prerequisite, int(level_match.group(1)) if level_match else None
+        return None, level
+    return normalize_spaces(match.group(1)), level
 
 
-def extract_drafts(spec: ClassSpec, lines: Sequence[Line]) -> tuple[list[FeatureDraft], int]:
+def extract_drafts(
+    spec: ClassSpec, lines: Sequence[Line], profile: LanguageProfile
+) -> tuple[list[FeatureDraft], int]:
     drafts: list[FeatureDraft] = []
     current: FeatureDraft | None = None
     subclass_mode = False
@@ -444,32 +674,38 @@ def extract_drafts(spec: ClassSpec, lines: Sequence[Line]) -> tuple[list[Feature
         text = normalize_spaces(line.text)
         lowered = text.lower()
 
-        if line.is_red_heading and SUBCLASS_HEADING.match(text):
+        # Il capitolo delle classi finisce qui: cio' che segue appartiene a un
+        # altro capitolo, e continuare ad accodarlo all'ultimo privilegio lo
+        # gonfia con background e specie.
+        if profile.next_chapter.match(text):
+            break
+
+        if line.is_red_heading and profile.subclass_heading.match(text):
             finish()
             subclass_mode = True
             option_mode = None
             ignoring_spell_list = False
             continue
 
-        if line.is_red_heading and lowered.startswith("lista degli incantesimi da "):
+        if line.is_red_heading and profile.spell_list_prefix in lowered:
             finish()
             option_mode = None
             ignoring_spell_list = True
             continue
 
-        if line.is_red_heading and lowered.startswith("opzioni di metamagia"):
+        if line.is_red_heading and lowered.startswith(profile.metamagic_heading):
             finish()
             option_mode = "metamagia"
             ignoring_spell_list = False
             continue
 
-        if line.is_red_heading and lowered.startswith("opzioni di suppliche occulte"):
+        if line.is_red_heading and lowered.startswith(profile.invocation_heading):
             finish()
             option_mode = "supplica-occulta"
             ignoring_spell_list = False
             continue
 
-        level_match = LEVEL_HEADING.match(text) if line.is_red_heading else None
+        level_match = profile.level_heading.match(text) if line.is_red_heading else None
         if level_match:
             finish()
             level_heading_count += 1
@@ -488,7 +724,7 @@ def extract_drafts(spec: ClassSpec, lines: Sequence[Line]) -> tuple[list[Feature
             option_mode
             and line.is_red_heading
             and line.size <= 19
-            and not lowered.startswith(("come personaggio", "privilegi di classe"))
+            and not lowered.startswith(profile.non_feature_prefixes)
         ):
             finish()
             current = FeatureDraft(
@@ -515,14 +751,15 @@ def allocate_id(
     class_id: str,
     name: str,
     minimum_level: int,
+    profile: LanguageProfile,
     parent_slug: str | None = None,
 ) -> str:
-    stem = f"srd521-it:{prefix}:{class_id}:{slugify(name)}"
+    stem = f"srd521-{profile.tag}:{prefix}:{class_id}:{slugify(name)}"
     candidate = stem
     if candidate in used and parent_slug:
         candidate = f"{stem}-{parent_slug}"
     if candidate in used:
-        candidate = f"{stem}-livello-{minimum_level}"
+        candidate = f"{stem}-{profile.level_slug_word}-{minimum_level}"
     suffix = 2
     unique = candidate
     while unique in used:
@@ -532,10 +769,15 @@ def allocate_id(
     return unique
 
 
-def base_record(draft: FeatureDraft, used_ids: set[str], source_order: int) -> tuple[dict[str, object], list[Line]]:
+def base_record(
+    draft: FeatureDraft,
+    used_ids: set[str],
+    source_order: int,
+    profile: LanguageProfile,
+) -> tuple[dict[str, object], list[Line]]:
     description = description_from_lines(draft.lines)
     if draft.kind == "supplica-occulta":
-        prerequisite, inferred_level = invocation_prerequisite(description)
+        prerequisite, inferred_level = invocation_prerequisite(description, profile)
         draft.prerequisite = prerequisite
         if inferred_level is not None:
             draft.minimum_level = max(draft.minimum_level, inferred_level)
@@ -547,6 +789,7 @@ def base_record(draft: FeatureDraft, used_ids: set[str], source_order: int) -> t
         class_id=draft.class_spec.class_id,
         name=draft.name,
         minimum_level=draft.minimum_level,
+        profile=profile,
     )
     record: dict[str, object] = {
         "id": record_id,
@@ -559,7 +802,7 @@ def base_record(draft: FeatureDraft, used_ids: set[str], source_order: int) -> t
         "description": description,
         "page": draft.page,
         "activation": activation_from(description),
-        "resource": resource_from(description),
+        "resource": resource_from(description, profile),
         "source_order": source_order,
     }
     if draft.prerequisite:
@@ -572,6 +815,7 @@ def internal_option_records(
     lines: Sequence[Line],
     used_ids: set[str],
     source_order: int,
+    profile: LanguageProfile,
 ) -> list[dict[str, object]]:
     """Promote initial italic/bold body labels to searchable child records."""
     starts: list[tuple[int, str]] = []
@@ -617,6 +861,7 @@ def internal_option_records(
             class_id=str(parent["class"]),
             name=name,
             minimum_level=int(parent["minimum_level"]),
+            profile=profile,
             parent_slug=parent_slug,
         )
         records.append(
@@ -631,7 +876,7 @@ def internal_option_records(
                 "description": description,
                 "page": option_lines[0].page,
                 "activation": activation_from(description),
-                "resource": resource_from(description),
+                "resource": resource_from(description, profile),
                 "parent_feature_id": parent["id"],
                 "source_order": source_order + option_index + 1,
             }
@@ -639,28 +884,95 @@ def internal_option_records(
     return records
 
 
-def build_catalog(pdf: Path) -> dict[str, object]:
-    page_lines = parse_poppler_xml(pdf)
+def adopt_structural_keys(
+    records: list[dict[str, object]], reference: Path, profile: LanguageProfile
+) -> None:
+    """Riusa gli identificativi dell'edizione di riferimento.
+
+    Gli id dei privilegi finiscono nelle schede salvate, quindi quelli italiani
+    non possono cambiare: sono la chiave strutturale, e l'edizione inglese la
+    adotta invece di coniarne una propria. Lo slug resta percio' italiano anche
+    in inglese — e' un identificativo opaco, non testo da mostrare, e il prezzo
+    e' molto minore di una migrazione dei dati utente.
+
+    L'accoppiamento e' posizionale, il che vale solo perche' il capitolo delle
+    classi e' ordinato per classe e per livello, non alfabeticamente: le due
+    edizioni descrivono le stesse cose nello stesso ordine. Ogni indice viene
+    comunque riverificato su classe, tipo e livello minimo, cosi' un
+    disallineamento si ferma qui invece di produrre id plausibili e sbagliati.
+    """
+    source = json.loads(reference.read_text(encoding="utf-8"))["records"]
+    if len(source) != len(records):
+        raise ValueError(
+            f"Riferimento non allineato: {len(source)} record contro {len(records)}"
+        )
+
+    # Le due edizioni ordinano le classi alfabeticamente *nella propria lingua* —
+    # il ladro e' sesto in italiano e nono in inglese — quindi l'accoppiamento
+    # va fatto dentro ogni classe, dove l'ordine e' per livello ed e' lo stesso.
+    def by_class(items: Sequence[dict[str, object]]) -> dict[str, list[dict[str, object]]]:
+        grouped: dict[str, list[dict[str, object]]] = {}
+        for item in items:
+            grouped.setdefault(str(item["class"]), []).append(item)
+        return grouped
+
+    origin_classes = by_class(source)
+    record_classes = by_class(records)
+    if origin_classes.keys() != record_classes.keys():
+        raise ValueError(
+            f"Classi diverse: {sorted(origin_classes)} contro {sorted(record_classes)}"
+        )
+
+    for class_id, mine in record_classes.items():
+        theirs = origin_classes[class_id]
+        if len(theirs) != len(mine):
+            raise ValueError(
+                f"{class_id}: {len(theirs)} record di riferimento contro {len(mine)}"
+            )
+        for index, (origin, record) in enumerate(zip(theirs, mine)):
+            for field in ("kind", "minimum_level"):
+                if origin[field] != record[field]:
+                    raise ValueError(
+                        f"{class_id}, record {index} disallineato su '{field}': "
+                        f"{origin[field]!r} contro {record[field]!r} "
+                        f"({origin['name']!r} contro {record['name']!r})"
+                    )
+            origin_id = str(origin["id"])
+            if origin_id.startswith(f"srd521-{profile.tag}:"):
+                raise ValueError("Il riferimento e' della stessa edizione: nulla da adottare")
+            record["id"] = f"srd521-{profile.tag}:" + origin_id.split(":", 1)[1]
+
+
+def build_catalog(
+    pdf: Path, profile: LanguageProfile, structural_keys: Path | None = None
+) -> dict[str, object]:
+    page_lines = parse_poppler_xml(pdf, profile)
     all_records: list[dict[str, object]] = []
     used_ids: set[str] = set()
     level_counts: dict[str, int] = {}
     source_order = 0
 
-    for spec in CLASSES:
-        drafts, heading_count = extract_drafts(spec, class_stream(spec, page_lines))
+    for spec in profile.classes:
+        drafts, heading_count = extract_drafts(
+            spec, class_stream(spec, page_lines, profile), profile
+        )
         level_counts[spec.class_id] = heading_count
         for draft in drafts:
-            record, body_lines = base_record(draft, used_ids, source_order)
+            record, body_lines = base_record(draft, used_ids, source_order, profile)
             if not record["description"]:
                 raise ValueError(f"Descrizione vuota per {record['id']} (pagina {record['page']})")
             all_records.append(record)
-            options = internal_option_records(record, body_lines, used_ids, source_order * 100)
+            options = internal_option_records(
+                record, body_lines, used_ids, source_order * 100, profile
+            )
             all_records.extend(options)
             source_order += 1
 
     for index, record in enumerate(all_records):
         record["source_order"] = index
-    validate_catalog(all_records, level_counts)
+    if structural_keys is not None:
+        adopt_structural_keys(all_records, structural_keys, profile)
+    validate_catalog(all_records, level_counts, profile)
     kind_counts: dict[str, int] = {}
     for record in all_records:
         kind = str(record["kind"])
@@ -670,11 +982,11 @@ def build_catalog(pdf: Path) -> dict[str, object]:
         "schema_version": 1,
         "source": {
             "title": "System Reference Document 5.2.1",
-            "language": "it",
+            "language": profile.tag,
             "license": "CC-BY-4.0",
             "url": "https://www.dndbeyond.com/srd",
-            "pdf": "https://media.dndbeyond.com/compendium-images/srd/5.2/IT_SRD_CC_v5.2.1.pdf",
-            "pages": "32-92",
+            "pdf": profile.pdf_url,
+            "pages": profile.source_pages,
         },
         "classes": [
             {
@@ -683,10 +995,10 @@ def build_catalog(pdf: Path) -> dict[str, object]:
                 "subclass": spec.subclass,
                 "level_heading_count": level_counts[spec.class_id],
             }
-            for spec in CLASSES
+            for spec in profile.classes
         ],
         "counts": {
-            "classes": len(CLASSES),
+            "classes": len(profile.classes),
             "records": len(all_records),
             "level_headings": sum(level_counts.values()),
             "by_kind": dict(sorted(kind_counts.items())),
@@ -695,26 +1007,17 @@ def build_catalog(pdf: Path) -> dict[str, object]:
     }
 
 
-def validate_catalog(records: Sequence[dict[str, object]], level_counts: dict[str, int]) -> None:
+def validate_catalog(
+    records: Sequence[dict[str, object]],
+    level_counts: dict[str, int],
+    profile: LanguageProfile,
+) -> None:
     ids = [str(record["id"]) for record in records]
     if len(ids) != len(set(ids)):
         duplicates = sorted({record_id for record_id in ids if ids.count(record_id) > 1})
         raise ValueError(f"ID duplicati: {duplicates}")
-    expected_level_counts = {
-        "barbaro": 24,
-        "bardo": 16,
-        "chierico": 16,
-        "druido": 18,
-        "guerriero": 21,
-        "ladro": 23,
-        "mago": 15,
-        "monaco": 26,
-        "paladino": 22,
-        "ranger": 22,
-        "stregone": 15,
-        "warlock": 14,
-    }
-    if level_counts != expected_level_counts:
+    expected_level_counts = profile.expected_level_counts
+    if expected_level_counts and level_counts != expected_level_counts:
         raise ValueError(
             "Conteggio delle intestazioni di livello inatteso: "
             f"atteso {expected_level_counts}, trovato {level_counts}"
@@ -741,7 +1044,7 @@ def validate_catalog(records: Sequence[dict[str, object]], level_counts: dict[st
         for record in records
         if record["kind"] == "subclass-feature"
     }
-    expected_classes = {spec.class_id for spec in CLASSES}
+    expected_classes = {spec.class_id for spec in profile.classes}
     if subclass_classes != expected_classes:
         raise ValueError(
             "Privilegi di sottoclasse incompleti: "
@@ -758,10 +1061,23 @@ def validate_catalog(records: Sequence[dict[str, object]], level_counts: dict[st
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--pdf", type=Path, default=DEFAULT_PDF, help="PDF ufficiale italiano SRD 5.2.1")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="JSON deterministico da generare")
+    parser.add_argument("--language", choices=sorted(PROFILES), default="it")
+    parser.add_argument("--pdf", type=Path, default=None, help="PDF ufficiale SRD 5.2.1")
+    parser.add_argument("--output", type=Path, default=None, help="JSON deterministico da generare")
+    parser.add_argument(
+        "--structural-keys",
+        type=Path,
+        default=None,
+        help="JSON di un'altra edizione da cui adottare gli identificativi",
+    )
     parser.add_argument("--check", action="store_true", help="Verifica che l'output esistente sia aggiornato")
     return parser.parse_args(argv)
+
+
+def _pdf_for(profile: LanguageProfile) -> Path:
+    """Il PDF accanto al repository, o quello nella cartella temporanea."""
+    beside = ROOT / profile.pdf_name
+    return beside if beside.is_file() else ROOT / "tmp/pdfs" / profile.pdf_name
 
 
 def serialize(catalog: dict[str, object]) -> bytes:
@@ -770,8 +1086,14 @@ def serialize(catalog: dict[str, object]) -> bytes:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
-    payload = serialize(build_catalog(args.pdf.resolve()))
-    output = args.output.resolve()
+    profile = PROFILES[args.language]
+    pdf = args.pdf or _pdf_for(profile)
+    output = (
+        args.output
+        or ROOT
+        / f"content/srd-5.2.1-it/src/main/resources/srd/5.2.1-{profile.tag}/class-features.json"
+    ).resolve()
+    payload = serialize(build_catalog(pdf.resolve(), profile, args.structural_keys))
     if args.check:
         if not output.is_file() or output.read_bytes() != payload:
             print(f"Output non aggiornato: {output}", file=sys.stderr)

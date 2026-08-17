@@ -1,14 +1,20 @@
-# Content pack SRD 5.2.1 in italiano
+# Content pack SRD 5.2.1 in italiano e inglese
 
-Il modulo `content/srd-5.2.1-it` include materiale tratto dal System Reference
-Document 5.2.1 italiano e lo mantiene separato dal motore e dai contenuti
-originali dell'app.
+Il modulo `content/srd-5.2.1-it` include materiale tratto dalle edizioni italiana
+e inglese del System Reference Document 5.2.1 e lo mantiene separato dal motore
+e dai contenuti originali dell'app.
 
 > Quest'opera include materiale tratto dal System Reference Document 5.2.1
 > ("SRD 5.2.1") di Wizards of the Coast LLC, disponibile all'indirizzo
 > https://www.dndbeyond.com/srd. Il SRD 5.2.1 è concesso in licenza ai sensi
 > della licenza di attribuzione 4.0 Internazionale di Creative Commons,
 > disponibile all'indirizzo
+> https://creativecommons.org/licenses/by/4.0/legalcode.
+
+> This work includes material taken from the System Reference Document 5.2.1
+> ("SRD 5.2.1") by Wizards of the Coast LLC, available at
+> https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative
+> Commons Attribution 4.0 International License, available at
 > https://creativecommons.org/licenses/by/4.0/legalcode.
 
 Il testo è stato convertito dal PDF ufficiale in strutture dati per la ricerca,
@@ -21,4 +27,5 @@ Fonti ufficiali:
 
 - SRD e download localizzati: <https://www.dndbeyond.com/srd>
 - PDF italiano 5.2.1: <https://media.dndbeyond.com/compendium-images/srd/5.2/IT_SRD_CC_v5.2.1.pdf>
+- PDF inglese 5.2.1: <https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf>
 - Licenza CC BY 4.0: <https://creativecommons.org/licenses/by/4.0/legalcode>

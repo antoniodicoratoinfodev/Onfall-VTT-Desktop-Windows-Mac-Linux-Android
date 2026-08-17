@@ -34,13 +34,17 @@ import app.d6d.engine.ai.EnemyCpuActionReport
 import app.d6d.engine.ai.EnemyCpuActionType
 import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.engine.ai.EnemyCpuResult
-import app.d6d.sheet.metresLabel
+import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumber
-import app.d6d.ui.components.italianLabel
+import app.d6d.i18n.label
 import app.d6d.ui.encounter.EncounterMode
 import app.d6d.ui.maps.PendingToken
 import app.d6d.ui.maps.arrangeTokens
+import app.d6d.ui.i18n.AppLocale
+import app.d6d.ui.i18n.LocalizedText
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.literalText
 import app.d6d.ui.maps.gridTooSmallMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -130,8 +134,23 @@ class BattleViewModel(
     var sessionGeneration by mutableStateOf(0L)
         private set
 
-    /** Messaggio dell'ultima regola violata; il livello Guided lo mostra senza bloccare il tavolo. */
-    var message by mutableStateOf<String?>(null)
+    /**
+     * Messaggio dell'ultima regola violata; il livello Guided lo mostra senza
+     * bloccare il tavolo.
+     *
+     * Non conserva la frase ma il modo di ricavarla: un avviso scritto in italiano
+     * resterebbe italiano anche dopo un cambio di lingua, e ci resterebbe finche'
+     * qualcosa non lo sostituisce. Cosi' invece segue la lingua come il resto
+     * dello schermo, e leggerlo dentro una composizione la iscrive al cambio.
+     */
+    private var messageText by mutableStateOf<LocalizedText?>(null)
+
+    val message: String? get() = messageText?.resolve(AppLocale.current)
+
+    /** Assegna il messaggio, o lo cancella con `null`. */
+    private fun say(text: LocalizedText?) {
+        messageText = text
+    }
 
     private var targetSelection by mutableStateOf<String?>(null)
 
@@ -403,6 +422,9 @@ class BattleViewModel(
         get() = !enemyCpuBusy && enemyCpuBatchPending
 
     fun resumeEnemyCpuTurn() {
+        // L'avviso che invitava a riprendere ha esaurito il suo compito: lasciarlo
+        // a schermo direbbe che l'automazione e' sospesa proprio mentre riparte.
+        say(null)
         suppressedEnemyCpuTurnSignature = null
         completedEnemyCpuTurnSignature = null
     }
@@ -484,7 +506,7 @@ class BattleViewModel(
         get() = state.simultaneousTies()
         set(value) {
             if (status != CombatStatus.DRAFT && status != CombatStatus.READY) {
-                message = "La gestione delle parità non si può cambiare durante il combattimento."
+                say { it.battle.tieHandlingLocked }
             } else {
                 command { session.setSimultaneousTies(value) }
             }
@@ -492,7 +514,7 @@ class BattleViewModel(
 
     fun selectActiveActor(combatantId: String) {
         if (combatantId !in activeCombatantIds) {
-            message = "Il combattente scelto non appartiene al turno corrente."
+            say { it.battle.combatantNotInTurn }
             return
         }
         if (activeActorId != combatantId) {
@@ -505,7 +527,7 @@ class BattleViewModel(
         activeActorSelection = combatantId
         inspectionSelection = combatantId
         targetSelection = sanitizeTarget(targetSelection)
-        message = null
+        say(null)
     }
 
     /** Combattente mostrato nei comandi; in assenza di una scelta segue il turno reale. */
@@ -522,7 +544,7 @@ class BattleViewModel(
             activeActorSelection = combatantId
         }
         inspectionSelection = combatantId
-        message = null
+        say(null)
     }
 
     /** Vero soltanto quando le capacita' mostrate appartengono all'attore che puo' agire ora. */
@@ -543,7 +565,7 @@ class BattleViewModel(
         when {
             singleTargeting != null -> confirmSingleTarget(combatantId)
             areaTargeting != null -> {
-                message = "Stai mirando un'area: scegli un punto sulla mappa oppure annulla."
+                say { it.battle.aimingAreaHint }
             }
             else -> inspectCombatant(combatantId)
         }
@@ -653,7 +675,7 @@ class BattleViewModel(
 
     fun addRosterCombatant(actor: ActorDefinition, party: Boolean): String? {
         if (!editMode) {
-            message = "Attiva Modifica per aggiungere combattenti alla sessione."
+            say { it.battle.enableEditToAddCombatants }
             return null
         }
         val (instanceId, copyNumber) = nextRosterInstanceId(actor.id())
@@ -669,7 +691,7 @@ class BattleViewModel(
     fun attack(abilityId: String) {
         val attacker = activeCombatantId ?: return
         val target = effectiveTargetId() ?: run {
-            message = "Nessun bersaglio valido."
+            say { it.battle.noValidTarget }
             return
         }
         attack(attacker, target, abilityId)
@@ -694,7 +716,7 @@ class BattleViewModel(
                 persistCombatResourcesOrRollback(
                     attacker,
                     definitionId,
-                    "Il consumo della risorsa dell'attacco non è stato salvato nella scheda.",
+                    AppLocale.current.battle.attackResourceNotSaved,
                 )
             }
             val damage = result.damageResult()
@@ -711,41 +733,33 @@ class BattleViewModel(
                         ),
                     )
                     actionResolution = ActionResolution(
-                        text = buildString {
-                            append('«').append(abilityName).append("»: ")
-                            if (critical) append("colpo critico, ")
-                            append(targetName)
-                                .append(" subisce ")
-                                .append(applied.totalAdjustedDamage())
-                                .append(" danni; ")
-                                .append(applied.targetHitPointsAfter())
-                                .append(" PF rimasti")
-                            targetArmorClass?.let {
-                                append(" (").append(result.attackRoll().total()).append(" contro CA ").append(it).append(')')
-                            }
-                            append('.')
-                        },
+                        text = AppLocale.current.battle.attackHitSentence(
+                            ability = abilityName,
+                            critical = critical,
+                            target = targetName,
+                            damage = applied.totalAdjustedDamage(),
+                            hitPointsLeft = applied.targetHitPointsAfter(),
+                            roll = result.attackRoll().total(),
+                            armorClass = targetArmorClass,
+                        ),
                         isHit = true,
                     )
                     if (applied.concentrationCheck().isPresent &&
                         !applied.concentrationCheck().get().maintained()
                     ) {
-                        push(target, floatInfo("Concentrazione persa"))
+                        push(target, floatInfo(AppLocale.current.battle.concentrationLost))
                     }
                 }
 
                 else -> {
-                    push(target, FloatingNumber(++floatSequence, "Mancato", FloatKind.MISS))
+                    push(target, FloatingNumber(++floatSequence, AppLocale.current.battle.missed, FloatKind.MISS))
                     actionResolution = ActionResolution(
-                        text = buildString {
-                            append('«').append(abilityName).append("»: ")
-                                .append(targetName)
-                                .append(" mancato")
-                            targetArmorClass?.let {
-                                append(" (").append(result.attackRoll().total()).append(" contro CA ").append(it).append(')')
-                            }
-                            append("; 0 danni.")
-                        },
+                        text = AppLocale.current.battle.attackMissSentence(
+                            ability = abilityName,
+                            target = targetName,
+                            roll = result.attackRoll().total(),
+                            armorClass = targetArmorClass,
+                        ),
                         isHit = false,
                     )
                 }
@@ -762,15 +776,15 @@ class BattleViewModel(
      */
     fun beginAbilityTargeting(abilityId: String) {
         val attacker = activeActorId ?: run {
-            message = "Nessun attore di turno."
+            say { it.battle.noActingCombatant }
             return
         }
         if (inspectedCombatantId != attacker || !canUseAbilitiesOf(attacker)) {
-            message = "Le capacità della scheda in esame sono solo consultabili: non è il suo turno."
+            say { it.battle.inspectedSheetReadOnly }
             return
         }
         val ability = abilities(attacker).firstOrNull { it.id() == abilityId } ?: run {
-            message = "Capacità non trovata."
+            say { it.battle.abilityNotFound }
             return
         }
         val wildShape = wildShapeProvider(abilityId)
@@ -796,7 +810,7 @@ class BattleViewModel(
         }
 
         actionResolution = null
-        message = null
+        say(null)
         if (ability.isArea) {
             beginAreaTargeting(abilityId)
             return
@@ -816,12 +830,12 @@ class BattleViewModel(
     ) {
         val definitionId = combatant(combatantId)?.snapshot()?.definitionId() ?: return
         val druid = actorProvider(definitionId) ?: run {
-            message = "La scheda originale del druido non è disponibile."
+            say { it.battle.druidSheetUnavailable }
             return
         }
         val druidLevel = druidLevelProvider(definitionId)
         if (druidLevel < 2) {
-            message = "Forma Selvatica richiede almeno due livelli da Druido."
+            say { it.battle.wildShapeNeedsTwoLevels }
             return
         }
         val transformed = CombatantSnapshot.wildShape(combatantId, druid, beast)
@@ -836,7 +850,7 @@ class BattleViewModel(
             } catch (failure: Exception) {
                 session.undo()
                 throw IllegalStateException(
-                    failure.message ?: "Il consumo di Forma Selvatica non è stato salvato nella scheda.",
+                    failure.message ?: AppLocale.current.battle.wildShapeNotSaved,
                     failure,
                 )
             }
@@ -844,7 +858,7 @@ class BattleViewModel(
         }
         if (activated) {
             actionResolution = ActionResolution(
-                text = "Forma Selvatica: ${druid.name()} assume la forma di ${beast.name()}.",
+                text = AppLocale.current.battle.wildShapeAssumed(druid.name(), beast.name()),
                 isHit = true,
             )
         }
@@ -866,14 +880,14 @@ class BattleViewModel(
                 persistCombatResourcesOrRollback(
                     combatantId,
                     definitionId,
-                    "Il consumo della risorsa non è stato salvato nella scheda.",
+                    AppLocale.current.battle.resourceNotSaved,
                 )
             }
             activated = true
         }
         if (activated) {
             actionResolution = ActionResolution(
-                text = "«${ability.name()}» attivata: hai un'azione aggiuntiva, non utilizzabile per Magia.",
+                text = AppLocale.current.battle.extraActionGranted(ability.name()),
                 isHit = true,
             )
         }
@@ -882,7 +896,7 @@ class BattleViewModel(
     /** Annulla la scelta del bersaglio di una capacita' singola. */
     fun cancelSingleTargeting() {
         singleTargeting = null
-        message = null
+        say(null)
     }
 
     /** Conferma il bersaglio senza mai sostituirlo con il primo nemico disponibile. */
@@ -890,14 +904,14 @@ class BattleViewModel(
         val targeting = singleTargeting ?: return
         if (targeting.attackerId !in activeCombatantIds || activeActorId != targeting.attackerId) {
             singleTargeting = null
-            message = "Il turno è cambiato: seleziona di nuovo la capacità."
+            say { it.battle.turnChangedReselect }
             return
         }
         val ability = abilities(targeting.attackerId)
             .firstOrNull { it.id() == targeting.abilityId }
             ?: run {
                 singleTargeting = null
-                message = "Capacità non trovata."
+                say { it.battle.abilityNotFound }
                 return
         }
         if (ability.healing() != null) {
@@ -905,23 +919,23 @@ class BattleViewModel(
             val healing = ability.healing()
             val self = targeting.attackerId == targetId
             if (target == null) {
-                message = "Bersaglio non valido."
+                say { it.battle.invalidTarget }
                 return
             }
             if (target.dead()) {
-                message = "Una normale capacità di cura non può riportare in vita un bersaglio morto."
+                say { it.battle.healingCannotRaiseDead }
                 return
             }
             if (isParty(targeting.attackerId) != isParty(targetId)) {
-                message = "Questa cura può bersagliare soltanto la propria squadra."
+                say { it.battle.healingOwnSideOnly }
                 return
             }
             if (healing.target() == HealingTarget.SELF && !self) {
-                message = "Questa cura può essere usata soltanto su di sé."
+                say { it.battle.healingSelfOnly }
                 return
             }
             if (healing.target() == HealingTarget.ALLY && self) {
-                message = "Questa cura richiede un alleato diverso da chi la usa."
+                say { it.battle.healingAllyOnly }
                 return
             }
             targetSelection = targetId
@@ -931,12 +945,14 @@ class BattleViewModel(
             return
         }
         if (sanitizeTargetFor(targeting.attackerId, targetId) == null) {
-            message = when {
-                targetId == targeting.attackerId -> "L'attore non può essere il proprio bersaglio."
-                combatant(targetId)?.let { it.defeated() || it.dead() } == true ->
-                    "Il bersaglio è già sconfitto."
-                else -> "Bersaglio non valido."
-            }
+            say(
+                when {
+                    targetId == targeting.attackerId -> LocalizedText { it.battle.cannotTargetSelf }
+                    combatant(targetId)?.let { it.defeated() || it.dead() } == true ->
+                        LocalizedText { it.battle.targetAlreadyDown }
+                    else -> LocalizedText { it.battle.invalidTarget }
+                },
+            )
             return
         }
 
@@ -968,7 +984,7 @@ class BattleViewModel(
                 persistCombatResourcesOrRollback(
                     healerId,
                     definitionId,
-                    "Il consumo della cura non è stato salvato nella scheda.",
+                    AppLocale.current.battle.healingNotSaved,
                 )
             }
             restored = healed
@@ -978,7 +994,7 @@ class BattleViewModel(
                 push(targetId, FloatingNumber(++floatSequence, "+$amount", FloatKind.HEAL))
             }
             actionResolution = ActionResolution(
-                text = "«${ability.name()}»: ${name(targetId)} recupera $amount punti ferita.",
+                text = AppLocale.current.battle.healingApplied(ability.name(), name(targetId), amount),
                 isHit = true,
             )
         }
@@ -995,18 +1011,19 @@ class BattleViewModel(
     fun beginAreaTargeting(abilityId: String) {
         actionResolution = null
         val caster = activeCombatantId ?: run {
-            message = "Nessun attore di turno."
+            say { it.battle.noActingCombatant }
             return
         }
         if (inspectedCombatantId != caster || !canUseAbilitiesOf(caster)) {
-            message = "Le capacità della scheda in esame sono solo consultabili: non è il suo turno."
+            say { it.battle.inspectedSheetReadOnly }
             return
         }
         val ability = abilities(caster).firstOrNull { it.id() == abilityId } ?: return
         if (!ability.isArea) return
         singleTargeting = null
         pendingArea = null
-        message = "Mira «${ability.name()}»: clicca sulla mappa per centrare l'area. Esc per annullare."
+        val abilityName = ability.name()
+        say { it.battle.aimAbility(abilityName) }
         areaTargeting = AreaTargeting(abilityId, caster, ability.name(), ability.areaRadiusFeet(), ability.rangeFeet())
     }
 
@@ -1014,7 +1031,7 @@ class BattleViewModel(
     fun cancelAreaTargeting() {
         areaTargeting = null
         pendingArea = null
-        message = null
+        say(null)
     }
 
     /**
@@ -1033,7 +1050,7 @@ class BattleViewModel(
             val ids = try {
                 session.areaTargets(targeting.casterId, center, targeting.abilityId)
             } catch (failure: RuntimeException) {
-                message = italianRuleMessage(failure.message)
+                say(ruleMessage(failure.message))
                 return
             }
             pendingArea = PendingArea(
@@ -1046,11 +1063,13 @@ class BattleViewModel(
                 targets = ids.map { AreaSaveChoice(it, name(it), saved = false) },
             )
             areaTargeting = null
-            message = if (ids.isEmpty()) {
-                "Nessuna creatura nell'area."
-            } else {
-                "Segna chi supera il tiro salvezza, poi applica."
-            }
+            say(
+                if (ids.isEmpty()) {
+                    LocalizedText { it.battle.noCreatureInArea }
+                } else {
+                    LocalizedText { it.battle.markSavesThenApply }
+                },
+            )
         } else {
             val definitionId = combatant(targeting.casterId)?.snapshot()?.definitionId() ?: return
             val consumesResource = abilities(targeting.casterId)
@@ -1068,7 +1087,7 @@ class BattleViewModel(
                     persistCombatResourcesOrRollback(
                         targeting.casterId,
                         definitionId,
-                        "Il consumo della risorsa dell'area non è stato salvato nella scheda.",
+                        AppLocale.current.battle.areaResourceNotSaved,
                     )
                 }
                 pushAreaResult(result)
@@ -1108,7 +1127,7 @@ class BattleViewModel(
                 persistCombatResourcesOrRollback(
                     pending.casterId,
                     definitionId,
-                    "Il consumo della risorsa dell'area non è stato salvato nella scheda.",
+                    AppLocale.current.battle.areaResourceNotSaved,
                 )
             }
             pushAreaResult(result)
@@ -1130,18 +1149,18 @@ class BattleViewModel(
                     ),
                 )
             } else if (outcome.saved()) {
-                push(outcome.targetId(), floatInfo("Salvo"))
+                push(outcome.targetId(), floatInfo(AppLocale.current.battle.floatSaved))
             }
         }
     }
 
     fun endTurn() {
         if (enemyCpuBatchPending) {
-            message = "Attendi che la CPU completi la parte nemica di questo turno."
+            say { it.battle.waitForCpuTurn }
             return
         }
         if (activeActorId?.let(::enemyCpuControlsActor) == true) {
-            message = "Questo combattente è controllato dalla CPU nemica."
+            say { it.battle.combatantIsCpuControlled }
             return
         }
         command { session.endTurn() }
@@ -1183,7 +1202,7 @@ class BattleViewModel(
 
     fun undo() {
         if (rejectMutationWhileEnemyCpuPending()) return
-        message = null
+        say(null)
         actionResolution = null
         val effect = undoEffects.lastOrNull() ?: UndoEffect.None
         try {
@@ -1198,19 +1217,19 @@ class BattleViewModel(
                     // una per clic. Il batch torna annullabile in un colpo solo
                     // quando anche l'ultima e' stata tolta.
                     if (!session.undo()) {
-                        message = "La modifica successiva al batch CPU non può essere annullata."
+                        say { it.battle.editAfterCpuBatchNotUndoable }
                         return
                     }
                     sync()
-                    message = "Modifica successiva al batch CPU annullata; il batch resta nella cronologia."
+                    say { it.battle.editAfterCpuBatchUndone }
                     return
                 }
                 if (!session.undoTo(effect.startingRevision)) {
-                    throw IllegalStateException("Il batch CPU non può essere annullato completamente.")
+                    throw IllegalStateException(AppLocale.current.battle.cpuBatchNotFullyUndoable)
                 }
             } else {
                 if (!session.undo()) {
-                    message = "Niente da annullare."
+                    say { it.battle.nothingToUndo }
                     return
                 }
             }
@@ -1238,21 +1257,26 @@ class BattleViewModel(
                         runCatching { resourceSink.onChanged(definitionId, restored) }
                             .exceptionOrNull()
                     }
-                    message = if (resourceFailure == null) {
-                        "Intero batch CPU annullato: l'automazione resta sospesa finché non scegli di riprenderla."
-                    } else {
-                        "Batch CPU annullato, ma le risorse della scheda non sono state riallineate: " +
-                            (resourceFailure.message ?: "errore sconosciuto")
-                    }
+                    say(
+                        if (resourceFailure == null) {
+                            LocalizedText { it.battle.cpuBatchUndone }
+                        } else {
+                            LocalizedText {
+                                it.battle.cpuBatchUndoneResourcesOff(
+                                    resourceFailure.message ?: it.battle.unknownError,
+                                )
+                            }
+                        },
+                    )
                 }
                 UndoEffect.None -> Unit
             }
         } catch (failure: CombatRuleException) {
-            message = italianRuleMessage(failure.message)
+            say(ruleMessage(failure.message))
         } catch (failure: IllegalArgumentException) {
-            message = italianRuleMessage(failure.message)
+            say(ruleMessage(failure.message))
         } catch (failure: IllegalStateException) {
-            message = italianRuleMessage(failure.message)
+            say(ruleMessage(failure.message))
         } finally {
             sync()
         }
@@ -1277,10 +1301,11 @@ class BattleViewModel(
 
     fun rollDeathSave(targetId: String) = command {
         val result = session.rollDeathSave(targetId, D20RollInput.digital())
+        val words = AppLocale.current.battle
         val label = when {
-            result.dead() -> "Morto"
-            result.stable() -> "Stabile"
-            else -> "Morte ${result.successes()}/${result.failures()}"
+            result.dead() -> words.dead
+            result.stable() -> words.stable
+            else -> words.deathSaves(result.successes(), result.failures())
         }
         push(targetId, floatInfo(label))
     }
@@ -1302,19 +1327,19 @@ class BattleViewModel(
 
     fun stabilize(targetId: String) = command {
         session.stabilize(targetId, "manuale")
-        push(targetId, floatInfo("Stabile"))
+        push(targetId, floatInfo(AppLocale.current.battle.stable))
     }
 
     fun setExhaustion(targetId: String, level: Int) = command {
         session.setExhaustion(targetId, level)
-        push(targetId, floatInfo("Sfinimento $level"))
+        push(targetId, floatInfo(AppLocale.current.battle.exhaustionLevel(level)))
     }
 
     fun pause() = command { session.pause() }
 
     fun resume() = command { session.resume() }
 
-    fun resolve(outcome: String = "Concluso dal tavolo") = command { session.resolve(outcome) }
+    fun resolve(outcome: String = AppLocale.current.battle.resolvedByTable) = command { session.resolve(outcome) }
 
     fun heal(targetId: String, amount: Int) = command {
         val healed = session.heal(targetId, amount)
@@ -1330,7 +1355,11 @@ class BattleViewModel(
     fun grantTemporary(targetId: String, amount: Int) = command {
         val granted = session.grantTemporaryHitPoints(targetId, amount)
         if (granted > 0) {
-            push(targetId, FloatingNumber(++floatSequence, "+$granted PFT", FloatKind.TEMPORARY))
+            push(targetId, FloatingNumber(
+                    ++floatSequence,
+                    AppLocale.current.battle.temporaryHitPointsGained(granted),
+                    FloatKind.TEMPORARY,
+                ))
         }
     }
 
@@ -1350,7 +1379,7 @@ class BattleViewModel(
             "",
             "",
         )
-        push(targetId, floatInfo(type.italianLabel))
+        push(targetId, floatInfo(type.label(AppLocale.current.language)))
     }
 
     fun removeCondition(targetId: String, conditionInstanceId: String) = command {
@@ -1396,7 +1425,7 @@ class BattleViewModel(
                 // annulla anche la modifica appena registrata nel combattimento.
                 session.undo()
                 throw IllegalStateException(
-                    failure.message ?: "La correzione non è stata salvata nella scheda.",
+                    failure.message ?: AppLocale.current.battle.correctionNotSaved,
                     failure,
                 )
             }
@@ -1547,30 +1576,33 @@ class BattleViewModel(
 
     fun move(combatantId: String, column: Int, row: Int) {
         if (enemyCpuBatchPending) {
-            message = "Attendi che la CPU completi la parte nemica di questo turno."
+            say { it.battle.waitForCpuTurn }
             return
         }
         if (enemyCpuControlsActor(combatantId)) {
-            message = "Questo combattente è controllato dalla CPU nemica."
+            say { it.battle.combatantIsCpuControlled }
             return
         }
         command {
             val feet = session.moveCombatant(combatantId, GridPosition(column, row))
-            push(combatantId, FloatingNumber(++floatSequence, metresLabel(feet), FloatKind.INFO))
+            push(
+                combatantId,
+                FloatingNumber(++floatSequence, distanceLabel(feet, AppLocale.language), FloatKind.INFO),
+            )
         }
     }
 
     fun moveActive(column: Int, row: Int) {
         if (enemyCpuBatchPending) {
-            message = "Attendi che la CPU completi la parte nemica di questo turno."
+            say { it.battle.waitForCpuTurn }
             return
         }
         if (enemyCpuControlsCurrentTurn) {
-            message = "La CPU sta controllando questo turno."
+            say { it.battle.cpuControlsThisTurn }
             return
         }
         val actor = activeActorId ?: run {
-            message = "Nessun attore attivo."
+            say { it.battle.noActiveActor }
             return
         }
         move(actor, column, row)
@@ -1602,7 +1634,7 @@ class BattleViewModel(
      */
     fun autoPlaceMissing(squaresFor: (String) -> Int = { 1 }) {
         if (!mapConfigured) {
-            message = "Configura prima la griglia."
+            say { it.battle.configureGridFirst }
             return
         }
         val grid = battleMap.grid()
@@ -1610,12 +1642,12 @@ class BattleViewModel(
             .filterNot { battleMap.isPlaced(it) }
             .map { PendingToken(it, isParty(it), squaresFor(it).coerceIn(1, 4)) }
         if (pending.isEmpty()) {
-            message = "Tutti i segnaposti sono già sulla mappa."
+            say { it.battle.allTokensAlreadyPlaced }
             return
         }
         val occupied = battleMap.orderedPlacements().flatMap { it.occupiedSquares() }.toSet()
         val placements = arrangeTokens(grid, pending, occupied) ?: run {
-            message = gridTooSmallMessage(grid)
+            say(gridTooSmallMessage(grid))
             return
         }
         val sideOf = pending.associate { it.combatantId to it.squaresPerSide }
@@ -1713,7 +1745,7 @@ class BattleViewModel(
         enemyCpuActionLabel = null
         suppressedEnemyCpuTurnSignature = null
         completedEnemyCpuTurnSignature = null
-        message = null
+        say(null)
         editMode = presentation["editMode"] == "true"
         mapEditMode = editMode && presentation["mapEditMode"] == "true"
         activeActorSelection = null
@@ -1769,11 +1801,26 @@ class BattleViewModel(
     }
 
     fun dismissMessage() {
-        message = null
+        say(null)
     }
 
     fun dismissActionResolution() {
         actionResolution = null
+    }
+
+    /**
+     * Scarta il riscontro di battaglia gia' composto, che non si puo' ritradurre.
+     *
+     * Il racconto del turno e i rifiuti del motore conservano *come si dice* una
+     * cosa e seguono la lingua da soli. Questi no: la conferma di un attacco e i
+     * numeri che salgono sopra i combattenti sono testo gia' composto, spesso
+     * con dentro il nome di un bersaglio. Ritradurli vorrebbe dire conservarne
+     * la forma semantica per un riscontro che dura tre secondi; scartarli costa
+     * niente e non lascia in giro una frase nella lingua di prima.
+     */
+    internal fun onLanguageChanged() {
+        actionResolution = null
+        floating = emptyMap()
     }
 
     /** Mostra o ritira l'anteprima della portata quando il mouse attraversa una capacita'. */
@@ -1797,8 +1844,14 @@ class BattleViewModel(
     }
 
     /** Mostra una nota guidata senza inviare alcun comando al motore. */
+    /** Mostra un testo gia' scritto: un nome, un errore del sistema, una diagnostica. */
     fun showMessage(text: String) {
-        message = text.takeIf { it.isNotBlank() }
+        say(text.takeIf { it.isNotBlank() }?.let(::literalText))
+    }
+
+    /** Mostra un testo del vocabolario, che seguira' la lingua scelta. */
+    fun showMessage(text: LocalizedText) {
+        say(text)
     }
 
     // --- interni ---------------------------------------------------------------------
@@ -1816,7 +1869,7 @@ class BattleViewModel(
                             action.amount() > 0 ->
                                 FloatingNumber(++floatSequence, "-${action.amount()}", FloatKind.DAMAGE)
                             action.hit() -> FloatingNumber(++floatSequence, "0/Immune", FloatKind.INFO)
-                            else -> FloatingNumber(++floatSequence, "Mancato", FloatKind.MISS)
+                            else -> FloatingNumber(++floatSequence, AppLocale.current.battle.missed, FloatKind.MISS)
                         },
                     )
                 }
@@ -1825,7 +1878,7 @@ class BattleViewModel(
                 if (action.targetId().isNotBlank() && action.amount() > 0) {
                     val slotSuffix = action.slotLevel()
                         .takeIf { it > 0 }
-                        ?.let { " · slot di $it° livello" }
+                        ?.let { AppLocale.current.battle.spellSlotSuffix(it) }
                         .orEmpty()
                     push(
                         action.targetId(),
@@ -1848,8 +1901,8 @@ class BattleViewModel(
                                 if (target.saved()) FloatKind.INFO else FloatKind.DAMAGE,
                             ),
                         )
-                        target.saved() -> push(target.targetId(), floatInfo("Salvo"))
-                        else -> push(target.targetId(), floatInfo("0/Immune"))
+                        target.saved() -> push(target.targetId(), floatInfo(AppLocale.current.battle.floatSaved))
+                        else -> push(target.targetId(), floatInfo(AppLocale.current.battle.floatImmune))
                     }
                 }
             }
@@ -1922,7 +1975,7 @@ class BattleViewModel(
                 resourceSink.onChanged(delta.definitionId, delta.after)
             } catch (failure: Exception) {
                 return failure.message
-                    ?: "Il turno CPU è concluso, ma le risorse non sono state salvate nella scheda."
+                    ?: AppLocale.current.battle.cpuTurnDoneResourcesNotSaved
             }
         }
         return null
@@ -1938,7 +1991,7 @@ class BattleViewModel(
                 .exceptionOrNull()
                 ?.let { failure ->
                     if (firstFailure == null) {
-                        firstFailure = failure.message ?: "ripristino risorse non riuscito"
+                        firstFailure = failure.message ?: AppLocale.current.battle.resourceRestoreFailed
                     }
                 }
         }
@@ -1951,7 +2004,7 @@ class BattleViewModel(
      */
     private fun rejectMutationWhileEnemyCpuPending(): Boolean {
         if (!enemyCpuBatchPending || editMode) return false
-        message = "Attendi che la CPU completi la parte nemica di questo turno."
+        say { it.battle.waitForCpuTurn }
         return true
     }
 
@@ -1963,16 +2016,16 @@ class BattleViewModel(
         val revisionBefore = state.revision()
         var completed = false
         try {
-            message = null
+            say(null)
             actionResolution = null
             block()
             completed = true
         } catch (failure: CombatRuleException) {
-            message = italianRuleMessage(failure.message)
+            say(ruleMessage(failure.message))
         } catch (failure: IllegalArgumentException) {
-            message = italianRuleMessage(failure.message)
+            say(ruleMessage(failure.message))
         } catch (failure: IllegalStateException) {
-            message = italianRuleMessage(failure.message)
+            say(ruleMessage(failure.message))
         } finally {
             sync()
             if (completed && state.revision() != revisionBefore) undoEffects.addLast(undoEffect)
@@ -2126,12 +2179,11 @@ data class PendingArea(
     val targets: List<AreaSaveChoice>,
 )
 
-val EnemyCpuDifficulty.italianLabel: String
-    get() = when (this) {
-        EnemyCpuDifficulty.EASY -> "Facile"
-        EnemyCpuDifficulty.MEDIUM -> "Medio"
-        EnemyCpuDifficulty.SORRY_FOR_YOU -> "Mi dispiace per te!"
-    }
+fun EnemyCpuDifficulty.label(strings: Strings): String = when (this) {
+    EnemyCpuDifficulty.EASY -> strings.battle.cpuDifficultyEasy
+    EnemyCpuDifficulty.MEDIUM -> strings.battle.cpuDifficultyMedium
+    EnemyCpuDifficulty.SORRY_FOR_YOU -> strings.battle.cpuDifficultySorryForYou
+}
 
 /**
  * Ritmo di riproduzione del turno nemico.
@@ -2148,10 +2200,9 @@ enum class EnemyCpuSpeed(val openingDelayMillis: Long, val stepDelayMillis: Long
     INSTANT(0L, 0L),
 }
 
-val EnemyCpuSpeed.italianLabel: String
-    get() = when (this) {
-        EnemyCpuSpeed.SLOW -> "Lenta"
-        EnemyCpuSpeed.NORMAL -> "Normale"
-        EnemyCpuSpeed.FAST -> "Veloce"
-        EnemyCpuSpeed.INSTANT -> "Istantanea"
-    }
+fun EnemyCpuSpeed.label(strings: Strings): String = when (this) {
+    EnemyCpuSpeed.SLOW -> strings.settings.cpuSpeedSlow
+    EnemyCpuSpeed.NORMAL -> strings.settings.cpuSpeedNormal
+    EnemyCpuSpeed.FAST -> strings.settings.cpuSpeedFast
+    EnemyCpuSpeed.INSTANT -> strings.settings.cpuSpeedInstant
+}

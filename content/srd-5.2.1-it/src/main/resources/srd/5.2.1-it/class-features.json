@@ -586,6 +586,7 @@
       "activation": "azione bonus",
       "resource": {
         "name": "Ira",
+        "cost": 1,
         "recovery": [
           "riposo lungo"
         ]
@@ -1765,6 +1766,7 @@
       "activation": "azione di Magia",
       "resource": {
         "name": "Forma selvatica",
+        "cost": 1,
         "recovery": [
           "riposo lungo"
         ]
@@ -4332,6 +4334,7 @@
       "activation": "azione bonus",
       "resource": {
         "name": "slot incantesimo",
+        "cost": 1,
         "recovery": [
           "riposo lungo"
         ]
@@ -5437,6 +5440,7 @@
       "activation": "azione bonus",
       "resource": {
         "name": "punti stregoneria",
+        "cost": 3,
         "recovery": [
           "riposo lungo"
         ]
@@ -5758,13 +5762,14 @@
       "name": "Conoscenze degli Antichi",
       "class": "warlock",
       "class_name": "Warlock",
-      "minimum_level": 1,
+      "minimum_level": 2,
       "subclass": null,
       "description": "Prerequisito: warlock di 2º livello o superiore Un'antica entità ha conferito dei frammenti di conoscenza al warlock, consentendogli di ottenere un talento della categoria Origini a scelta (vedi capitolo \"Talenti\").\nRipetibile. Questa supplica è ottenibile più di una volta. A ogni utilizzo, è necessario selezionare un talento diverso della categoria Origini.",
       "page": 88,
       "activation": null,
       "resource": null,
-      "source_order": 366
+      "source_order": 366,
+      "prerequisite": "warlock di 2º livello o superiore"
     },
     {
       "id": "srd521-it:feature:warlock:ripetibile",
@@ -5772,7 +5777,7 @@
       "name": "Ripetibile",
       "class": "warlock",
       "class_name": "Warlock",
-      "minimum_level": 1,
+      "minimum_level": 2,
       "subclass": null,
       "description": "Ripetibile. Questa supplica è ottenibile più di una volta. A ogni utilizzo, è necessario selezionare un talento diverso della categoria Origini.",
       "page": 88,
@@ -6389,6 +6394,7 @@
       "activation": null,
       "resource": {
         "name": "slot incantesimo",
+        "cost": 1,
         "recovery": [
           "riposo lungo"
         ]

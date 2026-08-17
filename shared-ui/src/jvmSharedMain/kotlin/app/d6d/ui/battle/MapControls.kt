@@ -24,7 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.space.MapGrid
-import app.d6d.sheet.metresLabel
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.components.Chip
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.maps.GridLimits
@@ -54,6 +56,8 @@ fun MapControls(
     modifier: Modifier = Modifier,
 ) {
     val grid = viewModel.battleMap.grid()
+    val words = strings.battle
+    val language = currentLanguage
     var expanded by remember { mutableStateOf(false) }
     var showMapPicker by remember { mutableStateOf(false) }
 
@@ -69,25 +73,32 @@ fun MapControls(
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("MAPPA", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
-                Chip("${grid.columns()} × ${grid.rows()} · ${metresLabel(grid.feetPerSquare())}/casella", Palette.TextMuted)
+                Text(words.mapCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                Chip(
+                    words.gridSummary(
+                        grid.columns(),
+                        grid.rows(),
+                        distanceLabel(grid.feetPerSquare(), language),
+                    ),
+                    Palette.TextMuted,
+                )
             }
             GameButton("−", accent = Palette.TextMuted, dense = true, onClick = {
                 onCellSizeChange((cellSize - 6.dp).coerceIn(MIN_CELL, MAX_CELL))
             })
-            Chip("Zoom ${cellSize.value.toInt()}", Palette.TextMuted)
+            Chip(words.zoomLevel(cellSize.value.toInt()), Palette.TextMuted)
             GameButton("+", accent = Palette.TextMuted, dense = true, onClick = {
                 onCellSizeChange((cellSize + 6.dp).coerceIn(MIN_CELL, MAX_CELL))
             })
             GameButton(
-                label = if (showGrid) "Griglia visibile" else "Griglia nascosta",
+                label = if (showGrid) words.gridVisible else words.gridHidden,
                 accent = if (showGrid) Palette.Gold else Palette.TextFaint,
                 selected = showGrid,
                 dense = true,
                 onClick = { onShowGridChange(!showGrid) },
             )
             GameButton(
-                label = if (expanded) "Nascondi opzioni" else "Opzioni mappa",
+                label = if (expanded) words.hideOptions else words.mapOptions,
                 accent = if (expanded) Palette.Gold else Palette.TextMuted,
                 selected = expanded,
                 dense = true,
@@ -97,7 +108,7 @@ fun MapControls(
 
         if (viewModel.mapEditMode) {
             Text(
-                text = "Trascina l'immagine per spostarla · angoli: proporzioni bloccate · lati: stretching libero.",
+                text = words.dragImageHint,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
@@ -116,7 +127,7 @@ fun MapControls(
                 // procedura Nuova partita consente, e al massimo che il motore
                 // accetta, invece di produrre un rifiuto o una griglia inservibile.
                 GameButton(
-                    label = "− colonne",
+                    label = words.fewerColumns,
                     accent = Palette.TextMuted,
                     dense = true,
                     enabled = grid.columns() > GridLimits.MIN_SIDE,
@@ -125,7 +136,7 @@ fun MapControls(
                     },
                 )
                 GameButton(
-                    label = "+ colonne",
+                    label = words.moreColumns,
                     accent = Palette.TextMuted,
                     dense = true,
                     enabled = grid.columns() < MapGrid.MAX_SIDE,
@@ -134,7 +145,7 @@ fun MapControls(
                     },
                 )
                 GameButton(
-                    label = "− righe",
+                    label = words.fewerRows,
                     accent = Palette.TextMuted,
                     dense = true,
                     enabled = grid.rows() > GridLimits.MIN_SIDE,
@@ -143,7 +154,7 @@ fun MapControls(
                     },
                 )
                 GameButton(
-                    label = "+ righe",
+                    label = words.moreRows,
                     accent = Palette.TextMuted,
                     dense = true,
                     enabled = grid.rows() < MapGrid.MAX_SIDE,
@@ -154,7 +165,7 @@ fun MapControls(
 
                 listOf(5, 10, 20, 50).forEach { feet ->
                     GameButton(
-                        label = "${metresLabel(feet)}/casella",
+                        label = words.perSquare(distanceLabel(feet, language)),
                         accent = if (grid.feetPerSquare() == feet) Palette.GoldBright else Palette.TextFaint,
                         selected = grid.feetPerSquare() == feet,
                         dense = true,
@@ -174,7 +185,7 @@ fun MapControls(
                     modifier = Modifier.width(150.dp),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Griglia", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                    Text(words.gridBrightness, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                     Slider(
                         value = gridBrightness.coerceIn(MIN_GRID_BRIGHTNESS, MAX_GRID_BRIGHTNESS),
                         onValueChange = { onGridBrightnessChange(it.coerceIn(MIN_GRID_BRIGHTNESS, MAX_GRID_BRIGHTNESS)) },
@@ -189,15 +200,15 @@ fun MapControls(
                     Chip("${(gridBrightness * 100).toInt()}%", Palette.TextMuted)
                 }
                 GameButton(
-                    label = "Scegli sfondo",
+                    label = words.chooseBackground,
                     accent = Palette.Party,
                     dense = true,
-                    subtitle = "Dall'archivio mappe",
+                    subtitle = words.fromMapArchive,
                     onClick = { showMapPicker = true },
                 )
                 if (viewModel.battleMap.backgroundImage().isNotBlank()) {
                     GameButton(
-                        label = "Editing mappa",
+                        label = words.mapEditing,
                         accent = if (viewModel.mapEditMode) Palette.Heal else Palette.Gold,
                         selected = viewModel.mapEditMode,
                         dense = true,
@@ -211,11 +222,11 @@ fun MapControls(
                             viewModel.mapEditMode = activate
                         },
                     )
-                    GameButton("Togli sfondo", accent = Palette.TextFaint, dense = true, onClick = {
+                    GameButton(words.removeBackground, accent = Palette.TextFaint, dense = true, onClick = {
                         viewModel.setMapBackground("")
                     })
                     if (viewModel.mapEditMode) {
-                        GameButton("Adatta e centra", accent = Palette.TextMuted, dense = true, onClick = {
+                        GameButton(words.fitAndCentre, accent = Palette.TextMuted, dense = true, onClick = {
                             // Una trasformazione non impostata fa ricalcolare alla
                             // vista il miglior "contain" usando le proporzioni vere
                             // dell'immagine. E' anche la via di recupero se lo sfondo
@@ -224,7 +235,7 @@ fun MapControls(
                         })
                     }
                 }
-                GameButton("Disponi tutti", accent = Palette.Heal, dense = true, onClick = {
+                GameButton(words.placeAll, accent = Palette.Heal, dense = true, onClick = {
                     viewModel.autoPlaceMissing { id -> viewModel.squaresPerSideFor(id) }
                 })
             }

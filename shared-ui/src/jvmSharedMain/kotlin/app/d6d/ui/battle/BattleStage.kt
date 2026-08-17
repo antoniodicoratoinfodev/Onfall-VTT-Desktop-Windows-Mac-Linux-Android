@@ -47,7 +47,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
-import app.d6d.sheet.metresLabel
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.ConditionChip
 import app.d6d.ui.components.Faction
@@ -137,6 +139,7 @@ fun BattleStage(
 @Composable
 internal fun BoxScope.FloatingCombatantPlates(viewModel: BattleViewModel) {
     val layout = LocalUiLayout.current
+    val words = strings.battle
     val inspectedId = viewModel.inspectedCombatantId?.takeIf { it != viewModel.activeCombatantId }
     val topId = inspectedId ?: viewModel.selectedTargetId
 
@@ -151,12 +154,12 @@ internal fun BoxScope.FloatingCombatantPlates(viewModel: BattleViewModel) {
                     combatantId,
                     if (inspectedId != null) {
                         if (viewModel.selectedTargetId == combatantId) {
-                            "In esame · bersaglio"
+                            words.plateInspectedTarget
                         } else {
-                            "In esame · consultazione"
+                            words.plateInspectedReadOnly
                         }
                     } else {
-                        "Bersaglio selezionato"
+                        words.plateSelectedTarget
                     },
                     scale = layout.targetPlateScale,
                     onScaleChange = { layout.targetPlateScale = it },
@@ -174,7 +177,7 @@ internal fun BoxScope.FloatingCombatantPlates(viewModel: BattleViewModel) {
                 StagePlate(
                     viewModel,
                     activeId,
-                    if (viewModel.isSimultaneousTurn) "Turno condiviso" else "Turno attivo",
+                    if (viewModel.isSimultaneousTurn) words.plateSharedTurn else words.plateActiveTurn,
                     scale = layout.activePlateScale,
                     onScaleChange = { layout.activePlateScale = it },
                 )
@@ -305,11 +308,14 @@ private fun MapLegend(viewModel: BattleViewModel, modifier: Modifier = Modifier)
     val active = viewModel.activeCombatantId
     val target = viewModel.selectedTargetId
     val distance = if (active != null && target != null) viewModel.distanceFeet(active, target) else null
+    val words = strings.battle
+    val language = currentLanguage
+    val square = distanceLabel(grid.feetPerSquare(), language)
     val description = buildString {
-        append("Scala della mappa: una casella equivale a ${metresLabel(grid.feetPerSquare())}.")
+        append(words.mapScaleDescription(square))
         append(
-            distance?.let { " Distanza dal bersaglio: ${metresLabel(it)}." }
-                ?: " Distanza dal bersaglio non determinata.",
+            distance?.let { words.distanceToTargetSentence(distanceLabel(it, language)) }
+                ?: words.distanceToTargetUnknownSentence,
         )
     }
 
@@ -323,14 +329,14 @@ private fun MapLegend(viewModel: BattleViewModel, modifier: Modifier = Modifier)
         horizontalAlignment = Alignment.End,
     ) {
         Text(
-            text = "1 casella = ${metresLabel(grid.feetPerSquare())}",
+            text = words.oneSquareEquals(square),
             color = Palette.Gold,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
-            text = distance?.let { "Distanza dal bersaglio: ${metresLabel(it)}" }
-                ?: "Distanza non determinata",
+            text = distance?.let { words.distanceToTarget(distanceLabel(it, language)) }
+                ?: words.distanceUndetermined,
             color = if (distance != null) Palette.Text else Palette.TextFaint,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -360,13 +366,14 @@ private fun StagePlate(
         isInspected -> Palette.TextMuted
         else -> Palette.Gold
     }
+    val words = strings.battle
     val state = buildString {
-        append("${combatant.currentHitPoints()} punti ferita su ${snapshot.maxHitPoints()}.")
-        if (isTarget) append(" Bersaglio selezionato.")
-        if (isActive) append(" Turno attivo.")
-        if (isInspected) append(" Scheda in esame, solo consultazione.")
-        if (combatant.dead()) append(" Morto.")
-        else if (combatant.defeated() || combatant.dead()) append(" Sconfitto.")
+        append(words.hitPointsSentence(combatant.currentHitPoints(), snapshot.maxHitPoints()))
+        if (isTarget) append(words.selectedTargetSentence)
+        if (isActive) append(words.activeTurnSentence)
+        if (isInspected) append(words.inspectedReadOnlySentence)
+        if (combatant.dead()) append(words.deadSentence)
+        else if (combatant.defeated()) append(words.defeatedSentence)
     }
 
     val plateShape = RoundedCornerShape(10.dp)
@@ -401,7 +408,7 @@ private fun StagePlate(
                     // Angoli a squadra dorati: la targa diventa una placca incorniciata.
                     .ornateFrame(accent = accent, alpha = if (isTarget) 0.85f else 0.5f)
                     .semantics(mergeDescendants = true) {
-                        contentDescription = "$role: ${snapshot.name()}"
+                        contentDescription = words.roleAndName(role, snapshot.name())
                         stateDescription = state
                     }
                     .padding(10.dp),
@@ -434,10 +441,10 @@ private fun StagePlate(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Chip("${combatant.currentHitPoints()}/${snapshot.maxHitPoints()} PF", Palette.Text)
-                    Chip("CA ${snapshot.armorClass()}", Palette.Gold)
+                    Chip(words.hitPointsShort(combatant.currentHitPoints(), snapshot.maxHitPoints()), Palette.Text)
+                    Chip(words.armorClassShort(snapshot.armorClass()), Palette.Gold)
                     if (combatant.bloodied() && !combatant.defeated() && !combatant.dead()) {
-                        Chip("INSANGUINATO", Palette.Bloodied)
+                        Chip(words.bloodiedBadge, Palette.Bloodied)
                     }
                 }
 
@@ -446,7 +453,7 @@ private fun StagePlate(
 
                 if (combatant.concentration() != null) {
                     Text(
-                        text = "Concentrazione",
+                        text = strings.abilities.concentration,
                         color = Palette.Temporary,
                         style = MaterialTheme.typography.bodySmall,
                     )

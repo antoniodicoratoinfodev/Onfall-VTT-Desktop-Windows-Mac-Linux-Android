@@ -7,6 +7,7 @@ import app.d6d.ui.state.BattleViewModel
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import app.d6d.ui.i18n.ItalianStrings
 
 class BattleLogTest {
 
@@ -40,7 +41,7 @@ class BattleLogTest {
                 "total" to "10",
                 "armorClass" to "13",
             ),
-        ).describeInItalian(model)
+        ).describe(model, ItalianStrings)
 
         assertEquals(
             "${model.name(actor)} manca ${model.name(target)} con «${ability.name()}»: " +
@@ -67,7 +68,7 @@ class BattleLogTest {
                 "amount" to "8",
                 "total" to "8",
             ),
-        ).describeInItalian(model)
+        ).describe(model, ItalianStrings)
 
         assertTrue(description.contains("1d8+3 · dadi [5] + 3 = 8"))
         assertTrue(description.contains("perforante"))
@@ -90,7 +91,7 @@ class BattleLogTest {
                 "modifier" to "-1",
                 "total" to "5",
             ),
-        ).describeInItalian(model)
+        ).describe(model, ItalianStrings)
 
         assertEquals(
             "${model.name(actor)} effettua una prova di Destrezza: " +
@@ -114,7 +115,7 @@ class BattleLogTest {
                 "remaining" to "2",
                 "expiry" to "END_OF_TARGET_TURN",
             ),
-        ).describeInItalian(model)
+        ).describe(model, ItalianStrings)
         val concentration = event(
             EventType.CONCENTRATION_CHECKED,
             target,
@@ -128,7 +129,7 @@ class BattleLogTest {
                 "difficultyClass" to "10",
                 "maintained" to "true",
             ),
-        ).describeInItalian(model)
+        ).describe(model, ItalianStrings)
 
         assertTrue(condition.contains("prono"))
         assertTrue(condition.contains("durata residua 2"))

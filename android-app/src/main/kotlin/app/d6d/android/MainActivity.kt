@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.d6d.ui.AppRoot
 import app.d6d.ui.images.FilePicker
+import app.d6d.ui.i18n.AppLocale
 import app.d6d.ui.theme.Palette
 import java.io.IOException
 import java.nio.file.Files
@@ -115,7 +116,7 @@ class MainActivity : ComponentActivity() {
 
                 override fun pickAsync(onPicked: (Path?) -> Unit, onError: (Throwable) -> Unit) {
                     pending.request?.onError(
-                        IllegalStateException("Un selettore di immagini e' gia' aperto."),
+                        IllegalStateException(AppLocale.current.maps.imagePickerAlreadyOpen),
                     )
                     pending.request = PendingImagePick(onPicked, onError)
                     try {
@@ -156,7 +157,7 @@ class MainActivity : ComponentActivity() {
             suffix = ".$extension",
         )
         val input = contentResolver.openInputStream(uri)
-            ?: throw IOException("Il provider non ha restituito dati per l'immagine selezionata.")
+            ?: throw IOException(AppLocale.current.maps.imageProviderReturnedNoData)
         input.use { source ->
             Files.newOutputStream(temporary).use(source::copyTo)
         }

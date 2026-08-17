@@ -206,10 +206,13 @@ private fun String.effectSourceKey(): String =
 private fun String.toActivationCost(): ActivationCost {
     val normalized = lowercase().trim()
     return when {
-        normalized.startsWith("passiva") || normalized.startsWith("nessuna azione") ->
+        normalized.startsWith("passiva") ||
+            normalized.startsWith("passive") ||
+            normalized.startsWith("nessuna azione") ||
+            normalized.startsWith("no action") ->
             ActivationCost.NONE
-        "azione bonus" in normalized -> ActivationCost.BONUS_ACTION
-        "reazione" in normalized -> ActivationCost.REACTION
+        "azione bonus" in normalized || "bonus action" in normalized -> ActivationCost.BONUS_ACTION
+        "reazione" in normalized || "reaction" in normalized -> ActivationCost.REACTION
         normalized.isBlank() || normalized == "—" -> ActivationCost.NONE
         else -> ActivationCost.ACTION
     }

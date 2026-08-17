@@ -2,6 +2,9 @@
 
 package app.d6d.sheet
 
+import app.d6d.i18n.AppLanguage
+import app.d6d.sheet.i18n.unnamedCreature
+
 import kotlinx.serialization.UseSerializers
 import app.d6d.domain.combat.AbilityDefinition
 import app.d6d.domain.combat.ActivationCost
@@ -61,6 +64,17 @@ data class StatBlockEntry(
 @Serializable
 data class MonsterStatBlock(
     val id: String = "mostro-nuovo",
+
+    /**
+     * La lingua in cui e' scritto il testo di questa scheda.
+     *
+     * Serve come per [CharacterSheet]: il bestiario incluso e' contenuto
+     * bilingue con identificativi stabili, e sapere in che lingua e' stata
+     * installata una creatura permette di rigenerarla nell'altra. Una creatura
+     * che l'utente ha modificato non si rigenera: si riconosce perche' non
+     * coincide piu' con quella canonica, e resta sua.
+     */
+    val contentLanguage: AppLanguage = AppLanguage.ITALIAN,
     val name: String = "",
 
     // --- intestazione ---
@@ -160,7 +174,10 @@ data class MonsterStatBlock(
      * le altre restano testo per il DM e vengono marcate come da risolvere a mano,
      * cosi' il motore non le ignora in silenzio.
      */
-    fun toActorDefinition(rulesetVersion: String = "5.2.1"): ActorDefinition {
+    fun toActorDefinition(
+        rulesetVersion: String = "5.2.1",
+        language: AppLanguage = AppLanguage.ITALIAN,
+    ): ActorDefinition {
         val sections = listOf(
             actions to ActivationCost.ACTION,
             bonusActions to ActivationCost.BONUS_ACTION,
@@ -202,7 +219,7 @@ data class MonsterStatBlock(
             id,
             "1.0.0",
             rulesetVersion,
-            name.ifBlank { "Creatura senza nome" },
+            name.ifBlank { unnamedCreature(language) },
             armorClass,
             averageHitPoints.coerceAtLeast(1),
             averageHitPoints.coerceAtLeast(1),

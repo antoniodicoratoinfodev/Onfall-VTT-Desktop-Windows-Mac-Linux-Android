@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import app.d6d.ui.i18n.ItalianStrings
 
 class EncounterBuilderViewModelTest {
 
@@ -158,8 +159,8 @@ class EncounterBuilderViewModelTest {
         assertTrue(builder.canStart)
         val noEnemies = requireNotNull(builder.enemyCpuInactiveReason)
         assertTrue(noEnemies.contains("alcun avversario"))
-        assertTrue(enemyCpuInactiveWarning(noEnemies).contains("sessione mono-fazione"))
-        assertFalse(enemyCpuInactiveWarning(noEnemies).contains("esplorativa"))
+        assertTrue(enemyCpuInactiveWarning(noEnemies, ItalianStrings).contains("sessione mono-fazione"))
+        assertFalse(enemyCpuInactiveWarning(noEnemies, ItalianStrings).contains("esplorativa"))
 
         builder.setSelected(hero.id, false)
         builder.setSelected(creature.id, true)
@@ -209,10 +210,12 @@ class EncounterBuilderViewModelTest {
     }
 
     @Test
-    fun `il ritmo scelto nella procedura arriva nella partita`() {
+    fun `il ritmo delle impostazioni arriva nella partita`() {
         val builder = EncounterBuilderViewModel(roster(), seedProvider = { 1L })
         assertEquals(EnemyCpuSpeed.NORMAL, builder.enemyCpuSpeed)
 
+        // La procedura non chiede piu' il ritmo: e' la shell ad allinearlo qui a
+        // partire dalle Impostazioni, prima di comporre la presentazione.
         builder.enemyCpuSpeed = EnemyCpuSpeed.SLOW
         val battle = BattleViewModel(builder.startedSession())
         battle.adopt(
@@ -224,16 +227,26 @@ class EncounterBuilderViewModelTest {
         // Senza CPU non c'e' ritmo da salvare: la partita e' tutta del tavolo.
         val sandbox = newEncounterPresentation(builder.mode, null, builder.enemyCpuSpeed)
         assertFalse("enemyCpuSpeed" in sandbox)
+    }
+
+    @Test
+    fun `ricominciare la procedura non tocca il ritmo delle impostazioni`() {
+        val builder = EncounterBuilderViewModel(roster(), seedProvider = { 1L })
+        builder.enemyCpuSpeed = EnemyCpuSpeed.INSTANT
 
         builder.restartWizard()
-        assertEquals(EnemyCpuSpeed.NORMAL, builder.enemyCpuSpeed)
+
+        // La difficolta' e' una scelta della procedura e riparte da Medio; il ritmo
+        // appartiene alle Impostazioni e non ha motivo di essere riportato indietro.
+        assertEquals(EnemyCpuDifficulty.MEDIUM, builder.enemyCpuDifficulty)
+        assertEquals(EnemyCpuSpeed.INSTANT, builder.enemyCpuSpeed)
     }
 
     @Test
     fun `il copy difficolta confronta i livelli senza promettere piani tra turni`() {
-        val easy = EnemyCpuDifficulty.EASY.italianComparison
-        val medium = EnemyCpuDifficulty.MEDIUM.italianComparison
-        val hard = EnemyCpuDifficulty.SORRY_FOR_YOU.italianComparison
+        val easy = EnemyCpuDifficulty.EASY.comparison(ItalianStrings)
+        val medium = EnemyCpuDifficulty.MEDIUM.comparison(ItalianStrings)
+        val hard = EnemyCpuDifficulty.SORRY_FOR_YOU.comparison(ItalianStrings)
 
         assertTrue(easy.contains("Rispetto a Medio"))
         assertTrue(easy.contains("scelte semplici"))

@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "source": {
-    "title": "System Reference Document 5.2.1 (italiano)",
+    "title": "System Reference Document 5.2.1",
+    "language": "it",
     "pages": "385-405"
   },
   "counts": {

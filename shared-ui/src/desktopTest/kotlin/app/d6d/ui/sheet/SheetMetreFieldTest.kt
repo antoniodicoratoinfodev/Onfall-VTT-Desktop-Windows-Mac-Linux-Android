@@ -1,8 +1,9 @@
 package app.d6d.ui.sheet
 
-import app.d6d.sheet.feetFromMetres
-import app.d6d.sheet.metresFromFeet
-import app.d6d.sheet.parseMetres
+import app.d6d.i18n.AppLanguage
+import app.d6d.sheet.i18n.distanceValue
+import app.d6d.sheet.i18n.feetFromDistance
+import app.d6d.sheet.i18n.parseDistance
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -19,22 +20,24 @@ import org.junit.jupiter.api.Test
 class SheetMetreFieldTest {
 
     /** Un campo simulato: stessa logica del composable, senza Compose. */
-    private class Field(initialFeet: Int) {
+    private class Field(initialFeet: Int, private val language: AppLanguage = AppLanguage.ITALIAN) {
         var feet = initialFeet
             private set
-        var draft = metresFromFeet(initialFeet)
+        var draft = distanceValue(initialFeet, language)
             private set
 
         fun type(text: String) {
             val cleaned = text.trim()
             if (!cleaned.matches(Regex("""-?\d*(?:[,.]\d*)?"""))) return
             draft = cleaned
-            parseMetres(cleaned)?.let { metres ->
-                val updated = feetFromMetres(metres)
+            parseDistance(cleaned)?.let { distance ->
+                val updated = feetFromDistance(distance, language)
                 if (updated != feet) {
                     feet = updated
                     // È l'effetto agganciato a `feet`: riallinea solo se necessario.
-                    if (metreDraftIsStale(draft, feet)) draft = metresFromFeet(feet)
+                    if (distanceDraftIsStale(draft, feet, language)) {
+                        draft = distanceValue(feet, language)
+                    }
                 }
             }
         }
@@ -42,11 +45,11 @@ class SheetMetreFieldTest {
         /** Cambio che arriva da fuori: Undo, caricamento di un'altra scheda. */
         fun receiveExternal(newFeet: Int) {
             feet = newFeet
-            if (metreDraftIsStale(draft, feet)) draft = metresFromFeet(feet)
+            if (distanceDraftIsStale(draft, feet, language)) draft = distanceValue(feet, language)
         }
 
         fun blur() {
-            draft = metresFromFeet(feet)
+            draft = distanceValue(feet, language)
         }
     }
 
@@ -122,11 +125,23 @@ class SheetMetreFieldTest {
 
     @Test
     fun `la stessa misura scritta in modo diverso non e' obsoleta`() {
-        assertFalse(metreDraftIsStale("1,5", 5))
-        assertFalse(metreDraftIsStale("1.5", 5))
-        assertFalse(metreDraftIsStale("1,50", 5))
-        assertFalse(metreDraftIsStale("9", 30))
-        assertTrue(metreDraftIsStale("1,5", 30))
-        assertTrue(metreDraftIsStale("", 30))
+        assertFalse(distanceDraftIsStale("1,5", 5, AppLanguage.ITALIAN))
+        assertFalse(distanceDraftIsStale("1.5", 5, AppLanguage.ITALIAN))
+        assertFalse(distanceDraftIsStale("1,50", 5, AppLanguage.ITALIAN))
+        assertFalse(distanceDraftIsStale("9", 30, AppLanguage.ITALIAN))
+        assertTrue(distanceDraftIsStale("1,5", 30, AppLanguage.ITALIAN))
+        assertTrue(distanceDraftIsStale("", 30, AppLanguage.ITALIAN))
+    }
+
+    @Test
+    fun `il campo inglese legge e scrive direttamente i piedi`() {
+        val field = Field(initialFeet = 30, language = AppLanguage.ENGLISH)
+
+        assertEquals("30", field.draft)
+        field.type("45")
+
+        assertEquals("45", field.draft)
+        assertEquals(45, field.feet)
+        assertFalse(distanceDraftIsStale("45", 45, AppLanguage.ENGLISH))
     }
 }

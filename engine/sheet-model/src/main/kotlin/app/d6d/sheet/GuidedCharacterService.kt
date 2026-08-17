@@ -1,5 +1,7 @@
 package app.d6d.sheet
 
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.pick
 import app.d6d.domain.combat.DamageType
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.CharacterClassId
@@ -16,13 +18,34 @@ import app.d6d.rules.character.StartingArmor
 import app.d6d.rules.character.WeaponDefinition
 import app.d6d.rules.character.WeaponProperty
 import app.d6d.rules.character.WeaponReach
+import app.d6d.sheet.i18n.distanceUnit
+import app.d6d.sheet.i18n.distanceValue
 
 /**
  * Applica una creazione/avanzamento validato alla scheda senza duplicare le
  * tabelle del content pack nella UI.
  */
-class GuidedCharacterService(val pack: RulesContentPack) {
+class GuidedCharacterService(
+    val pack: RulesContentPack,
+    private val optionLabelsForId: (String) -> List<String> = {
+        listOf(defaultOptionLabel(it))
+    },
+) {
     private val progressionEngine = CharacterProgressionEngine(pack)
+    private val language = if (pack.manifest.locale.startsWith("en", ignoreCase = true)) {
+        AppLanguage.ENGLISH
+    } else {
+        AppLanguage.ITALIAN
+    }
+    private fun say(italian: String, english: String): String = language.pick(italian, english)
+
+    /** Prima viene l'etichetta da salvare; le altre riconoscono una scheda creata nell'altra lingua. */
+    private fun optionLabels(id: String): List<String> =
+        optionLabelsForId(id).filter(String::isNotBlank).distinct().ifEmpty {
+            listOf(defaultOptionLabel(id))
+        }
+
+    private fun optionLabel(id: String): String = optionLabels(id).first()
 
     fun requirements(
         sheet: CharacterSheet,
@@ -75,17 +98,20 @@ class GuidedCharacterService(val pack: RulesContentPack) {
             }
             .flatMap { byId[it.id]?.optionIds.orEmpty() }
             .filter { it.toSkillOrNull() == null }
-            .filter { sheet.toolProficiencies.containsListedEntry(optionLabel(it)) }
+            .filter { id -> optionLabels(id).any(sheet.toolProficiencies::containsListedEntry) }
         val duplicateLanguages = requirements
             .filter { it.kind == ChoiceKind.LANGUAGE_PROFICIENCY }
             .flatMap { byId[it.id]?.optionIds.orEmpty() }
-            .filter { sheet.languages.containsListedEntry(optionLabel(it)) }
+            .filter { id -> optionLabels(id).any(sheet.languages::containsListedEntry) }
         val localIssues = buildList {
             if (invalidExpertise.isNotEmpty()) {
                 add(
                     ProgressionIssue(
                         "EXPERTISE_REQUIRES_PROFICIENCY",
-                        "Maestria richiede una competenza nelle abilità già posseduta o appena scelta.",
+                        say(
+                            "Maestria richiede una competenza nelle abilità già posseduta o appena scelta.",
+                            "Expertise requires a Skill proficiency you already have or just selected.",
+                        ),
                     ),
                 )
             }
@@ -93,7 +119,10 @@ class GuidedCharacterService(val pack: RulesContentPack) {
                 add(
                     ProgressionIssue(
                         "SKILL_ALREADY_PROFICIENT",
-                        "Non puoi scegliere di nuovo una competenza nelle abilità già posseduta.",
+                        say(
+                            "Non puoi scegliere di nuovo una competenza nelle abilità già posseduta.",
+                            "You can't select a Skill proficiency you already have.",
+                        ),
                     ),
                 )
             }
@@ -101,7 +130,10 @@ class GuidedCharacterService(val pack: RulesContentPack) {
                 add(
                     ProgressionIssue(
                         "TOOL_ALREADY_PROFICIENT",
-                        "Non puoi scegliere di nuovo una competenza negli strumenti già posseduta.",
+                        say(
+                            "Non puoi scegliere di nuovo una competenza negli strumenti già posseduta.",
+                            "You can't select a Tool proficiency you already have.",
+                        ),
                     ),
                 )
             }
@@ -109,7 +141,10 @@ class GuidedCharacterService(val pack: RulesContentPack) {
                 add(
                     ProgressionIssue(
                         "LANGUAGE_ALREADY_KNOWN",
-                        "Non puoi scegliere di nuovo una lingua già conosciuta.",
+                        say(
+                            "Non puoi scegliere di nuovo una lingua già conosciuta.",
+                            "You can't select a language you already know.",
+                        ),
                     ),
                 )
             }
@@ -374,7 +409,11 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         val languages = appendDistinctText(
             sheet.languages,
             (
-                cumulativeClassLevels.flatMap { it.languageProficiencyGrants } +
+                // Soltanto il livello appena ottenuto concede nuove lingue. Ripassare
+                // ogni volta tutte le righe precedenti duplicava una concessione
+                // salvata in italiano quando il livello successivo veniva applicato
+                // con il pacchetto inglese ("Druidico, Druidic").
+                definition.level(progressed.levelIn(request.classId)).languageProficiencyGrants +
                     selectedLanguages
                 ).distinct().joinToString(", "),
         )
@@ -386,6 +425,7 @@ class GuidedCharacterService(val pack: RulesContentPack) {
             it.toWeaponEntry(
                 abilityScores = abilityScores,
                 proficiencyBonus = proficiencyBonusForLevel(progressed.totalLevel),
+                language = language,
             )
         }
         val weapons = sheet.weapons +
@@ -546,19 +586,37 @@ class GuidedCharacterService(val pack: RulesContentPack) {
         newOptionId: String,
         allowedOptionIds: Set<String>,
     ): CharacterSheet {
-        require(sheet.progression.configured) { "La progressione guidata non e' configurata." }
-        require(oldOptionId != newOptionId) { "La nuova opzione deve essere diversa da quella sostituita." }
-        require(oldOptionId in sheet.progression.selectedFeatureIds) {
-            "L'opzione da sostituire non e' posseduta dal personaggio."
+        require(sheet.progression.configured) {
+            say("La progressione guidata non è configurata.", "Guided progression isn't configured.")
         }
-        require(newOptionId in allowedOptionIds) { "La nuova opzione non e' disponibile." }
+        require(oldOptionId != newOptionId) {
+            say(
+                "La nuova opzione deve essere diversa da quella sostituita.",
+                "The new option must differ from the option being replaced.",
+            )
+        }
+        require(oldOptionId in sheet.progression.selectedFeatureIds) {
+            say(
+                "L'opzione da sostituire non è posseduta dal personaggio.",
+                "The character doesn't have the option being replaced.",
+            )
+        }
+        require(newOptionId in allowedOptionIds) {
+            say("La nuova opzione non è disponibile.", "The new option isn't available.")
+        }
         require(newOptionId !in sheet.progression.selectedFeatureIds) {
-            "La nuova opzione e' gia' posseduta dal personaggio."
+            say(
+                "La nuova opzione è già posseduta dal personaggio.",
+                "The character already has the new option.",
+            )
         }
 
         val containingSelections = sheet.progression.selections.count { oldOptionId in it.optionIds }
         require(containingSelections == 1) {
-            "La scelta da sostituire non e' rappresentata in modo univoco nella progressione."
+            say(
+                "La scelta da sostituire non è rappresentata in modo univoco nella progressione.",
+                "The selection being replaced isn't represented uniquely in the progression.",
+            )
         }
         val updatedProgression = sheet.progression.copy(
             selections = sheet.progression.selections.map { selection ->
@@ -663,10 +721,10 @@ class GuidedCharacterService(val pack: RulesContentPack) {
                     ritual = spell.ritual,
                     materials = "M" in spell.components,
                     note = when {
-                        id in magicInitiateSpellIds -> "Iniziato alla magia"
-                        id in progression.alwaysPreparedSpellIds -> "Sempre preparato"
+                        id in magicInitiateSpellIds -> say("Iniziato alla magia", "Magic Initiate")
+                        id in progression.alwaysPreparedSpellIds -> say("Sempre preparato", "Always prepared")
                         id in progression.spellbookSpellIds && id !in progression.preparedSpellIds ->
-                            "Nel libro degli incantesimi"
+                            say("Nel libro degli incantesimi", "In the spellbook")
                         else -> ""
                     },
                 )
@@ -707,6 +765,7 @@ class GuidedCharacterService(val pack: RulesContentPack) {
 fun WeaponDefinition.toWeaponEntry(
     abilityScores: Map<Ability, Int>,
     proficiencyBonus: Int,
+    language: AppLanguage = AppLanguage.ITALIAN,
 ): WeaponEntry {
     fun modifierOf(ability: Ability) = abilityModifier(abilityScores[ability] ?: 10)
     val strength = modifierOf(Ability.STRENGTH)
@@ -728,12 +787,18 @@ fun WeaponDefinition.toWeaponEntry(
         damageType = damageType,
         rangeFeet = attackRangeFeet,
         note = buildString {
-            append("Padronanza: ").append(mastery)
+            append(language.pick("Padronanza: ", "Mastery: ")).append(mastery)
             if (versatileDiceSides > 0) {
-                append(" · a due mani 1d").append(versatileDiceSides)
+                append(language.pick(" · a due mani 1d", " · two-handed 1d"))
+                    .append(versatileDiceSides)
             }
             if (reach == WeaponReach.RANGED || WeaponProperty.THROWN in properties) {
-                append(" · gittata ").append(normalRangeFeet).append('/').append(longRangeFeet)
+                append(language.pick(" · gittata ", " · range "))
+                    .append(distanceValue(normalRangeFeet, language))
+                    .append('/')
+                    .append(distanceValue(longRangeFeet, language))
+                    .append(' ')
+                    .append(distanceUnit(language))
             }
         },
     )
@@ -752,7 +817,7 @@ private fun String.toSkillOrNull(): Skill? {
     }
 }
 
-private fun optionLabel(id: String): String =
+private fun defaultOptionLabel(id: String): String =
     id.substringAfterLast(':')
         .replace('-', ' ')
         .replace('_', ' ')

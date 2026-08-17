@@ -1,5 +1,7 @@
 package app.d6d.sheet
 
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.pick
 import app.d6d.persistence.json.AtomicFiles
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -63,23 +65,45 @@ class ImageStore(private val dataDirectory: Path) {
      * la firma nei primi byte e' la difesa vera, perche' e' il contenuto a essere
      * poi decodificato e mostrato.
      */
-    fun importImage(source: Path): String {
-        require(Files.isRegularFile(source)) { "Il file non esiste: $source" }
+    fun importImage(
+        source: Path,
+        language: AppLanguage = AppLanguage.ITALIAN,
+    ): String {
+        require(Files.isRegularFile(source)) {
+            language.pick("Il file non esiste: $source", "The file does not exist: $source")
+        }
 
         val size = Files.size(source)
         require(size <= MAX_IMAGE_BYTES) {
-            "Immagine troppo grande (${humanBytes(size)}): il limite e' $maxSizeLabel."
+            language.pick(
+                "Immagine troppo grande (${humanBytes(size)}): il limite è $maxSizeLabel.",
+                "The image is too large (${humanBytes(size)}): the limit is $maxSizeLabel.",
+            )
         }
         require(isSupported(source)) {
-            "Formato immagine non supportato: ${source.fileName}. Formati accettati: $acceptedFormatsLabel."
+            language.pick(
+                "Formato immagine non supportato: ${source.fileName}. " +
+                    "Formati accettati: $acceptedFormatsLabel.",
+                "Unsupported image format: ${source.fileName}. " +
+                    "Accepted formats: $acceptedFormatsLabel.",
+            )
         }
         val format = sniffFormat(source)
         require(format != null) {
-            "Il file non e' un'immagine valida o e' danneggiato. Formati accettati: $acceptedFormatsLabel."
+            language.pick(
+                "Il file non è un'immagine valida o è danneggiato. " +
+                    "Formati accettati: $acceptedFormatsLabel.",
+                "The file is not a valid image or is damaged. " +
+                    "Accepted formats: $acceptedFormatsLabel.",
+            )
         }
         val dimensions = imageDimensions(source, format)
         require(dimensions != null) {
-            "Non è possibile leggere le dimensioni dell'immagine: il file è incompleto o danneggiato."
+            language.pick(
+                "Non è possibile leggere le dimensioni dell'immagine: " +
+                    "il file è incompleto o danneggiato.",
+                "The image dimensions cannot be read: the file is incomplete or damaged.",
+            )
         }
         val pixels = dimensions.width.toLong() * dimensions.height.toLong()
         require(
@@ -87,8 +111,12 @@ class ImageStore(private val dataDirectory: Path) {
                 dimensions.height in 1..MAX_IMAGE_SIDE &&
                 pixels <= MAX_IMAGE_PIXELS,
         ) {
-            "Immagine troppo grande (${dimensions.width}×${dimensions.height} pixel): " +
-                "il limite è $maxPixelSizeLabel."
+            language.pick(
+                "Immagine troppo grande (${dimensions.width}×${dimensions.height} pixel): " +
+                    "il limite è $maxPixelSizeLabel.",
+                "The image is too large (${dimensions.width}×${dimensions.height} pixels): " +
+                    "the limit is $maxPixelSizeLabelEn.",
+            )
         }
 
         Files.createDirectories(imagesDirectory)
@@ -347,6 +375,7 @@ class ImageStore(private val dataDirectory: Path) {
         const val maxSizeLabel: String = "32 MB"
 
         const val maxPixelSizeLabel: String = "16 megapixel e 8192 pixel per lato"
+        private const val maxPixelSizeLabelEn: String = "16 megapixels and 8192 pixels per side"
 
         private const val HEADER_BYTES = 32
 

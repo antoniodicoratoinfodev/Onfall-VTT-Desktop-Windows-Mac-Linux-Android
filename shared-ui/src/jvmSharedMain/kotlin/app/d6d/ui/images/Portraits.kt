@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import app.d6d.ui.i18n.AppLocale
 
 /**
  * Scelta di un file dalla piattaforma.
@@ -72,6 +73,9 @@ class PortraitRepository(
     loadOnCreate: Boolean = true,
 ) {
 
+    /** Vocabolario in uso: qui non arriva `LocalStrings`, siamo fuori da Compose. */
+    private val words get() = AppLocale.current.maps
+
     var library by mutableStateOf(PortraitLibrary())
         private set
 
@@ -80,6 +84,11 @@ class PortraitRepository(
         private set
 
     var message by mutableStateOf<String?>(null)
+
+    /** I messaggi sono gia' risolti: al cambio lingua non devono restare indietro. */
+    internal fun onLanguageChanged() {
+        message = null
+    }
 
     private data class CachedBitmap(val image: ImageBitmap?, val estimatedBytes: Long)
 
@@ -143,7 +152,7 @@ class PortraitRepository(
         picker.pickAsync(
             onPicked = { chosen ->
                 if (chosen == null) {
-                    message = "Selezione immagine annullata."
+                    message = words.imageSelectionCancelled
                     onComplete(false)
                 } else {
                     dispatchPicked(
@@ -173,15 +182,15 @@ class PortraitRepository(
         picker.pickAsync(
             onPicked = { chosen ->
                 if (chosen == null) {
-                    message = "Selezione immagine annullata."
+                    message = words.imageSelectionCancelled
                     onPicked(null)
                 } else {
                     dispatchPicked(
                         chosen = chosen,
-                        operation = { store.importImage(chosen) },
+                        operation = { store.importImage(chosen, AppLocale.language) },
                         onSuccess = { storedName ->
                             revision++
-                            message = "Sfondo caricato."
+                            message = words.backgroundLoaded
                             onPicked(storedName)
                         },
                         onFailure = { failure ->
@@ -210,7 +219,7 @@ class PortraitRepository(
         picker.pickAsync(
             onPicked = { chosen ->
                 if (chosen == null) {
-                    message = "Selezione immagine annullata."
+                    message = words.imageSelectionCancelled
                     onComplete(null)
                 } else {
                     dispatchPicked(
@@ -219,7 +228,7 @@ class PortraitRepository(
                         onSuccess = { result ->
                             mapLibrary = result.library
                             revision++
-                            message = "Mappa «${result.entry.name}» aggiunta all'archivio."
+                            message = words.mapAdded(result.entry.name)
                             onComplete(result.entry)
                         },
                         onFailure = { failure ->
@@ -270,7 +279,7 @@ class PortraitRepository(
                 mapLibrary = updated
                 if (deleteImage) removeCached(entry.image)
                 revision++
-                message = "Mappa «${entry.name}» eliminata."
+                message = words.mapDeleted(entry.name)
             },
             onFailure = { message = operationError(it) },
         )
@@ -279,7 +288,7 @@ class PortraitRepository(
     /** Nome iniziale di una mappa: il nome del file scelto, senza estensione. */
     private fun mapDisplayName(source: Path): String {
         val file = source.fileName?.toString().orEmpty()
-        return file.substringBeforeLast('.', file).ifBlank { "Mappa senza nome" }
+        return file.substringBeforeLast('.', file).ifBlank { words.unnamedMap }
     }
 
     fun clearPortrait(definitionId: String) {
@@ -312,7 +321,7 @@ class PortraitRepository(
     private data class MapImport(val library: MapLibrary, val entry: StoredMap)
 
     private fun persistPortrait(definitionId: String, chosen: Path): PortraitImport {
-        val stored = store.importImage(chosen)
+        val stored = store.importImage(chosen, AppLocale.language)
         val previous = library.portraits[definitionId]
         val updated = library.copy(portraits = library.portraits + (definitionId to stored))
         try {
@@ -335,11 +344,11 @@ class PortraitRepository(
         library = result.library
         result.previous?.takeIf { it != result.stored }?.let(::removeCached)
         revision++
-        message = "Ritratto assegnato."
+        message = words.portraitAssigned
     }
 
     private fun persistMap(chosen: Path): MapImport {
-        val stored = store.importImage(chosen)
+        val stored = store.importImage(chosen, AppLocale.language)
         val entry = StoredMap("map-${UUID.randomUUID()}", mapDisplayName(chosen), stored)
         val updated = mapLibrary.copy(maps = mapLibrary.maps + entry)
         try {
@@ -351,12 +360,15 @@ class PortraitRepository(
         return MapImport(updated, entry)
     }
 
-    private fun pickerError(failure: Throwable): String =
-        "Impossibile aprire l'immagine: ${failure.message ?: failure::class.simpleName ?: "errore sconosciuto"}"
+    private fun pickerError(failure: Throwable): String = words.cannotOpenImage(
+        failure.message
+            ?: failure::class.simpleName
+            ?: AppLocale.current.battle.unknownError,
+    )
 
     private fun operationError(failure: Throwable): String = when (failure) {
-        is IllegalArgumentException -> failure.message ?: "Immagine non valida."
-        is java.io.IOException -> "Errore su disco: ${failure.message}"
+        is IllegalArgumentException -> failure.message ?: words.invalidImage
+        is java.io.IOException -> words.diskError(failure.message.orEmpty())
         else -> pickerError(failure)
     }
 

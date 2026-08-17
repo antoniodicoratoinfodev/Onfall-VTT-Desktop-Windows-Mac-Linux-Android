@@ -1,6 +1,8 @@
 import unittest
 
-from extract_srd_beasts import content_slug, parse_records
+from extract_srd_beasts import PROFILES, content_slug, parse_records
+
+ITALIAN = PROFILES["it"]
 
 
 class ExtractSrdBeastsTest(unittest.TestCase):
@@ -36,7 +38,7 @@ Velocità 18 m
 GS 2 (PE 450; BC +2)
 """
 
-        records = parse_records(fixture)
+        records = parse_records(fixture, ITALIAN)
 
         self.assertEqual(["Topo", "Lupo"], [record["name"] for record in records])
         self.assertIn("Morso.", records[0]["stat_block"])
@@ -55,7 +57,7 @@ Azioni
 Pungiglione. Colpito: 5 danni perforanti.
 """
 
-        record = parse_records(fixture)[0]
+        record = parse_records(fixture, ITALIAN)[0]
 
         self.assertEqual("srd521-it:beast:vespa-gigante", record["id"])
         self.assertTrue(record["has_fly_speed"])

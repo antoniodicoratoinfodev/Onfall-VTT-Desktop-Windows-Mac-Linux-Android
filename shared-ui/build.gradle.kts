@@ -49,6 +49,10 @@ kotlin {
         named("desktopTest") {
             dependencies {
                 implementation(libs.junit.jupiter)
+                // La riflessione serve a un test solo, quello che percorre tutto
+                // il vocabolario voce per voce: elencarle a mano vorrebbe dire
+                // riscrivere proprio il difetto che deve trovare.
+                implementation(kotlin("reflect"))
                 // Il ritmo del turno CPU si prova a tempo virtuale: i test non
                 // devono aspettare davvero le pause che rendono leggibile la partita.
                 implementation(libs.kotlinx.coroutines.test)

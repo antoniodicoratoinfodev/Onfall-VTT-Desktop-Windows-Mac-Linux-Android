@@ -3,7 +3,12 @@ package app.d6d.ui.sheet
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.d6d.content.srd521it.Srd521ItContent
+import app.d6d.ui.content.guidedCharacterService
+import app.d6d.ui.content.guidedCharacterServiceFor
+import app.d6d.ui.content.srdCatalog
+import app.d6d.ui.content.regeneratedIn
+import app.d6d.ui.content.retranslatedTo
+import app.d6d.ui.content.srdPack
 import app.d6d.content.srd521it.SrdBeastForm
 import app.d6d.content.srd521it.SrdBeasts
 import app.d6d.content.srd521it.SrdChoiceOption
@@ -19,27 +24,35 @@ import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.SpellcastingKind
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
+import app.d6d.ui.i18n.AppLocale
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.LocalizedText
+import app.d6d.ui.i18n.literalText
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.GuidedCharacterService
 import app.d6d.sheet.MonsterStatBlock
 import app.d6d.sheet.SheetLibrary
 import app.d6d.sheet.SheetStore
+import app.d6d.sheet.i18n.localizedSheetError
 import app.d6d.ui.content.SessionTemplates
 import java.io.IOException
 
 /** Quale delle due schede si sta redigendo. */
-enum class SheetKind(val label: String) {
-    PERSONAGGIO("Personaggi"),
-    MOSTRO("Mostri"),
+enum class SheetKind {
+    PERSONAGGIO,
+    MOSTRO,
+}
+
+fun SheetKind.label(strings: Strings): String = when (this) {
+    SheetKind.PERSONAGGIO -> strings.compendium.characters
+    SheetKind.MOSTRO -> strings.sheet.monsters
 }
 
 /** Sezione strutturata della scheda modificabile dal Compendio. */
 enum class CharacterTraitSection(
-    val label: String,
     val catalogKinds: Set<RuleElementKind>,
 ) {
     FEATURE(
-        "privilegi",
         setOf(
             RuleElementKind.CLASS_FEATURE,
             RuleElementKind.SUBCLASS_FEATURE,
@@ -49,7 +62,6 @@ enum class CharacterTraitSection(
         ),
     ),
     FEAT(
-        "talenti",
         setOf(
             RuleElementKind.ORIGIN_FEAT,
             RuleElementKind.GENERAL_FEAT,
@@ -82,12 +94,35 @@ class SheetViewModel(
     private val store: SheetStore,
     loadOnCreate: Boolean = true,
 ) {
-    private val guidedCharacters by lazy { GuidedCharacterService(Srd521ItContent.pack) }
+    private val guidedCharacters: GuidedCharacterService get() = guidedCharacterService
 
-    val srdClasses get() = Srd521ItContent.pack.classes
+    val srdClasses get() = srdPack.classes
 
     fun backgroundDefinition(id: String): BackgroundDefinition? =
-        Srd521ItContent.pack.background(id)
+        srdPack.background(id)
+
+    /** Nome delle classi guidate derivato dagli ID, quindi sempre nella lingua corrente. */
+    fun displayedClassName(sheet: CharacterSheet = character): String {
+        if (!sheet.progression.configured) return sheet.className
+        return sheet.progression.classLevels.joinToString(" / ") { classLevel ->
+            val name = srdPack.classes.firstOrNull { it.id == classLevel.classId }?.name
+                ?: classLevel.classId.name
+            "$name ${classLevel.level}"
+        }.ifBlank { sheet.className }
+    }
+
+    /** Come la classe, una sottoclasse guidata è contenuto SRD e non testo libero. */
+    fun displayedSubclassName(sheet: CharacterSheet = character): String {
+        if (!sheet.progression.configured || sheet.progression.subclasses.isEmpty()) {
+            return sheet.subclass
+        }
+        val savedNames = sheet.subclass.split(" / ")
+        return sheet.progression.subclasses.mapIndexed { index, subclass ->
+            srdPack.element(subclass.subclassId)?.name
+                ?: savedNames.getOrNull(index)
+                ?: subclass.subclassId
+        }.joinToString(" / ")
+    }
 
     var library by mutableStateOf(SheetLibrary())
         private set
@@ -128,7 +163,83 @@ class SheetViewModel(
     var selectedId by mutableStateOf<String?>(null)
         private set
 
-    var status by mutableStateOf<String?>(null)
+    /**
+     * Esito dell'ultima operazione sull'archivio.
+     *
+     * Come il messaggio del tavolo, conserva il modo di dire la frase e non la
+     * frase: cosi' un «Scheda salvata.» rimasto a schermo diventa «Sheet saved.»
+     * appena si cambia lingua, invece di restare indietro.
+     */
+    private var statusText by mutableStateOf<LocalizedText?>(null)
+
+    val status: String? get() = statusText?.resolve(AppLocale.current)
+
+    private fun say(text: LocalizedText?) {
+        statusText = text
+    }
+
+    /**
+     * Riporta nella lingua corrente la scheda aperta **e tutto l'archivio**.
+     *
+     * Tradurre la sola scheda aperta sarebbe peggio che non tradurre niente:
+     * [isDirty] la confronta con la copia dentro [library], e una copia rimasta
+     * nella lingua di prima farebbe risultare non salvato un personaggio che
+     * nessuno ha toccato — con l'avviso di modifiche pendenti che blocca la
+     * navigazione. Le due cose si muovono insieme, sempre.
+     *
+     * L'archivio si traduce **in memoria e basta**: cambiare lingua e' una
+     * preferenza di lettura, non una modifica ai personaggi, e riscrivere i file
+     * di chi gioca per un interruttore delle impostazioni sarebbe una liberta'
+     * che non ci compete. Chi salva, salva quello che vede.
+     *
+     * Il messaggio invece si scarta: gli errori letterali non si ritraducono.
+     */
+    internal fun onLanguageChanged() {
+        say(null)
+        alignSheetLanguage()
+    }
+
+    /**
+     * Allinea archivio e scheda aperta alla lingua corrente, **e lo scrive**.
+     *
+     * Si chiama al caricamento oltre che al cambio lingua: un archivio scritto
+     * in italiano e riaperto con la preferenza inglese deve mostrarsi in inglese
+     * subito. Ogni scheda porta con se' la lingua del proprio testo, quindi un
+     * archivio misto si allinea voce per voce.
+     *
+     * Il salvataggio qui e' una migrazione esplicita e atomica, e c'e' per una
+     * ragione precisa. Tenere la traduzione solo in memoria sembrava piu'
+     * prudente, ma non lo era: `save`, `delete`, la sincronizzazione dal
+     * combattimento e il ripristino dei contenuti inclusi riscrivono **tutta**
+     * la libreria, quindi la traduzione finiva su disco lo stesso — per meta',
+     * quando capitava, e come effetto collaterale del salvataggio di un mostro.
+     * Fra una scrittura dichiarata e una accidentale, la dichiarata e' l'unica
+     * difendibile. La conversione e' senza perdita: `SheetTranslationTest` lo
+     * verifica con un giro di andata e ritorno.
+     *
+     * Se il disco non e' scrivibile la traduzione resta comunque in memoria:
+     * leggere in inglese non deve dipendere dal permesso di scrittura.
+     */
+    private fun alignSheetLanguage() {
+        val target = AppLocale.language
+        val staleCharacters = library.characters.any { it.contentLanguage != target }
+        val staleMonsters = library.monsters.any { it.contentLanguage != target }
+        if (staleCharacters || staleMonsters) {
+            library = library.copy(
+                characters = library.characters.map { it.retranslatedTo(target) },
+                monsters = library.monsters.map { it.regeneratedIn(target) },
+            )
+            runCatching { store.save(library) }
+        }
+        if (monster.contentLanguage != target) {
+            monster = monster.regeneratedIn(target)
+        }
+        pristineNewMonster = pristineNewMonster?.regeneratedIn(target)
+        if (character.contentLanguage != target) {
+            character = character.retranslatedTo(target)
+        }
+        pristineNewCharacter = pristineNewCharacter?.retranslatedTo(target)
+    }
 
     private var pristineNewCharacter: CharacterSheet? = null
     private var pristineNewMonster: MonsterStatBlock? = null
@@ -183,10 +294,20 @@ class SheetViewModel(
             // salvata prima che esistessero, o con un pacchetto piu' vecchio, li
             // ha vuoti. Si ricalcolano leggendo, e si riscrivono solo se davvero
             // cambiati, cosi' un archivio gia' allineato non viene toccato.
+            //
+            // Ogni scheda si rigenera col pacchetto della **propria** lingua, non
+            // di quella a schermo: la pulizia del testo generato confronta con i
+            // nomi del pacchetto, e col pacchetto sbagliato non riconosce nulla
+            // di cio' che trova — quindi non ricalcolerebbe, riscriverebbe. Per
+            // giunta prima dell'allineamento linguistico, e con la possibilita'
+            // di finire su disco poche righe piu' sotto.
             val refreshed = fromDisk.copy(
-                characters = fromDisk.characters
-                    .map { guidedCharacters.withRefreshedEffects(it, refreshCatalog) }
-                    .map(guidedCharacters::withoutGeneratedFeatureText),
+                characters = fromDisk.characters.map { sheet ->
+                    val service = guidedCharacterServiceFor(sheet.contentLanguage)
+                    service.withoutGeneratedFeatureText(
+                        service.withRefreshedEffects(sheet, refreshCatalog),
+                    )
+                },
             )
             // Riscrivere e' un'ottimizzazione, non una condizione: se il disco non
             // e' scrivibile l'archivio deve aprirsi lo stesso, con gli effetti
@@ -198,10 +319,14 @@ class SheetViewModel(
                 fromDisk
             }
         } catch (failure: IOException) {
-            status = "Errore su disco: ${failure.message}"
+            say { it.sheet.diskError(failure.message.orEmpty()) }
             return SheetNavigationResult.FAILED
         } catch (failure: IllegalArgumentException) {
-            status = "Scheda non valida: ${failure.message}"
+            say {
+                it.sheet.invalidSheet(
+                    localizedSheetError(failure.message.orEmpty(), it.language),
+                )
+            }
             return SheetNavigationResult.FAILED
         }
 
@@ -209,13 +334,19 @@ class SheetViewModel(
         // prima scrittura del seed) sono terminate con successo.
         library = loaded
         initialized = true
+        // Prima di selezionare: la selezione copia dalla libreria nella scheda
+        // aperta, e copiare da un archivio non allineato riporterebbe dentro il
+        // testo nella lingua sbagliata.
+        alignSheetLanguage()
+        // Da `library`, non da `loaded`: la selezione copia la scheda dentro
+        // quella aperta, e `loaded` e' ancora com'era su disco.
         when (kind) {
-            SheetKind.PERSONAGGIO -> loaded.characters.firstOrNull()?.let(::selectCharacterInternal)
+            SheetKind.PERSONAGGIO -> library.characters.firstOrNull()?.let(::selectCharacterInternal)
                 ?: newSheetInternal()
-            SheetKind.MOSTRO -> loaded.monsters.firstOrNull()?.let(::selectMonsterInternal)
+            SheetKind.MOSTRO -> library.monsters.firstOrNull()?.let(::selectMonsterInternal)
                 ?: newSheetInternal()
         }
-        status = "Archivio caricato."
+        say { it.sheet.archiveLoaded }
         return SheetNavigationResult.APPLIED
     }
 
@@ -233,7 +364,7 @@ class SheetViewModel(
             SheetKind.MOSTRO -> library.monsters.firstOrNull()?.let(::selectMonsterInternal)
                 ?: newSheetInternal()
         }
-        status = null
+        say(null)
         return SheetNavigationResult.APPLIED
     }
 
@@ -247,7 +378,7 @@ class SheetViewModel(
             ?: return notFoundResult()
         currentKind = SheetKind.PERSONAGGIO
         selectCharacterInternal(selected)
-        status = null
+        say(null)
         return SheetNavigationResult.APPLIED
     }
 
@@ -261,18 +392,18 @@ class SheetViewModel(
             ?: return notFoundResult()
         currentKind = SheetKind.MOSTRO
         selectMonsterInternal(selected)
-        status = null
+        say(null)
         return SheetNavigationResult.APPLIED
     }
 
     fun newSheet(discardUnsavedChanges: Boolean = false): SheetNavigationResult {
         if (isDirty && !discardUnsavedChanges) return unsavedResult()
         newSheetInternal()
-        status = "Nuova scheda: compila e salva."
+        say { it.sheet.newSheetFillAndSave }
         return SheetNavigationResult.APPLIED
     }
 
-    fun save(): Boolean = guard("Scheda salvata.") {
+    fun save(): Boolean = guard(LocalizedText { it.sheet.sheetSaved }) {
         val updatedLibrary = when (kind) {
             SheetKind.PERSONAGGIO -> library.copy(
                 characters = library.characters.filterNot { it.id == character.id } + character,
@@ -293,7 +424,7 @@ class SheetViewModel(
         onSaved?.invoke(kind)
     }
 
-    fun delete(id: String): Boolean = guard("Scheda eliminata.") {
+    fun delete(id: String): Boolean = guard(LocalizedText { it.sheet.sheetDeleted }) {
         val deletedKind = kind
         val deletingSelection = selectedId == id
         val updatedLibrary = when (kind) {
@@ -320,7 +451,7 @@ class SheetViewModel(
      * resta autorevole, quindi un'edit al tavolo deve confluire nella scheda, non
      * solo nel catalogo. Non sposta la selezione ne' la scheda in modifica.
      */
-    fun upsertCharacterSilently(sheet: CharacterSheet): Boolean = guard("Scheda aggiornata dalla battaglia.") {
+    fun upsertCharacterSilently(sheet: CharacterSheet): Boolean = guard(LocalizedText { it.sheet.sheetUpdatedFromBattle }) {
         val editingThisSheet = selectedId == sheet.id && kind == SheetKind.PERSONAGGIO
         val preserveDraft = editingThisSheet && isDirty
         val updatedLibrary = library.copy(
@@ -332,7 +463,7 @@ class SheetViewModel(
         onSaved?.invoke(SheetKind.PERSONAGGIO)
     }
 
-    fun upsertMonsterSilently(block: MonsterStatBlock): Boolean = guard("Stat block aggiornato dalla battaglia.") {
+    fun upsertMonsterSilently(block: MonsterStatBlock): Boolean = guard(LocalizedText { it.sheet.statBlockUpdatedFromBattle }) {
         val editingThisBlock = selectedId == block.id && kind == SheetKind.MOSTRO
         val preserveDraft = editingThisBlock && isDirty
         val updatedLibrary = library.copy(
@@ -362,7 +493,7 @@ class SheetViewModel(
         val missingCharacters = characters.filterNot { it.id in knownCharacters }
         val missingMonsters = monsters.filterNot { it.id in knownMonsters }
         if (missingCharacters.isEmpty() && missingMonsters.isEmpty()) return false
-        return guard("Schede del template ripristinate.") {
+        return guard(LocalizedText { it.sheet.templateSheetsRestored }) {
             val updatedLibrary = library.copy(
                 characters = library.characters + missingCharacters,
                 monsters = library.monsters + missingMonsters,
@@ -390,21 +521,28 @@ class SheetViewModel(
 
     fun recoverCharacterResources(period: RecoveryPeriod) {
         character = character.recoveredAfter(period)
-        status = if (period == RecoveryPeriod.LONG_REST) {
-            "Risorse da riposo lungo recuperate."
-        } else {
-            "Risorse da riposo breve recuperate."
-        }
+        say(
+            if (period == RecoveryPeriod.LONG_REST) {
+                LocalizedText { it.sheet.longRestResourcesRecovered }
+            } else {
+                LocalizedText { it.sheet.shortRestResourcesRecovered }
+            },
+        )
     }
 
     /** Forme attualmente apprese tramite le scelte di Forma selvatica. */
     fun knownWildShapeForms(): List<SrdBeastForm> =
-        character.progression.selectedFeatureIds.mapNotNull(SrdBeasts::byId)
+        character.progression.selectedFeatureIds.mapNotNull { id ->
+            SrdBeasts.byId(id, AppLocale.language)
+        }
 
     /** Forme legali al livello attuale che il druido non conosce ancora. */
     fun wildShapeReplacementOptions(): List<SrdBeastForm> {
         val knownIds = knownWildShapeForms().mapTo(mutableSetOf()) { it.id }
-        return SrdBeasts.availableAt(character.progression.levelIn(CharacterClassId.DRUID))
+        return SrdBeasts.availableAt(
+            character.progression.levelIn(CharacterClassId.DRUID),
+            AppLocale.language,
+        )
             .filterNot { it.id in knownIds }
     }
 
@@ -416,7 +554,10 @@ class SheetViewModel(
     fun longRestAndReplaceWildShapeForm(oldFormId: String, newFormId: String): Boolean =
         runCatching {
             val legalIds = SrdBeasts
-                .availableAt(character.progression.levelIn(CharacterClassId.DRUID))
+                .availableAt(
+                    character.progression.levelIn(CharacterClassId.DRUID),
+                    AppLocale.language,
+                )
                 .mapTo(mutableSetOf()) { it.id }
             guidedCharacters.replaceSelectedOption(
                 sheet = character,
@@ -427,13 +568,16 @@ class SheetViewModel(
         }.fold(
             onSuccess = { updated ->
                 character = updated
-                val oldName = SrdBeasts.byId(oldFormId)?.name ?: oldFormId
-                val newName = SrdBeasts.byId(newFormId)?.name ?: newFormId
-                status = "Riposo lungo completato: $oldName sostituita con $newName."
+                val oldName = SrdBeasts.byId(oldFormId, AppLocale.language)?.name ?: oldFormId
+                val newName = SrdBeasts.byId(newFormId, AppLocale.language)?.name ?: newFormId
+                say { it.sheet.longRestFormSwapped(oldName, newName) }
                 true
             },
             onFailure = { failure ->
-                status = failure.message ?: "Impossibile sostituire la forma conosciuta."
+                say(
+                    failure.message?.let(::literalText)
+                        ?: LocalizedText { it.sheet.cannotSwapKnownForm },
+                )
                 false
             },
         )
@@ -480,6 +624,7 @@ class SheetViewModel(
             classLevel = character.progression.levelIn(classId) + 1,
             sheet = character,
             provisionalSelections = provisionalSelections,
+            language = AppLocale.language,
         )
 
     fun fixedHitPointIncrease(classId: CharacterClassId): Int =
@@ -488,18 +633,21 @@ class SheetViewModel(
     fun advanceCharacter(request: LevelUpRequest): Boolean {
         val validation = guidedCharacters.validate(character, request)
         if (!validation.valid) {
-            status = validation.issues.joinToString("\n") { it.message }
+            say(literalText(validation.issues.joinToString("\n") { it.message }))
             return false
         }
         character = guidedCharacters.withRefreshedEffects(
             guidedCharacters.advance(character, request),
             abilityCatalog,
         )
-        status = if (character.effectiveLevel == 1) {
-            "Personaggio SRD creato: completa i dettagli narrativi e salva."
-        } else {
-            "Livello ${character.effectiveLevel} applicato. Controlla e salva la scheda."
-        }
+        val level = character.effectiveLevel
+        say(
+            if (level == 1) {
+                LocalizedText { it.sheet.srdCharacterCreated }
+            } else {
+                LocalizedText { it.sheet.levelApplied(level) }
+            },
+        )
         return true
     }
 
@@ -575,7 +723,7 @@ class SheetViewModel(
         return abilityCatalog.any { candidate ->
             candidate.id in activeIds &&
                 candidate.category in fightingStyleFeatureKinds &&
-                candidate.name.startsWith("Stile di combattimento", ignoreCase = true)
+                candidate.name.startsWith(AppLocale.current.sheet.fightingStyle, ignoreCase = true)
         }
     }
 
@@ -602,7 +750,7 @@ class SheetViewModel(
     ): Boolean {
         val ability = abilityCatalog.firstOrNull { it.id == abilityId }
         if (ability == null || ability.category !in section.catalogKinds) {
-            status = "La voce scelta non appartiene alla lista dei ${section.label}."
+            say { it.sheet.entryNotInSection(section.label(it)) }
             return false
         }
 
@@ -627,21 +775,24 @@ class SheetViewModel(
             ),
             abilityCatalog,
         )
-        status = if (selected) {
-            "«${ability.name}» aggiunto alla scheda."
-        } else {
-            "«${ability.name}» rimosso dalla scheda."
-        }
+        val abilityName = ability.name
+        say(
+            if (selected) {
+                LocalizedText { it.sheet.abilityAddedToSheet(abilityName) }
+            } else {
+                LocalizedText { it.sheet.abilityRemovedFromSheet(abilityName) }
+            },
+        )
         return true
     }
 
     /** Crea o aggiorna una capacità del Compendio senza toccare la scheda aperta. */
     fun upsertAbility(ability: CatalogAbility): Boolean {
         if (ability.immutable || bundledSrdAbilities.any { it.id == ability.id }) {
-            status = "Il contenuto SRD è in sola lettura. Duplicalo per creare una variante personale."
+            say { it.sheet.bundledSrdReadOnly }
             return false
         }
-        return guard("Abilità salvata.") {
+        return guard(LocalizedText { it.sheet.abilitySaved }) {
         // La conversione applica in un solo punto tutte le validazioni meccaniche.
             ability.toDefinition()
             val updatedLibrary = library.copy(
@@ -665,14 +816,14 @@ class SheetViewModel(
         val bundled = bundledSrdAbilities.firstOrNull { it.id == abilityId }
         val classified = own ?: bundled
         if (passive && classified != null && classified.effect != AbilityEffect.NONE) {
-            status = "Una capacità con effetto automatico deve restare attiva."
+            say { it.sheet.automaticAbilityMustStayActive }
             return false
         }
         if (own != null && !own.immutable && bundledSrdAbilities.none { it.id == abilityId }) {
             return upsertAbility(own.copy(passive = passive))
         }
         if (bundled == null) {
-            status = "Abilità non trovata nel Compendio."
+            say { it.sheet.abilityNotInCompendium }
             return false
         }
         val updated = if (bundled.passive == passive) {
@@ -681,10 +832,11 @@ class SheetViewModel(
             library.passiveOverrides + (abilityId to passive)
         }
         if (updated == library.passiveOverrides) return true
+        val bundledName = bundled.name
         val message = if (passive) {
-            "«${bundled.name}» ora vale come tratto permanente."
+            LocalizedText { it.sheet.abilityBecamePassive(bundledName) }
         } else {
-            "«${bundled.name}» torna fra le capacità da spendere nel turno."
+            LocalizedText { it.sheet.abilityBecameActive(bundledName) }
         }
         return guard(message) {
             val updatedLibrary = library.copy(passiveOverrides = updated)
@@ -718,16 +870,15 @@ class SheetViewModel(
      */
     fun deleteAbility(id: String): Boolean {
         if (bundledSrdAbilities.any { it.id == id }) {
-            status = "Il contenuto SRD incluso non può essere eliminato."
+            say { it.sheet.bundledSrdCannotBeDeleted }
             return false
         }
         val usedBy = abilityUsageCount(id)
         if (usedBy > 0) {
-            status = "Impossibile eliminare: l'abilità è usata da $usedBy " +
-                if (usedBy == 1) "scheda." else "schede."
+            say { it.sheet.cannotDeleteAbilityInUse(usedBy.toString()) }
             return false
         }
-        return guard("Abilità eliminata.") {
+        return guard(LocalizedText { it.sheet.abilityDeleted }) {
             val updatedLibrary = library.copy(abilities = library.abilities.filterNot { it.id == id })
             store.save(updatedLibrary)
             library = updatedLibrary
@@ -745,8 +896,8 @@ class SheetViewModel(
      * SRD le distribuisce il content pack, non il file dell'utente.
      */
     private fun seeded(): SheetLibrary = SheetLibrary(
-        characters = SessionTemplates.all.flatMap { it.party },
-        monsters = SessionTemplates.all.flatMap { it.monsters },
+        characters = SessionTemplates.of(AppLocale.language).all.flatMap { it.party },
+        monsters = SessionTemplates.of(AppLocale.language).all.flatMap { it.monsters },
         abilities = emptyList(),
     )
 
@@ -770,39 +921,74 @@ class SheetViewModel(
                 character = CharacterSheet(
                     id = "pg-$stamp",
                     armorClassMethod = ArmorClassMethod.UNARMORED,
+                    // Esplicita: il predefinito del modello e' l'italiano, che e'
+                    // giusto per le schede salvate prima che il campo esistesse
+                    // ma sbagliato per una scheda che nasce adesso. Senza questo,
+                    // un personaggio creato in inglese veniva salvato come testo
+                    // inglese marcato italiano, e al riavvio non si traduceva.
+                    contentLanguage = AppLocale.language,
                 )
                 pristineNewCharacter = character
             }
             SheetKind.MOSTRO -> {
-                monster = MonsterStatBlock(id = "mostro-$stamp")
+                // Come per il personaggio: una creatura che nasce adesso nasce
+                // nella lingua di adesso, non nel predefinito del modello.
+                monster = MonsterStatBlock(
+                    id = "mostro-$stamp",
+                    contentLanguage = AppLocale.language,
+                )
                 pristineNewMonster = monster
             }
         }
     }
 
     private fun unsavedResult(): SheetNavigationResult {
-        status = "Ci sono modifiche non salvate: salva oppure conferma di volerle scartare."
+        say { it.sheet.unsavedChangesPrompt }
         return SheetNavigationResult.UNSAVED_CHANGES
     }
 
     private fun notFoundResult(): SheetNavigationResult {
-        status = "Scheda non trovata."
+        say { it.sheet.sheetNotFound }
         return SheetNavigationResult.NOT_FOUND
     }
 
-    private fun guard(successMessage: String, block: () -> Unit): Boolean {
-        status = try {
-            block()
-            successMessage
-        } catch (failure: IOException) {
-            "Errore su disco: ${failure.message}"
-        } catch (failure: IllegalArgumentException) {
-            "Scheda non valida: ${failure.message}"
-        }
-        return status == successMessage
+    /**
+     * Esegue l'operazione e ne racconta l'esito.
+     *
+     * Il successo arriva come [LocalizedText] e non come frase gia' fatta: e' lo
+     * stesso motivo per cui [status] non conserva una stringa.
+     */
+    private fun guard(success: LocalizedText, block: () -> Unit): Boolean {
+        var succeeded = false
+        say(
+            try {
+                block()
+                succeeded = true
+                success
+            } catch (failure: IOException) {
+                LocalizedText { it.sheet.diskError(failure.message.orEmpty()) }
+            } catch (failure: IllegalArgumentException) {
+                LocalizedText {
+                    it.sheet.invalidSheet(
+                        localizedSheetError(failure.message.orEmpty(), it.language),
+                    )
+                }
+            },
+        )
+        return succeeded
     }
 }
 
-private val bundledSrdAbilities: List<CatalogAbility> by lazy {
-    Srd521ItContent.catalog
+private val bundledSrdAbilities: List<CatalogAbility> get() = srdCatalog
+
+/**
+ * Nome della sezione, per le frasi che la nominano.
+ *
+ * Vive qui e non nell'enum perche' il nome e' testo da mostrare, mentre l'enum
+ * porta solo cio' che decide il comportamento: quali categorie del catalogo la
+ * sezione accetta.
+ */
+fun CharacterTraitSection.label(strings: Strings): String = when (this) {
+    CharacterTraitSection.FEATURE -> strings.sheet.sectionFeatures
+    CharacterTraitSection.FEAT -> strings.sheet.sectionFeats
 }

@@ -25,11 +25,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.d6d.sheet.metresLabel
+import app.d6d.i18n.label
+import app.d6d.i18n.pick
+import app.d6d.sheet.i18n.damageText
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.CatalogAbility
-import app.d6d.sheet.italianLabel
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
@@ -38,16 +42,17 @@ import app.d6d.ui.theme.Palette
 
 @Composable
 internal fun AbilityArchiveHeader(compact: Boolean, onCreate: () -> Unit) {
+    val words = strings.abilities
     val title = @Composable {
         Column {
             Text(
-                text = "Abilità",
+                text = words.title,
                 color = Palette.Text,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                text = "Regole SRD e capacità personalizzate riusabili nelle schede dei personaggi.",
+                text = words.subtitle,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -59,7 +64,7 @@ internal fun AbilityArchiveHeader(compact: Boolean, onCreate: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
             title()
-            GameButton("＋ Nuova abilità", accent = Palette.Party, onClick = onCreate)
+            GameButton(words.newAbilityPlus, accent = Palette.Party, onClick = onCreate)
         }
     } else {
         Row(
@@ -68,7 +73,7 @@ internal fun AbilityArchiveHeader(compact: Boolean, onCreate: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.weight(1f)) { title() }
-            GameButton("＋ Nuova abilità", accent = Palette.Party, onClick = onCreate)
+            GameButton(words.newAbilityPlus, accent = Palette.Party, onClick = onCreate)
         }
     }
 }
@@ -86,6 +91,8 @@ internal fun AbilityList(
     onSelect: (CatalogAbility) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.abilities
+    val language = currentLanguage
     Column(
         modifier
             .fillMaxSize()
@@ -110,7 +117,7 @@ internal fun AbilityList(
                 }
                 item {
                     Eyebrow(
-                        "Abilità (${abilities.size}${if (abilities.size == totalCount) "" else " di $totalCount"})",
+                        words.abilitiesCount(abilities.size, totalCount),
                         color = Palette.Party,
                     )
                 }
@@ -121,7 +128,7 @@ internal fun AbilityList(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                "Nessuna abilità corrisponde ai filtri.",
+                                words.noAbilityMatchesFilters,
                                 color = Palette.TextFaint,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
@@ -146,6 +153,8 @@ private fun AbilityFilters(
     onCategoryFilter: (RuleElementKind?) -> Unit,
     onClassFilter: (CharacterClassId?) -> Unit,
 ) {
+    val words = strings.abilities
+    val language = currentLanguage
     Column(
         Modifier
             .fillMaxWidth()
@@ -154,13 +163,13 @@ private fun AbilityFilters(
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Text("CATEGORIA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(language.pick("CATEGORIA", "CATEGORY"), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             GameButton(
-                label = "Tutte",
+                label = words.allFeminine,
                 accent = if (categoryFilter == null) Palette.Gold else Palette.TextMuted,
                 selected = categoryFilter == null,
                 dense = true,
@@ -168,7 +177,7 @@ private fun AbilityFilters(
             )
             categories.forEach { category ->
                 GameButton(
-                    label = category.italianLabel,
+                    label = category.label(language),
                     accent = if (categoryFilter == category) Palette.Gold else Palette.TextMuted,
                     selected = categoryFilter == category,
                     dense = true,
@@ -177,13 +186,13 @@ private fun AbilityFilters(
             }
         }
 
-        Text("CLASSE", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(strings.abilities.classCaps, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             GameButton(
-                label = "Tutte",
+                label = words.allFeminine,
                 accent = if (classFilter == null) Palette.Party else Palette.TextMuted,
                 selected = classFilter == null,
                 dense = true,
@@ -191,7 +200,7 @@ private fun AbilityFilters(
             )
             CharacterClassId.entries.forEach { classId ->
                 GameButton(
-                    label = classId.italianLabel,
+                    label = classId.label(language),
                     accent = if (classFilter == classId) Palette.Party else Palette.TextMuted,
                     selected = classFilter == classId,
                     dense = true,
@@ -204,6 +213,9 @@ private fun AbilityFilters(
 
 @Composable
 private fun AbilityListRow(ability: CatalogAbility, selected: Boolean, onClick: () -> Unit) {
+    val strings = strings
+    val words = strings.abilities
+    val language = currentLanguage
     val shape = RoundedCornerShape(8.dp)
     Column(
         Modifier
@@ -215,7 +227,7 @@ private fun AbilityListRow(ability: CatalogAbility, selected: Boolean, onClick: 
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Text(
-            text = ability.name.ifBlank { "Senza nome" },
+            text = ability.name.ifBlank { strings.compendium.unnamed },
             color = Palette.Text,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -229,11 +241,11 @@ private fun AbilityListRow(ability: CatalogAbility, selected: Boolean, onClick: 
             // Il primo tag dice subito da che parte sta: un tratto permanente non
             // si gioca nel turno, e vederlo prima del costo evita di cercarlo fra
             // i comandi.
-            if (ability.passive) Chip("Passiva", Palette.Crit)
-            Chip(ability.activationCost.label, Palette.Gold)
-            Chip(ability.resolutionMethod.label, Palette.Party)
-            if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
-            if (ability.isArea) Chip("Area ${metresLabel(ability.areaRadiusFeet)}", Palette.Crit)
+            if (ability.passive) Chip(language.pick("Passiva", "Passive"), Palette.Crit)
+            Chip(ability.activationCost.labelIn(strings), Palette.Gold)
+            Chip(ability.resolutionMethod.labelIn(strings), Palette.Party)
+            if (ability.dealsDamage) Chip(ability.damageText(language), Palette.Enemy)
+            if (ability.isArea) Chip(words.areaOf(distanceLabel(ability.areaRadiusFeet, language)), Palette.Crit)
         }
         AbilityMetadataChips(ability)
     }
@@ -242,37 +254,39 @@ private fun AbilityListRow(ability: CatalogAbility, selected: Boolean, onClick: 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AbilityMetadataChips(ability: CatalogAbility) {
+    val words = strings.abilities
+    val language = currentLanguage
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Chip(ability.category.italianLabel, Palette.Crit)
+        Chip(ability.category.label(language), Palette.Crit)
         if (ability.classEligibility.isEmpty()) {
-            Chip("Tutte le classi", Palette.Party)
+            Chip(words.allClasses, Palette.Party)
         } else {
             ability.classEligibility
                 .map { it.classId }
                 .distinct()
                 .sortedBy { it.ordinal }
                 .forEach { classId ->
-                    Chip(classId.italianLabel, Palette.Party)
+                    Chip(classId.label(language), Palette.Party)
                 }
             ability.classEligibility
                 .map { it.minimumLevel }
                 .distinct()
                 .sorted()
                 .forEach { minimumLevel ->
-                    Chip("Dal ${minimumLevel}º livello", Palette.Gold)
+                    Chip(words.fromLevel(minimumLevel), Palette.Gold)
                 }
         }
         ability.spellLevel?.let { level ->
-            Chip(if (level == 0) "Trucchetto" else "Incantesimo di ${level}º livello", Palette.Heal)
+            Chip(if (level == 0) strings.abilities.cantrip else words.spellOfLevel(level), Palette.Heal)
         }
         if (ability.sourcePage > 0) {
-            Chip("Pagina ${ability.sourcePage}", Palette.TextMuted)
+            Chip(words.page(ability.sourcePage), Palette.TextMuted)
         }
         if (ability.immutable) {
-            Chip("SRD · sola lettura", Palette.GoldBright)
+            Chip(words.srdReadOnly, Palette.GoldBright)
         }
     }
 }

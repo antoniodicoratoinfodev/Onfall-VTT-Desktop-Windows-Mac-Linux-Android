@@ -15,15 +15,22 @@ import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.maps.GridLimits
 import app.d6d.ui.maps.PendingToken
 import app.d6d.ui.maps.arrangeTokens
+import app.d6d.ui.i18n.AppLocale
+import app.d6d.ui.i18n.Strings
 import app.d6d.ui.maps.gridTooSmallMessage
 import app.d6d.ui.roster.RosterItem
 import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
 
 /** I due schieramenti che il motore conserva nella sessione portabile. */
-enum class EncounterFaction(val label: String) {
-    ALLEATI("Alleati"),
-    AVVERSARI("Avversari"),
+enum class EncounterFaction {
+    ALLEATI,
+    AVVERSARI,
+}
+
+fun EncounterFaction.label(strings: Strings): String = when (this) {
+    EncounterFaction.ALLEATI -> strings.encounter.alliesLabel
+    EncounterFaction.AVVERSARI -> strings.encounter.opponentsLabel
 }
 
 /** Passaggi espliciti della procedura Nuova partita. */
@@ -36,22 +43,32 @@ enum class NewGameStep {
 }
 
 /** Da dove arrivano personaggi e creature della nuova partita. */
-enum class TemplateSource(val label: String) {
-    INCLUSA("Partita inclusa"),
-    ESISTENTI("Template già creati"),
-    DA_ZERO("Crea da zero"),
+enum class TemplateSource {
+    INCLUSA,
+    ESISTENTI,
+    DA_ZERO,
+}
+
+fun TemplateSource.label(strings: Strings): String = when (this) {
+    TemplateSource.INCLUSA -> strings.encounter.sourceIncludedGame
+    TemplateSource.ESISTENTI -> strings.encounter.sourceExistingTemplates
+    TemplateSource.DA_ZERO -> strings.encounter.sourceFromScratch
 }
 
 /** Esperienza scelta per la nuova partita. */
-enum class EncounterMode(val label: String, val description: String) {
-    FIGHT(
-        "Modalità Fight",
-        "Apre la mappa tattica e dispone automaticamente alleati e nemici vicini, pronti allo scontro.",
-    ),
-    ROLEPLAY_FIGHT_EXPLORATION(
-        "Roleplay & Fight & Exploration",
-        "Apre la schermata normale con la griglia pronta, lasciando libero il posizionamento dei token.",
-    ),
+enum class EncounterMode {
+    FIGHT,
+    ROLEPLAY_FIGHT_EXPLORATION,
+}
+
+fun EncounterMode.label(strings: Strings): String = when (this) {
+    EncounterMode.FIGHT -> strings.encounter.modeFight
+    EncounterMode.ROLEPLAY_FIGHT_EXPLORATION -> strings.encounter.modeFull
+}
+
+fun EncounterMode.description(strings: Strings): String = when (this) {
+    EncounterMode.FIGHT -> strings.encounter.modeFightHint
+    EncounterMode.ROLEPLAY_FIGHT_EXPLORATION -> strings.encounter.modeFullHint
 }
 
 /**
@@ -124,8 +141,11 @@ class EncounterBuilderViewModel(
     /**
      * Ritmo con cui la partita mostrera' i turni della CPU.
      *
-     * Si sceglie qui perche' e' la stessa domanda della difficolta' - come sara'
-     * l'avversario - e resta poi cambiabile a tavolo aperto dalla fascia nemica.
+     * Non e' una scelta della procedura: e' la preferenza dell'applicazione, che la
+     * shell tiene allineata qui. Continua a finire nella presentazione della partita
+     * perche' quel campo resta leggibile e scrivibile da entrambe le direzioni — i
+     * salvataggi vecchi si aprono, i nuovi restano apribili da una versione
+     * precedente — ma a decidere e' sempre l'impostazione, anche alla riapertura.
      */
     var enemyCpuSpeed by mutableStateOf(EnemyCpuSpeed.NORMAL)
 
@@ -135,13 +155,17 @@ class EncounterBuilderViewModel(
     var gridRows by mutableStateOf(DEFAULT_ROWS)
         private set
 
-    /** Il motore conserva i piedi; la procedura li presenta sempre anche in metri. */
+    /** Il motore conserva i piedi; la procedura li presenta nella lingua corrente. */
     var feetPerSquare by mutableStateOf(DEFAULT_FEET_PER_SQUARE)
         private set
 
     private var scratchBaselineIds: Set<String> = emptySet()
 
-    var encounterName by mutableStateOf("Partita")
+    // Il nome proposto per una partita nuova segue la lingua di chi la crea.
+    // Una volta salvato resta com'e': da li' in poi e' un dato, non un'etichetta.
+    private var suggestedEncounterName = AppLocale.current.nav.game
+    private var includedTemplateId: String? = null
+    var encounterName by mutableStateOf(suggestedEncounterName)
 
     var status by mutableStateOf<String?>(null)
         private set
@@ -172,8 +196,8 @@ class EncounterBuilderViewModel(
         get() = when {
             // In sandbox non c'e' nessuna automazione da avvertire: e' spenta per scelta.
             enemyCpuDifficulty == null -> null
-            allyCount == 0 -> "CPU inattiva: aggiungi almeno un alleato che gli avversari possano affrontare."
-            opponentCount == 0 -> "CPU inattiva: non hai selezionato alcun avversario da controllare."
+            allyCount == 0 -> AppLocale.current.encounter.cpuIdleNoAllies
+            opponentCount == 0 -> AppLocale.current.encounter.cpuIdleNoOpponents
             else -> null
         }
 
@@ -186,17 +210,21 @@ class EncounterBuilderViewModel(
         templateSource = null
         scratchBaselineIds = emptySet()
         choices = emptyMap()
-        encounterName = "Partita"
+        includedTemplateId = null
+        suggestedEncounterName = AppLocale.current.nav.game
+        encounterName = suggestedEncounterName
         gridColumns = DEFAULT_COLUMNS
         gridRows = DEFAULT_ROWS
         feetPerSquare = DEFAULT_FEET_PER_SQUARE
         mode = EncounterMode.ROLEPLAY_FIGHT_EXPLORATION
         enemyCpuDifficulty = EnemyCpuDifficulty.MEDIUM
-        enemyCpuSpeed = EnemyCpuSpeed.NORMAL
+        // Il ritmo non si azzera: appartiene alle impostazioni, non alla procedura,
+        // e ricominciare da capo una partita non e' motivo per rimetterlo a Normale.
         status = null
     }
 
     fun useExistingTemplates() {
+        includedTemplateId = null
         templateSource = TemplateSource.ESISTENTI
         scratchBaselineIds = emptySet()
         resetRecommended()
@@ -204,7 +232,7 @@ class EncounterBuilderViewModel(
     }
 
     /** Le partite gia' pronte distribuite con l'app. */
-    internal val includedTemplates: List<SessionTemplate> get() = SessionTemplates.all
+    internal val includedTemplates: List<SessionTemplate> get() = SessionTemplates.of(AppLocale.language).all
 
     /**
      * Compila la procedura con una partita inclusa.
@@ -234,7 +262,9 @@ class EncounterBuilderViewModel(
             .filterNot { it.id in party || it.id in opponents }
             .associate { it.id to ParticipantChoice(false, MIN_QUANTITY, defaultChoice(it).faction) }
         choices = untouched + party + opponents
-        encounterName = template.name
+        includedTemplateId = template.id
+        suggestedEncounterName = template.name
+        encounterName = suggestedEncounterName
         gridColumns = template.gridColumns.coerceIn(MIN_GRID_SIDE, MAX_GRID_SIDE)
         gridRows = template.gridRows.coerceIn(MIN_GRID_SIDE, MAX_GRID_SIDE)
         feetPerSquare = template.feetPerSquare.coerceIn(MIN_FEET_PER_SQUARE, MAX_FEET_PER_SQUARE)
@@ -246,11 +276,22 @@ class EncounterBuilderViewModel(
 
     /** Conserva l'archivio esistente, ma per questa partita mostra solo le nuove schede. */
     fun createFromScratch() {
+        includedTemplateId = null
         templateSource = TemplateSource.DA_ZERO
         scratchBaselineIds = roster.items.mapTo(mutableSetOf()) { it.id }
         choices = emptyMap()
         status = null
         step = NewGameStep.PARTECIPANTI
+    }
+
+    /** Riallinea soltanto il nome ancora proposto dalla procedura, non uno editato dall'utente. */
+    internal fun onLanguageChanged() {
+        val replacement = includedTemplateId
+            ?.let { id -> includedTemplates.firstOrNull { it.id == id }?.name }
+            ?: AppLocale.current.nav.game
+        if (encounterName == suggestedEncounterName) encounterName = replacement
+        suggestedEncounterName = replacement
+        status = null
     }
 
     fun back() {
@@ -266,8 +307,8 @@ class EncounterBuilderViewModel(
 
     fun continueFromParticipants() {
         status = when {
-            encounterName.isBlank() -> "Dai un nome alla partita."
-            selectedCount == 0 -> "Seleziona almeno un partecipante."
+            encounterName.isBlank() -> AppLocale.current.encounter.nameTheGame
+            selectedCount == 0 -> AppLocale.current.encounter.pickAtLeastOneParticipant
             else -> null
         }
         if (status == null) step = NewGameStep.GRIGLIA
@@ -343,10 +384,10 @@ class EncounterBuilderViewModel(
      */
     fun startedSession(): CombatSession {
         val name = encounterName.trim()
-        require(name.isNotEmpty()) { "Dai un nome all'incontro." }
+        require(name.isNotEmpty()) { AppLocale.current.encounter.nameTheEncounter }
 
         val selected = participants.filter { it.selected }
-        require(selected.isNotEmpty()) { "Seleziona almeno un partecipante." }
+        require(selected.isNotEmpty()) { AppLocale.current.encounter.pickAtLeastOneParticipant }
 
         val usedInstanceIds = mutableSetOf<String>()
         val setups = mutableListOf<CombatantSetup>()
@@ -355,7 +396,7 @@ class EncounterBuilderViewModel(
 
         selected.forEach { participant ->
             val source = requireNotNull(roster.definitionFor(participant.id)) {
-                "La scheda «${participant.name}» non è più disponibile."
+                AppLocale.current.encounter.sheetNoLongerAvailable(participant.name)
             }
             repeat(participant.quantity) { index ->
                 val instanceId = uniqueInstanceId(
@@ -396,10 +437,10 @@ class EncounterBuilderViewModel(
         return try {
             startedSession()
         } catch (failure: IllegalArgumentException) {
-            status = failure.message ?: "Configurazione dell'incontro non valida."
+            status = failure.message ?: AppLocale.current.encounter.invalidConfiguration
             null
         } catch (failure: IllegalStateException) {
-            status = failure.message ?: "Impossibile avviare l'incontro."
+            status = failure.message ?: AppLocale.current.encounter.cannotStart
             null
         }
     }
@@ -472,7 +513,7 @@ class EncounterBuilderViewModel(
             tokens = combatants.map {
                 PendingToken(it.instanceId, it.faction == EncounterFaction.ALLEATI, it.squaresPerSide)
             },
-        ) ?: throw IllegalStateException(gridTooSmallMessage(grid))
+        ) ?: throw IllegalStateException(gridTooSmallMessage(grid).resolve(AppLocale.current))
 
         val sideOf = combatants.associate { it.instanceId to it.squaresPerSide }
         placements.forEach { (instanceId, origin) ->

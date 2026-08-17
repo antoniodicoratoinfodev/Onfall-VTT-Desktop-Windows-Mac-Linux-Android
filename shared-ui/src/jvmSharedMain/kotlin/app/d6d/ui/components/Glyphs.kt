@@ -23,9 +23,10 @@ import kotlin.math.sin
  *
  * Come i ritratti, niente immagini importate: le icone sono poche linee — spade
  * incrociate per la battaglia, un d20 per la nuova partita, un tomo per il
- * Compendio — cosi' l'identita' visiva resta originale e scala a ogni densita'.
+ * Compendio, un ingranaggio per le impostazioni — cosi' l'identita' visiva resta
+ * originale e scala a ogni densita'.
  */
-enum class AppGlyph { SWORDS, D20, TOME }
+enum class AppGlyph { SWORDS, D20, TOME, GEAR }
 
 @Composable
 fun GlyphIcon(
@@ -56,6 +57,7 @@ fun GlyphIcon(
             AppGlyph.SWORDS -> drawSwords(tint, stroke)
             AppGlyph.D20 -> drawD20(tint, stroke)
             AppGlyph.TOME -> drawTome(tint, stroke)
+            AppGlyph.GEAR -> drawGear(tint, stroke)
         }
     }
 }
@@ -155,4 +157,45 @@ private fun DrawScope.drawTome(tint: Color, stroke: Stroke) {
         close()
     }
     drawPath(boss, tint)
+}
+
+/** Ingranaggio: corona di otto denti e mozzo centrale. */
+private fun DrawScope.drawGear(tint: Color, stroke: Stroke) {
+    val teeth = 8
+    val tip = size.minDimension * 0.46f
+    val root = size.minDimension * 0.33f
+    val c = center
+    val step = 360f / teeth
+    // Il dente occupa poco meno di meta' periodo e i fianchi sono inclinati: cosi'
+    // pieni e vuoti si equivalgono e la corona resta leggibile anche a 20 dp.
+    val toothHalf = step * 0.22f
+    val flank = step * 0.10f
+
+    fun point(angleDegrees: Float, radius: Float): Offset {
+        val radians = Math.toRadians(angleDegrees.toDouble())
+        return Offset(
+            c.x + radius * cos(radians).toFloat(),
+            c.y + radius * sin(radians).toFloat(),
+        )
+    }
+
+    val crown = Path()
+    repeat(teeth) { index ->
+        val centre = -90f + index * step
+        val corners = listOf(
+            point(centre - toothHalf, tip),
+            point(centre + toothHalf, tip),
+            point(centre + toothHalf + flank, root),
+            point(centre + step - toothHalf - flank, root),
+        )
+        corners.forEachIndexed { corner, offset ->
+            if (index == 0 && corner == 0) crown.moveTo(offset.x, offset.y)
+            else crown.lineTo(offset.x, offset.y)
+        }
+    }
+    crown.close()
+    drawPath(crown, tint, style = stroke)
+
+    // Mozzo: il foro dell'albero, che distingue l'ingranaggio da una stella.
+    drawCircle(tint, radius = size.minDimension * 0.14f, center = c, style = stroke)
 }

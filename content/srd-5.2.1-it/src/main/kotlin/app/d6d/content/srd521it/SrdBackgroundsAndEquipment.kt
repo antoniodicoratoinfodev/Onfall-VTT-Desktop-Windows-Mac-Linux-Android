@@ -1,5 +1,7 @@
 package app.d6d.content.srd521it
 
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.label
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.BackgroundDefinition
 import app.d6d.rules.character.CharacterClassId
@@ -25,7 +27,7 @@ private fun equipmentChoice(owner: String, title: String, vararg options: String
 
 private fun fixedToolChoice(owner: String, name: String, slug: String) = ChoiceDefinition(
     id = "$PREFIX:choice:$owner:tool",
-    title = "$name: competenza negli strumenti",
+    title = "$name: competenza negli strumenti",  // tradotto in blocco piu' sotto
     kind = ChoiceKind.TOOL_PROFICIENCY,
     count = 1,
     optionIds = listOf(tool(slug)),
@@ -33,7 +35,25 @@ private fun fixedToolChoice(owner: String, name: String, slug: String) = ChoiceD
 
 /** I quattro background completi distribuiti nello SRD 5.2.1 italiano. */
 object SrdBackgrounds {
-    val all: List<BackgroundDefinition> = listOf(
+    fun all(language: AppLanguage): List<BackgroundDefinition> = when (language) {
+        AppLanguage.ITALIAN -> italian
+        AppLanguage.ENGLISH -> english
+    }
+
+    private val english: List<BackgroundDefinition> by lazy {
+        italian.map { background ->
+            val slug = background.id.substringAfterLast(':')
+            val text = ENGLISH_BACKGROUNDS.getValue(slug)
+            background.copy(
+                name = text.name,
+                description = text.description,
+                toolChoice = background.toolChoice.copy(title = text.toolTitle),
+                equipmentChoice = background.equipmentChoice.copy(title = text.equipmentTitle),
+            )
+        }
+    }
+
+    private val italian: List<BackgroundDefinition> = listOf(
         BackgroundDefinition(
             id = "$PREFIX:background:accolito",
             name = "Accolito",
@@ -136,7 +156,23 @@ object SrdStartingEquipment {
         goldPieces = gold,
     )
 
-    val all: List<EquipmentPackageDefinition> = listOf(
+    fun all(language: AppLanguage): List<EquipmentPackageDefinition> = when (language) {
+        AppLanguage.ITALIAN -> italian
+        AppLanguage.ENGLISH -> english
+    }
+
+    private val english: List<EquipmentPackageDefinition> by lazy {
+        italian.map { pack ->
+            val text = ENGLISH_PACKS.getValue(pack.id.removePrefix("$PREFIX:equipment:"))
+            pack.copy(
+                name = text.name,
+                description = text.description,
+                itemNames = pack.itemNames.map { ENGLISH_ITEMS.getValue(it) },
+            )
+        }
+    }
+
+    private val italian: List<EquipmentPackageDefinition> = listOf(
         pack("background:accolito", "a", "Dotazione A", "Scorte da calligrafo, libro (preghiere), simbolo sacro, pergamena (10 fogli), tunica e 8 mo.", items = listOf("Scorte da calligrafo", "Libro (preghiere)", "Simbolo sacro", "Pergamena (10 fogli)", "Tunica"), gold = 8),
         pack("background:accolito", "b", "50 mo", "50 mo.", gold = 50),
         pack("background:criminale", "a", "Dotazione A", "2 pugnali, arnesi da scasso, piede di porco, 2 borse, abiti da viaggiatore e 16 mo.", weapons = listOf("pugnale"), items = listOf("Arnesi da scasso", "Piede di porco", "2 borse", "Abiti da viaggiatore"), gold = 16),
@@ -173,13 +209,186 @@ object SrdStartingEquipment {
         pack("class:warlock", "b", "100 mo", "100 mo.", gold = 100),
     )
 
-    fun choiceFor(classId: CharacterClassId): ChoiceDefinition {
+    fun choiceFor(classId: CharacterClassId, language: AppLanguage): ChoiceDefinition {
         val slug = classId.contentId
-        val optionIds = all.filter { it.id.startsWith("$PREFIX:equipment:class:$slug:") }.map { it.id }
+        val optionIds = all(language)
+            .filter { it.id.startsWith("$PREFIX:equipment:class:$slug:") }
+            .map { it.id }
         return equipmentChoice(
             owner = "class:$slug",
-            title = "${classId.italianLabel}: scegli la dotazione iniziale",
+            title = SrdWords.of(language).startingEquipmentFor(classId.label(language)),
             options = optionIds.toTypedArray(),
         )
     }
 }
+
+private class BackgroundText(
+    val name: String,
+    val description: String,
+    val toolTitle: String,
+    val equipmentTitle: String,
+)
+
+// Chiave: lo slug canonico, che resta italiano.
+private val ENGLISH_BACKGROUNDS = mapOf(
+    "accolito" to BackgroundText(
+        name = "Acolyte",
+        description = "Intelligence, Wisdom, Charisma · Magic Initiate (Cleric) · " +
+            "Insight, Religion · Calligrapher's Supplies.",
+        toolTitle = "Acolyte: tool proficiency",
+        equipmentTitle = "Acolyte: choose the equipment or 50 GP",
+    ),
+    "criminale" to BackgroundText(
+        name = "Criminal",
+        description = "Dexterity, Constitution, Intelligence · Alert · " +
+            "Sleight of Hand, Stealth · Thieves' Tools.",
+        toolTitle = "Criminal: tool proficiency",
+        equipmentTitle = "Criminal: choose the equipment or 50 GP",
+    ),
+    "sapiente" to BackgroundText(
+        name = "Sage",
+        description = "Constitution, Intelligence, Wisdom · Magic Initiate (Wizard) · " +
+            "Arcana, History · Calligrapher's Supplies.",
+        toolTitle = "Sage: tool proficiency",
+        equipmentTitle = "Sage: choose the equipment or 50 GP",
+    ),
+    "soldato" to BackgroundText(
+        name = "Soldier",
+        description = "Strength, Dexterity, Constitution · Savage Attacker · " +
+            "Athletics, Intimidation · a Gaming Set.",
+        toolTitle = "Soldier: choose a Gaming Set",
+        equipmentTitle = "Soldier: choose the equipment or 50 GP",
+    ),
+)
+
+private class PackText(val name: String, val description: String)
+
+private fun gold(amount: Int) = PackText("$amount GP", "$amount GP.")
+
+private val ENGLISH_PACKS = mapOf(
+    "background:accolito:a" to PackText(
+        "Equipment A",
+        "Calligrapher's Supplies, Book (prayers), Holy Symbol, Parchment (10 sheets), Robe, and 8 GP.",
+    ),
+    "background:accolito:b" to gold(50),
+    "background:criminale:a" to PackText(
+        "Equipment A",
+        "2 Daggers, Thieves' Tools, Crowbar, 2 Pouches, Traveler's Clothes, and 16 GP.",
+    ),
+    "background:criminale:b" to gold(50),
+    "background:sapiente:a" to PackText(
+        "Equipment A",
+        "Quarterstaff, Calligrapher's Supplies, Book (history), Parchment (8 sheets), Robe, and 8 GP.",
+    ),
+    "background:sapiente:b" to gold(50),
+    "background:soldato:a" to PackText(
+        "Equipment A",
+        "Spear, Shortbow, 20 Arrows, Gaming Set (chosen), Healer's Kit, Quiver, " +
+            "Traveler's Clothes, and 14 GP.",
+    ),
+    "background:soldato:b" to gold(50),
+    "class:barbaro:a" to PackText(
+        "Equipment A",
+        "Greataxe, 4 Handaxes, Explorer's Pack, and 15 GP.",
+    ),
+    "class:barbaro:b" to gold(75),
+    "class:bardo:a" to PackText(
+        "Equipment A",
+        "Leather Armor, 2 Daggers, a Musical Instrument of your choice, Entertainer's Pack, and 19 GP.",
+    ),
+    "class:bardo:b" to gold(90),
+    "class:chierico:a" to PackText(
+        "Equipment A",
+        "Chain Shirt, Shield, Mace, Holy Symbol, Priest's Pack, and 7 GP.",
+    ),
+    "class:chierico:b" to gold(110),
+    "class:druido:a" to PackText(
+        "Equipment A",
+        "Leather Armor, Shield, Sickle, Druidic Focus (Quarterstaff), Explorer's Pack, " +
+            "Herbalism Kit, and 9 GP.",
+    ),
+    "class:druido:b" to gold(50),
+    "class:guerriero:a" to PackText(
+        "Equipment A",
+        "Chain Mail, Greatsword, Flail, 8 Javelins, Dungeoneer's Pack, and 4 GP.",
+    ),
+    "class:guerriero:b" to PackText(
+        "Equipment B",
+        "Studded Leather Armor, Scimitar, Shortsword, Longbow, 20 Arrows, Quiver, " +
+            "Dungeoneer's Pack, and 11 GP.",
+    ),
+    "class:guerriero:c" to gold(155),
+    "class:ladro:a" to PackText(
+        "Equipment A",
+        "Leather Armor, 2 Daggers, Shortsword, Shortbow, 20 Arrows, Quiver, Thieves' Tools, " +
+            "Burglar's Pack, and 8 GP.",
+    ),
+    "class:ladro:b" to gold(100),
+    "class:mago:a" to PackText(
+        "Equipment A",
+        "2 Daggers, Arcane Focus (Quarterstaff), Robe, Spellbook, Scholar's Pack, and 5 GP.",
+    ),
+    "class:mago:b" to gold(55),
+    "class:monaco:a" to PackText(
+        "Equipment A",
+        "Spear, 5 Daggers, Artisan's Tools or Musical Instrument (chosen), Explorer's Pack, and 11 GP.",
+    ),
+    "class:monaco:b" to gold(50),
+    "class:paladino:a" to PackText(
+        "Equipment A",
+        "Chain Mail, Shield, Longsword, 6 Javelins, Holy Symbol, Priest's Pack, and 9 GP.",
+    ),
+    "class:paladino:b" to gold(150),
+    "class:ranger:a" to PackText(
+        "Equipment A",
+        "Studded Leather Armor, Scimitar, Shortsword, Longbow, 20 Arrows, Quiver, " +
+            "Druidic Focus (sprig of mistletoe), Explorer's Pack, and 7 GP.",
+    ),
+    "class:ranger:b" to gold(150),
+    "class:stregone:a" to PackText(
+        "Equipment A",
+        "Spear, 2 Daggers, Arcane Focus (crystal), Dungeoneer's Pack, and 28 GP.",
+    ),
+    "class:stregone:b" to gold(50),
+    "class:warlock:a" to PackText(
+        "Equipment A",
+        "Leather Armor, Sickle, 2 Daggers, Arcane Focus (orb), Book (occult lore), " +
+            "Scholar's Pack, and 15 GP.",
+    ),
+    "class:warlock:b" to gold(100),
+)
+
+// Le voci non-arma delle dotazioni. Le armi hanno gia' la loro tavola in
+// [SrdWeapons]; qui sta solo cio' che arma non e'.
+internal val ENGLISH_ITEMS = mapOf(
+    "Scorte da calligrafo" to "Calligrapher's Supplies",
+    "Libro (preghiere)" to "Book (prayers)",
+    "Libro (storia)" to "Book (history)",
+    "Libro (scienze occulte)" to "Book (occult lore)",
+    "Simbolo sacro" to "Holy Symbol",
+    "Pergamena (10 fogli)" to "Parchment (10 sheets)",
+    "Pergamena (8 fogli)" to "Parchment (8 sheets)",
+    "Tunica" to "Robe",
+    "Veste" to "Robe",
+    "Arnesi da scasso" to "Thieves' Tools",
+    "Piede di porco" to "Crowbar",
+    "2 borse" to "2 Pouches",
+    "Abiti da viaggiatore" to "Traveler's Clothes",
+    "20 frecce" to "20 Arrows",
+    "Gioco scelto" to "Gaming Set (chosen)",
+    "Borsa del guaritore" to "Healer's Kit",
+    "Faretra" to "Quiver",
+    "Dotazione da esploratore" to "Explorer's Pack",
+    "Dotazione da intrattenitore" to "Entertainer's Pack",
+    "Dotazione da sacerdote" to "Priest's Pack",
+    "Dotazione da avventuriero" to "Dungeoneer's Pack",
+    "Dotazione da scassinatore" to "Burglar's Pack",
+    "Dotazione da studioso" to "Scholar's Pack",
+    "Strumento musicale a scelta" to "Musical Instrument (chosen)",
+    "Strumento scelto" to "Tool (chosen)",
+    "Focus druidico" to "Druidic Focus",
+    "Focus arcano (cristallo)" to "Arcane Focus (crystal)",
+    "Focus arcano (globo)" to "Arcane Focus (orb)",
+    "Borsa da erborista" to "Herbalism Kit",
+    "Libro degli incantesimi" to "Spellbook",
+)

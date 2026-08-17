@@ -1,5 +1,6 @@
 package app.d6d.content.srd521it
 
+import app.d6d.i18n.AppLanguage
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ClassEligibility
 import app.d6d.rules.character.RuleElementDefinition
@@ -45,7 +46,11 @@ data class SrdBeastForm(
     val speed: String,
     val sourcePage: Int,
     val statBlock: String,
+    /** L'edizione da cui viene la scheda: decide come rileggerla. */
+    val language: AppLanguage = AppLanguage.ITALIAN,
 ) {
+    private val dialect: BeastDialect get() = BeastDialect.of(language)
+
     private val challengeRank: Int
         get() = when (challengeRating) {
             "0" -> 0
@@ -65,7 +70,7 @@ data class SrdBeastForm(
         }
 
     val summary: String
-        get() = "GS $challengeRating · Velocità $speed"
+        get() = dialect.summary(challengeRating, speed)
 
     fun isAvailableAt(druidLevel: Int): Boolean {
         val maximumRank = when {
@@ -82,28 +87,29 @@ data class SrdBeastForm(
         kind = RuleElementKind.CLASS_OPTION,
         description = statBlock,
         classEligibility = listOf(ClassEligibility(CharacterClassId.DRUID, minimumDruidLevel)),
-        prerequisite = "Forma selvatica · Druido di ${minimumDruidLevel}º livello",
+        prerequisite = dialect.wildShapePrerequisite(minimumDruidLevel),
         sourcePage = sourcePage,
     )
 
     /** Proiezione operativa usata quando il druido assume davvero questa forma. */
     fun toActorDefinition(): ActorDefinition {
         val normalized = statBlock.replace('−', '-').replace('–', '-')
-        val header = requireNotNull(
-            Regex("(?m)^CA (\\d+) Iniziativa ([+-]?\\d+) \\((\\d+)\\)").find(normalized),
-        ) { "Intestazione non valida per la forma $name." }
-        val hitPoints = Regex("(?m)^PF (\\d+)").find(normalized)?.groupValues?.get(1)?.toInt()
-            ?: error("PF mancanti per la forma $name.")
-        val speedMetres = Regex("(?m)^Velocità ([\\d,]+) m").find(normalized)
-            ?.groupValues?.get(1)?.replace(',', '.')?.toDouble()
-            ?: 0.0
-        val saves = parseSavingThrows(normalized)
-        val actionsText = normalized.substringAfter("\nAzioni\n", "")
-            .substringBefore("\nAzioni bonus\n")
+        val header = requireNotNull(dialect.header.find(normalized)) {
+            "Intestazione non valida per la forma $name."
+        }
+        val hitPoints = dialect.hitPoints.find(normalized)?.groupValues?.get(1)?.toInt()
+            ?: error("Punti ferita mancanti per la forma $name.")
+        val speedFeet = dialect.speed.find(normalized)
+            ?.groupValues?.get(1)
+            ?.let(dialect.speedToFeet)
+            ?: 0
+        val saves = parseSavingThrows(normalized, dialect)
+        val actionsText = normalized.substringAfter(dialect.actionsHeading, "")
+            .substringBefore(dialect.bonusActionsHeading)
             .replace('\n', ' ')
-        val attacks = attackRegex.findAll(actionsText).mapIndexed { index, match ->
+        val attacks = dialect.attack.findAll(actionsText).mapIndexed { index, match ->
             val values = match.groupValues
-            val damageType = damageType(values[10])
+            val damageType = dialect.damageType(values[10])
             val damage = if (values[6].isNotBlank()) {
                 val modifier = values[9].toIntOrNull().orZero() * if (values[8] == "-") -1 else 1
                 DamageFormula.dice(damageType, values[6].toInt(), values[7].toInt(), modifier)
@@ -112,11 +118,11 @@ data class SrdBeastForm(
             }
             AbilityDefinition.builder("$id:attack:$index", values[1].trim())
                 .version("1.0.0")
-                .source("srd521-it")
+                .source(SrdIdentity.CANONICAL_PREFIX)
                 .rulesetVersion("5.2.1")
                 .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
                 .attackBonus(values[3].toInt())
-                .rangeFeet(metresToFeet(values[4]))
+                .rangeFeet(dialect.speedToFeet(values[4]))
                 .damage(listOf(damage))
                 .automationStatus(AutomationStatus.AUTOMATED)
                 .rulesText(match.value.trim())
@@ -129,108 +135,66 @@ data class SrdBeastForm(
             // Forma Selvatica conserva i PF del druido; questo valore descrive la
             // bestia e viene sostituito dal comando di trasformazione.
             .maxHitPoints(hitPoints)
-            .speedFeet((speedMetres / 1.5 * 5).toInt())
+            .speedFeet(speedFeet)
             .initiativeModifier(header.groupValues[2].toInt())
             .initiativeScore(header.groupValues[3].toInt())
             .constitutionSaveBonus(saves[SaveAbility.CONSTITUTION].orZero())
             .savingThrowBonuses(saves)
-            .resistances(parseDamageList(normalized, "Resistenze"))
-            .vulnerabilities(parseDamageList(normalized, "Vulnerabilità"))
-            .damageImmunities(parseDamageList(normalized, "Immunità ai danni"))
+            .resistances(parseDamageList(normalized, dialect.resistancesLabel, dialect))
+            .vulnerabilities(parseDamageList(normalized, dialect.vulnerabilitiesLabel, dialect))
+            .damageImmunities(parseDamageList(normalized, dialect.damageImmunitiesLabel, dialect))
             .abilities(attacks)
-            .attacksPerAction(if ("Multiattacco." in actionsText) 2 else 1)
+            .attacksPerAction(if (dialect.multiattack in actionsText) 2 else 1)
             .build()
     }
 }
 
-private val attackRegex = Regex(
-    "([A-ZÀ-Ü][^.]*)\\. Tiro per colpire (in mischia|a distanza): ([+-]?\\d+)(?: \\([^)]*\\))?, " +
-        "(?:portata|gittata) ([\\d,]+)(?:/[\\d,]+)? m\\.?\\s*Colpito: (\\d+)" +
-        "(?: \\((\\d+)d(\\d+)(?:\\s*([+-])?\\s*(\\d+))?\\))? dann[oi] (?:da )?([a-zàèéìòù]+)",
-)
-
-private fun parseSavingThrows(text: String): Map<SaveAbility, Int> {
-    val labels = mapOf(
-        "For" to SaveAbility.STRENGTH,
-        "Des" to SaveAbility.DEXTERITY,
-        "Cos" to SaveAbility.CONSTITUTION,
-        "Int" to SaveAbility.INTELLIGENCE,
-        "Sag" to SaveAbility.WISDOM,
-        "Car" to SaveAbility.CHARISMA,
-    )
-    return Regex("(For|Des|Cos|Int|Sag|Car) \\d+ [+-]?\\d+ ([+-]?\\d+)")
+private fun parseSavingThrows(text: String, dialect: BeastDialect): Map<SaveAbility, Int> =
+    dialect.savingThrows
         .findAll(text)
-        .associate { match -> labels.getValue(match.groupValues[1]) to match.groupValues[2].toInt() }
-}
-
-private fun parseDamageList(text: String, label: String): Set<DamageType> {
-    val line = Regex("(?m)^${Regex.escape(label)}(?: ai danni)? (.+)$")
-        .find(text)?.groupValues?.get(1).orEmpty().lowercase()
-    return DamageType.entries.filterTo(mutableSetOf()) { type ->
-        val italian = when (type) {
-            DamageType.ACID -> "acido"
-            DamageType.BLUDGEONING -> "contundente"
-            DamageType.COLD -> "freddo"
-            DamageType.FIRE -> "fuoco"
-            DamageType.FORCE -> "forza"
-            DamageType.LIGHTNING -> "fulmine"
-            DamageType.NECROTIC -> "necrotico"
-            DamageType.PIERCING -> "perforante"
-            DamageType.POISON -> "veleno"
-            DamageType.PSYCHIC -> "psichico"
-            DamageType.RADIANT -> "radioso"
-            DamageType.SLASHING -> "tagliente"
-            DamageType.THUNDER -> "tuono"
-            DamageType.UNTYPED -> ""
+        .associate { match ->
+            // Il meno tipografico dell'SRD non e' il meno ASCII che Int.toInt() capisce.
+            dialect.saveAbility(match.groupValues[1]) to match.groupValues[2].replace('−', '-').toInt()
         }
-        italian.isNotEmpty() && italian in line
-    }
-}
 
-private fun damageType(label: String): DamageType = when (label.lowercase()) {
-    "acido" -> DamageType.ACID
-    "contundenti", "contundente" -> DamageType.BLUDGEONING
-    "freddo" -> DamageType.COLD
-    "fuoco" -> DamageType.FIRE
-    "forza" -> DamageType.FORCE
-    "fulmine" -> DamageType.LIGHTNING
-    "necrotici", "necrotico" -> DamageType.NECROTIC
-    "perforanti", "perforante" -> DamageType.PIERCING
-    "veleno" -> DamageType.POISON
-    "psichici", "psichico" -> DamageType.PSYCHIC
-    "radiosi", "radioso" -> DamageType.RADIANT
-    "taglienti", "tagliente" -> DamageType.SLASHING
-    "tuono" -> DamageType.THUNDER
-    else -> error("Tipo di danno non supportato: $label")
+private fun parseDamageList(text: String, label: String, dialect: BeastDialect): Set<DamageType> {
+    val line = Regex("(?m)^${Regex.escape(label)}(?: ai danni)? (.+)$")
+        .find(text)?.groupValues?.get(1).orEmpty()
+    return dialect.damageTypesIn(line)
 }
-
-private fun metresToFeet(value: String): Int =
-    (value.replace(',', '.').toDouble() / 1.5 * 5).toInt()
 
 private fun Int?.orZero(): Int = this ?: 0
 
 /** Tutte le Bestie SRD con GS massimo 1, complete di scheda delle statistiche. */
 object SrdBeasts {
     private val json = Json { ignoreUnknownKeys = true }
+    private val cache = HashMap<AppLanguage, List<SrdBeastForm>>()
 
-    val all: List<SrdBeastForm> by lazy {
-        val stream = checkNotNull(
-            SrdBeasts::class.java.getResourceAsStream("/srd/5.2.1-it/beasts.json"),
-        ) { "Risorsa SRD delle forme bestiali non trovata." }
+    fun all(language: AppLanguage = AppLanguage.ITALIAN): List<SrdBeastForm> = synchronized(cache) {
+        cache.getOrPut(language) { load(language) }
+    }
+
+    private fun load(language: AppLanguage): List<SrdBeastForm> {
+        val identity = SrdIdentity.of(language)
+        val path = "/srd/${identity.resourceDirectory}/beasts.json"
+        val stream = checkNotNull(SrdBeasts::class.java.getResourceAsStream(path)) {
+            "Risorsa SRD delle forme bestiali non trovata: $path."
+        }
         val document = stream.bufferedReader(Charsets.UTF_8).use {
             json.decodeFromString<BeastDocument>(it.readText())
         }
         check(document.schemaVersion == 1)
         check(document.records.size == document.counts.records)
-        document.records.map { record ->
+        return document.records.map { record ->
             SrdBeastForm(
-                id = record.id,
+                id = identity.beastId(record.name, record.id),
                 name = record.name,
                 challengeRating = record.challengeRating,
                 hasFlySpeed = record.hasFlySpeed,
                 speed = record.speed,
                 sourcePage = record.page,
                 statBlock = record.statBlock,
+                language = language,
             )
         }.also { forms ->
             check(forms.size == 64) {
@@ -242,10 +206,15 @@ object SrdBeasts {
         }
     }
 
-    val elements: List<RuleElementDefinition> by lazy { all.map(SrdBeastForm::toRuleElement) }
+    fun elements(language: AppLanguage): List<RuleElementDefinition> =
+        all(language).map(SrdBeastForm::toRuleElement)
 
-    fun byId(id: String): SrdBeastForm? = all.firstOrNull { it.id == id }
+    fun byId(id: String, language: AppLanguage = AppLanguage.ITALIAN): SrdBeastForm? =
+        all(language).firstOrNull { it.id == id }
 
-    fun availableAt(druidLevel: Int): List<SrdBeastForm> =
-        all.filter { it.isAvailableAt(druidLevel) }
+    fun availableAt(
+        druidLevel: Int,
+        language: AppLanguage = AppLanguage.ITALIAN,
+    ): List<SrdBeastForm> =
+        all(language).filter { it.isAvailableAt(druidLevel) }
 }

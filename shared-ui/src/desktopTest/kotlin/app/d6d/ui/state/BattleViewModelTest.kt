@@ -609,6 +609,34 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `riprendere la CPU toglie l avviso che invitava a riprenderla`() = runTest {
+        val session = enemyCpuResourceSession(heroColumn = 2)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.enemyCpuSpeed = EnemyCpuSpeed.SLOW
+
+        // Una revisione esterna a meta' riproduzione sospende il turno e lascia a
+        // schermo il motivo: e' l'avviso che invita a riprendere.
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+        session.applyDamage(
+            "enemy",
+            "hero",
+            listOf(app.d6d.domain.combat.DamageComponent(DamageType.FORCE, 1)),
+            false,
+        )
+        turn.join()
+        assertTrue(model.enemyCpuTurnSuppressed)
+        assertFalse(model.message.isNullOrBlank())
+
+        model.resumeEnemyCpuTurn()
+
+        // Sopravvivere al ripristino direbbe che l'automazione e' sospesa proprio
+        // mentre riparte: il tavolo leggerebbe il contrario di quel che vede.
+        assertFalse(model.enemyCpuTurnSuppressed)
+        assertNull(model.message)
+    }
+
+    @Test
     fun `undo dopo il consolidamento rimuove prima la revisione esterna`() {
         val session = enemyCpuResourceSession(heroColumn = 2)
         val model = BattleViewModel(session)
@@ -846,7 +874,7 @@ class BattleViewModelTest {
         model.playEnemyCpuTurn()
 
         assertTrue(model.floating["hero"].orEmpty().isNotEmpty())
-        assertTrue(model.actionResolution?.text.orEmpty().contains("1 attacchi"))
+        assertTrue(model.actionResolution?.text.orEmpty().contains("1 attacco"))
     }
 
     @Test

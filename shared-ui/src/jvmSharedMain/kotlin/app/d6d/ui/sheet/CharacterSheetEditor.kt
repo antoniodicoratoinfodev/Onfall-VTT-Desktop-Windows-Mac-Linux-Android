@@ -33,7 +33,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.d6d.sheet.metresLabel
+import app.d6d.i18n.abbreviationIn
+import app.d6d.i18n.label
+import app.d6d.i18n.pick
+import app.d6d.sheet.i18n.damageText
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.sheet.i18n.label as sheetLabel
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.Ability
@@ -46,7 +53,6 @@ import app.d6d.sheet.SpellSlot
 import app.d6d.sheet.Spellcasting
 import app.d6d.sheet.WeaponEntry
 import app.d6d.sheet.abilityModifier
-import app.d6d.sheet.italianLabel
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.images.PortraitPicker
@@ -71,8 +77,12 @@ fun CharacterSheetEditor(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val strings = strings
+    val words = strings.sheet
     val scope = rememberCoroutineScope()
     val sheet = viewModel.character
+    val displayedClassName = viewModel.displayedClassName(sheet)
+    val displayedSubclassName = viewModel.displayedSubclassName(sheet)
     val update: (CharacterSheet) -> Unit = { viewModel.character = it }
     var deleteId by remember(viewModel.selectedId) { mutableStateOf<String?>(null) }
     var showProgressionDialog by remember(viewModel.selectedId) { mutableStateOf(false) }
@@ -86,7 +96,14 @@ fun CharacterSheetEditor(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(11.dp),
         ) {
-            HeaderSection(sheet, portraits, compact, update)
+            HeaderSection(
+                sheet,
+                portraits,
+                compact,
+                displayedClassName,
+                displayedSubclassName,
+                update,
+            )
             ProgressionOverview(
                 viewModel = viewModel,
                 sheet = sheet,
@@ -131,15 +148,15 @@ fun CharacterSheetEditor(
             horizontalArrangement = Arrangement.spacedBy(9.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            GameButton("Salva scheda", accent = Palette.Heal, onClick = {
+            GameButton(words.saveSheet, accent = Palette.Heal, onClick = {
                 scope.launch { runDiskIo { viewModel.save() } }
             })
             viewModel.selectedId?.let { id ->
-                GameButton("Elimina", accent = Palette.Enemy, onClick = { deleteId = id })
+                GameButton(strings.common.delete, accent = Palette.Enemy, onClick = { deleteId = id })
             }
             if (viewModel.isDirty) {
                 Text(
-                    "Modifiche non salvate",
+                    words.unsavedChanges,
                     color = Palette.Bloodied,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.align(Alignment.CenterVertically),
@@ -152,15 +169,15 @@ fun CharacterSheetEditor(
         AlertDialog(
             onDismissRequest = { deleteId = null },
             containerColor = Palette.Surface,
-            title = { Text("Eliminare la scheda?", color = Palette.Text) },
+            title = { Text(words.deleteSheetTitle, color = Palette.Text) },
             text = {
                 Text(
-                    "La scheda di «${sheet.characterName.ifBlank { "Senza nome" }}» verrà eliminata definitivamente.",
+                    words.deleteSheetBody(sheet.characterName.ifBlank { strings.common.unnamed }),
                     color = Palette.TextMuted,
                 )
             },
             confirmButton = {
-                GameButton("Elimina", accent = Palette.Enemy, onClick = {
+                GameButton(strings.common.delete, accent = Palette.Enemy, onClick = {
                     scope.launch {
                         runDiskIo { viewModel.delete(id) }
                         deleteId = null
@@ -168,7 +185,7 @@ fun CharacterSheetEditor(
                 })
             },
             dismissButton = {
-                GameButton("Annulla", accent = Palette.TextMuted, onClick = { deleteId = null })
+                GameButton(strings.common.cancel, accent = Palette.TextMuted, onClick = { deleteId = null })
             },
         )
     }
@@ -187,10 +204,21 @@ private fun HeaderSection(
     sheet: CharacterSheet,
     portraits: PortraitRepository,
     compact: Boolean,
+    displayedClassName: String,
+    displayedSubclassName: String,
     update: (CharacterSheet) -> Unit,
 ) {
+    val strings = strings
+    val words = strings.sheet
+    val language = strings.language
     if (compact) {
-        CompactHeaderSection(sheet, portraits, update)
+        CompactHeaderSection(
+            sheet,
+            portraits,
+            displayedClassName,
+            displayedSubclassName,
+            update,
+        )
         return
     }
 
@@ -199,12 +227,12 @@ private fun HeaderSection(
         horizontalArrangement = Arrangement.spacedBy(9.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        SheetBox("Ritratto", Modifier.width(150.dp)) {
+        SheetBox(language.pick("Ritratto", "Portrait"), Modifier.width(150.dp)) {
             PortraitPicker(portraits, sheet.id, sheet.characterName)
         }
 
-        SheetBox("Personaggio", Modifier.weight(2.4f)) {
-            SheetField("Nome del personaggio", sheet.characterName) {
+        SheetBox(strings.compendium.characterLabel, Modifier.weight(2.4f)) {
+            SheetField(words.characterName, sheet.characterName) {
                 update(sheet.copy(characterName = it))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -212,67 +240,72 @@ private fun HeaderSection(
                     update(sheet.copy(background = it))
                 }
                 if (sheet.progression.configured) {
-                    DerivedValue("Classe", sheet.className, Modifier.weight(1f), accent = Palette.Party)
+                    DerivedValue(
+                        strings.compendium.classLabel,
+                        displayedClassName,
+                        Modifier.weight(1f),
+                        accent = Palette.Party,
+                    )
                 } else {
-                    SheetField("Classe", sheet.className, Modifier.weight(1f)) {
+                    SheetField(strings.compendium.classLabel, sheet.className, Modifier.weight(1f)) {
                         update(sheet.copy(className = it))
                     }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetField("Specie", sheet.species, Modifier.weight(1f)) {
+                SheetField(language.pick("Specie", "Species"), sheet.species, Modifier.weight(1f)) {
                     update(sheet.copy(species = it))
                 }
                 if (sheet.progression.configured) {
                     DerivedValue(
-                        "Sottoclasse",
-                        sheet.subclass.ifBlank { "—" },
+                        language.pick("Sottoclasse", "Subclass"),
+                        displayedSubclassName.ifBlank { "—" },
                         Modifier.weight(1f),
                         accent = Palette.Party,
                     )
                 } else {
-                    SheetField("Sottoclasse", sheet.subclass, Modifier.weight(1f)) {
+                    SheetField(language.pick("Sottoclasse", "Subclass"), sheet.subclass, Modifier.weight(1f)) {
                         update(sheet.copy(subclass = it))
                     }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 if (sheet.progression.configured) {
-                    DerivedValue("Livello", sheet.effectiveLevel.toString(), Modifier.weight(1f))
+                    DerivedValue(strings.common.level, sheet.effectiveLevel.toString(), Modifier.weight(1f))
                 } else {
-                    SheetNumberField("Livello", sheet.level, Modifier.weight(1f)) {
+                    SheetNumberField(strings.common.level, sheet.level, Modifier.weight(1f)) {
                         update(sheet.copy(level = it.coerceIn(1, 20)))
                     }
                 }
-                SheetNumberField("PE", sheet.experiencePoints, Modifier.weight(1f)) {
+                SheetNumberField(language.pick("PE", "XP"), sheet.experiencePoints, Modifier.weight(1f)) {
                     update(sheet.copy(experiencePoints = it.coerceAtLeast(0)))
                 }
             }
         }
 
         DerivedValue(
-            "CA attuale",
+            words.currentArmorClass,
             sheet.effectiveArmorClass.toString(),
             Modifier.width(120.dp),
             accent = Palette.Party,
         )
 
-        SheetBox("Punti ferita", Modifier.weight(1.2f)) {
+        SheetBox(words.hitPoints, Modifier.weight(1.2f)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SheetNumberField("Attuali", sheet.currentHitPoints, Modifier.weight(1f)) {
+                SheetNumberField(language.pick("Attuali", "Current"), sheet.currentHitPoints, Modifier.weight(1f)) {
                     update(sheet.copy(currentHitPoints = it.coerceIn(0, sheet.maxHitPoints)))
                 }
                 SheetNumberField("Max", sheet.maxHitPoints, Modifier.weight(1f)) {
                     update(sheet.copy(maxHitPoints = it.coerceAtLeast(1)))
                 }
             }
-            SheetNumberField("Temporanei", sheet.temporaryHitPoints) {
+            SheetNumberField(language.pick("Temporanei", "Temporary"), sheet.temporaryHitPoints) {
                 update(sheet.copy(temporaryHitPoints = it.coerceAtLeast(0)))
             }
         }
 
-        SheetBox("Dadi vita", Modifier.width(122.dp)) {
-            SheetNumberField("Spesi", sheet.hitDiceSpent) {
+        SheetBox(words.hitDice, Modifier.width(122.dp)) {
+            SheetNumberField(language.pick("Spesi", "Spent"), sheet.hitDiceSpent) {
                 update(sheet.copy(hitDiceSpent = it.coerceIn(0, sheet.hitDiceMax)))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -285,12 +318,12 @@ private fun HeaderSection(
             }
         }
 
-        SheetBox("TS contro morte", Modifier.width(136.dp)) {
-            Text("Successi", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        SheetBox(words.deathSaves, Modifier.width(136.dp)) {
+            Text(language.pick("Successi", "Successes"), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
             PipRow(3, sheet.deathSaveSuccesses, color = Palette.Heal) {
                 update(sheet.copy(deathSaveSuccesses = it))
             }
-            Text("Fallimenti", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+            Text(strings.sheet.failures, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
             PipRow(3, sheet.deathSaveFailures, color = Palette.Critical) {
                 update(sheet.copy(deathSaveFailures = it))
             }
@@ -302,10 +335,15 @@ private fun HeaderSection(
 private fun CompactHeaderSection(
     sheet: CharacterSheet,
     portraits: PortraitRepository,
+    displayedClassName: String,
+    displayedSubclassName: String,
     update: (CharacterSheet) -> Unit,
 ) {
+    val strings = strings
+    val words = strings.sheet
+    val language = strings.language
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        SheetBox("Ritratto", Modifier.fillMaxWidth()) {
+        SheetBox(language.pick("Ritratto", "Portrait"), Modifier.fillMaxWidth()) {
             PortraitPicker(
                 repository = portraits,
                 definitionId = sheet.id,
@@ -314,8 +352,8 @@ private fun CompactHeaderSection(
             )
         }
 
-        SheetBox("Personaggio", Modifier.fillMaxWidth()) {
-            SheetField("Nome del personaggio", sheet.characterName) {
+        SheetBox(strings.compendium.characterLabel, Modifier.fillMaxWidth()) {
+            SheetField(words.characterName, sheet.characterName) {
                 update(sheet.copy(characterName = it))
             }
             AdaptiveFormRow(
@@ -329,43 +367,48 @@ private fun CompactHeaderSection(
                     },
                     adaptiveFormItem { fieldModifier ->
                         if (sheet.progression.configured) {
-                            DerivedValue("Classe", sheet.className, fieldModifier, accent = Palette.Party)
+                            DerivedValue(
+                                strings.compendium.classLabel,
+                                displayedClassName,
+                                fieldModifier,
+                                accent = Palette.Party,
+                            )
                         } else {
-                            SheetField("Classe", sheet.className, fieldModifier) {
+                            SheetField(strings.compendium.classLabel, sheet.className, fieldModifier) {
                                 update(sheet.copy(className = it))
                             }
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetField("Specie", sheet.species, fieldModifier) {
+                        SheetField(language.pick("Specie", "Species"), sheet.species, fieldModifier) {
                             update(sheet.copy(species = it))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
                         if (sheet.progression.configured) {
                             DerivedValue(
-                                "Sottoclasse",
-                                sheet.subclass.ifBlank { "—" },
+                                language.pick("Sottoclasse", "Subclass"),
+                                displayedSubclassName.ifBlank { "—" },
                                 fieldModifier,
                                 accent = Palette.Party,
                             )
                         } else {
-                            SheetField("Sottoclasse", sheet.subclass, fieldModifier) {
+                            SheetField(language.pick("Sottoclasse", "Subclass"), sheet.subclass, fieldModifier) {
                                 update(sheet.copy(subclass = it))
                             }
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
                         if (sheet.progression.configured) {
-                            DerivedValue("Livello", sheet.effectiveLevel.toString(), fieldModifier)
+                            DerivedValue(strings.common.level, sheet.effectiveLevel.toString(), fieldModifier)
                         } else {
-                            SheetNumberField("Livello", sheet.level, fieldModifier) {
+                            SheetNumberField(strings.common.level, sheet.level, fieldModifier) {
                                 update(sheet.copy(level = it.coerceIn(1, 20)))
                             }
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("PE", sheet.experiencePoints, fieldModifier) {
+                        SheetNumberField(language.pick("PE", "XP"), sheet.experiencePoints, fieldModifier) {
                             update(sheet.copy(experiencePoints = it.coerceAtLeast(0)))
                         }
                     },
@@ -374,19 +417,19 @@ private fun CompactHeaderSection(
         }
 
         DerivedValue(
-            "CA attuale",
+            words.currentArmorClass,
             sheet.effectiveArmorClass.toString(),
             Modifier.fillMaxWidth(),
             accent = Palette.Party,
         )
 
-        SheetBox("Punti ferita", Modifier.fillMaxWidth()) {
+        SheetBox(words.hitPoints, Modifier.fillMaxWidth()) {
             AdaptiveFormRow(
                 compact = true,
                 compactColumns = 2,
                 items = arrayOf(
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Attuali", sheet.currentHitPoints, fieldModifier) {
+                        SheetNumberField(language.pick("Attuali", "Current"), sheet.currentHitPoints, fieldModifier) {
                             update(sheet.copy(currentHitPoints = it.coerceIn(0, sheet.maxHitPoints)))
                         }
                     },
@@ -396,7 +439,7 @@ private fun CompactHeaderSection(
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Temporanei", sheet.temporaryHitPoints, fieldModifier) {
+                        SheetNumberField(language.pick("Temporanei", "Temporary"), sheet.temporaryHitPoints, fieldModifier) {
                             update(sheet.copy(temporaryHitPoints = it.coerceAtLeast(0)))
                         }
                     },
@@ -404,13 +447,13 @@ private fun CompactHeaderSection(
             )
         }
 
-        SheetBox("Dadi vita", Modifier.fillMaxWidth()) {
+        SheetBox(words.hitDice, Modifier.fillMaxWidth()) {
             AdaptiveFormRow(
                 compact = true,
                 compactColumns = 2,
                 items = arrayOf(
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Spesi", sheet.hitDiceSpent, fieldModifier) {
+                        SheetNumberField(language.pick("Spesi", "Spent"), sheet.hitDiceSpent, fieldModifier) {
                             update(sheet.copy(hitDiceSpent = it.coerceIn(0, sheet.hitDiceMax)))
                         }
                     },
@@ -428,12 +471,12 @@ private fun CompactHeaderSection(
             )
         }
 
-        SheetBox("TS contro morte", Modifier.fillMaxWidth()) {
-            Text("Successi", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        SheetBox(words.deathSaves, Modifier.fillMaxWidth()) {
+            Text(language.pick("Successi", "Successes"), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
             PipRow(3, sheet.deathSaveSuccesses, color = Palette.Heal) {
                 update(sheet.copy(deathSaveSuccesses = it))
             }
-            Text("Fallimenti", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+            Text(strings.sheet.failures, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
             PipRow(3, sheet.deathSaveFailures, color = Palette.Critical) {
                 update(sheet.copy(deathSaveFailures = it))
             }
@@ -450,9 +493,12 @@ private fun AbilitiesColumn(
     update: (CharacterSheet) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = strings
+    val words = strings.sheet
+    val language = strings.language
     Column(modifier, verticalArrangement = Arrangement.spacedBy(9.dp)) {
         DerivedValue(
-            "Bonus di competenza",
+            words.proficiencyBonus,
             signed(sheet.proficiencyBonus),
             Modifier.fillMaxWidth(),
         )
@@ -461,39 +507,39 @@ private fun AbilitiesColumn(
             AbilityBlock(ability, sheet, update)
         }
 
-        SheetBox("Ispirazione eroica") {
+        SheetBox(words.heroicInspiration) {
             SheetCheck(
-                if (sheet.heroicInspiration) "Disponibile" else "Non disponibile",
+                if (sheet.heroicInspiration) words.available else words.notAvailable,
                 sheet.heroicInspiration,
             ) { update(sheet.copy(heroicInspiration = it)) }
         }
 
-        SheetBox("Addestramento e competenze") {
+        SheetBox(words.trainingAndProficiencies) {
             Text(
-                "Competenza nelle armature",
+                words.armorTraining,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.labelSmall,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetCheck("Leggera", sheet.armorTraining.light) {
+                SheetCheck(language.pick("Leggera", "Light"), sheet.armorTraining.light) {
                     update(sheet.copy(armorTraining = sheet.armorTraining.copy(light = it)))
                 }
-                SheetCheck("Media", sheet.armorTraining.medium) {
+                SheetCheck(language.pick("Media", "Medium"), sheet.armorTraining.medium) {
                     update(sheet.copy(armorTraining = sheet.armorTraining.copy(medium = it)))
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SheetCheck("Pesante", sheet.armorTraining.heavy) {
+                SheetCheck(language.pick("Pesante", "Heavy"), sheet.armorTraining.heavy) {
                     update(sheet.copy(armorTraining = sheet.armorTraining.copy(heavy = it)))
                 }
-                SheetCheck("Scudi", sheet.armorTraining.shields) {
+                SheetCheck(language.pick("Scudi", "Shields"), sheet.armorTraining.shields) {
                     update(sheet.copy(armorTraining = sheet.armorTraining.copy(shields = it)))
                 }
             }
-            SheetField("Armi", sheet.weaponProficiencies) {
+            SheetField(strings.sheet.weapons, sheet.weaponProficiencies) {
                 update(sheet.copy(weaponProficiencies = it))
             }
-            SheetField("Strumenti", sheet.toolProficiencies) {
+            SheetField(words.tools, sheet.toolProficiencies) {
                 update(sheet.copy(toolProficiencies = it))
             }
         }
@@ -510,21 +556,24 @@ private fun AbilityBlock(
     sheet: CharacterSheet,
     update: (CharacterSheet) -> Unit,
 ) {
+    val strings = strings
+    val words = strings.sheet
+    val language = strings.language
     val skills = Skill.of(ability)
 
-    SheetBox(ability.italianLabel) {
+    SheetBox(ability.label(language)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SheetNumberField("Punteggio", sheet.score(ability), Modifier.weight(1f)) { score ->
+            SheetNumberField(strings.sheet.score, sheet.score(ability), Modifier.weight(1f)) { score ->
                 update(sheet.copy(abilityScores = sheet.abilityScores + (ability to score.coerceIn(1, 30))))
             }
-            DerivedValue("Modificatore", signed(abilityModifier(sheet.score(ability))))
+            DerivedValue(words.modifier, signed(abilityModifier(sheet.score(ability))))
         }
 
         ProficiencyLine(
-            label = "Tiro salvezza",
+            label = words.savingThrow,
             bonus = sheet.saveBonus(ability),
             level = sheet.saveProficiencies[ability] ?: Proficiency.NONE,
             bold = true,
@@ -535,7 +584,7 @@ private fun AbilityBlock(
 
         skills.forEach { skill ->
             ProficiencyLine(
-                label = skill.italianLabel,
+                label = skill.label(language),
                 bonus = sheet.skillBonus(skill),
                 level = sheet.skillProficiencies[skill] ?: Proficiency.NONE,
                 disadvantage = sheet.hasDisadvantageOnSkill(skill),
@@ -590,7 +639,7 @@ private fun ProficiencyLine(
         )
         if (disadvantage) {
             Text(
-                text = "SVANT.",
+                text = currentLanguage.pick("SVANT.", "DISADV."),
                 color = Palette.Bloodied,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
@@ -611,6 +660,9 @@ private fun CombatColumn(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val strings = strings
+    val words = strings.sheet
+    val language = currentLanguage
     var abilityPickerOpen by remember(sheet.id) { mutableStateOf(false) }
     var traitPickerSection by remember(sheet.id) {
         mutableStateOf<CharacterTraitSection?>(null)
@@ -623,20 +675,20 @@ private fun CombatColumn(
             items = arrayOf(
                 adaptiveFormItem { itemModifier ->
                     DerivedValue(
-                        "Iniziativa",
+                        strings.sheet.initiative,
                         signed(sheet.initiativeModifier) +
-                            if (sheet.strengthDexterityD20Disadvantage) " · svant." else "",
+                            if (sheet.strengthDexterityD20Disadvantage) words.disadvantageShort else "",
                         itemModifier,
                     )
                 },
                 adaptiveFormItem { itemModifier ->
-                    SheetBox("Velocita'", itemModifier) {
-                        SheetMetreField("Base", sheet.speedFeet) {
+                    SheetBox(language.pick("Velocita'", "Speed"), itemModifier) {
+                        SheetMetreField(language.pick("Base", "Base"), sheet.speedFeet) {
                             update(sheet.copy(speedFeet = it.coerceAtLeast(0)))
                         }
                         if (sheet.armorSpeedPenaltyFeet > 0) {
                             Text(
-                                "Effettiva: ${metresLabel(sheet.effectiveSpeedFeet)}",
+                                words.effectiveSpeed(distanceLabel(sheet.effectiveSpeedFeet, language)),
                                 color = Palette.Bloodied,
                                 style = MaterialTheme.typography.labelSmall,
                             )
@@ -644,10 +696,10 @@ private fun CombatColumn(
                     }
                 },
                 adaptiveFormItem(1.3f) { itemModifier ->
-                    SheetBox("Taglia", itemModifier) {
+                    SheetBox(language.pick("Taglia", "Size"), itemModifier) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             CreatureSize.entries.forEach { size ->
-                                SheetCheck(size.italianLabel, sheet.size == size) {
+                                SheetCheck(size.sheetLabel(language), sheet.size == size) {
                                     if (it) update(sheet.copy(size = size))
                                 }
                             }
@@ -655,18 +707,18 @@ private fun CombatColumn(
                     }
                 },
                 adaptiveFormItem { itemModifier ->
-                    DerivedValue("Percezione passiva", sheet.passivePerception.toString(), itemModifier)
+                    DerivedValue(words.passivePerception, sheet.passivePerception.toString(), itemModifier)
                 },
             ),
         )
 
-        SheetBox("Armi e abilità da combattimento") {
+        SheetBox(words.weaponsAndCombatAbilities) {
             if (!compact) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ColumnHeader("Nome", Modifier.weight(2f))
-                    ColumnHeader("Bonus att. / CD", Modifier.weight(1f))
-                    ColumnHeader("Danno e tipo", Modifier.weight(1.6f))
-                    ColumnHeader("Note", Modifier.weight(1.6f))
+                    ColumnHeader(strings.common.nameLabel, Modifier.weight(2f))
+                    ColumnHeader(words.attackBonusOrDc, Modifier.weight(1f))
+                    ColumnHeader(words.damageAndType, Modifier.weight(1.6f))
+                    ColumnHeader(language.pick("Note", "Notes"), Modifier.weight(1.6f))
                 }
             }
             sheet.weapons.forEachIndexed { index, weapon ->
@@ -698,34 +750,34 @@ private fun CombatColumn(
                     }
                 }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                GameButton("+ Aggiungi arma", accent = Palette.Party, onClick = {
+                GameButton(words.addWeapon, accent = Palette.Party, onClick = {
                     update(
                         sheet.copy(
                             weapons = sheet.weapons + WeaponEntry(attackAbility = Ability.STRENGTH),
                         ),
                     )
                 })
-                GameButton("+ Aggiungi abilità", accent = Palette.Gold, onClick = {
+                GameButton(words.addAbility, accent = Palette.Gold, onClick = {
                     abilityPickerOpen = true
                 })
             }
         }
 
-        SheetBox("Privilegi di classe") {
+        SheetBox(words.classFeatures) {
             ProgressionEntries(
                 ids = viewModel.characterTraitIds(CharacterTraitSection.FEATURE),
                 catalog = availableAbilities,
-                emptyNote = "Nessun privilegio registrato: questa scheda non usa la progressione guidata.",
+                emptyNote = words.noFeaturesRecorded,
                 onRemove = { id ->
                     viewModel.setCharacterTraitSelected(CharacterTraitSection.FEATURE, id, false)
                 },
             )
             GameButton(
-                "+ Gestisci privilegi",
+                words.manageFeatures,
                 accent = Palette.Gold,
                 onClick = { traitPickerSection = CharacterTraitSection.FEATURE },
             )
-            Text("NOTE TUE", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+            Text(words.yourNotes, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
             SheetTextArea(sheet.classFeatures, minLines = 3) { update(sheet.copy(classFeatures = it)) }
         }
 
@@ -733,26 +785,26 @@ private fun CombatColumn(
             compact = compact,
             items = arrayOf(
                 adaptiveFormItem { itemModifier ->
-                    SheetBox("Tratti della specie", itemModifier) {
+                    SheetBox(words.speciesTraits, itemModifier) {
                         SheetTextArea(sheet.speciesTraits) { update(sheet.copy(speciesTraits = it)) }
                     }
                 },
                 adaptiveFormItem { itemModifier ->
-                    SheetBox("Talenti", itemModifier) {
+                    SheetBox(strings.sheet.feats, itemModifier) {
                         ProgressionEntries(
                             ids = viewModel.characterTraitIds(CharacterTraitSection.FEAT),
                             catalog = availableAbilities,
-                            emptyNote = "Nessun talento registrato.",
+                            emptyNote = words.noFeatsRecorded,
                             onRemove = { id ->
                                 viewModel.setCharacterTraitSelected(CharacterTraitSection.FEAT, id, false)
                             },
                         )
                         GameButton(
-                            "+ Gestisci talenti",
+                            words.manageFeats,
                             accent = Palette.Gold,
                             onClick = { traitPickerSection = CharacterTraitSection.FEAT },
                         )
-                        Text("NOTE TUE", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                        Text(words.yourNotes, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                         SheetTextArea(sheet.feats) { update(sheet.copy(feats = it)) }
                     }
                 },
@@ -817,6 +869,9 @@ private fun ColumnHeader(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEntry) -> Unit) {
+    val strings = strings
+    val words = strings.sheet
+    val language = strings.language
     if (compact) {
         Column(
             Modifier
@@ -825,54 +880,54 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            SheetField("Nome", weapon.name) { onChange(weapon.copy(name = it)) }
+            SheetField(strings.common.nameLabel, weapon.name) { onChange(weapon.copy(name = it)) }
             LegacyWeaponClassificationWarning(weapon)
             AdaptiveFormRow(
                 compact = true,
                 compactColumns = 2,
                 items = arrayOf(
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Bonus att. / CD", weapon.attackBonus, fieldModifier) {
+                        SheetNumberField(words.attackBonusOrDc, weapon.attackBonus, fieldModifier) {
                             onChange(weapon.copy(attackBonus = it))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
                         if (weapon.fixedDamage > 0) {
-                            SheetNumberField("Danno fisso", weapon.fixedDamage, fieldModifier) {
+                            SheetNumberField(words.fixedDamage, weapon.fixedDamage, fieldModifier) {
                                 onChange(weapon.copy(fixedDamage = it.coerceAtLeast(0)))
                             }
                         } else {
-                            SheetNumberField("Dadi", weapon.diceCount, fieldModifier) {
+                            SheetNumberField(language.pick("Dadi", "Dice"), weapon.diceCount, fieldModifier) {
                                 onChange(weapon.copy(diceCount = it.coerceAtLeast(1)))
                             }
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
                         if (weapon.fixedDamage > 0) {
-                            SheetBox("Tipo", fieldModifier) {
-                                Text(weapon.damageType.italianLabel, color = Palette.Text)
+                            SheetBox(language.pick("Tipo", "Type"), fieldModifier) {
+                                Text(weapon.damageType.label(language), color = Palette.Text)
                             }
                         } else {
-                            SheetNumberField("Facce", weapon.diceSides, fieldModifier) {
+                            SheetNumberField(language.pick("Facce", "Sides"), weapon.diceSides, fieldModifier) {
                                 onChange(weapon.copy(diceSides = it.coerceAtLeast(2)))
                             }
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Modificatore", weapon.damageModifier, fieldModifier) {
+                        SheetNumberField(words.modifier, weapon.damageModifier, fieldModifier) {
                             onChange(weapon.copy(damageModifier = it))
                         }
                     },
                 ),
             )
-            SheetField("Note", weapon.note) { onChange(weapon.copy(note = it)) }
-            SheetCheck("Azione bonus", weapon.bonusAction) {
+            SheetField(language.pick("Note", "Notes"), weapon.note) { onChange(weapon.copy(note = it)) }
+            SheetCheck(words.bonusAction, weapon.bonusAction) {
                 onChange(weapon.copy(bonusAction = it))
             }
             if (!weapon.isArea) {
                 WeaponAttackAbilitySelector(weapon, onChange)
             }
-            SheetCheck("Incantesimo o trucchetto", weapon.isSpellOrCantrip) {
+            SheetCheck(words.spellOrCantrip, weapon.isSpellOrCantrip) {
                 onChange(weapon.withSpellClassification(it))
             }
             WeaponAreaSection(weapon, onChange)
@@ -893,14 +948,14 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
             }
             Row(Modifier.weight(1.6f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 if (weapon.fixedDamage > 0) {
-                    SheetNumberField("fisso", weapon.fixedDamage, Modifier.weight(2f)) {
+                    SheetNumberField(language.pick("fisso", "fixed"), weapon.fixedDamage, Modifier.weight(2f)) {
                         onChange(weapon.copy(fixedDamage = it.coerceAtLeast(0)))
                     }
                 } else {
                     SheetNumberField("d", weapon.diceCount, Modifier.weight(1f)) {
                         onChange(weapon.copy(diceCount = it.coerceAtLeast(1)))
                     }
-                    SheetNumberField("facce", weapon.diceSides, Modifier.weight(1f)) {
+                    SheetNumberField(language.pick("facce", "sides"), weapon.diceSides, Modifier.weight(1f)) {
                         onChange(weapon.copy(diceSides = it.coerceAtLeast(2)))
                     }
                 }
@@ -910,13 +965,13 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
             }
             SheetField("", weapon.note, Modifier.weight(1.6f)) { onChange(weapon.copy(note = it)) }
         }
-        SheetCheck("Azione bonus", weapon.bonusAction) {
+        SheetCheck(words.bonusAction, weapon.bonusAction) {
             onChange(weapon.copy(bonusAction = it))
         }
         if (!weapon.isArea) {
             WeaponAttackAbilitySelector(weapon, onChange)
         }
-        SheetCheck("Incantesimo o trucchetto", weapon.isSpellOrCantrip) {
+        SheetCheck(words.spellOrCantrip, weapon.isSpellOrCantrip) {
             onChange(weapon.withSpellClassification(it))
         }
         WeaponAreaSection(weapon, onChange)
@@ -929,8 +984,10 @@ private fun WeaponAttackAbilitySelector(
     weapon: WeaponEntry,
     onChange: (WeaponEntry) -> Unit,
 ) {
+    val strings = strings
+    val words = strings.sheet
     Text(
-        "CARATTERISTICA DEL TIRO PER COLPIRE",
+        words.attackAbilityCaps,
         color = Palette.TextMuted,
         style = MaterialTheme.typography.labelSmall,
     )
@@ -939,7 +996,7 @@ private fun WeaponAttackAbilitySelector(
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         GameButton(
-            label = if (weapon.isSpellOrCantrip) "Caratteristica da incantatore" else "Da classificare",
+            label = if (weapon.isSpellOrCantrip) words.spellcastingAbility else words.toClassify,
             accent = if (weapon.attackAbility == null) Palette.Gold else Palette.TextMuted,
             selected = weapon.attackAbility == null,
             dense = true,
@@ -973,11 +1030,11 @@ private fun WeaponAttackAbilitySelector(
 
 @Composable
 private fun LegacyWeaponClassificationWarning(weapon: WeaponEntry) {
+    val strings = strings
+    val words = strings.sheet
     if (!weapon.legacyClassificationRequired || weapon.name.isBlank()) return
     Text(
-        "Voce importata da classificare: se è un'arma scegli la caratteristica " +
-            "del tiro per colpire; altrimenti attiva “Incantesimo o trucchetto”. " +
-            "Con un'armatura non competente resta esclusa dalla battaglia.",
+        words.unclassifiedEntryHint,
         color = Palette.Bloodied,
         fontWeight = FontWeight.Bold,
         style = MaterialTheme.typography.bodySmall,
@@ -1002,7 +1059,9 @@ private fun WeaponEntry.withSpellClassification(isSpellOrCantrip: Boolean): Weap
  */
 @Composable
 private fun WeaponAreaSection(weapon: WeaponEntry, onChange: (WeaponEntry) -> Unit) {
-    SheetCheck("Danno ad area (incantesimo con TS)", weapon.isArea) { on ->
+    val strings = strings
+    val words = strings.sheet
+    SheetCheck(words.areaDamageWithSave, weapon.isArea) { on ->
         onChange(
             weapon.copy(
                 areaRadiusFeet = if (on) weapon.areaRadiusFeet.takeIf { it > 0 } ?: 20 else 0,
@@ -1014,15 +1073,15 @@ private fun WeaponAreaSection(weapon: WeaponEntry, onChange: (WeaponEntry) -> Un
     }
     if (!weapon.isArea) return
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        SheetMetreField("Raggio", weapon.areaRadiusFeet, Modifier.weight(1f)) {
+        SheetMetreField(strings.abilities.radius, weapon.areaRadiusFeet, Modifier.weight(1f)) {
             onChange(weapon.copy(areaRadiusFeet = it.coerceAtLeast(1)))
         }
-        SheetMetreField("Gittata", weapon.rangeFeet, Modifier.weight(1f)) {
+        SheetMetreField(currentLanguage.pick("Gittata", "Range"), weapon.rangeFeet, Modifier.weight(1f)) {
             onChange(weapon.copy(rangeFeet = it.coerceAtLeast(0)))
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("TIRO SALVEZZA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(words.savingThrowCaps, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Ability.entries.forEach { ability ->
                 GameButton(
@@ -1035,13 +1094,16 @@ private fun WeaponAreaSection(weapon: WeaponEntry, onChange: (WeaponEntry) -> Un
             }
         }
     }
-    SheetCheck("Metà danni con TS superato", weapon.halfOnSave) {
+    SheetCheck(words.halfDamageOnSave, weapon.halfOnSave) {
         onChange(weapon.copy(halfOnSave = it))
     }
 }
 
 @Composable
 private fun CharacterAbilityRow(ability: CatalogAbility, onRemove: () -> Unit) {
+    val strings = strings
+    val words = strings.sheet
+    val language = currentLanguage
     val shape = RoundedCornerShape(7.dp)
     Column(
         Modifier
@@ -1072,22 +1134,24 @@ private fun CharacterAbilityRow(ability: CatalogAbility, onRemove: () -> Unit) {
                     )
                 }
             }
-            GameButton("Rimuovi", accent = Palette.Enemy, dense = true, onClick = onRemove)
+            GameButton(strings.common.remove, accent = Palette.Enemy, dense = true, onClick = onRemove)
         }
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Chip(ability.activationCost.characterLabel, Palette.Gold)
-            if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
-            if (ability.isArea) Chip("Area ${metresLabel(ability.areaRadiusFeet)}", Palette.Crit)
-            Chip("Dal catalogo Abilità", Palette.Party)
+            Chip(ability.activationCost.label(language), Palette.Gold)
+            if (ability.dealsDamage) Chip(ability.damageText(language), Palette.Enemy)
+            if (ability.isArea) Chip(words.areaOf(distanceLabel(ability.areaRadiusFeet, language)), Palette.Crit)
+            Chip(words.fromAbilityCatalog, Palette.Party)
         }
     }
 }
 
 @Composable
 private fun MissingAbilityRow(abilityId: String, onRemove: () -> Unit) {
+    val strings = strings
+    val words = strings.sheet
     Row(
         Modifier
             .fillMaxWidth()
@@ -1098,12 +1162,12 @@ private fun MissingAbilityRow(abilityId: String, onRemove: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Abilità non più presente nel catalogo · $abilityId",
+            text = words.abilityMissingFromCatalog(abilityId),
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(1f),
         )
-        GameButton("Rimuovi", accent = Palette.Enemy, dense = true, onClick = onRemove)
+        GameButton(strings.common.remove, accent = Palette.Enemy, dense = true, onClick = onRemove)
     }
 }
 
@@ -1114,10 +1178,13 @@ private fun AbilityPickerDialog(
     onSelect: (CatalogAbility) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val strings = strings
+    val words = strings.sheet
+    val language = currentLanguage
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.Surface,
-        title = { Text("Aggiungi abilità", color = Palette.Text) },
+        title = { Text(words.addAbilityTitle, color = Palette.Text) },
         text = {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 430.dp).verticalScroll(rememberScrollState()),
@@ -1125,7 +1192,7 @@ private fun AbilityPickerDialog(
             ) {
                 if (abilities.isEmpty()) {
                     Text(
-                        "Il catalogo è vuoto. Crea prima un’abilità in Compendio → Abilità.",
+                        words.emptyAbilityCatalog,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -1150,16 +1217,20 @@ private fun AbilityPickerDialog(
                                 )
                                 Text(
                                     buildString {
-                                        append(ability.activationCost.characterLabel)
-                                        if (ability.dealsDamage) append(" · ${ability.damageText}")
-                                        if (ability.isArea) append(" · area ${metresLabel(ability.areaRadiusFeet)}")
+                                        append(ability.activationCost.label(language))
+                                        if (ability.dealsDamage) append(" · ${ability.damageText(language)}")
+                                        if (ability.isArea) append(" · ${words.areaOf(distanceLabel(ability.areaRadiusFeet, language)).lowercase()}")
                                     },
                                     color = Palette.TextMuted,
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
                             GameButton(
-                                label = if (alreadySelected) "Aggiunta" else "Aggiungi",
+                                label = if (alreadySelected) {
+                                    language.pick("Aggiunta", "Added")
+                                } else {
+                                    strings.common.add
+                                },
                                 accent = if (alreadySelected) Palette.TextFaint else Palette.Party,
                                 dense = true,
                                 selected = alreadySelected,
@@ -1171,7 +1242,7 @@ private fun AbilityPickerDialog(
             }
         },
         confirmButton = {
-            GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
+            GameButton(strings.common.close, accent = Palette.TextMuted, onClick = onDismiss)
         },
     )
 }
@@ -1194,6 +1265,9 @@ private fun TraitPickerDialog(
     onToggle: (CatalogAbility, Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val strings = strings
+    val words = strings.sheet
+    val language = currentLanguage
     var query by remember(section, sheet.id) { mutableStateOf("") }
     var categoryFilter by remember(section, sheet.id) {
         mutableStateOf<RuleElementKind?>(null)
@@ -1214,8 +1288,8 @@ private fun TraitPickerDialog(
         matchesQuery && matchesCategory && matchesCompatibility
     }
     val title = when (section) {
-        CharacterTraitSection.FEATURE -> "Gestisci privilegi"
-        CharacterTraitSection.FEAT -> "Gestisci talenti"
+        CharacterTraitSection.FEATURE -> words.manageFeaturesTitle
+        CharacterTraitSection.FEAT -> words.manageFeatsTitle
     }
 
     AlertDialog(
@@ -1225,7 +1299,7 @@ private fun TraitPickerDialog(
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, color = Palette.Text)
                 Text(
-                    "Scegli dal Compendio · ${filtered.size} risultati",
+                    words.chooseFromCompendium(filtered.size),
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -1238,14 +1312,14 @@ private fun TraitPickerDialog(
                     .heightIn(max = 540.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                SheetField("Cerca per nome, regola o prerequisito", query) { query = it }
-                Text("CATEGORIA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                SheetField(words.searchByNameRuleOrPrerequisite, query) { query = it }
+                Text(language.pick("CATEGORIA", "CATEGORY"), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     GameButton(
-                        "Tutte",
+                        words.allFeminine,
                         accent = if (categoryFilter == null) Palette.Gold else Palette.TextMuted,
                         selected = categoryFilter == null,
                         dense = true,
@@ -1253,7 +1327,7 @@ private fun TraitPickerDialog(
                     )
                     categories.forEach { category ->
                         GameButton(
-                            category.italianLabel,
+                            category.label(language),
                             accent = if (categoryFilter == category) Palette.Gold else Palette.TextMuted,
                             selected = categoryFilter == category,
                             dense = true,
@@ -1262,14 +1336,14 @@ private fun TraitPickerDialog(
                     }
                 }
                 if (sheet.progression.configured) {
-                    SheetCheck("Solo compatibili con classe e livello", onlyCompatible) {
+                    SheetCheck(words.onlyCompatibleWithClassAndLevel, onlyCompatible) {
                         onlyCompatible = it
                     }
                 }
 
                 if (filtered.isEmpty()) {
                     Text(
-                        "Nessuna voce corrisponde ai filtri.",
+                        words.noEntryMatchesFilters,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -1321,15 +1395,15 @@ private fun TraitPickerDialog(
                                             horizontalArrangement = Arrangement.spacedBy(5.dp),
                                             verticalArrangement = Arrangement.spacedBy(4.dp),
                                         ) {
-                                            Chip(ability.category.italianLabel, Palette.Crit)
-                                            if (!compatible) Chip("Fuori requisiti", Palette.Enemy)
+                                            Chip(ability.category.label(language), Palette.Crit)
+                                            if (!compatible) Chip(words.outOfRequirements, Palette.Enemy)
                                             if (ability.sourcePage > 0) {
-                                                Chip("pag. ${ability.sourcePage}", Palette.TextMuted)
+                                                Chip(words.sourcePage(ability.sourcePage), Palette.TextMuted)
                                             }
                                         }
                                     }
                                     GameButton(
-                                        label = if (selected) "Rimuovi" else "Aggiungi",
+                                        label = if (selected) strings.common.remove else strings.common.add,
                                         accent = if (selected) Palette.Enemy else Palette.Party,
                                         dense = true,
                                         selected = selected,
@@ -1339,7 +1413,7 @@ private fun TraitPickerDialog(
                                 if (ability.classEligibility.isNotEmpty()) {
                                     Text(
                                         ability.classEligibility.joinToString(" · ") {
-                                            "${it.classId.italianLabel} ${it.minimumLevel}+"
+                                            words.classAndMinimumLevel(it.classId.label(language), it.minimumLevel)
                                         },
                                         color = Palette.TextMuted,
                                         style = MaterialTheme.typography.labelSmall,
@@ -1347,7 +1421,7 @@ private fun TraitPickerDialog(
                                 }
                                 if (ability.prerequisite.isNotBlank()) {
                                     Text(
-                                        "Prerequisito: ${ability.prerequisite}",
+                                        words.prerequisite(ability.prerequisite),
                                         color = Palette.GoldBright,
                                         style = MaterialTheme.typography.bodySmall,
                                     )
@@ -1368,19 +1442,10 @@ private fun TraitPickerDialog(
             }
         },
         confirmButton = {
-            GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
+            GameButton(strings.common.close, accent = Palette.TextMuted, onClick = onDismiss)
         },
     )
 }
-
-private val ActivationCost.characterLabel: String
-    get() = when (this) {
-        ActivationCost.ACTION -> "Azione"
-        ActivationCost.BONUS_ACTION -> "Azione bonus"
-        ActivationCost.REACTION -> "Reazione"
-        ActivationCost.LEGENDARY_ACTION -> "Azione leggendaria"
-        ActivationCost.NONE -> "Nessun costo"
-    }
 
 // --- incantesimi --------------------------------------------------------------------
 
@@ -1391,11 +1456,14 @@ private fun SpellcastingSection(
     compact: Boolean,
     update: (CharacterSheet) -> Unit,
 ) {
+    val strings = strings
+    val words = strings.sheet
+    val language = currentLanguage
     val casting = sheet.spellcasting
 
-    SheetBox("Incantesimi") {
+    SheetBox(strings.sheet.spells) {
         if (casting == null) {
-            GameButton("Questo personaggio lancia incantesimi", accent = Palette.Party, onClick = {
+            GameButton(words.castsSpells, accent = Palette.Party, onClick = {
                 update(sheet.copy(spellcasting = Spellcasting()))
             })
             return@SheetBox
@@ -1403,8 +1471,7 @@ private fun SpellcastingSection(
 
         if (sheet.spellcastingBlockedByArmor) {
             Text(
-                "Lancio bloccato: manca la competenza nell'armatura indossata. " +
-                    "Gli incantesimi non saranno disponibili in combattimento.",
+                words.castingBlockedByArmor,
                 color = Palette.Bloodied,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.bodySmall,
@@ -1423,14 +1490,14 @@ private fun SpellcastingSection(
                 adaptiveFormItem(1.4f) { itemModifier ->
                     Column(itemModifier) {
                         Text(
-                            "Caratteristica da incantatore",
+                            words.spellcastingAbility,
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.labelSmall,
                         )
                         if (sheet.progression.configured && casting.abilitiesByClass.isNotEmpty()) {
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 casting.abilitiesByClass.forEach { (classId, ability) ->
-                                    Chip("${classId.italianLabel}: ${ability.abbreviation}", Palette.Party)
+                                    Chip(words.spellcastingAbilityOf(classId.label(language), ability.abbreviationIn(language)), Palette.Party)
                                 }
                             }
                         } else {
@@ -1445,14 +1512,14 @@ private fun SpellcastingSection(
                     }
                 },
                 adaptiveFormItem { itemModifier ->
-                    DerivedValue("Modificatore", signed(sheet.modifier(casting.ability)), itemModifier)
+                    DerivedValue(words.modifier, signed(sheet.modifier(casting.ability)), itemModifier)
                 },
                 adaptiveFormItem { itemModifier ->
-                    DerivedValue("CD tiro salvezza", sheet.spellSaveDc?.toString() ?: "—", itemModifier)
+                    DerivedValue(words.saveDc, sheet.spellSaveDc?.toString() ?: "—", itemModifier)
                 },
                 adaptiveFormItem { itemModifier ->
                     DerivedValue(
-                        "Bonus di attacco",
+                        words.attackBonus,
                         sheet.spellAttackBonus?.let { signed(it) } ?: "—",
                         itemModifier,
                     )
@@ -1460,7 +1527,7 @@ private fun SpellcastingSection(
             ),
         )
 
-        Text("Slot incantesimo", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(words.spellSlots, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1485,7 +1552,7 @@ private fun SpellcastingSection(
 
         if (casting.spells.isNotEmpty()) {
             Text(
-                "Trucchetti e incantesimi selezionati",
+                words.selectedCantripsAndSpells,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.labelSmall,
             )
@@ -1495,7 +1562,7 @@ private fun SpellcastingSection(
                 .forEach { (level, spells) ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            if (level == 0) "TRUCCHETTI" else "LIVELLO $level",
+                            if (level == 0) words.cantripsHeading else words.levelHeading(level),
                             color = Palette.Gold,
                             style = MaterialTheme.typography.labelSmall,
                         )
@@ -1507,8 +1574,8 @@ private fun SpellcastingSection(
                                 Chip(
                                     buildString {
                                         append(spell.name)
-                                        if (spell.concentration) append(" · C")
-                                        if (spell.ritual) append(" · R")
+                                        if (spell.concentration) append(words.concentrationInitial)
+                                        if (spell.ritual) append(words.ritualInitial)
                                     },
                                     if (level == 0) Palette.Party else Palette.Temporary,
                                 )
@@ -1526,6 +1593,8 @@ private fun SlotBlock(
     editableTotal: Boolean,
     onChange: (SpellSlot) -> Unit,
 ) {
+    val strings = strings
+    val words = strings.sheet
     Column(
         Modifier
             .width(112.dp)
@@ -1534,16 +1603,18 @@ private fun SlotBlock(
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
-            "Livello ${slot.level}",
+            words.slotLevel(slot.level),
             color = Palette.Gold,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
         )
         if (editableTotal) {
-            SheetNumberField("Totali", slot.total) { onChange(slot.copy(total = it.coerceIn(0, 9))) }
+            SheetNumberField(currentLanguage.pick("Totali", "Total"), slot.total) {
+                onChange(slot.copy(total = it.coerceIn(0, 9)))
+            }
         } else {
             Text(
-                "Totali ${slot.total}",
+                words.slotTotal(slot.total),
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -1557,6 +1628,8 @@ private fun SlotBlock(
 
 @Composable
 private fun PactSlotBlock(slot: SpellSlot, onChange: (SpellSlot) -> Unit) {
+    val strings = strings
+    val words = strings.sheet
     Column(
         Modifier
             .width(150.dp)
@@ -1566,12 +1639,12 @@ private fun PactSlotBlock(slot: SpellSlot, onChange: (SpellSlot) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
-            "PATTO · LIVELLO ${slot.level}",
+            words.pactSlotLevel(slot.level),
             color = Palette.Gold,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
         )
-        Text("Riposo breve o lungo", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(words.shortOrLongRest, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         PipRow(slot.total, slot.spent, color = Palette.Gold) {
             onChange(slot.copy(spent = it.coerceIn(0, slot.total)))
         }
@@ -1594,6 +1667,8 @@ private fun ProgressionEntries(
     emptyNote: String,
     onRemove: (String) -> Unit,
 ) {
+    val strings = strings
+    val words = strings.sheet
     val byId = catalog.associateBy { it.id }
     val entries = ids.mapNotNull { byId[it] }
     // Le padronanze d'arme sono armi, non voci di catalogo: si riconoscono
@@ -1624,7 +1699,7 @@ private fun ProgressionEntries(
                     )
                     if (entry.sourcePage > 0) {
                         Text(
-                            text = "pag. ${entry.sourcePage}",
+                            text = words.sourcePage(entry.sourcePage),
                             color = Palette.TextFaint,
                             style = MaterialTheme.typography.labelSmall,
                         )
@@ -1639,7 +1714,7 @@ private fun ProgressionEntries(
                 }
             }
             GameButton(
-                "Rimuovi",
+                strings.common.remove,
                 accent = Palette.Enemy,
                 dense = true,
                 onClick = { onRemove(entry.id) },
@@ -1647,7 +1722,7 @@ private fun ProgressionEntries(
         }
     }
     if (masteries.isNotEmpty()) {
-        Text("PADRONANZE D'ARME", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(words.weaponMasteries, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -1665,52 +1740,55 @@ private fun CharacterNotesSection(
     compact: Boolean,
     update: (CharacterSheet) -> Unit,
 ) {
+    val strings = strings
+    val words = strings.sheet
+    val language = strings.language
     AdaptiveFormRow(
         compact = compact,
         items = arrayOf(
             adaptiveFormItem { itemModifier ->
-                SheetBox("Aspetto", itemModifier) {
+                SheetBox(strings.sheet.appearance, itemModifier) {
                     SheetTextArea(sheet.appearance, minLines = 3) { update(sheet.copy(appearance = it)) }
                 }
             },
             adaptiveFormItem(1.4f) { itemModifier ->
-                SheetBox("Storia e tratti caratteriali", itemModifier) {
+                SheetBox(words.backgroundAndTraits, itemModifier) {
                     SheetTextArea(sheet.backstory, minLines = 3) { update(sheet.copy(backstory = it)) }
-                    SheetField("Allineamento", sheet.alignment) { update(sheet.copy(alignment = it)) }
+                    SheetField(strings.sheet.alignment, sheet.alignment) { update(sheet.copy(alignment = it)) }
                 }
             },
             adaptiveFormItem { itemModifier ->
                 Column(itemModifier, verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    SheetBox("Lingue") {
+                    SheetBox(language.pick("Lingue", "Languages")) {
                         SheetTextArea(sheet.languages, minLines = 2) { update(sheet.copy(languages = it)) }
                     }
-                    SheetBox("Denari") {
+                    SheetBox(language.pick("Denari", "Coins")) {
                         AdaptiveFormRow(
                             compact = compact,
                             compactColumns = 2,
                             items = arrayOf(
                                 adaptiveFormItem { fieldModifier ->
-                                    SheetNumberField("MR", sheet.money.copper, fieldModifier) {
+                                    SheetNumberField(language.pick("MR", "CP"), sheet.money.copper, fieldModifier) {
                                         update(sheet.copy(money = sheet.money.copy(copper = it)))
                                     }
                                 },
                                 adaptiveFormItem { fieldModifier ->
-                                    SheetNumberField("MA", sheet.money.silver, fieldModifier) {
+                                    SheetNumberField(language.pick("MA", "SP"), sheet.money.silver, fieldModifier) {
                                         update(sheet.copy(money = sheet.money.copy(silver = it)))
                                     }
                                 },
                                 adaptiveFormItem { fieldModifier ->
-                                    SheetNumberField("ME", sheet.money.electrum, fieldModifier) {
+                                    SheetNumberField(language.pick("ME", "EP"), sheet.money.electrum, fieldModifier) {
                                         update(sheet.copy(money = sheet.money.copy(electrum = it)))
                                     }
                                 },
                                 adaptiveFormItem { fieldModifier ->
-                                    SheetNumberField("MO", sheet.money.gold, fieldModifier) {
+                                    SheetNumberField(language.pick("MO", "GP"), sheet.money.gold, fieldModifier) {
                                         update(sheet.copy(money = sheet.money.copy(gold = it)))
                                     }
                                 },
                                 adaptiveFormItem { fieldModifier ->
-                                    SheetNumberField("MP", sheet.money.platinum, fieldModifier) {
+                                    SheetNumberField(language.pick("MP", "PP"), sheet.money.platinum, fieldModifier) {
                                         update(sheet.copy(money = sheet.money.copy(platinum = it)))
                                     }
                                 },
@@ -1720,10 +1798,10 @@ private fun CharacterNotesSection(
                 }
             },
             adaptiveFormItem(1.2f) { itemModifier ->
-                SheetBox("Equipaggiamento", itemModifier) {
+                SheetBox(strings.sheet.equipment, itemModifier) {
                     SheetTextArea(sheet.equipment, minLines = 4) { update(sheet.copy(equipment = it)) }
                     Text(
-                        "Sintonia con oggetti magici",
+                        words.magicItemAttunement,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.labelSmall,
                     )

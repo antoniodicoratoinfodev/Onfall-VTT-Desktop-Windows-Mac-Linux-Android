@@ -60,9 +60,17 @@ import app.d6d.ui.roster.RosterViewModel
 import app.d6d.sheet.ImageStore
 import app.d6d.ui.images.FilePicker
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.i18n.AppLocale
+import app.d6d.ui.i18n.LocalStrings
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.stringsFor
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.layout.LayoutStore
 import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.layout.UiLayoutState
+import app.d6d.ui.settings.AppPreferencesState
+import app.d6d.ui.settings.PreferencesStore
+import app.d6d.ui.settings.SettingsScreen
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.ui.session.OpenGameSession
 import app.d6d.ui.session.SessionWorkspace
@@ -85,10 +93,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-enum class Destination(val label: String, val icon: AppGlyph) {
-    BATTAGLIA("Battaglia", AppGlyph.SWORDS),
-    INCONTRO("Partita", AppGlyph.D20),
-    COMPENDIO("Compendio", AppGlyph.TOME),
+enum class Destination(val icon: AppGlyph) {
+    BATTAGLIA(AppGlyph.SWORDS),
+    INCONTRO(AppGlyph.D20),
+    COMPENDIO(AppGlyph.TOME),
+    IMPOSTAZIONI(AppGlyph.GEAR),
+}
+
+/** Nome della voce di navigazione, nella lingua in uso. */
+fun Destination.label(strings: Strings): String = when (this) {
+    Destination.BATTAGLIA -> strings.nav.battle
+    Destination.INCONTRO -> strings.nav.game
+    Destination.COMPENDIO -> strings.nav.compendium
+    Destination.IMPOSTAZIONI -> strings.nav.settings
 }
 
 // Larghezze della barra di navigazione desktop. Parte al minimo — solo le icone —
@@ -96,7 +113,11 @@ enum class Destination(val label: String, val icon: AppGlyph) {
 // Oltre la soglia compaiono anche le etichette: sotto resta compatta.
 private val RAIL_MIN = 54.dp
 private val RAIL_MAX = 240.dp
-private val RAIL_LABELS_FROM = 96.dp
+
+// La soglia e' tarata sull'etichetta piu' lunga: sotto questa larghezza
+// «Impostazioni» andrebbe a capo a meta' parola, che si legge peggio della sola
+// icona. Va rialzata se un giorno arrivasse una voce con un nome ancora piu' lungo.
+private val RAIL_LABELS_FROM = 116.dp
 
 /**
  * Radice dell'applicazione, condivisa fra desktop e Android.
@@ -130,6 +151,29 @@ fun AppRoot(
         var requestedCompendiumItemId by remember { mutableStateOf<String?>(null) }
         var requestedCompendiumNewKind by remember { mutableStateOf<RosterKind?>(null) }
 
+        // Carica lingua e disposizione prima dei contenuti inclusi. In
+        // particolare la lingua deve essere gia' definitiva quando il roster
+        // costruisce le schede dei template: far partire i due caricamenti in
+        // parallelo rendeva il risultato dipendente da quale disco finiva prima.
+        val layoutStore = remember { LayoutStore(dataDirectory.resolve("layout.json")) }
+        val layout = remember { UiLayoutState(store = layoutStore) }
+        var layoutReady by remember { mutableStateOf(false) }
+        LaunchedEffect(layout) {
+            layout.restore(runDiskIo { layoutStore.load() })
+            layoutReady = true
+        }
+
+        val preferencesStore = remember { PreferencesStore(dataDirectory.resolve("preferences.json")) }
+        val preferences = remember { AppPreferencesState(store = preferencesStore) }
+        var preferencesReady by remember { mutableStateOf(false) }
+        LaunchedEffect(preferences) {
+            preferences.restore(runDiskIo { preferencesStore.load() })
+            // Allinea il vocabolario prima di sbloccare l'inizializzazione del
+            // roster, non in un effetto concorrente della ricomposizione dopo.
+            AppLocale.use(preferences.language)
+            preferencesReady = true
+        }
+
         // Il roster unifica schede e compendio: le schede sono la fonte, il catalogo
         // da combattimento ne discende.
         val roster = remember {
@@ -152,16 +196,26 @@ fun AppRoot(
                     footprintProvider = { definitionId -> roster.footprintFor(definitionId) },
                     passiveProvider = { abilityId -> roster.abilityIsPassive(abilityId) },
                     actorProvider = { definitionId -> roster.definitionFor(definitionId) },
-                    wildShapeProvider = { abilityId -> SrdBeasts.byId(abilityId)?.toActorDefinition() },
+                    wildShapeProvider = { abilityId ->
+                        SrdBeasts.byId(abilityId, AppLocale.language)?.toActorDefinition()
+                    },
                     druidLevelProvider = { definitionId -> roster.druidLevelFor(definitionId) },
+                    // Fuori dalla composizione il vocabolario si legge da
+                    // `AppLocale`: qui non arriva alcun `LocalStrings`.
                     resourceSink = CombatResourceSink { definitionId, resources ->
                         if (!roster.applyCombatResources(definitionId, resources)) {
-                            error(roster.sheets.status ?: "Risorse della scheda non salvate.")
+                            error(
+                                roster.sheets.status
+                                    ?: AppLocale.current.nav.sheetResourcesNotSaved,
+                            )
                         }
                     },
                     editSink = CombatantEditSink { definitionId, snapshot ->
                         if (!roster.applyCombatEdit(definitionId, snapshot)) {
-                            error(roster.sheets.status ?: "Correzione della scheda non salvata.")
+                            error(
+                                roster.sheets.status
+                                    ?: AppLocale.current.nav.sheetEditNotSaved,
+                            )
                         }
                     },
                 )
@@ -187,7 +241,8 @@ fun AppRoot(
         // quello che l'utente ha aperto: l'archivio viene popolato alla prima
         // installazione, quindi su uno gia' esistente le partite incluse
         // nominerebbero schede che non ci sono. Si rimettono solo le mancanti.
-        LaunchedEffect(roster) {
+        LaunchedEffect(roster, preferencesReady) {
+            if (!preferencesReady) return@LaunchedEffect
             runCatching {
                 runDiskIo {
                     roster.initialize()
@@ -227,6 +282,10 @@ fun AppRoot(
                 // restano bozze o errori, la decisione torna all'utente.
                 val prepared = workspace.prepareForPersistence()
                 runDiskIo { workspace.flushAutosaves(prepared) }
+                runDiskIo {
+                    if (layoutReady) runCatching { layout.persist() }
+                    if (preferencesReady) runCatching { preferences.persist() }
+                }
                 if (workspace.openSessions.none { it.manager.hasUnsavedChanges }) {
                     runDiskIo { runCatching { recoveryStore.clear() } }
                     onExitConfirmed()
@@ -240,19 +299,50 @@ fun AppRoot(
         // Disposizione dei pannelli: larghezze, collassi, zoom e posizione delle
         // targhe. Si carica all'avvio dallo stesso file trasportabile e vi torna a
         // ogni modifica, cosi' l'interfaccia riapre com'era stata lasciata.
-        val layoutStore = remember { LayoutStore(dataDirectory.resolve("layout.json")) }
-        val layout = remember { UiLayoutState(store = layoutStore) }
-        LaunchedEffect(layout) {
-            layout.restore(runDiskIo { layoutStore.load() })
-        }
         // `snapshotFlow` osserva i valori senza ricomporre la radice a ogni frame
         // di trascinamento; `collectLatest` annulla l'attesa precedente, quindi si
         // scrive su disco solo quando i pannelli si fermano.
-        LaunchedEffect(layout) {
+        LaunchedEffect(layout, layoutReady) {
+            if (!layoutReady) return@LaunchedEffect
             snapshotFlow { layout.snapshot() }.collectLatest {
                 delay(600)
                 runDiskIo { runCatching { layout.persist() } }
             }
+        }
+
+        // Preferenze dell'applicazione: separate dalla disposizione perche' sono
+        // un'altra domanda — non dove stanno i pannelli, ma come l'app si comporta.
+        // Stesso ciclo: caricamento fuori dal thread grafico, scrittura ritardata.
+        LaunchedEffect(preferences, preferencesReady) {
+            if (!preferencesReady) return@LaunchedEffect
+            snapshotFlow { preferences.snapshot() }.collectLatest {
+                delay(600)
+                runDiskIo { runCatching { preferences.persist() } }
+            }
+        }
+        // La lingua scelta raggiunge anche chi non vive in composizione: i view
+        // model che rifiutano un comando, il racconto del turno nemico, gli errori
+        // di salvataggio. Dentro la composizione ci pensa `LocalStrings` piu' sotto.
+        LaunchedEffect(preferences.language, encounterBuilder, roster, portraits, workspace) {
+            AppLocale.use(preferences.language)
+            encounterBuilder.onLanguageChanged()
+            roster.onLanguageChanged()
+            portraits.onLanguageChanged()
+            workspace.onLanguageChanged()
+        }
+        // Il ritmo della CPU e' una preferenza di chi guarda, non una proprieta'
+        // dello scontro: da qui raggiunge subito le partite gia' aperte e quella
+        // che la procedura sta preparando. Il valore fotografato in un salvataggio
+        // resta leggibile, ma questo lo supera: la fonte di verita' e' una sola.
+        LaunchedEffect(preferences, workspace, encounterBuilder) {
+            // Osserva anche l'elenco delle schede aperte, non solo la preferenza:
+            // una partita aperta dopo l'ultimo cambio arriva col ritmo scritto nel
+            // proprio salvataggio, e va allineata anche lei.
+            snapshotFlow { preferences.enemyCpuSpeed to workspace.openSessions.toList() }
+                .collect { (speed, sessions) ->
+                    encounterBuilder.enemyCpuSpeed = speed
+                    sessions.forEach { it.battle.enemyCpuSpeed = speed }
+                }
         }
 
         // Ogni scheda conserva il proprio effetto di autosave anche quando non e'
@@ -268,11 +358,16 @@ fun AppRoot(
         val disposalPersistenceScope = remember(workspace) {
             CoroutineScope(SupervisorJob() + Dispatchers.IO)
         }
-        DisposableEffect(workspace) {
+        DisposableEffect(workspace, layout, preferences) {
             onDispose {
                 val prepared = workspace.prepareForPersistence()
                 disposalPersistenceScope.launch {
                     runCatching { workspace.flushAutosaves(prepared) }
+                    // Se la shell viene distrutta mentre il caricamento iniziale
+                    // e' ancora in corso, non sovrascrive i file esistenti con i
+                    // valori predefiniti che erano visibili solo per un istante.
+                    if (layoutReady) runCatching { layout.persist() }
+                    if (preferencesReady) runCatching { preferences.persist() }
                 }
             }
         }
@@ -327,9 +422,7 @@ fun AppRoot(
                                     requestedCompendiumNewKind = null
                                     destination = Destination.COMPENDIO
                                 } else {
-                                    activeSession.battle.showMessage(
-                                        "La scheda collegata a questo combattente non è presente nel Compendio.",
-                                    )
+                                    activeSession.battle.showMessage { it.nav.sheetNotInCompendium }
                                 }
                             },
                             onCreateRosterCharacter = {
@@ -371,13 +464,27 @@ fun AppRoot(
                         onRequestedItemHandled = { requestedCompendiumItemId = null },
                         requestedNewKind = requestedCompendiumNewKind,
                         onRequestedNewHandled = { requestedCompendiumNewKind = null },
+                        modifier = contentModifier,
+                    )
+
+                Destination.IMPOSTAZIONI ->
+                    SettingsScreen(
+                        preferences = preferences,
+                        layout = layout,
+                        dataDirectory = dataDirectory,
+                        compact = compact,
                         cursorPreferences = cursorPreferences,
                         modifier = contentModifier,
                     )
             }
         }
 
-        CompositionLocalProvider(LocalUiLayout provides layout) {
+        CompositionLocalProvider(
+            LocalUiLayout provides layout,
+            // Il vocabolario entra qui e scende fino all'ultima etichetta. Cambia
+            // lingua e a essere ridisegnato e' solo chi legge davvero del testo.
+            LocalStrings provides stringsFor(preferences.language),
+        ) {
             Box(modifier.fillMaxSize()) {
                 // Fondale atmosferico condiviso: resta fermo mentre le schermate si
                 // alternano sopra. La battaglia dipinge il proprio fondo opaco,
@@ -385,7 +492,9 @@ fun AppRoot(
                 AtmosphericBackground(
                     modifier = Modifier.fillMaxSize(),
                     animationFrameIntervalMillis = atmosphericAnimationFrameMillis,
-                    animationRunning = atmosphericAnimationRunning,
+                    // La shell ferma l'animazione quando la finestra non serve;
+                    // l'utente puo' fermarla sempre, dalle Impostazioni.
+                    animationRunning = atmosphericAnimationRunning && preferences.animatedBackdrop,
                 )
 
                 if (compact) {
@@ -423,6 +532,7 @@ fun AppRoot(
             }
 
             if (exitWarningOpen) {
+                val text = strings.nav
                 val dirtySessions = workspace.openSessions.filter { it.manager.hasUnsavedChanges }
                 val draftCount = dirtySessions.count { it.manager.currentSlug == null }
                 val names = dirtySessions.take(4).joinToString(" · ") {
@@ -440,32 +550,30 @@ fun AppRoot(
                     containerColor = Palette.Surface,
                     title = {
                         Text(
-                            "Partite non salvate",
+                            text.unsavedGamesTitle,
                             color = Palette.Text,
                             fontWeight = FontWeight.Bold,
                         )
                     },
                     text = {
                         Text(
-                            buildString {
-                                append("${dirtySessions.size} sessioni hanno modifiche da salvare")
-                                if (draftCount > 0) append(", di cui $draftCount mai salvate")
-                                append(".\n\n")
-                                append(names)
-                                if (dirtySessions.size > 4) append(" · …")
-                                append("\n\nTorna a Partita per salvarle o chiuderle una per una.")
-                            },
+                            text.unsavedGamesBody(
+                                dirty = dirtySessions.size,
+                                neverSaved = draftCount,
+                                names = names,
+                                truncated = dirtySessions.size > 4,
+                            ),
                             color = Palette.TextMuted,
                         )
                     },
                     confirmButton = {
-                        GameButton("Torna e salva", accent = Palette.Heal, onClick = {
+                        GameButton(text.returnAndSave, accent = Palette.Heal, onClick = {
                             exitWarningOpen = false
                             destination = Destination.INCONTRO
                         })
                     },
                     dismissButton = {
-                        GameButton("Esci senza salvare", accent = Palette.Enemy, onClick = {
+                        GameButton(text.exitWithoutSaving, accent = Palette.Enemy, onClick = {
                             exitWarningOpen = false
                             uiScope.launch {
                                 runDiskIo { runCatching { recoveryStore.clear() } }
@@ -490,6 +598,7 @@ private fun NoOpenSessionScreen(
     onOpenNewGame: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val text = strings.nav
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             Modifier.padding(24.dp),
@@ -498,18 +607,18 @@ private fun NoOpenSessionScreen(
         ) {
             GlyphIcon(AppGlyph.SWORDS, tint = Palette.Gold, size = 44.dp)
             Text(
-                text = "Nessuna partita aperta",
+                text = text.noOpenSessionTitle,
                 color = Palette.Text,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                text = "Vai su Partita per cominciarne una nuova o riaprire un salvataggio.",
+                text = text.noOpenSessionBody,
                 color = Palette.TextMuted,
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            GameButton("Vai a Partita", accent = Palette.Gold, primary = true, onClick = onOpenNewGame)
+            GameButton(text.goToGame, accent = Palette.Gold, primary = true, onClick = onOpenNewGame)
         }
     }
 }
@@ -549,6 +658,7 @@ private fun NavRail(
     // Sotto la soglia si mostrano solo le icone: la barra resta leggibile anche
     // stretta, come le colonne squadra e nemici quando si restringono.
     val showLabels = width >= RAIL_LABELS_FROM
+    val strings = strings
     Column(
         Modifier
             .width(width)
@@ -565,12 +675,12 @@ private fun NavRail(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(7.dp))
                 .clickable(role = Role.Button, onClick = onCollapse)
-                .semantics { contentDescription = "Chiudi la barra di navigazione" }
+                .semantics { contentDescription = strings.nav.collapseRail }
                 .padding(vertical = 4.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = if (showLabels) "‹  Chiudi" else "‹",
+                text = if (showLabels) "‹  ${strings.nav.collapseRailShort}" else "‹",
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.labelMedium,
             )
@@ -601,6 +711,7 @@ private fun NavRail(
 /** Barra chiusa: una striscia sottile col solo tasto per riaprirla. */
 @Composable
 private fun CollapsedRail(onExpand: () -> Unit) {
+    val label = strings.nav.expandRail
     Column(
         Modifier
             .fillMaxHeight()
@@ -613,7 +724,7 @@ private fun CollapsedRail(onExpand: () -> Unit) {
             Modifier
                 .clip(RoundedCornerShape(7.dp))
                 .clickable(role = Role.Button, onClick = onExpand)
-                .semantics { contentDescription = "Apri la barra di navigazione" }
+                .semantics { contentDescription = label }
                 .padding(vertical = 6.dp, horizontal = 4.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -647,6 +758,7 @@ private fun NavItem(
 ) {
     val tint = if (selected) Palette.GoldBright else Palette.TextMuted
     val shape = RoundedCornerShape(8.dp)
+    val label = destination.label(strings)
     Column(
         modifier
             // La voce attiva e' una velatura d'oro bordata, non un blocco pieno:
@@ -680,11 +792,11 @@ private fun NavItem(
             glyph = destination.icon,
             tint = tint,
             size = 20.dp,
-            contentDescription = destination.label.takeUnless { showLabel },
+            contentDescription = label.takeUnless { showLabel },
         )
         if (showLabel) {
             Text(
-                text = destination.label,
+                text = label,
                 color = tint,
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.labelSmall,

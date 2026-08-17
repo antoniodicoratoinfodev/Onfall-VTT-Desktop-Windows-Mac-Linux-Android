@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.initials
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.i18n.strings
 
 /**
  * Ritratto di un attore, con caricamento dell'immagine.
@@ -42,6 +43,7 @@ fun PortraitPicker(
     modifier: Modifier = Modifier,
     diameter: androidx.compose.ui.unit.Dp = 92.dp,
 ) {
+    val words = strings.maps
     // Leggere `revision` lega questa composizione agli import: un nuovo file
     // caricato ridisegna subito il ritratto.
     @Suppress("UNUSED_EXPRESSION")
@@ -80,13 +82,13 @@ fun PortraitPicker(
         }
 
         GameButton(
-            label = if (portrait == null) "Carica immagine" else "Cambia",
+            label = if (portrait == null) words.uploadImage else words.changeImage,
             accent = Palette.Party,
             onClick = { repository.assignPortraitAsync(definitionId) },
         )
         if (portrait != null) {
             GameButton(
-                label = "Rimuovi",
+                label = strings.common.remove,
                 accent = Palette.TextFaint,
                 onClick = { repository.clearPortrait(definitionId) },
             )

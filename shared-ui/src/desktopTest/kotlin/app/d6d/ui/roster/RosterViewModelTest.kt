@@ -11,6 +11,7 @@ import app.d6d.sheet.Ability
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
+import app.d6d.sheet.MonsterStatBlock
 import app.d6d.sheet.PACT_SLOT_RESOURCE_PREFIX
 import app.d6d.sheet.Proficiency
 import app.d6d.sheet.SPELL_SLOT_RESOURCE_PREFIX
@@ -28,6 +29,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import app.d6d.i18n.AppLanguage
+import app.d6d.ui.i18n.AppLocale
 
 /**
  * Unificazione di schede e compendio.
@@ -49,11 +52,51 @@ class RosterViewModelTest {
         catalogStore().load().firstOrNull { it.combatDefinition().id() == id }
 
     @Test
+    fun `la proiezione da combattimento usa la lingua corrente`() {
+        // `definitionFor` alimenta il configuratore degli incontri. Chiamare
+        // `toActorDefinition()` senza lingua lasciava il predefinito italiano, e
+        // un attore senza nome entrava in una partita inglese come «Senza nome».
+        val roster = roster()
+        val sheets = sheetStore()
+        val library = sheets.load()
+        sheets.save(
+            library.copy(
+                characters = library.characters + CharacterSheet(id = "pg-anonimo", characterName = ""),
+                monsters = library.monsters + MonsterStatBlock(id = "bestia-anonima", name = ""),
+            ),
+        )
+        val reloaded = RosterViewModel(catalogStore(), sheets)
+
+        assertEquals("Senza nome", reloaded.definitionFor("pg-anonimo")?.name())
+        assertEquals("Creatura senza nome", reloaded.definitionFor("bestia-anonima")?.name())
+
+        AppLocale.use(AppLanguage.ENGLISH)
+        reloaded.onLanguageChanged()
+
+        assertEquals("Unnamed", reloaded.definitionFor("pg-anonimo")?.name())
+        assertEquals("Unnamed creature", reloaded.definitionFor("bestia-anonima")?.name())
+        assertNotNull(roster)
+    }
+
+    @Test
     fun `il roster contiene sia personaggi sia creature`() {
         val roster = roster()
 
         assertTrue(roster.items.any { it.kind == RosterKind.PERSONAGGIO })
         assertTrue(roster.items.any { it.kind == RosterKind.CREATURA })
+    }
+
+    @Test
+    fun `il sottotitolo guidato del roster segue il cambio lingua`() {
+        val roster = roster()
+        assertEquals("Guerriero 1", roster.items.first { it.id == "pg-tarvos" }.subtitle)
+
+        roster.status = "Messaggio precedente"
+        AppLocale.use(AppLanguage.ENGLISH)
+        roster.onLanguageChanged()
+
+        assertEquals("Fighter 1", roster.items.first { it.id == "pg-tarvos" }.subtitle)
+        assertNull(roster.status)
     }
 
     @Test
@@ -249,13 +292,13 @@ class RosterViewModelTest {
             ),
         )
         val roster = roster()
-        assertTrue(roster.items.none { it.id == SessionTemplates.default.party.first().id })
+        assertTrue(roster.items.none { it.id == SessionTemplates.of(AppLanguage.ITALIAN).default.party.first().id })
 
         roster.installIncludedContent()
 
         // Non solo la partita che si apre: tutto il contenuto distribuito.
         val known = roster.items.mapTo(mutableSetOf()) { it.id }
-        SessionTemplates.all.forEach { template ->
+        SessionTemplates.of(AppLanguage.ITALIAN).all.forEach { template ->
             template.startedSession().currentState().combatants().values.forEach { combatant ->
                 val definitionId = combatant.snapshot().definitionId()
                 assertTrue(definitionId in known, "«${template.name}»: manca la scheda di $definitionId")

@@ -46,6 +46,7 @@ import app.d6d.ui.runDiskIo
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.theme.OrnateDivider
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
@@ -60,17 +61,18 @@ fun SessionMenuButton(
     openSessionCount: Int = 1,
     autosaveWarning: Boolean = false,
 ) {
+    val words = strings.session
     val scope = rememberCoroutineScope()
     val subtitle = when {
-        autosaveWarning && openSessionCount > 1 -> "Autosave da controllare · $openSessionCount aperte"
-        autosaveWarning -> "Autosave da controllare"
-        manager.hasUnsavedChanges && openSessionCount > 1 -> "Da salvare · $openSessionCount aperte"
-        manager.hasUnsavedChanges -> "Da salvare"
-        openSessionCount > 1 -> "$openSessionCount aperte"
+        autosaveWarning && openSessionCount > 1 -> words.autosaveToCheckWithCount(openSessionCount)
+        autosaveWarning -> words.autosaveToCheck
+        manager.hasUnsavedChanges && openSessionCount > 1 -> words.toSaveWithCount(openSessionCount)
+        manager.hasUnsavedChanges -> words.toSave
+        openSessionCount > 1 -> words.openTabs(openSessionCount)
         else -> null
     }
     GameButton(
-        label = "Sessione",
+        label = strings.session.sessionLabel,
         subtitle = subtitle,
         accent = Palette.Gold,
         dense = dense,
@@ -95,6 +97,7 @@ fun SessionMenuDialog(
     onOpenInNewTab: ((SessionSummary) -> Unit)? = null,
     workspace: SessionWorkspace? = null,
 ) {
+    val words = strings.session
     if (!manager.menuOpen) return
 
     var name by remember(manager.currentName) { mutableStateOf(manager.currentName) }
@@ -153,17 +156,16 @@ fun SessionMenuDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
             Text(
-                text = "Sessioni",
+                text = strings.session.sessionsLabel,
                 color = Palette.Text,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
             OrnateDivider(color = Palette.GoldDim)
             Text(
-                text = "Una sessione salvata conserva combattimento, mappa, segnaposti, " +
-                    "registro completo e stato dei dadi: riaprendola i tiri futuri sono gli stessi." +
+                words.saveExplainer +
                     if (onOpenInNewTab != null) {
-                        " Viene aperta in una scheda indipendente senza chiudere le altre."
+                        words.saveExplainerTab
                     } else {
                         ""
                     },
@@ -212,7 +214,7 @@ fun SessionMenuDialog(
 
             if (manager.hasUnsavedChanges) {
                 Text(
-                    text = "Ci sono modifiche alla battaglia non ancora salvate.",
+                    text = words.unsavedBattleChanges,
                     color = Palette.Bloodied,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier
@@ -223,9 +225,9 @@ fun SessionMenuDialog(
             }
 
             if (workspace != null && workspace.openSessions.size > 1) {
-                Eyebrow("Sessioni preparate (${workspace.openSessions.size})")
+                Eyebrow(words.preparedSessions(workspace.openSessions.size))
                 Text(
-                    "Passa a un'altra mappa senza chiudere o ricaricare la partita corrente.",
+                    words.preparedSessionsHint,
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -267,12 +269,12 @@ fun SessionMenuDialog(
                 OrnateDivider(color = Palette.GoldDim)
             }
 
-            Eyebrow("Salva con nome")
+            Eyebrow(words.saveWithName)
                 if (compact) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SessionNameField(name, onNameChange = { name = it })
                         GameButton(
-                            label = "Salva",
+                            label = strings.common.save,
                             accent = Palette.Heal,
                             enabled = name.isNotBlank(),
                             onClick = { saveSession(name) },
@@ -285,7 +287,7 @@ fun SessionMenuDialog(
                     ) {
                         SessionNameField(name, onNameChange = { name = it }, modifier = Modifier.weight(1f))
                         GameButton(
-                            label = "Salva",
+                            label = strings.common.save,
                             accent = Palette.Heal,
                             enabled = name.isNotBlank(),
                             onClick = { saveSession(name) },
@@ -293,10 +295,10 @@ fun SessionMenuDialog(
                     }
                 }
 
-            Eyebrow("Sessioni salvate (${manager.sessions.size})")
+            Eyebrow(words.savedSessions(manager.sessions.size))
             if (manager.sessions.isEmpty()) {
                 Text(
-                    text = "Nessuna sessione salvata.",
+                    text = words.noSavedSession,
                     color = Palette.TextFaint,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -306,7 +308,7 @@ fun SessionMenuDialog(
                         SessionRow(
                             summary = summary,
                             compact = compact,
-                            openLabel = if (onOpenInNewTab != null) "Apri in scheda" else "Apri",
+                            openLabel = if (onOpenInNewTab != null) words.openInTab else strings.common.open,
                             onOpen = openSession,
                             onDelete = { deleteSession = it },
                         )
@@ -315,7 +317,7 @@ fun SessionMenuDialog(
             }
 
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                GameButton("Chiudi", accent = Palette.TextMuted, onClick = { manager.menuOpen = false })
+                GameButton(strings.common.close, accent = Palette.TextMuted, onClick = { manager.menuOpen = false })
             }
         }
         }
@@ -325,15 +327,15 @@ fun SessionMenuDialog(
         AlertDialog(
             onDismissRequest = { overwriteName = null },
             containerColor = Palette.Surface,
-            title = { Text("Sostituire la sessione?", color = Palette.Text) },
+            title = { Text(words.replaceSessionTitle, color = Palette.Text) },
             text = {
                 Text(
-                    "Esiste già una sessione con questo nome. Il salvataggio precedente verrà sostituito.",
+                    words.replaceSessionBody,
                     color = Palette.TextMuted,
                 )
             },
             confirmButton = {
-                GameButton("Sostituisci", accent = Palette.Enemy, onClick = {
+                GameButton(strings.common.replace, accent = Palette.Enemy, onClick = {
                     scope.launch {
                         val prepared = manager.prepareForPersistence()
                         runDiskIo {
@@ -345,7 +347,7 @@ fun SessionMenuDialog(
                 })
             },
             dismissButton = {
-                GameButton("Annulla", accent = Palette.TextMuted, onClick = { overwriteName = null })
+                GameButton(strings.common.cancel, accent = Palette.TextMuted, onClick = { overwriteName = null })
             },
         )
     }
@@ -354,15 +356,15 @@ fun SessionMenuDialog(
         AlertDialog(
             onDismissRequest = { discardForSession = null },
             containerColor = Palette.Surface,
-            title = { Text("Scartare le modifiche?", color = Palette.Text) },
+            title = { Text(words.discardChangesTitle, color = Palette.Text) },
             text = {
                 Text(
-                    "Aprendo «${summary.displayName}» perderai le modifiche non salvate della battaglia corrente.",
+                    words.discardChangesBody(summary.displayName),
                     color = Palette.TextMuted,
                 )
             },
             confirmButton = {
-                GameButton("Scarta e apri", accent = Palette.Enemy, onClick = {
+                GameButton(words.discardAndOpen, accent = Palette.Enemy, onClick = {
                     scope.launch {
                         if (
                             runDiskIo { manager.requestLoad(summary, discardUnsavedChanges = true) } ==
@@ -375,7 +377,7 @@ fun SessionMenuDialog(
                 })
             },
             dismissButton = {
-                GameButton("Annulla", accent = Palette.TextMuted, onClick = { discardForSession = null })
+                GameButton(strings.common.cancel, accent = Palette.TextMuted, onClick = { discardForSession = null })
             },
         )
     }
@@ -384,15 +386,15 @@ fun SessionMenuDialog(
         AlertDialog(
             onDismissRequest = { deleteSession = null },
             containerColor = Palette.Surface,
-            title = { Text("Eliminare la sessione?", color = Palette.Text) },
+            title = { Text(words.deleteSessionTitle, color = Palette.Text) },
             text = {
                 Text(
-                    "«${summary.displayName}» verrà eliminata definitivamente dal dispositivo.",
+                    words.deleteSessionBody(summary.displayName),
                     color = Palette.TextMuted,
                 )
             },
             confirmButton = {
-                GameButton("Elimina", accent = Palette.Enemy, onClick = {
+                GameButton(strings.common.delete, accent = Palette.Enemy, onClick = {
                     scope.launch {
                         runDiskIo { manager.delete(summary) }
                         workspace?.reconcileAutosaveWarning()
@@ -401,7 +403,7 @@ fun SessionMenuDialog(
                 })
             },
             dismissButton = {
-                GameButton("Annulla", accent = Palette.TextMuted, onClick = { deleteSession = null })
+                GameButton(strings.common.cancel, accent = Palette.TextMuted, onClick = { deleteSession = null })
             },
         )
     }
@@ -421,17 +423,18 @@ fun OpenSavedSessionDialog(
     onDismiss: () -> Unit,
     onOpened: () -> Unit,
 ) {
+    val words = strings.session
     val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.Surface,
         title = {
-            Text("Apri una sessione salvata", color = Palette.Text, fontWeight = FontWeight.Bold)
+            Text(words.openSavedSessionTitle, color = Palette.Text, fontWeight = FontWeight.Bold)
         },
         text = {
             if (workspace.savedSessions.isEmpty()) {
                 Text(
-                    "L'archivio è vuoto: nessuna sessione è ancora stata salvata.",
+                    words.emptyArchive,
                     color = Palette.TextMuted,
                 )
             } else {
@@ -446,7 +449,7 @@ fun OpenSavedSessionDialog(
                     workspace.savedSessions.forEach { summary ->
                         GameButton(
                             label = summary.displayName,
-                            subtitle = "Round ${summary.round}",
+                            subtitle = words.round(summary.round),
                             accent = Palette.Heal,
                             modifier = Modifier.fillMaxWidth(),
                             onClick = {
@@ -464,7 +467,7 @@ fun OpenSavedSessionDialog(
             }
         },
         confirmButton = {
-            GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
+            GameButton(strings.common.close, accent = Palette.TextMuted, onClick = onDismiss)
         },
     )
 }
@@ -476,13 +479,14 @@ private fun OpenSessionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.session
     val state = when {
-        opened.manager.currentSlug == null -> "Bozza"
-        opened.manager.hasUnsavedChanges -> "Da salvare"
-        else -> "Round ${opened.battle.round}"
+        opened.manager.currentSlug == null -> strings.session.draftLabel
+        opened.manager.hasUnsavedChanges -> words.toSave
+        else -> words.round(opened.battle.round)
     }
     GameButton(
-        label = shortDisplayName(opened),
+        label = shortDisplayName(opened, words),
         subtitle = state,
         selected = selected,
         role = Role.Tab,
@@ -543,7 +547,7 @@ private fun SessionRow(
             if (!damaged) {
                 GameButton(openLabel, accent = Palette.Party, onClick = { onOpen(summary) })
             }
-            GameButton("Elimina", accent = Palette.Enemy, onClick = { onDelete(summary) })
+            GameButton(strings.common.delete, accent = Palette.Enemy, onClick = { onDelete(summary) })
         }
     }
 }
@@ -555,6 +559,7 @@ private fun SessionSummaryContent(
     damaged: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.session
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 text = summary.displayName,
@@ -569,10 +574,10 @@ private fun SessionSummaryContent(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (damaged) {
-                    Chip("File danneggiato", Palette.Critical)
+                    Chip(words.damagedFile, Palette.Critical)
                 } else {
-                    Chip("Round ${summary.round}", Palette.Gold)
-                    Chip("${summary.combatantCount} combattenti", Palette.TextMuted)
+                    Chip(words.round(summary.round), Palette.Gold)
+                    Chip(words.combatants(summary.combatantCount), Palette.TextMuted)
                     Chip(summary.status, Palette.Party)
                 }
             }
@@ -603,6 +608,6 @@ private fun SessionActions(
         if (!damaged) {
             GameButton(openLabel, accent = Palette.Party, onClick = { onOpen(summary) })
         }
-        GameButton("Elimina", accent = Palette.Enemy, onClick = { onDelete(summary) })
+        GameButton(strings.common.delete, accent = Palette.Enemy, onClick = { onDelete(summary) })
     }
 }

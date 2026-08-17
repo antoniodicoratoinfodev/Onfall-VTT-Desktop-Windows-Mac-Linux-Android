@@ -9,6 +9,7 @@ import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageFormula
+import app.d6d.ui.i18n.AppLocale
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.HealingDefinition
 import app.d6d.domain.combat.ResolutionMethod
@@ -28,7 +29,7 @@ private const val SOURCE = "content-user-private"
  */
 data class AbilityDraft(
     val id: String = "cap-nuova",
-    val name: String = "Nuova capacita'",
+    val name: String = AppLocale.current.compendium.newAbility,
     val activationCost: ActivationCost = ActivationCost.ACTION,
     val resolutionMethod: ResolutionMethod = ResolutionMethod.ATTACK_ROLL,
     val attackBonus: Int = 4,
@@ -63,7 +64,7 @@ data class AbilityDraft(
         }
         return AbilityDefinition.builder(
             id.ifBlank { "cap-senza-nome" },
-            name.ifBlank { "Senza nome" },
+            name.ifBlank { AppLocale.current.compendium.unnamed },
         )
             .version(VERSION)
             .source(SOURCE)
@@ -119,7 +120,7 @@ data class AbilityDraft(
 /** Bozza modificabile di un attore: personaggio, PNG o creatura. */
 data class ActorDraft(
     val id: String = "attore-nuovo",
-    val name: String = "Nuovo attore",
+    val name: String = AppLocale.current.compendium.newActor,
     val kind: ActorKind = ActorKind.CREATURE,
     val level: Int = 1,
     val armorClass: Int = 13,
@@ -140,7 +141,7 @@ data class ActorDraft(
         id.ifBlank { "attore-senza-id" },
         VERSION,
         RULESET,
-        name.ifBlank { "Senza nome" },
+        name.ifBlank { AppLocale.current.compendium.unnamed },
         armorClass,
         maxHitPoints.coerceAtLeast(1),
         maxHitPoints.coerceAtLeast(1),
@@ -161,7 +162,7 @@ data class ActorDraft(
     fun toEntry(): ActorCatalogEntry = ActorCatalogEntry(
         ActorTemplate(
             id.ifBlank { "attore-senza-id" },
-            name.ifBlank { "Senza nome" },
+            name.ifBlank { AppLocale.current.compendium.unnamed },
             kind,
             if (kind == ActorKind.PLAYER_CHARACTER) level.coerceIn(1, 20) else level.coerceIn(0, 20),
         ),
@@ -197,48 +198,3 @@ data class ActorDraft(
         }
     }
 }
-
-val DamageType.italianLabel: String
-    get() = when (this) {
-        DamageType.ACID -> "Acido"
-        DamageType.BLUDGEONING -> "Contundente"
-        DamageType.COLD -> "Freddo"
-        DamageType.FIRE -> "Fuoco"
-        DamageType.FORCE -> "Forza"
-        DamageType.LIGHTNING -> "Fulmine"
-        DamageType.NECROTIC -> "Necrotico"
-        DamageType.PIERCING -> "Perforante"
-        DamageType.POISON -> "Veleno"
-        DamageType.PSYCHIC -> "Psichico"
-        DamageType.RADIANT -> "Radiante"
-        DamageType.SLASHING -> "Tagliente"
-        DamageType.THUNDER -> "Tuono"
-        DamageType.UNTYPED -> "Non tipizzato"
-    }
-
-val ActorKind.italianLabel: String
-    get() = when (this) {
-        ActorKind.PLAYER_CHARACTER -> "Personaggio"
-        ActorKind.NON_PLAYER_CHARACTER -> "PNG"
-        ActorKind.CREATURE -> "Creatura"
-    }
-
-val SaveAbility.italianLabel: String
-    get() = when (this) {
-        SaveAbility.STRENGTH -> "Forza"
-        SaveAbility.DEXTERITY -> "Destrezza"
-        SaveAbility.CONSTITUTION -> "Costituzione"
-        SaveAbility.INTELLIGENCE -> "Intelligenza"
-        SaveAbility.WISDOM -> "Saggezza"
-        SaveAbility.CHARISMA -> "Carisma"
-    }
-
-val SaveAbility.italianAbbreviation: String
-    get() = when (this) {
-        SaveAbility.STRENGTH -> "FOR"
-        SaveAbility.DEXTERITY -> "DES"
-        SaveAbility.CONSTITUTION -> "COS"
-        SaveAbility.INTELLIGENCE -> "INT"
-        SaveAbility.WISDOM -> "SAG"
-        SaveAbility.CHARISMA -> "CAR"
-    }

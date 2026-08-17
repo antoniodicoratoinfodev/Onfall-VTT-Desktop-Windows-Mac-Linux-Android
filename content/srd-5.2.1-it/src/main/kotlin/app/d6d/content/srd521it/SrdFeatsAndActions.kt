@@ -1,5 +1,6 @@
 package app.d6d.content.srd521it
 
+import app.d6d.i18n.AppLanguage
 import app.d6d.rules.character.EffectCondition
 import app.d6d.rules.character.EffectTarget
 import app.d6d.rules.character.RuleEffect
@@ -7,13 +8,13 @@ import app.d6d.rules.character.RuleElementDefinition
 import app.d6d.rules.character.RuleElementKind
 
 /**
- * Talenti e azioni comuni presenti nel System Reference Document 5.2.1 italiano.
+ * Talenti e azioni comuni presenti nelle edizioni italiana e inglese dell'SRD 5.2.1.
  *
  * I nomi delle azioni esposti al Compendio sono all'infinito; nel testo è conservata
  * la denominazione nominale usata dal Glossario delle regole del documento ufficiale.
  */
 object SrdFeatsAndActions {
-    val feats: List<RuleElementDefinition> = listOf(
+    private val italianFeats: List<RuleElementDefinition> = listOf(
         RuleElementDefinition(
             id = "srd521-it:feat:origin:abile",
             name = "Abile",
@@ -314,7 +315,7 @@ object SrdFeatsAndActions {
         ),
     )
 
-    val actions: List<RuleElementDefinition> = listOf(
+    private val italianActions: List<RuleElementDefinition> = listOf(
         commonAction(
             id = "attacco",
             name = "Attacco",
@@ -527,14 +528,90 @@ object SrdFeatsAndActions {
         ),
     )
 
-    val all: List<RuleElementDefinition> = feats + actions
+    /** Compatibilita': l'edizione italiana resta il riferimento delle prove. */
+    val feats: List<RuleElementDefinition> get() = italianFeats
+    val actions: List<RuleElementDefinition> get() = italianActions
+    val all: List<RuleElementDefinition> get() = all(AppLanguage.ITALIAN)
+
+    fun feats(language: AppLanguage): List<RuleElementDefinition> = when (language) {
+        AppLanguage.ITALIAN -> italianFeats
+        AppLanguage.ENGLISH -> englishFeats
+    }
+
+    fun actions(language: AppLanguage): List<RuleElementDefinition> = when (language) {
+        AppLanguage.ITALIAN -> italianActions
+        AppLanguage.ENGLISH -> englishActions
+    }
+
+    fun all(language: AppLanguage = AppLanguage.ITALIAN): List<RuleElementDefinition> =
+        feats(language) + actions(language)
+
+    /**
+     * I talenti inglesi non si traducono a mano: nome e testo arrivano dal PDF
+     * inglese, gia' estratto in `feats.json`, e il crosswalk dice quale voce
+     * corrisponde a quale. Le regole — effetti, scelte, prerequisiti — restano
+     * quelle italiane, perche' sono le stesse regole.
+     */
+    private val englishFeats: List<RuleElementDefinition> by lazy {
+        val source = SrdFeatSource.byItalianName(AppLanguage.ENGLISH)
+        italianFeats.map { feat ->
+            val record = source.getValue(feat.name)
+            feat.copy(
+                name = record.name,
+                description = record.description,
+                prerequisite = record.prerequisite.ifBlank { "None" },
+                activation = ENGLISH_FEAT_ACTIVATIONS.getValue(feat.activation),
+                effects = feat.effects.map { effect -> effect.copy(source = record.name) },
+            )
+        }
+    }
+
+    private val englishActions: List<RuleElementDefinition> by lazy {
+        italianActions.map { action ->
+            val text = ENGLISH_ACTIONS.getValue(action.id.substringAfterLast(':'))
+            action.copy(
+                name = text.name,
+                description = text.description,
+                prerequisite = "None",
+                activation = "Action",
+            )
+        }
+    }
 }
 
+private val ENGLISH_FEAT_ACTIVATIONS = mapOf(
+    "Passiva" to "Passive",
+    "Nessuna azione; una volta per turno, quando colpisce con un'arma" to
+        "No action; once per turn, when you hit with a weapon",
+    "Passiva; subito dopo il tiro per l'iniziativa" to
+        "Passive; immediately after rolling Initiative",
+    "Come l'incantesimo lanciato" to "Same as the spell cast",
+    "Passiva; una volta per turno per Colpisci e afferra" to
+        "Passive; once per turn for Punch and Grab",
+    "Nessuna azione; quando una creatura entro 18 metri supera o fallisce una prova con d20" to
+        "No action; when a creature within 60 feet succeeds or fails a D20 Test",
+    "Nessuna azione; quando un tiro per colpire non va a segno" to
+        "No action; when an attack roll misses",
+    "Passiva; quando un tiro per colpire con il d20 ottiene 20" to
+        "Passive; when a d20 attack roll scores 20",
+    "Azione bonus (Fusione con le ombre); passiva (Forma d'ombra)" to
+        "Bonus Action (Merge with Shadows); passive (Shadow Form)",
+    "Nessuna azione; quando lancia un incantesimo con uno slot di livello da 1 a 4" to
+        "No action; when you cast a spell using a level 1–4 spell slot",
+    "Nessuna azione; subito dopo un'azione di Attacco o Magia" to
+        "No action; immediately after taking the Attack or Magic action",
+)
+
+// Con `get()`, non con un valore: le liste dell'oggetto si costruiscono usando
+// funzioni di primo livello di questo stesso file, quindi inizializzare qui una
+// proprieta' leggendo `SrdFeatsAndActions.all` la valuterebbe mentre l'oggetto
+// e' ancora a meta' della propria inizializzazione, e troverebbe liste nulle.
+
 /** Nome breve usato dall'aggregatore del pacchetto SRD. */
-val srdFeatsAndActions: List<RuleElementDefinition> = SrdFeatsAndActions.all
+val srdFeatsAndActions: List<RuleElementDefinition> get() = SrdFeatsAndActions.all
 
 /** Nome descrittivo mantenuto come API pubblica del catalogo. */
-val srdFeatsAndCommonActions: List<RuleElementDefinition> = SrdFeatsAndActions.all
+val srdFeatsAndCommonActions: List<RuleElementDefinition> get() = SrdFeatsAndActions.all
 
 private fun commonAction(
     id: String,

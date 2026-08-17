@@ -64,10 +64,12 @@ import app.d6d.ui.session.SessionMenuButton
 import app.d6d.ui.session.SessionMenuDialog
 import app.d6d.ui.session.SessionWorkspace
 import app.d6d.ui.state.BattleViewModel
-import app.d6d.ui.state.EnemyCpuSpeed
-import app.d6d.ui.state.italianLabel
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.OrnateDivider
+import app.d6d.i18n.label
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import kotlinx.coroutines.delay
 
@@ -144,7 +146,6 @@ fun BattleScreen(
         // Filo d'oro sotto l'intestazione: chiude la fascia dei turni come il
         // bordo inciso di un pannello, senza il peso di un bordo pieno.
         GoldenRule()
-        EnemyCpuBanner(viewModel, compact)
         // Il bordo inferiore della fascia turni: trascinandolo verso il basso la
         // fascia cresce. Solo sul desktop e solo quando l'ordine turni e' visibile.
         if (!compact && layout.turnOrderDisplayMode != TurnOrderDisplayMode.HIDDEN) {
@@ -164,7 +165,7 @@ fun BattleScreen(
         viewModel.actionResolution?.let { resolution ->
             val tone = if (resolution.isHit) Palette.Heal else Palette.GoldBright
             Text(
-                text = "Risolto subito · ${resolution.text}",
+                text = strings.battle.resolvedImmediately(resolution.text),
                 color = tone,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.bodySmall,
@@ -178,7 +179,7 @@ fun BattleScreen(
 
         viewModel.message?.let { text ->
             Text(
-                text = "Avviso · $text",
+                text = strings.battle.warning(text),
                 color = Palette.Bloodied,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.bodySmall,
@@ -235,7 +236,7 @@ private fun WideBattleBody(
         Row(Modifier.fillMaxSize()) {
             Rail(
                 viewModel = viewModel,
-                title = "Squadra",
+                title = strings.battle.squad,
                 ids = viewModel.partyIds,
                 faction = Faction.PARTY,
                 roster = roster,
@@ -289,7 +290,7 @@ private fun WideBattleBody(
             Column(Modifier.width(layout.enemyWidth)) {
                 Rail(
                     viewModel = viewModel,
-                    title = "Nemici",
+                    title = strings.battle.enemies,
                     ids = viewModel.enemyIds,
                     faction = Faction.ENEMY,
                     roster = roster,
@@ -396,21 +397,21 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = "REGISTRO EVENTI",
+                    text = strings.battle.eventLogTitle,
                     color = Palette.Gold,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelSmall,
                 )
                 if (!collapsed) {
                     Text(
-                        text = "Trascina verso il basso per collassare",
+                        text = strings.battle.dragDownToCollapse,
                         color = Palette.TextFaint,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
             Text(
-                text = if (collapsed) "Apri ▸" else "Collassa ▾",
+                text = if (collapsed) strings.battle.openArrow else strings.battle.collapseArrow,
                 color = Palette.TextMuted,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
@@ -450,7 +451,7 @@ private fun CompactBattleBody(
         ) {
             CompactTab.entries.forEach { entry ->
                 GameButton(
-                    label = entry.label,
+                    label = entry.label(strings),
                     accent = if (tab == entry) Palette.Gold else Palette.TextMuted,
                     selected = tab == entry,
                     onClick = { tab = entry },
@@ -464,7 +465,7 @@ private fun CompactBattleBody(
                 CompactTab.PALCO -> BattleStage(viewModel, portraits)
                 CompactTab.SQUADRA -> Rail(
                     viewModel = viewModel,
-                    title = "Squadra",
+                    title = strings.battle.squad,
                     ids = viewModel.partyIds,
                     faction = Faction.PARTY,
                     roster = roster,
@@ -476,7 +477,7 @@ private fun CompactBattleBody(
 
                 CompactTab.NEMICI -> Rail(
                     viewModel = viewModel,
-                    title = "Nemici",
+                    title = strings.battle.enemies,
                     ids = viewModel.enemyIds,
                     faction = Faction.ENEMY,
                     roster = roster,
@@ -494,11 +495,18 @@ private fun CompactBattleBody(
     }
 }
 
-private enum class CompactTab(val label: String) {
-    PALCO("Mappa"),
-    SQUADRA("Squadra"),
-    NEMICI("Nemici"),
-    REGISTRO("Registro"),
+private enum class CompactTab {
+    PALCO,
+    SQUADRA,
+    NEMICI,
+    REGISTRO,
+}
+
+private fun CompactTab.label(strings: Strings): String = when (this) {
+    CompactTab.PALCO -> strings.battle.mapLabel
+    CompactTab.SQUADRA -> strings.battle.squad
+    CompactTab.NEMICI -> strings.battle.enemies
+    CompactTab.REGISTRO -> strings.battle.logLabel
 }
 
 @Composable
@@ -552,7 +560,7 @@ private fun Rail(
                 }
             }
             Text(
-                text = "$standing/${ids.size} in piedi",
+                text = strings.battle.standingCount(standing, ids.size),
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -630,7 +638,7 @@ private fun BattleTopBar(
                     BattleMark()
                     BattleTitle(sessions, modifier = Modifier.weight(1f))
                     if (viewModel.status != CombatStatus.ACTIVE) {
-                        Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
+                        Chip(text = viewModel.status.label(currentLanguage), color = viewModel.status.tint)
                     }
                 }
                 if (labelNeedsOwnRow) {
@@ -773,10 +781,10 @@ private fun BattleTopBar(
                 if (viewModel.status == CombatStatus.DRAFT || viewModel.status == CombatStatus.READY) {
                     GameButton(
                         label = when {
-                            !tight && viewModel.simultaneousTies -> "Parità insieme"
-                            !tight -> "Parità separate"
-                            viewModel.simultaneousTies -> "Parità unite"
-                            else -> "Parità divise"
+                            !tight && viewModel.simultaneousTies -> strings.battle.tiesTogether
+                            !tight -> strings.battle.tiesSeparate
+                            viewModel.simultaneousTies -> strings.battle.tiesJoined
+                            else -> strings.battle.tiesSplit
                         },
                         accent = if (viewModel.simultaneousTies) Palette.GoldBright else Palette.TextMuted,
                         selected = viewModel.simultaneousTies,
@@ -792,106 +800,16 @@ private fun BattleTopBar(
                     openSessionCount = openSessionCount,
                     autosaveWarning = autosaveWarning,
                 )
-                // Senza CPU la fascia nemica non compare mai: senza questo segno
-                // nulla direbbe al tavolo che gli avversari li muove lui.
+                // Da quando la fascia nemica non esiste piu', questo e' l'unico
+                // segno che distingue una partita in cui gli avversari li muove il
+                // tavolo da una in cui li muove la CPU.
                 if (!viewModel.enemyCpuEnabled) {
-                    Chip(text = "Sandbox", color = Palette.Party)
+                    Chip(text = strings.encounter.sandbox, color = Palette.Party)
                 }
                 if (viewModel.status != CombatStatus.ACTIVE) {
-                    Chip(text = viewModel.status.italianLabel, color = viewModel.status.tint)
+                    Chip(text = viewModel.status.label(currentLanguage), color = viewModel.status.tint)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun EnemyCpuBanner(viewModel: BattleViewModel, compact: Boolean) {
-    if (!viewModel.enemyCpuEnabled) return
-    val cpuTurnActive = viewModel.enemyCpuTurnKey != null
-    val suspended = viewModel.enemyCpuTurnSuppressed
-    val completed = viewModel.enemyCpuBatchCompleted
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(Palette.Enemy.copy(alpha = if (suspended) 0.08f else 0.13f))
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = if (suspended) {
-                "Batch CPU annullato e sospeso per questo turno."
-            } else if (viewModel.editMode) {
-                "CPU in pausa mentre la modalità Modifica è attiva."
-            } else if (completed) {
-                "I nemici hanno agito · completa il turno con gli alleati."
-            } else if (!cpuTurnActive) {
-                "CPU · ${viewModel.enemyCpuDifficulty.italianLabel} pronta per il prossimo turno nemico."
-            } else {
-                // Mentre il turno scorre la fascia racconta il comando in corso:
-                // e' l'unico posto dove un'azione gia' risolta resta leggibile.
-                viewModel.enemyCpuActionLabel?.takeIf { viewModel.enemyCpuBusy }
-                    ?: "CPU · ${viewModel.enemyCpuDifficulty.italianLabel} sta decidendo…"
-            },
-            color = if (suspended) Palette.TextMuted else Palette.Enemy,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (suspended) {
-            GameButton(
-                label = "Riprendi CPU",
-                accent = Palette.Enemy,
-                dense = true,
-                onClick = viewModel::resumeEnemyCpuTurn,
-            )
-        }
-        EnemyCpuSpeedPicker(viewModel, compact)
-    }
-}
-
-/**
- * Ritmo con cui la CPU mostra il proprio turno.
- *
- * Sta nella fascia perche' e' li' che il tavolo si accorge di non star vedendo
- * nulla: la scelta vale subito, anche a turno gia' avviato, e viene salvata con
- * la sessione. Sulla shell stretta un solo comando cicla fra i ritmi.
- */
-@Composable
-private fun EnemyCpuSpeedPicker(viewModel: BattleViewModel, compact: Boolean) {
-    if (compact) {
-        val speeds = EnemyCpuSpeed.values()
-        GameButton(
-            label = "Ritmo · ${viewModel.enemyCpuSpeed.italianLabel}",
-            accent = Palette.Gold,
-            dense = true,
-            onClick = {
-                viewModel.enemyCpuSpeed = speeds[(viewModel.enemyCpuSpeed.ordinal + 1) % speeds.size]
-            },
-        )
-        return
-    }
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            "Ritmo",
-            color = Palette.TextMuted,
-            style = MaterialTheme.typography.bodySmall,
-        )
-        EnemyCpuSpeed.values().forEach { speed ->
-            val selected = viewModel.enemyCpuSpeed == speed
-            GameButton(
-                label = speed.italianLabel,
-                accent = if (selected) Palette.Gold else Palette.TextMuted,
-                selected = selected,
-                dense = true,
-                onClick = { viewModel.enemyCpuSpeed = speed },
-            )
         }
     }
 }
@@ -942,10 +860,11 @@ private fun TurnsLabel(
     onCycle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.battle
     val nextAction = when (mode) {
-        TurnOrderDisplayMode.HIDDEN -> "Mostra l'ordine dei turni senza iniziativa"
-        TurnOrderDisplayMode.ORDER_ONLY -> "Mostra anche i valori di iniziativa"
-        TurnOrderDisplayMode.WITH_INITIATIVE -> "Nascondi l'ordine dei turni"
+        TurnOrderDisplayMode.HIDDEN -> words.showTurnOrderWithoutInitiative
+        TurnOrderDisplayMode.ORDER_ONLY -> words.showInitiativeValues
+        TurnOrderDisplayMode.WITH_INITIATIVE -> words.hideTurnOrder
     }
     Row(
         modifier
@@ -963,7 +882,7 @@ private fun TurnsLabel(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "ORDINE DEI TURNI",
+            text = words.turnOrderTitle,
             color = Palette.Gold,
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
@@ -999,7 +918,7 @@ private fun BattleMark() {
 private fun BattleTitle(sessions: SessionManager, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
         Text(
-            text = sessions.currentDisplayName.ifBlank { "Incontro senza nome" },
+            text = sessions.currentDisplayName.ifBlank { strings.battle.unnamedEncounter },
             color = Palette.Text,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -1007,7 +926,7 @@ private fun BattleTitle(sessions: SessionManager, modifier: Modifier = Modifier)
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            text = if (sessions.hasUnsavedChanges) "Modifiche non salvate" else "Sessione salvata",
+            text = if (sessions.hasUnsavedChanges) strings.battle.unsavedChanges else strings.battle.sessionSaved,
             color = if (sessions.hasUnsavedChanges) Palette.Bloodied else Palette.TextMuted,
             maxLines = 1,
             style = MaterialTheme.typography.bodySmall,
@@ -1021,22 +940,13 @@ private fun EditModeButton(viewModel: BattleViewModel) {
         // Nessun sottotitolo: quel testo lungo allargava il pulsante e comprimeva
         // la fascia turni. In modifica i comandi di riordino (◀ ▶ e "rendi
         // corrente") compaiono direttamente sui riquadri, dove servono.
-        label = if (viewModel.editMode) "Modifica attiva" else "Modifica",
+        label = if (viewModel.editMode) strings.battle.editingActive else strings.common.edit,
         accent = if (viewModel.editMode) Palette.Heal else Palette.TextMuted,
         selected = viewModel.editMode,
         dense = true,
         onClick = { viewModel.editMode = !viewModel.editMode },
     )
 }
-
-private val CombatStatus.italianLabel: String
-    get() = when (this) {
-        CombatStatus.DRAFT -> "Bozza"
-        CombatStatus.READY -> "Pronto"
-        CombatStatus.ACTIVE -> "Attivo"
-        CombatStatus.PAUSED -> "In pausa"
-        CombatStatus.RESOLVED -> "Risolto"
-    }
 
 private val CombatStatus.tint
     get() = when (this) {

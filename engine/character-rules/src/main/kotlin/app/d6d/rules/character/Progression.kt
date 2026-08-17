@@ -1,5 +1,8 @@
 package app.d6d.rules.character
 
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.label
+import app.d6d.i18n.pick
 import kotlinx.serialization.Serializable
 
 /** Una classe e il numero di livelli acquisiti in essa. */
@@ -191,6 +194,14 @@ object ExperienceProgression {
 
 class CharacterProgressionEngine(private val pack: RulesContentPack) {
 
+    private val language: AppLanguage = if (pack.manifest.locale.startsWith("en", ignoreCase = true)) {
+        AppLanguage.ENGLISH
+    } else {
+        AppLanguage.ITALIAN
+    }
+
+    private fun say(italian: String, english: String): String = language.pick(italian, english)
+
     fun requirementsFor(
         progression: CharacterProgression,
         classId: CharacterClassId,
@@ -198,7 +209,12 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
     ): List<ChoiceDefinition> {
         val definition = pack.classDefinition(classId)
         val nextClassLevel = progression.levelIn(classId) + 1
-        require(nextClassLevel in 1..20) { "${definition.name} è già al 20º livello." }
+        require(nextClassLevel in 1..20) {
+            say(
+                "${definition.name} è già al 20º livello.",
+                "${definition.name} is already level 20.",
+            )
+        }
         val level = definition.level(nextClassLevel)
         val previous = if (nextClassLevel == 1) null else definition.level(nextClassLevel - 1)
         val provisionalBackground = provisionalSelections
@@ -221,7 +237,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             if (fixedToolId !in alreadyGranted) return choice
             return choice.copy(
                 id = "${choice.id}:sostitutiva",
-                title = "${choice.title}: scegli una competenza sostitutiva negli strumenti",
+                title = choice.title + say(
+                    ": scegli una competenza sostitutiva negli strumenti",
+                    ": choose a replacement Tool proficiency",
+                ),
                 optionIds = emptyList(),
                 poolId = "${pack.manifest.id}:pool:tools:any",
             )
@@ -232,7 +251,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                     add(
                         ChoiceDefinition(
                             id = "${pack.manifest.id}:choice:origin:background",
-                            title = "Scegli il background",
+                            title = say("Scegli il background", "Choose a background"),
                             kind = ChoiceKind.BACKGROUND,
                             count = 1,
                             optionIds = pack.backgrounds.map { it.id },
@@ -246,7 +265,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                     add(
                         ChoiceDefinition(
                             id = "${pack.manifest.id}:choice:origin:feat",
-                            title = "Scegli il talento Origini concesso dal background",
+                            title = say(
+                                "Scegli il talento Origini concesso dal background",
+                                "Choose the Origin feat granted by your background",
+                            ),
                             kind = ChoiceKind.FEAT,
                             count = 1,
                             poolId = "${pack.manifest.id}:pool:feats:origin",
@@ -271,8 +293,12 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 add(
                     ChoiceDefinition(
                         id = "${classId.contentId}:$nextClassLevel:cantrips",
-                        title = "Scegli $newCantrips " +
-                            if (newCantrips == 1) "trucchetto" else "trucchetti",
+                        title = say(
+                            "Scegli $newCantrips " +
+                                if (newCantrips == 1) "trucchetto" else "trucchetti",
+                            "Choose $newCantrips " +
+                                if (newCantrips == 1) "cantrip" else "cantrips",
+                        ),
                         kind = ChoiceKind.CANTRIP,
                         count = newCantrips,
                         poolId = "spells:${classId.contentId}:cantrip",
@@ -284,8 +310,12 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 add(
                     ChoiceDefinition(
                         id = "${classId.contentId}:$nextClassLevel:prepared-spells",
-                        title = "Scegli $newPrepared " +
-                            if (newPrepared == 1) "incantesimo preparato" else "incantesimi preparati",
+                        title = say(
+                            "Scegli $newPrepared " +
+                                if (newPrepared == 1) "incantesimo preparato" else "incantesimi preparati",
+                            "Choose $newPrepared prepared " +
+                                if (newPrepared == 1) "spell" else "spells",
+                        ),
                         kind = ChoiceKind.PREPARED_SPELL,
                         count = newPrepared,
                         poolId = level.preparedSpellPoolId
@@ -297,7 +327,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 add(
                     ChoiceDefinition(
                         id = "${classId.contentId}:$nextClassLevel:spellbook",
-                        title = "Aggiungi ${level.spellbookAdditions} incantesimi al libro",
+                        title = say(
+                            "Aggiungi ${level.spellbookAdditions} incantesimi al libro",
+                            "Add ${level.spellbookAdditions} spells to your spellbook",
+                        ),
                         kind = ChoiceKind.SPELLBOOK_SPELL,
                         count = level.spellbookAdditions,
                         poolId = "spells:${classId.contentId}:spellbook",
@@ -310,7 +343,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 add(
                     ChoiceDefinition(
                         id = "${pack.manifest.id}:choice:origin:abile:proficiencies",
-                        title = "Abile: scegli tre competenze in abilità o strumenti",
+                        title = say(
+                            "Abile: scegli tre competenze in abilità o strumenti",
+                            "Skilled: choose three Skill or Tool proficiencies",
+                        ),
                         kind = ChoiceKind.SKILL_OR_TOOL_PROFICIENCY,
                         count = 3,
                         poolId = "${pack.manifest.id}:pool:skills-or-tools:any",
@@ -357,7 +393,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                         optionId.endsWith(":subclass:collegio-della-sapienza") -> add(
                             ChoiceDefinition(
                                 id = "${parentSelection.choiceId}:sapienza:competenze-bonus",
-                                title = "Collegio della Sapienza: scegli tre competenze nelle abilità",
+                                title = say(
+                                    "Collegio della Sapienza: scegli tre competenze nelle abilità",
+                                    "College of Lore: choose three Skill proficiencies",
+                                ),
                                 kind = ChoiceKind.SKILL_PROFICIENCY,
                                 count = 3,
                                 poolId = "${pack.manifest.id}:pool:skills:bardo:any",
@@ -366,7 +405,8 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                         optionId.endsWith(":ordine-taumaturgo") -> add(
                             bonusCantripChoice(
                                 parentSelection.choiceId,
-                                "Taumaturgo",
+                                stableSlug = "taumaturgo",
+                                title = say("Taumaturgo", "Thaumaturge"),
                                 count = 1,
                                 listSlug = CharacterClassId.CLERIC.contentId,
                             ),
@@ -374,7 +414,8 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                         optionId.endsWith(":ordine-mago") -> add(
                             bonusCantripChoice(
                                 parentSelection.choiceId,
-                                "Ordine primordiale: Mago",
+                                stableSlug = "ordine-primordiale-mago",
+                                title = say("Ordine primordiale: Mago", "Primal Order: Magician"),
                                 count = 1,
                                 listSlug = CharacterClassId.DRUID.contentId,
                             ),
@@ -382,7 +423,8 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                         optionId.endsWith(":guerriero-benedetto") -> add(
                             bonusCantripChoice(
                                 parentSelection.choiceId,
-                                "Guerriero benedetto",
+                                stableSlug = "guerriero-benedetto",
+                                title = say("Guerriero benedetto", "Blessed Warrior"),
                                 count = 2,
                                 listSlug = CharacterClassId.CLERIC.contentId,
                             ),
@@ -390,7 +432,8 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                         optionId.endsWith(":guerriero-druidico") -> add(
                             bonusCantripChoice(
                                 parentSelection.choiceId,
-                                "Guerriero druidico",
+                                stableSlug = "guerriero-druidico",
+                                title = say("Guerriero druidico", "Druidic Warrior"),
                                 count = 2,
                                 listSlug = CharacterClassId.DRUID.contentId,
                             ),
@@ -399,7 +442,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                             add(
                                 ChoiceDefinition(
                                     id = "${parentSelection.choiceId}:patto-del-tomo:cantrips",
-                                    title = "Patto del tomo: scegli tre trucchetti",
+                                    title = say(
+                                        "Patto del tomo: scegli tre trucchetti",
+                                        "Pact of the Tome: choose three cantrips",
+                                    ),
                                     kind = ChoiceKind.CANTRIP,
                                     count = 3,
                                     poolId = "${pack.manifest.id}:pool:spells:any:cantrip",
@@ -408,7 +454,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                             add(
                                 ChoiceDefinition(
                                     id = "${parentSelection.choiceId}:patto-del-tomo:rituals",
-                                    title = "Patto del tomo: scegli due rituali di 1º livello",
+                                    title = say(
+                                        "Patto del tomo: scegli due rituali di 1º livello",
+                                        "Pact of the Tome: choose two level 1 Ritual spells",
+                                    ),
                                     kind = ChoiceKind.PREPARED_SPELL,
                                     count = 2,
                                     poolId = "${pack.manifest.id}:pool:spells:any:1:ritual",
@@ -418,7 +467,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                         optionId.endsWith(":conoscenze-degli-antichi") -> add(
                             ChoiceDefinition(
                                 id = "${parentSelection.choiceId}:conoscenze-degli-antichi:talento",
-                                title = "Conoscenze degli Antichi: scegli un talento Origini",
+                                title = say(
+                                    "Conoscenze degli Antichi: scegli un talento Origini",
+                                    "Lessons of the First Ones: choose an Origin feat",
+                                ),
                                 kind = ChoiceKind.FEAT,
                                 count = 1,
                                 poolId = "${pack.manifest.id}:pool:feats:origin",
@@ -448,19 +500,31 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         val issues = mutableListOf<ProgressionIssue>()
         val totalLevel = progression.totalLevel
         if (totalLevel >= 20) {
-            issues += ProgressionIssue("MAX_LEVEL", "Il personaggio ha già raggiunto il 20º livello.")
+            issues += ProgressionIssue(
+                "MAX_LEVEL",
+                say("Il personaggio ha già raggiunto il 20º livello.", "The character has already reached level 20."),
+            )
         } else if (totalLevel > 0 && ExperienceProgression.levelForExperience(experiencePoints) <= totalLevel) {
             val next = ExperienceProgression.nextThreshold(totalLevel)
             issues += ProgressionIssue(
                 "INSUFFICIENT_XP",
-                "Servono ${next ?: 0} PE per raggiungere il livello ${totalLevel + 1}.",
+                say(
+                    "Servono ${next ?: 0} PE per raggiungere il livello ${totalLevel + 1}.",
+                    "${next ?: 0} XP are required to reach level ${totalLevel + 1}.",
+                ),
             )
         }
         if (progression.levelIn(request.classId) >= 20) {
-            issues += ProgressionIssue("CLASS_MAX_LEVEL", "La classe scelta è già al 20º livello.")
+            issues += ProgressionIssue(
+                "CLASS_MAX_LEVEL",
+                say("La classe scelta è già al 20º livello.", "The selected class is already level 20."),
+            )
         }
         if (request.hitPointIncrease < 1) {
-            issues += ProgressionIssue("HIT_POINTS", "L'incremento dei punti ferita deve essere almeno 1.")
+            issues += ProgressionIssue(
+                "HIT_POINTS",
+                say("L'incremento dei punti ferita deve essere almeno 1.", "The Hit Point increase must be at least 1."),
+            )
         }
 
         if (progression.configured && progression.levelIn(request.classId) == 0) {
@@ -471,10 +535,13 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 ).distinct()
             requiredGroups.forEach { alternatives ->
                 if (alternatives.none { (abilityScores[it] ?: 10) >= 13 }) {
-                    val names = alternatives.joinToString(" o ") { it.italianLabel }
+                    val names = alternatives.joinToString(say(" o ", " or ")) { it.label(language) }
                     issues += ProgressionIssue(
                         "MULTICLASS_PREREQUISITE",
-                        "Per la multiclasse serve almeno 13 in $names.",
+                        say(
+                            "Per la multiclasse serve almeno 13 in $names.",
+                            "Multiclassing requires a score of at least 13 in $names.",
+                        ),
                     )
                 }
             }
@@ -485,7 +552,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             requirementsFor(progression, request.classId, request.selections)
         }
             .getOrElse {
-                issues += ProgressionIssue("CLASS_LEVEL", it.message ?: "Livello di classe non valido.")
+                issues += ProgressionIssue(
+                    "CLASS_LEVEL",
+                    it.message ?: say("Livello di classe non valido.", "Invalid class level."),
+                )
                 emptyList()
             }
         requirements.forEach { choice ->
@@ -493,14 +563,23 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             if (selected.size != choice.count) {
                 issues += ProgressionIssue(
                     "CHOICE_COUNT",
-                    "«${choice.title}» richiede esattamente ${choice.count} scelte.",
+                    say(
+                        "«${choice.title}» richiede esattamente ${choice.count} scelte.",
+                        "“${choice.title}” requires exactly ${choice.count} selections.",
+                    ),
                 )
             }
             if (!choice.allowDuplicates && selected.distinct().size != selected.size) {
-                issues += ProgressionIssue("DUPLICATE_CHOICE", "«${choice.title}» non accetta duplicati.")
+                issues += ProgressionIssue(
+                    "DUPLICATE_CHOICE",
+                    say("«${choice.title}» non accetta duplicati.", "“${choice.title}” doesn't allow duplicates."),
+                )
             }
             if (choice.optionIds.isNotEmpty() && selected.any { it !in choice.optionIds }) {
-                issues += ProgressionIssue("INVALID_CHOICE", "«${choice.title}» contiene un'opzione non valida.")
+                issues += ProgressionIssue(
+                    "INVALID_CHOICE",
+                    say("«${choice.title}» contiene un'opzione non valida.", "“${choice.title}” contains an invalid option."),
+                )
             }
             selected.forEach { optionId ->
                 if (
@@ -515,7 +594,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 ) {
                     issues += ProgressionIssue(
                         "INVALID_POOL_CHOICE",
-                        "«${choice.title}» contiene un'opzione non disponibile: $optionId.",
+                        say(
+                            "«${choice.title}» contiene un'opzione non disponibile: $optionId.",
+                            "“${choice.title}” contains an unavailable option: $optionId.",
+                        ),
                     )
                 }
             }
@@ -539,7 +621,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             if (selected.any { it in previouslySelected && it !in repeatableOptionIds }) {
                 issues += ProgressionIssue(
                     "ALREADY_SELECTED",
-                    "«${choice.title}» contiene un'opzione non ripetibile già posseduta.",
+                    say(
+                        "«${choice.title}» contiene un'opzione non ripetibile già posseduta.",
+                        "“${choice.title}” contains a non-repeatable option already owned.",
+                    ),
                 )
             }
             if (choice.kind == ChoiceKind.FEATURE_TARGET) {
@@ -551,7 +636,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 if (selected.any { it in previousTargets }) {
                     issues += ProgressionIssue(
                         "ALREADY_SELECTED_TARGET",
-                        "«${choice.title}» deve essere associata a un trucchetto diverso.",
+                        say(
+                            "«${choice.title}» deve essere associata a un trucchetto diverso.",
+                            "“${choice.title}” must target a different cantrip.",
+                        ),
                     )
                 }
             }
@@ -562,8 +650,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 if (selected.any { it in previousAncientKnowledgeFeats }) {
                     issues += ProgressionIssue(
                         "ANCIENT_KNOWLEDGE_REQUIRES_DIFFERENT_FEAT",
-                        "Ogni acquisizione di Conoscenze degli Antichi richiede un talento " +
-                            "Origini diverso.",
+                        say(
+                            "Ogni acquisizione di Conoscenze degli Antichi richiede un talento Origini diverso.",
+                            "Each acquisition of Lessons of the First Ones requires a different Origin feat.",
+                        ),
                     )
                 }
             }
@@ -587,8 +677,12 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             ) {
                 issues += ProgressionIssue(
                     "BACKGROUND_ABILITY_SCORE_INCREASE",
-                    "Il background richiede +2 e +1 oppure +1 a tutte e tre le caratteristiche indicate, " +
-                        "senza superare 20.",
+                    say(
+                        "Il background richiede +2 e +1 oppure +1 a tutte e tre le caratteristiche " +
+                            "indicate, senza superare 20.",
+                        "The background requires +2 and +1, or +1 to each of its three listed " +
+                            "abilities, without exceeding 20.",
+                    ),
                 )
             }
             val backgroundSkillIds = selectedBackground.skillProficiencies.mapTo(mutableSetOf()) {
@@ -603,13 +697,19 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             if (chosenSkillIds.any { it in backgroundSkillIds }) {
                 issues += ProgressionIssue(
                     "BACKGROUND_SKILL_DUPLICATE",
-                    "Le competenze di classe devono essere diverse da quelle già concesse dal background.",
+                    say(
+                        "Le competenze di classe devono essere diverse da quelle già concesse dal background.",
+                        "Class proficiencies must differ from those already granted by the background.",
+                    ),
                 )
             }
         } else if (request.backgroundAbilityScoreIncreases.any { it.value != 0 }) {
             issues += ProgressionIssue(
                 "UNEXPECTED_BACKGROUND_ABILITY_SCORE_INCREASE",
-                "Gli aumenti del background richiedono un background selezionato.",
+                say(
+                    "Gli aumenti del background richiedono un background selezionato.",
+                    "Background ability increases require a selected background.",
+                ),
             )
         }
         val acquisitions = requirements.flatMap { choice ->
@@ -643,8 +743,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         if (duplicateAcquisitions.isNotEmpty()) {
             issues += ProgressionIssue(
                 "DUPLICATE_ACQUISITION",
-                "La stessa opzione non può essere acquisita due volte nello stesso avanzamento: " +
-                    duplicateAcquisitions.joinToString { it.second },
+                say(
+                    "La stessa opzione non può essere acquisita due volte nello stesso avanzamento: ",
+                    "The same option can't be acquired twice in one advancement: ",
+                ) + duplicateAcquisitions.joinToString { it.second },
             )
         }
         val definition = pack.classDefinition(request.classId)
@@ -663,7 +765,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             if (selectedPreparedSpells.any { it !in availableInBook }) {
                 issues += ProgressionIssue(
                     "SPELL_NOT_IN_SPELLBOOK",
-                    "Gli incantesimi preparati dal mago devono essere presenti nel suo libro.",
+                    say(
+                        "Gli incantesimi preparati dal mago devono essere presenti nel suo libro.",
+                        "A Wizard's prepared spells must be in their spellbook.",
+                    ),
                 )
             }
             val wizardSpecialChoices = requirements.filter {
@@ -678,7 +783,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             if (selectedWizardSpecials.any { it !in availableInBook }) {
                 issues += ProgressionIssue(
                     "SPELL_NOT_IN_SPELLBOOK",
-                    "Maestria e Incantesimi personali devono essere scelti dal libro del mago.",
+                    say(
+                        "Maestria e Incantesimi personali devono essere scelti dal libro del mago.",
+                        "Spell Mastery and Signature Spells must be chosen from the Wizard's spellbook.",
+                    ),
                 )
             }
             val selectedMasterySpells = wizardSpecialChoices
@@ -686,12 +794,16 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 .flatMap { selectionsById[it.id]?.optionIds.orEmpty() }
             if (
                 selectedMasterySpells.any {
-                    pack.element(it)?.spell?.castingTime?.trim()?.lowercase() != "azione"
+                    pack.element(it)?.spell?.castingTime?.trim()?.lowercase() !=
+                        say("azione", "action")
                 }
             ) {
                 issues += ProgressionIssue(
                     "SPELL_MASTERY_CASTING_TIME",
-                    "Maestria negli incantesimi richiede un tempo di lancio di un'Azione.",
+                    say(
+                        "Maestria negli incantesimi richiede un tempo di lancio di un'Azione.",
+                        "Spell Mastery requires a casting time of one Action.",
+                    ),
                 )
             }
         }
@@ -701,19 +813,28 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 element.kind == RuleElementKind.GENERAL_FEAT && nextTotalLevel < 4 ->
                     issues += ProgressionIssue(
                         "FEAT_LEVEL_PREREQUISITE",
-                        "Il talento «${element.name}» richiede il 4º livello.",
+                        say(
+                            "Il talento «${element.name}» richiede il 4º livello.",
+                            "The ${element.name} feat requires level 4.",
+                        ),
                     )
                 element.kind == RuleElementKind.EPIC_BOON_FEAT && nextTotalLevel < 19 ->
                     issues += ProgressionIssue(
                         "FEAT_LEVEL_PREREQUISITE",
-                        "Il talento «${element.name}» richiede il 19º livello.",
+                        say(
+                            "Il talento «${element.name}» richiede il 19º livello.",
+                            "The ${element.name} feat requires level 19.",
+                        ),
                     )
                 element.id.endsWith(":lottatore") &&
                     listOf(Ability.STRENGTH, Ability.DEXTERITY)
                         .none { (abilityScores[it] ?: 10) >= 13 } ->
                     issues += ProgressionIssue(
                         "FEAT_ABILITY_PREREQUISITE",
-                        "Lottatore richiede Forza o Destrezza 13 o superiore.",
+                        say(
+                            "Lottatore richiede Forza o Destrezza 13 o superiore.",
+                            "Grappler requires Strength or Dexterity 13 or higher.",
+                        ),
                     )
                 element.id.endsWith(":dono-richiamo-incantesimi") &&
                     progression.classLevels.none {
@@ -722,14 +843,20 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                     pack.classDefinition(request.classId).spellcastingKind == SpellcastingKind.NONE ->
                     issues += ProgressionIssue(
                         "FEAT_SPELLCASTING_PREREQUISITE",
-                        "Il Dono del richiamo degli incantesimi richiede il privilegio Incantesimi.",
+                        say(
+                            "Il Dono del richiamo degli incantesimi richiede il privilegio Incantesimi.",
+                            "Boon of Spell Recall requires the Spellcasting feature.",
+                        ),
                     )
             }
         }
         validateMagicInitiate(progression, request, requirements, selectionsById, issues)
         val unexpected = selectionsById.keys - requirements.mapTo(mutableSetOf()) { it.id }
         if (unexpected.isNotEmpty()) {
-            issues += ProgressionIssue("UNEXPECTED_CHOICE", "Scelte non richieste: ${unexpected.joinToString()}.")
+            issues += ProgressionIssue(
+                "UNEXPECTED_CHOICE",
+                say("Scelte non richieste: ", "Unexpected selections: ") + unexpected.joinToString() + ".",
+            )
         }
         val selectedAbilityScoreIncrease = request.selections
             .flatMap { it.optionIds }
@@ -757,7 +884,11 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             ) {
                 issues += ProgressionIssue(
                     "ABILITY_SCORE_INCREASE",
-                    "L'incremento del talento deve applicare +1 alla caratteristica scelta, senza superare $cap.",
+                    say(
+                        "L'incremento del talento deve applicare +1 alla caratteristica scelta, " +
+                            "senza superare $cap.",
+                        "The feat increase must add +1 to the selected ability without exceeding $cap.",
+                    ),
                 )
             }
         } else if (selectedAbilityScoreIncrease) {
@@ -768,13 +899,21 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             ) {
                 issues += ProgressionIssue(
                     "ABILITY_SCORE_INCREASE",
-                    "L'aumento richiede +2 a una caratteristica o +1 a due caratteristiche, senza superare 20.",
+                    say(
+                        "L'aumento richiede +2 a una caratteristica o +1 a due caratteristiche, " +
+                            "senza superare 20.",
+                        "The increase requires +2 to one ability or +1 to two abilities, " +
+                            "without exceeding 20.",
+                    ),
                 )
             }
         } else if (actualIncreases.isNotEmpty()) {
             issues += ProgressionIssue(
                 "UNEXPECTED_ABILITY_SCORE_INCREASE",
-                "Gli aumenti di caratteristica richiedono il talento corrispondente.",
+                say(
+                    "Gli aumenti di caratteristica richiedono il talento corrispondente.",
+                    "Ability score increases require the corresponding feat.",
+                ),
             )
         }
         return LevelUpValidation(issues.distinct())
@@ -1015,12 +1154,19 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             .flatMap { it.optionIds }
             .distinct()
             .map { listId ->
-                val listName = listId.substringAfterLast(':')
+                val stableListName = listId.substringAfterLast(':')
                     .replaceFirstChar { it.uppercase() }
-                val resourceId = "${pack.manifest.id}:resource:magic-initiate:$listName"
+                val listLabel = CharacterClassId.entries
+                    .firstOrNull { it.contentId == listId.substringAfterLast(':') }
+                    ?.label(language)
+                    ?: stableListName
+                val resourceId = "${pack.manifest.id}:resource:magic-initiate:$stableListName"
                 ResourcePoolState(
                     resourceId = resourceId,
-                    name = "Iniziato alla magia ($listName): lancio gratuito",
+                    name = say(
+                        "Iniziato alla magia ($listLabel): lancio gratuito",
+                        "Magic Initiate ($listLabel): free casting",
+                    ),
                     maximum = 1,
                     spent = existing[resourceId]?.spent?.coerceAtMost(1) ?: 0,
                     recovery = RecoveryPeriod.LONG_REST,
@@ -1196,7 +1342,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
     ): ChoiceDefinition = ChoiceDefinition(
         id = "${pack.manifest.id}:choice:level:$totalLevel:" +
             "${featId.substringAfterLast(':')}:ability-increase",
-        title = "Scegli la caratteristica da aumentare di 1",
+        title = say(
+            "Scegli la caratteristica da aumentare di 1",
+            "Choose the ability to increase by 1",
+        ),
         kind = ChoiceKind.ABILITY_SCORE_INCREASE,
         count = 1,
         optionIds = abilities.map { "${pack.manifest.id}:ability:${it.name.lowercase()}" },
@@ -1210,7 +1359,8 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         val slug = invocationId.substringAfterLast(':')
         return ChoiceDefinition(
             id = "$parentChoiceId:$slug:target",
-            title = "${pack.element(invocationId)?.name ?: "Supplica"}: scegli il trucchetto",
+            title = (pack.element(invocationId)?.name ?: say("Supplica", "Invocation")) +
+                say(": scegli il trucchetto", ": choose the cantrip"),
             kind = ChoiceKind.FEATURE_TARGET,
             count = 1,
             poolId = "${pack.manifest.id}:pool:known-cantrips:warlock:$mode",
@@ -1219,12 +1369,16 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
 
     private fun bonusCantripChoice(
         parentChoiceId: String,
+        stableSlug: String,
         title: String,
         count: Int,
         listSlug: String,
     ): ChoiceDefinition = ChoiceDefinition(
-        id = "$parentChoiceId:${title.lowercase().replace(Regex("[^a-z0-9]+"), "-")}:cantrips",
-        title = "$title: scegli ${if (count == 1) "un trucchetto" else "$count trucchetti"}",
+        id = "$parentChoiceId:$stableSlug:cantrips",
+        title = title + say(
+            ": scegli ${if (count == 1) "un trucchetto" else "$count trucchetti"}",
+            ": choose ${if (count == 1) "one cantrip" else "$count cantrips"}",
+        ),
         kind = ChoiceKind.CANTRIP,
         count = count,
         poolId = "${pack.manifest.id}:pool:spells:$listSlug:cantrip",
@@ -1234,9 +1388,12 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         ChoiceDefinition(
             id = "${pack.manifest.id}:choice:origin:magic-initiate:list",
             title = if (fixedListId == null) {
-                "Iniziato alla magia: scegli la lista"
+                say("Iniziato alla magia: scegli la lista", "Magic Initiate: choose the spell list")
             } else {
-                "Iniziato alla magia: lista concessa dal background"
+                say(
+                    "Iniziato alla magia: lista concessa dal background",
+                    "Magic Initiate: spell list granted by the background",
+                )
             },
             kind = ChoiceKind.SPELL_LIST,
             count = 1,
@@ -1246,21 +1403,30 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         ),
         ChoiceDefinition(
             id = "${pack.manifest.id}:choice:origin:magic-initiate:cantrips",
-            title = "Iniziato alla magia: scegli due trucchetti dalla lista",
+            title = say(
+                "Iniziato alla magia: scegli due trucchetti dalla lista",
+                "Magic Initiate: choose two cantrips from the list",
+            ),
             kind = ChoiceKind.CANTRIP,
             count = 2,
             poolId = "${pack.manifest.id}:pool:spells:magic-initiate:cantrip",
         ),
         ChoiceDefinition(
             id = "${pack.manifest.id}:choice:origin:magic-initiate:spell",
-            title = "Iniziato alla magia: scegli un incantesimo di 1º livello",
+            title = say(
+                "Iniziato alla magia: scegli un incantesimo di 1º livello",
+                "Magic Initiate: choose a level 1 spell",
+            ),
             kind = ChoiceKind.PREPARED_SPELL,
             count = 1,
             poolId = "${pack.manifest.id}:pool:spells:magic-initiate:1",
         ),
         ChoiceDefinition(
             id = "${pack.manifest.id}:choice:origin:magic-initiate:ability",
-            title = "Iniziato alla magia: scegli la caratteristica da incantatore",
+            title = say(
+                "Iniziato alla magia: scegli la caratteristica da incantatore",
+                "Magic Initiate: choose the spellcasting ability",
+            ),
             kind = ChoiceKind.SPELLCASTING_ABILITY,
             count = 1,
             optionIds = listOf(Ability.INTELLIGENCE, Ability.WISDOM, Ability.CHARISMA).map {
@@ -1293,7 +1459,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         if (listId in previousLists) {
             issues += ProgressionIssue(
                 "MAGIC_INITIATE_REPEAT",
-                "Iniziato alla magia può essere scelto di nuovo solo con una lista diversa.",
+                say(
+                    "Iniziato alla magia può essere scelto di nuovo solo con una lista diversa.",
+                    "Magic Initiate can be selected again only with a different spell list.",
+                ),
             )
         }
         val spells = request.selections
@@ -1309,7 +1478,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         ) {
             issues += ProgressionIssue(
                 "MAGIC_INITIATE_LIST",
-                "I trucchetti e l'incantesimo di Iniziato alla magia devono provenire dalla lista scelta.",
+                say(
+                    "I trucchetti e l'incantesimo di Iniziato alla magia devono provenire dalla lista scelta.",
+                    "Magic Initiate's cantrips and spell must come from the selected spell list.",
+                ),
             )
         }
     }

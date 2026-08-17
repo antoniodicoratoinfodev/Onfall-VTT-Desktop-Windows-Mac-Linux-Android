@@ -28,12 +28,18 @@ import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.EventType
-import app.d6d.sheet.italianLabel
-import app.d6d.sheet.metresLabel
+import app.d6d.domain.combat.SaveAbility
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.inlineLabel
+import app.d6d.i18n.label
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.sheet.i18n.distanceUnit
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
-import app.d6d.ui.components.italianLabel
+import app.d6d.ui.i18n.LogStrings
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
@@ -84,13 +90,13 @@ fun BattleLog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Eyebrow("Registro eventi")
+                    Eyebrow(strings.battle.eventLogHeading)
                     // Il round corrente vive qui, accanto all'etichetta: il registro
                     // e' il posto naturale per "a che punto siamo" della battaglia.
-                    Chip(text = "Round ${viewModel.round}", color = Palette.Gold)
+                    Chip(text = strings.battle.roundNumber(viewModel.round), color = Palette.Gold)
                 }
                 Text(
-                    text = "${viewModel.events.size} eventi",
+                    text = strings.battle.eventCount(viewModel.events.size),
                     color = Palette.TextFaint,
                     style = MaterialTheme.typography.labelSmall,
                 )
@@ -124,7 +130,7 @@ private fun LogLine(event: CombatEvent, viewModel: BattleViewModel, latest: Bool
         ) {
             GoldenRule(Modifier.weight(1f), alpha = 0.3f)
             Text(
-                text = "Round ${event.round()}",
+                text = strings.battle.roundNumber(event.round()),
                 color = Palette.Gold,
                 style = MaterialTheme.typography.labelSmall,
             )
@@ -155,12 +161,12 @@ private fun LogLine(event: CombatEvent, viewModel: BattleViewModel, latest: Bool
         horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         Text(
-            text = if (latest) "ORA" else "R${event.round()}",
+            text = if (latest) strings.battle.logNow else "R${event.round()}",
             color = if (latest) Palette.Gold else Palette.TextFaint,
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
-            text = event.describeInItalian(viewModel),
+            text = event.describe(viewModel, strings),
             color = event.type().tint,
             fontWeight = when {
                 latest || critical || event.type() == EventType.DIED -> FontWeight.Bold
@@ -203,9 +209,12 @@ private val EventType.tint: Color
  * Traduce un evento del motore in una riga leggibile.
  *
  * I dettagli restano quelli registrati dal motore: qui non si ricalcola nulla,
- * cosi' il registro a schermo e quello salvato non possono divergere.
+ * cosi' il registro a schermo e quello salvato non possono divergere. Le parole
+ * arrivano tutte da [LogStrings]; questa funzione decide solo quali pezzi passare.
  */
-internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
+internal fun CombatEvent.describe(viewModel: BattleViewModel, strings: Strings): String {
+    val words = strings.log
+    val language = strings.language
     val actor = actorId().takeIf { it.isNotBlank() }?.let { viewModel.name(it) } ?: ""
     val target = targetId().takeIf { it.isNotBlank() }?.let { viewModel.name(it) } ?: ""
     val detail: (String) -> String = { key -> details()[key].orEmpty() }
@@ -214,186 +223,211 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
         viewModel.abilities(actorId()).firstOrNull { it.id() == abilityId }?.name().orEmpty()
             .ifBlank { abilityId }
     }
-    val ability = abilityName.takeIf { it.isNotBlank() }?.let { " con «$it»" }.orEmpty()
-    val d20 = details().d20Breakdown()
+    val ability = abilityName.takeIf { it.isNotBlank() }?.let { words.withAbility(it) }.orEmpty()
+    val d20 = details().d20Breakdown(words)
+    val againstAc = if (d20.isBlank()) "" else words.rollAgainstArmorClass(d20, detail("armorClass"))
 
     return when (type()) {
-        EventType.ENCOUNTER_CREATED -> "Incontro creato"
-        EventType.COMBATANT_ADDED -> "$actor entra nell'incontro"
+        EventType.ENCOUNTER_CREATED -> words.encounterCreated
+        EventType.COMBATANT_ADDED -> words.combatantAdded(actor)
         EventType.PARTY_SET -> {
             val party = detail("combatantIds")
                 .split(',')
                 .filter { it.isNotBlank() }
                 .joinToString(", ") { viewModel.name(it) }
-            if (party.isBlank()) "Schieramenti dichiarati" else "Squadra dichiarata: $party"
+            if (party.isBlank()) words.sidesDeclared else words.partyDeclared(party)
         }
-        EventType.ENCOUNTER_READY -> "Incontro pronto"
+        EventType.ENCOUNTER_READY -> words.encounterReady
         EventType.INITIATIVE_SET -> buildString {
-            append(actor).append(": iniziativa ").append(detail("total"))
-            if (detail("static") == "true") append(" (punteggio statico)")
+            append(words.initiativeSet(actor, detail("total")))
+            if (detail("static") == "true") append(words.staticInitiativeSuffix)
             when (detail("mode")) {
-                "ADVANTAGE" -> append(" con Vantaggio: +5")
-                "DISADVANTAGE" -> append(" con Svantaggio: −5")
+                "ADVANTAGE" -> append(words.advantageInitiativeSuffix)
+                "DISADVANTAGE" -> append(words.disadvantageInitiativeSuffix)
             }
         }
-        EventType.INITIATIVE_ROLLED -> "$actor tira iniziativa: $d20"
+        EventType.INITIATIVE_ROLLED -> words.initiativeRolled(actor, d20)
         EventType.ABILITY_CHECK_ROLLED ->
-            "$actor effettua una prova di ${detail("ability").saveAbilityInItalian()}: $d20"
+            words.abilityCheckRolled(actor, detail("ability").asSaveAbility(strings), d20)
         EventType.INITIATIVE_ORDER_SET -> {
             val order = detail("order")
                 .split(',')
                 .filter { it.isNotBlank() }
                 .joinToString(" → ") { viewModel.name(it) }
-            if (order.isBlank()) "Ordine d'iniziativa fissato" else "Ordine d'iniziativa: $order"
+            if (order.isBlank()) words.initiativeOrderSet else words.initiativeOrder(order)
         }
-        EventType.ENCOUNTER_STARTED -> "L'incontro comincia"
-        EventType.ROUND_STARTED -> "— Round ${detail("round")} —"
-        EventType.ROUND_ENDED -> "Fine del round ${detail("round").ifBlank { round().toString() }}"
-        EventType.TURN_STARTED -> "Turno di $actor"
-        EventType.TURN_ENDED -> "$actor termina il turno"
-        EventType.ACTION_SPENT -> "$actor usa ${detail("cost").activationCostInItalian()}"
-        EventType.ABILITY_ACTIVATED -> "$actor attiva «${abilityName.ifBlank { detail("abilityId") }}»"
-        EventType.RESOURCE_SPENT ->
-            "$actor consuma ${detail("cost")} uso di ${detail("resourceName")}; " +
-                "ne restano ${detail("remaining")}/${detail("maximum")}"
-        EventType.ACTION_GRANTED ->
-            "$actor ottiene un'azione aggiuntiva, non utilizzabile per l'azione di Magia"
-        EventType.MOVEMENT_SPENT ->
-            "$actor usa ${detail("feet").asDistance()} di movimento; " +
-                "ne restano ${detail("remaining").asDistance()}"
-        EventType.SPELL_SLOT_SPENT -> "$actor consuma uno slot"
+        EventType.ENCOUNTER_STARTED -> words.encounterStarted
+        EventType.ROUND_STARTED -> words.roundStarted(detail("round"))
+        EventType.ROUND_ENDED -> words.roundEnded(detail("round").ifBlank { round().toString() })
+        EventType.TURN_STARTED -> words.turnStarted(actor)
+        EventType.TURN_ENDED -> words.turnEnded(actor)
+        EventType.ACTION_SPENT -> words.actionSpent(actor, detail("cost").asActivationCost(words))
+        EventType.ABILITY_ACTIVATED ->
+            words.abilityActivated(actor, abilityName.ifBlank { detail("abilityId") })
+        EventType.RESOURCE_SPENT -> words.resourceSpent(
+            actor = actor,
+            cost = detail("cost"),
+            resource = detail("resourceName"),
+            remaining = detail("remaining"),
+            maximum = detail("maximum"),
+        )
+        EventType.ACTION_GRANTED -> words.actionGranted(actor)
+        EventType.MOVEMENT_SPENT -> words.movementSpent(
+            actor = actor,
+            spent = detail("feet").asDistance(language),
+            remaining = detail("remaining").asDistance(language),
+        )
+        EventType.SPELL_SLOT_SPENT -> words.spellSlotSpent(actor)
         EventType.ATTACK_ROLLED ->
-            "$actor tira per colpire $target$ability: $d20 contro CA ${detail("armorClass")}"
-        EventType.ATTACK_MISSED -> buildString {
-            append(actor).append(" manca ").append(target).append(ability)
-            if (d20.isNotBlank()) append(": ").append(d20).append(" contro CA ").append(detail("armorClass"))
-        }
-        EventType.ATTACK_HIT -> buildString {
-            append(actor).append(" colpisce ").append(target).append(ability)
-            if (d20.isNotBlank()) append(": ").append(d20).append(" contro CA ").append(detail("armorClass"))
-        }
-        EventType.CRITICAL_HIT -> buildString {
-            append("COLPO CRITICO di ").append(actor).append(" su ").append(target).append(ability)
-            if (d20.isNotBlank()) append(": ").append(d20).append(" contro CA ").append(detail("armorClass"))
-        }
-        EventType.AREA_SPELL_CAST ->
-            "$actor usa ${abilityName.ifBlank { "un'area" }} al centro ${detail("center")} — " +
-                "raggio ${detail("radiusFeet").asDistance()}, CD ${detail("saveDc")}, " +
-                "${detail("targets")} creature coinvolte"
+            words.attackRolled(actor, target, ability, d20, detail("armorClass"))
+        EventType.ATTACK_MISSED -> words.attackMissed(actor, target, ability, againstAc)
+        EventType.ATTACK_HIT -> words.attackHit(actor, target, ability, againstAc)
+        EventType.CRITICAL_HIT -> words.criticalHit(actor, target, ability, againstAc)
+        EventType.AREA_SPELL_CAST -> words.areaSpellCast(
+            actor = actor,
+            ability = abilityName.ifBlank { words.anArea },
+            centre = detail("center"),
+            radius = detail("radiusFeet").asDistance(language),
+            saveDc = detail("saveDc"),
+            targets = detail("targets"),
+        )
         EventType.SAVING_THROW_ROLLED -> {
-            val esito = if (detail("saved") == "true") "supera" else "fallisce"
-            val save = detail("save").saveAbilityInItalian()
+            val verb = if (detail("saved") == "true") words.savePassedVerb else words.saveFailedVerb
+            val save = detail("save").asSaveAbility(strings)
+            val against = abilityName.ifBlank { actor }
             if (d20.isNotBlank()) {
-                "$target $esito il tiro salvezza su $save contro ${abilityName.ifBlank { actor }}: " +
-                    "$d20 contro CD ${detail("dc")}"
+                words.savingThrowRolled(target, verb, save, against, d20, detail("dc"))
             } else {
-                "$target $esito il tiro salvezza su $save contro " +
-                    "${abilityName.ifBlank { actor }} (deciso al tavolo)"
+                words.savingThrowDeclared(target, verb, save, against)
             }
         }
-        EventType.DAMAGE_ROLLED -> {
-            val damageType = detail("type").damageTypeInItalian()
-            val recipient = target.takeIf { it.isNotBlank() }?.let { " su $it" }.orEmpty()
-            "$actor determina i danni${ability}$recipient: ${details().damageBreakdown()} $damageType"
-        }
+        EventType.DAMAGE_ROLLED -> words.damageRolled(
+            actor = actor,
+            ability = ability,
+            recipient = target.takeIf { it.isNotBlank() }?.let { words.damageOnTarget(it) }.orEmpty(),
+            breakdown = "${details().damageBreakdown(words)} ${detail("type").asDamageType(language)}",
+        )
         EventType.DAMAGE_APPLIED -> if (detail("hitPointsAfter").isNotBlank()) {
-            val total = detail("totalAdjusted").ifBlank { detail("adjusted") }
-            buildString {
-                if (actor.isNotBlank()) append(actor).append(" infligge a ") else append(target).append(" subisce ")
-                if (actor.isNotBlank()) append(target).append(' ')
-                append(total).append(" danni")
-                val temporary = detail("temporaryAbsorbed").toIntOrNull() ?: 0
-                val lost = detail("hitPointsLost").toIntOrNull()
-                if (temporary > 0) append(" (").append(temporary).append(" assorbiti dai PF temporanei)")
-                if (lost != null) append("; PF persi ").append(lost)
-                append("; ").append(target).append(" resta a ").append(detail("hitPointsAfter")).append(" PF")
-            }
+            words.damageDealt(
+                actor = actor,
+                target = target,
+                total = detail("totalAdjusted").ifBlank { detail("adjusted") },
+                temporaryAbsorbed = detail("temporaryAbsorbed").toIntOrNull() ?: 0,
+                hitPointsLost = detail("hitPointsLost").toIntOrNull(),
+                hitPointsAfter = detail("hitPointsAfter"),
+            )
         } else {
-            val type = detail("type").damageTypeInItalian()
-            val adjustment = when {
-                detail("immune") == "true" -> " · immune"
-                detail("resistant") == "true" -> " · resistente"
-                detail("vulnerable") == "true" -> " · vulnerabile"
-                else -> ""
-            }
-            "$actor applica a $target il danno $type: ${detail("raw")} → ${detail("adjusted")}$adjustment"
+            words.damageAdjusted(
+                actor = actor,
+                target = target,
+                type = detail("type").asDamageType(language),
+                raw = detail("raw"),
+                adjusted = detail("adjusted"),
+                adjustment = when {
+                    detail("immune") == "true" -> words.immuneSuffix
+                    detail("resistant") == "true" -> words.resistantSuffix
+                    detail("vulnerable") == "true" -> words.vulnerableSuffix
+                    else -> ""
+                },
+            )
         }
-        EventType.ZERO_HIT_POINTS -> "$target cade a 0 PF per il danno di $actor"
-        EventType.HEALED ->
-            "$target recupera ${detail("restored")} PF " +
-                "(richiesti ${detail("requested")}, ora ${detail("hitPointsAfter")} PF)"
-        EventType.CURRENT_HIT_POINTS_SET ->
-            "$target: PF attuali ${detail("before")} → ${detail("after")}" +
-                if (detail("zeroMeansDead") == "true") " — morto" else ""
-        EventType.TEMPORARY_HIT_POINTS_GRANTED ->
-            "$target riceve ${detail("offered")} PF temporanei; " +
-                "ne conserva ${detail("retained")} (prima ${detail("before")})"
-        EventType.CONDITION_APPLIED -> {
-            val condition = detail("condition").ifBlank { detail("type") }.conditionInItalian()
-            val source = actor.takeIf { it.isNotBlank() }?.let { " da $it" }.orEmpty()
-            val duration = detail("remaining").takeIf { it.isNotBlank() }?.let {
-                " · durata residua $it (${detail("expiry").conditionExpiryInItalian()})"
-            }.orEmpty()
-            "$target diventa $condition$source$duration"
-        }
-        EventType.CONDITION_REMOVED -> {
-            val condition = detail("condition").ifBlank { detail("type") }.conditionInItalian()
-            "$target non è più $condition"
-        }
-        EventType.CONDITION_EXPIRED -> {
-            val condition = detail("condition").ifBlank { detail("type") }.conditionInItalian()
-            "Su $target scade: $condition"
-        }
-        EventType.CONDITION_IMMUNE -> {
-            val condition = detail("condition").ifBlank { detail("type") }.conditionInItalian()
-            "$actor tenta di applicare $condition a $target, ma il bersaglio è immune"
-        }
-        EventType.CONCENTRATION_STARTED ->
-            "$actor inizia a concentrarsi${ability}"
-        EventType.CONCENTRATION_CHECKED -> {
-            val who = actor.ifBlank { target }
-            val dc = detail("difficultyClass").ifBlank { detail("dc") }
-            "$who prova a mantenere la concentrazione: $d20 contro CD $dc — " +
-                if (detail("maintained") == "true") "mantenuta" else "persa"
-        }
-        EventType.CONCENTRATION_ENDED -> buildString {
-            append(actor).append(" perde la concentrazione").append(ability)
-            detail("reason").takeIf { it.isNotBlank() }?.let { append(" (").append(it.reasonInItalian()).append(')') }
-        }
-        EventType.ENCOUNTER_PAUSED -> "Incontro in pausa"
-        EventType.ENCOUNTER_RESUMED -> "Incontro ripreso"
-        EventType.ENCOUNTER_RESOLVED -> "Incontro risolto: ${detail("outcome")}"
+        EventType.ZERO_HIT_POINTS -> words.zeroHitPoints(target, actor)
+        EventType.HEALED -> words.healed(
+            target = target,
+            restored = detail("restored"),
+            requested = detail("requested"),
+            after = detail("hitPointsAfter"),
+        )
+        EventType.CURRENT_HIT_POINTS_SET -> words.currentHitPointsSet(
+            target = target,
+            before = detail("before"),
+            after = detail("after"),
+            dead = detail("zeroMeansDead") == "true",
+        )
+        EventType.TEMPORARY_HIT_POINTS_GRANTED -> words.temporaryHitPointsGranted(
+            target = target,
+            offered = detail("offered"),
+            retained = detail("retained"),
+            before = detail("before"),
+        )
+        EventType.CONDITION_APPLIED -> words.conditionApplied(
+            target = target,
+            condition = detail("condition").ifBlank { detail("type") }.asCondition(language),
+            source = actor.takeIf { it.isNotBlank() }?.let { words.conditionSource(it) }.orEmpty(),
+            duration = detail("remaining").takeIf { it.isNotBlank() }?.let {
+                words.conditionDuration(it, detail("expiry").asConditionExpiry(words))
+            }.orEmpty(),
+        )
+        EventType.CONDITION_REMOVED -> words.conditionRemoved(
+            target,
+            detail("condition").ifBlank { detail("type") }.asCondition(language),
+        )
+        EventType.CONDITION_EXPIRED -> words.conditionExpired(
+            target,
+            detail("condition").ifBlank { detail("type") }.asCondition(language),
+        )
+        EventType.CONDITION_IMMUNE -> words.conditionImmune(
+            actor,
+            target,
+            detail("condition").ifBlank { detail("type") }.asCondition(language),
+        )
+        EventType.CONCENTRATION_STARTED -> words.concentrationStarted(actor, ability)
+        EventType.CONCENTRATION_CHECKED -> words.concentrationChecked(
+            who = actor.ifBlank { target },
+            roll = d20,
+            dc = detail("difficultyClass").ifBlank { detail("dc") },
+            maintained = detail("maintained") == "true",
+        )
+        EventType.CONCENTRATION_ENDED -> words.concentrationEnded(
+            actor = actor,
+            ability = ability,
+            reason = detail("reason").takeIf { it.isNotBlank() }
+                ?.let { " (${it.asConcentrationReason(words)})" }
+                .orEmpty(),
+        )
+        EventType.ENCOUNTER_PAUSED -> words.encounterPaused
+        EventType.ENCOUNTER_RESUMED -> words.encounterResumed
+        EventType.ENCOUNTER_RESOLVED -> words.encounterResolved(detail("outcome"))
         // L'annullamento resta scritto nel registro invece di sparire: il log e'
         // append-only, quindi la cronologia mostra anche i ripensamenti del tavolo.
-        EventType.UNDO_PERFORMED ->
-            "Comando annullato: ripristinata la revisione precedente alla ${detail("revertedRevision")}"
+        EventType.UNDO_PERFORMED -> words.undoPerformed(detail("revertedRevision"))
 
         EventType.DEATH_SAVE_ROLLED -> {
             val who = target.ifBlank { actor }
             when {
-                detail("source") == "damage" -> {
-                    "$who subisce ${detail("failures")} fallimenti contro morte per il danno di $actor; " +
-                        "fallimenti totali ${detail("totalFailures")}"
-                }
-                detail("outcome") == "natural20" -> "$who tira contro morte: $d20 — recupera 1 PF"
-                else -> {
-                    "$who tira contro morte: $d20 — " +
-                        "${detail("successes").ifBlank { "0" }} successi, " +
-                        "${detail("failures").ifBlank { detail("totalFailures") }} fallimenti"
-                }
+                detail("source") == "damage" -> words.deathSaveFromDamage(
+                    who = who,
+                    failures = detail("failures"),
+                    actor = actor,
+                    totalFailures = detail("totalFailures"),
+                )
+                detail("outcome") == "natural20" -> words.deathSaveNatural20(who, d20)
+                else -> words.deathSaveRolled(
+                    who = who,
+                    roll = d20,
+                    successes = detail("successes").ifBlank { "0" },
+                    failures = detail("failures").ifBlank { detail("totalFailures") },
+                )
             }
         }
 
-        EventType.STABILIZED -> "${actor.ifBlank { target }} è stabilizzato"
-        EventType.KNOCKED_OUT -> "$target messo fuori combattimento a 1 PF"
-        EventType.DIED -> buildString {
+        EventType.STABILIZED -> words.stabilized(actor.ifBlank { target })
+        EventType.KNOCKED_OUT -> words.knockedOut(target)
+        EventType.DIED -> {
             val who = target.ifBlank { actor }
-            append(who).append(" muore (").append(detail("cause").causeInItalian()).append(')')
-            if (actor.isNotBlank() && actor != who) append(" per l'azione di ").append(actor)
+            words.died(
+                who = who,
+                cause = detail("cause").asDeathCause(words),
+                byActor = if (actor.isNotBlank() && actor != who) words.killedBy(actor) else "",
+            )
         }
-        EventType.EXHAUSTION_CHANGED ->
-            "$actor: sfinimento ${detail("before")} → ${detail("after")} " +
-                "(${detail("d20Penalty")} ai D20, ${detail("speedPenaltyFeet").asDistance()})"
+        EventType.EXHAUSTION_CHANGED -> words.exhaustionChanged(
+            actor = actor,
+            before = detail("before"),
+            after = detail("after"),
+            d20Penalty = detail("d20Penalty"),
+            speedPenalty = detail("speedPenaltyFeet").asDistance(language),
+        )
 
         EventType.COMBATANT_EDITED -> {
             val previousName = detail("previousName")
@@ -405,64 +439,86 @@ internal fun CombatEvent.describeInItalian(viewModel: BattleViewModel): String {
             }
             // Vengono elencate solo le statistiche cambiate davvero: il registro
             // deve dire cosa e' stato corretto, non ripetere tutta la scheda.
+            val speedLabel = words.statSpeed
             val changes = listOf(
-                Triple("CA", detail("previousArmorClass"), detail("armorClass")),
-                Triple("PF max", detail("previousMaxHitPoints"), detail("maxHitPoints")),
-                Triple("Velocità", detail("previousSpeedFeet"), detail("speedFeet")),
-                Triple("Iniziativa", detail("previousInitiativeModifier"), detail("initiativeModifier")),
-                Triple("TS Cos", detail("previousConstitutionSaveBonus"), detail("constitutionSaveBonus")),
+                Triple(words.statArmorClass, detail("previousArmorClass"), detail("armorClass")),
+                Triple(words.statMaxHitPoints, detail("previousMaxHitPoints"), detail("maxHitPoints")),
+                Triple(speedLabel, detail("previousSpeedFeet"), detail("speedFeet")),
+                Triple(
+                    words.statInitiative,
+                    detail("previousInitiativeModifier"),
+                    detail("initiativeModifier"),
+                ),
+                Triple(
+                    words.statConstitutionSave,
+                    detail("previousConstitutionSaveBonus"),
+                    detail("constitutionSaveBonus"),
+                ),
             ).filter { (_, before, after) -> before != after && after.isNotBlank() }
                 .joinToString(", ") { (label, before, after) ->
-                    if (label == "Velocità") "$label ${before.asDistance()}→${after.asDistance()}" else "$label $before→$after"
+                    if (label == speedLabel) {
+                        "$label ${before.asDistance(language)}→${after.asDistance(language)}"
+                    } else {
+                        "$label $before→$after"
+                    }
                 }
 
-            buildString {
-                append("Scheda corretta: ").append(rename)
-                if (changes.isNotEmpty()) append(" — ").append(changes)
-                append(" [rev. ").append(detail("version")).append(']')
-            }
+            words.combatantEdited(rename, changes, detail("version"))
         }
-        EventType.COMBATANT_TRANSFORMED ->
-            "$actor usa Forma Selvatica: ${detail("previousName")} diventa ${detail("name")}; " +
-                "${detail("temporaryHitPoints")} PF temporanei"
+        EventType.COMBATANT_TRANSFORMED -> words.combatantTransformed(
+            actor = actor,
+            previousName = detail("previousName"),
+            name = detail("name"),
+            temporaryHitPoints = detail("temporaryHitPoints"),
+        )
 
-        EventType.MAP_CONFIGURED -> buildString {
-            append("Mappa ").append(detail("columns")).append('×').append(detail("rows"))
-            append(", ").append(detail("feetPerSquare").asDistance()).append(" per casella")
-            val dropped = detail("droppedPlacements").toIntOrNull() ?: 0
-            if (dropped > 0) append(" — $dropped segnaposti fuori bordo rimossi")
-        }
+        EventType.MAP_CONFIGURED -> words.mapConfigured(
+            columns = detail("columns"),
+            rows = detail("rows"),
+            perSquare = detail("feetPerSquare").asDistance(language),
+            dropped = detail("droppedPlacements").toIntOrNull() ?: 0,
+        )
 
         EventType.MAP_BACKGROUND_SET ->
-            if (detail("image").isBlank()) "Sfondo rimosso" else "Sfondo: ${detail("image")}"
+            if (detail("image").isBlank()) words.backgroundRemoved else words.backgroundSet(detail("image"))
 
-        EventType.COMBATANT_PLACED -> "$actor collocato in ${detail("position")}"
+        EventType.COMBATANT_PLACED -> words.combatantPlaced(actor, detail("position"))
 
-        EventType.COMBATANT_MOVED ->
-            "$actor si sposta ${detail("from")} → ${detail("to")} " +
-                "(${detail("feet").asDistance()}, ne restano ${detail("remainingFeet").asDistance()})"
+        EventType.COMBATANT_MOVED -> words.combatantMoved(
+            actor = actor,
+            from = detail("from"),
+            to = detail("to"),
+            feet = detail("feet").asDistance(language),
+            remaining = detail("remainingFeet").asDistance(language),
+        )
 
-        EventType.COMBATANT_REMOVED_FROM_MAP -> "$actor tolto dalla mappa"
+        EventType.COMBATANT_REMOVED_FROM_MAP -> words.combatantRemovedFromMap(actor)
     }
 }
 
-/** Il registro riceve i piedi del motore e li mostra in metri come tutto il resto. */
-private fun String.asDistance(): String = toIntOrNull()?.let(::metresLabel) ?: "$this m"
+/**
+ * Il registro riceve i piedi del motore e li mostra nella misura della lingua.
+ *
+ * Un valore che non e' un numero passa cosi' com'e' con l'unita' appesa: un
+ * dettaglio malformato non deve far sparire la riga dal registro.
+ */
+private fun String.asDistance(language: AppLanguage): String =
+    toIntOrNull()?.let { distanceLabel(it, language) } ?: "$this ${distanceUnit(language)}"
 
 /** Formula completa di un tiro d20, inclusi entrambi i dadi di Vantaggio/Svantaggio. */
-private fun Map<String, String>.d20Breakdown(): String {
+private fun Map<String, String>.d20Breakdown(words: LogStrings): String {
     val natural = this["natural"].orEmpty()
     val total = this["total"].orEmpty()
     if (natural.isBlank()) return total
 
     val rolled = this["dice"].orEmpty()
     val die = when (this["mode"]) {
-        "ADVANTAGE" -> "d20 $rolled (Vantaggio, scelto $natural)"
-        "DISADVANTAGE" -> "d20 $rolled (Svantaggio, scelto $natural)"
-        else -> "d20 $natural"
+        "ADVANTAGE" -> words.dieWithAdvantage(rolled, natural)
+        "DISADVANTAGE" -> words.dieWithDisadvantage(rolled, natural)
+        else -> words.plainDie(natural)
     }
     val modifier = this["modifier"].orEmpty().modifierOperation()
-    val source = if (this["source"] == "MANUAL") " · inserito manualmente" else ""
+    val source = if (this["source"] == "MANUAL") words.enteredManually else ""
     return buildString {
         append(die)
         if (modifier.isNotBlank()) append(' ').append(modifier)
@@ -472,18 +528,17 @@ private fun Map<String, String>.d20Breakdown(): String {
 }
 
 /** Valori effettivi dei dadi di danno, formula originale, modificatore e totale. */
-private fun Map<String, String>.damageBreakdown(): String {
+private fun Map<String, String>.damageBreakdown(words: LogStrings): String {
     val amount = this["amount"].orEmpty().ifBlank { this["total"].orEmpty() }
     val formula = this["formula"].orEmpty()
     val prefix = formula.takeIf { it.isNotBlank() }?.let { "$it · " }.orEmpty()
     return when (this["source"]?.lowercase()) {
-        "manual" -> "${prefix}valore inserito $amount"
-        "fixed" -> "${prefix}danno fisso $amount"
+        "manual" -> prefix + words.manualDamage(amount)
+        "fixed" -> prefix + words.fixedDamage(amount)
         else -> {
-            val dice = this["dice"].orEmpty()
             val modifier = this["modifier"].orEmpty().modifierOperation()
             buildString {
-                append(prefix).append("dadi ").append(dice)
+                append(prefix).append(words.diceDamage(this@damageBreakdown["dice"].orEmpty()))
                 if (modifier.isNotBlank()) append(' ').append(modifier)
                 append(" = ").append(amount)
             }
@@ -496,59 +551,53 @@ private fun String.modifierOperation(): String {
     return if (value < 0) "− ${-value}" else "+ $value"
 }
 
-private fun String.activationCostInItalian(): String = runCatching {
+private fun String.asActivationCost(words: LogStrings): String = runCatching {
     when (ActivationCost.valueOf(this)) {
-        ActivationCost.ACTION -> "l'azione"
-        ActivationCost.BONUS_ACTION -> "l'azione bonus"
-        ActivationCost.REACTION -> "la reazione"
-        ActivationCost.LEGENDARY_ACTION -> "un'azione leggendaria"
-        ActivationCost.NONE -> "un'azione gratuita"
+        ActivationCost.ACTION -> words.costAction
+        ActivationCost.BONUS_ACTION -> words.costBonusAction
+        ActivationCost.REACTION -> words.costReaction
+        ActivationCost.LEGENDARY_ACTION -> words.costLegendaryAction
+        ActivationCost.NONE -> words.costFree
     }
 }.getOrDefault(lowercase())
 
-private fun String.conditionInItalian(): String = runCatching {
-    ConditionType.valueOf(this).italianLabel.lowercase()
+private fun String.asCondition(language: AppLanguage): String = runCatching {
+    ConditionType.valueOf(this).inlineLabel(language)
 }.getOrDefault(lowercase())
 
-private fun String.damageTypeInItalian(): String = runCatching {
-    DamageType.valueOf(this).italianLabel.lowercase()
+private fun String.asDamageType(language: AppLanguage): String = runCatching {
+    DamageType.valueOf(this).inlineLabel(language)
 }.getOrDefault(lowercase())
 
-private fun String.saveAbilityInItalian(): String = when (this) {
-    "STRENGTH" -> "Forza"
-    "DEXTERITY" -> "Destrezza"
-    "CONSTITUTION" -> "Costituzione"
-    "INTELLIGENCE" -> "Intelligenza"
-    "WISDOM" -> "Saggezza"
-    "CHARISMA" -> "Carisma"
-    else -> lowercase().ifBlank { "caratteristica non indicata" }
+private fun String.asSaveAbility(strings: Strings): String = runCatching {
+    SaveAbility.valueOf(this).label(strings.language)
+}.getOrElse { lowercase().ifBlank { strings.log.abilityUnspecified } }
+
+private fun String.asConditionExpiry(words: LogStrings): String = when (this) {
+    "START_OF_TARGET_TURN" -> words.expiryStartOfTargetTurn
+    "END_OF_TARGET_TURN" -> words.expiryEndOfTargetTurn
+    "START_OF_SOURCE_TURN" -> words.expiryStartOfSourceTurn
+    "END_OF_SOURCE_TURN" -> words.expiryEndOfSourceTurn
+    "CONCENTRATION" -> words.expiryConcentration
+    "MANUAL" -> words.expiryManual
+    else -> lowercase().ifBlank { words.expiryUnspecified }
 }
 
-private fun String.conditionExpiryInItalian(): String = when (this) {
-    "START_OF_TARGET_TURN" -> "inizio turno del bersaglio"
-    "END_OF_TARGET_TURN" -> "fine turno del bersaglio"
-    "START_OF_SOURCE_TURN" -> "inizio turno della fonte"
-    "END_OF_SOURCE_TURN" -> "fine turno della fonte"
-    "CONCENTRATION" -> "concentrazione"
-    "MANUAL" -> "rimozione manuale"
-    else -> lowercase().ifBlank { "scadenza non indicata" }
+private fun String.asConcentrationReason(words: LogStrings): String = when (this) {
+    "zero hit points" -> words.reasonZeroHitPoints
+    "failed save" -> words.reasonFailedSave
+    "replaced" -> words.reasonReplaced
+    "manual" -> words.reasonManual
+    "manual current hit points edit" -> words.reasonManualHitPointEdit
+    else -> ifBlank { words.reasonUnspecified }
 }
 
-private fun String.reasonInItalian(): String = when (this) {
-    "zero hit points" -> "0 PF"
-    "failed save" -> "tiro salvezza fallito"
-    "replaced" -> "sostituita da un'altra concentrazione"
-    "manual" -> "interrotta manualmente"
-    "manual current hit points edit" -> "PF impostati manualmente"
-    else -> ifBlank { "motivo non indicato" }
-}
-
-private fun String.causeInItalian(): String = when (this) {
-    "three successes" -> "tre successi"
-    "three failures", "death saves" -> "tiri contro morte"
-    "massive damage" -> "danno massiccio"
-    "exhaustion" -> "sfinimento"
-    "manual" -> "stabilizzazione manuale"
-    "manual current hit points edit" -> "PF impostati manualmente"
-    else -> ifBlank { "causa non specificata" }
+private fun String.asDeathCause(words: LogStrings): String = when (this) {
+    "three successes" -> words.causeThreeSuccesses
+    "three failures", "death saves" -> words.causeDeathSaves
+    "massive damage" -> words.causeMassiveDamage
+    "exhaustion" -> words.causeExhaustion
+    "manual" -> words.causeManualStabilization
+    "manual current hit points edit" -> words.causeManualHitPointEdit
+    else -> ifBlank { words.causeUnspecified }
 }

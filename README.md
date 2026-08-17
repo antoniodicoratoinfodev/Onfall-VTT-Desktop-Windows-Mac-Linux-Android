@@ -1,8 +1,9 @@
 # Onfall
 
 Onfall is an offline-first combat and encounter tracker compatible with 5e and 5.5e (D&D 2024).
-Multiplayer support is planned for the future. The application includes a separate Italian SRD
-5.2.1 content pack for guided character creation, class progression, feats, actions and spells.
+Multiplayer support is planned for the future. The application includes a separate bilingual SRD
+5.2.1 content pack (Italian and English) for guided character creation, class progression, feats,
+actions and spells.
 Its attribution and licence notice are in [`NOTICE-SRD.md`](NOTICE-SRD.md). The engine, user
 interface and bundled encounter examples are original, and desktop and Android share the same
 engine, data, and screens.
@@ -21,9 +22,10 @@ Four parts living on the same engine:
 3. a **combat engine** that is independent from the interface, deterministic, audited, and undoable;
 4. a **game interface** that presents the fight as a turn based battle.
 
-Three destinations hold them together, and the navigation rail on the left collapses to icons, or
-disappears entirely, when the table needs the room. The interface is in Italian, so the screenshots
-below name them **Battaglia** (battle), **Partita** (session) and **Compendio** (Compendium).
+Four destinations hold them together, and the navigation rail on the left collapses to icons, or
+disappears entirely, when the table needs the room. The screenshots below use the Italian labels
+**Battaglia** (battle), **Partita** (session), **Compendio**
+(Compendium) and **Impostazioni** (Settings). The language can be switched to English at runtime.
 
 ## Starting a session
 
@@ -35,10 +37,11 @@ are and to show the engine at different points of a campaign: *Le rovine di Vall
 The builder then walks through four steps: where to start from, who takes part, the grid, and how to
 begin. In the participants step each template gets a **faction** and a **quantity**, so the same
 stat block can enter the fight four times without being duplicated in the archive. The grid step
-sets columns, rows and the distance one square represents; every distance in the application is then
-shown in metres, using the conversion the Italian rules print (5 feet = 1.5 m). The last step chooses between **Fight mode**, which lays allies
-and enemies out facing each other and ready to roll, and **Roleplay & Fight & Exploration**, which
-opens the same grid empty and leaves placement to the table.
+sets columns, rows and the distance one square represents. Distances follow the selected language:
+metres in Italian, using the rules conversion (5 feet = 1.5 m), and feet in English. The last step
+chooses between **Fight mode**, which lays allies and enemies out facing each other and ready to roll,
+and **Roleplay & Fight & Exploration**, which opens the same grid empty and leaves placement to the
+table.
 
 A combatant is **copied** into the session, so ordinary changes to HP, conditions, turns, and
 position never alter its Compendium template. Explicit stat corrections and Action Surge uses
@@ -214,11 +217,11 @@ need.
 
 ## SRD content pack
 
-The Italian SRD 5.2.1 pack is a separate module, so the engine and the licensed content never mix.
-It carries 12 classes with their SRD subclasses, 408 class and subclass feature records (including
-10 metamagics and 28 eldritch invocations), 4 complete backgrounds, 33 starting-equipment packages,
-17 feats, 339 spells, 38 weapons and 64 complete Beast stat blocks eligible for Wild Shape. It is
-distributed under CC BY 4.0; see [`NOTICE-SRD.md`](NOTICE-SRD.md).
+The Italian and English SRD 5.2.1 pack is a separate module, so the engine and the licensed content
+never mix. It carries 12 classes with their SRD subclasses, 408 class and subclass feature records
+(including 10 metamagics and 28 eldritch invocations), 4 complete backgrounds, 33
+starting-equipment packages, 17 feats, 339 spells, 38 weapons and 64 complete Beast stat blocks
+eligible for Wild Shape. It is distributed under CC BY 4.0; see [`NOTICE-SRD.md`](NOTICE-SRD.md).
 
 ## Architecture
 
@@ -229,7 +232,7 @@ distributed under CC BY 4.0; see [`NOTICE-SRD.md`](NOTICE-SRD.md).
 | `engine/persistence-json` | Java 17 | atomic saves, backups, import and export |
 | `engine/character-rules` | Kotlin | versioned class choices, XP progression and class resources |
 | `engine/sheet-model` | Kotlin | 2024 character sheet and 2025 monster stat block |
-| `content/srd-5.2.1-it` | Kotlin/JSON | Italian SRD classes, backgrounds, equipment, beasts, feats, actions and spells (CC BY 4.0) |
+| `content/srd-5.2.1-it` | Kotlin/JSON | Italian and English SRD classes, backgrounds, equipment, beasts, feats, actions and spells (CC BY 4.0) |
 | `shared-ui` | Kotlin + Compose MP | theme, components, screens, presentation state |
 | `desktop-app` | Kotlin | JVM window, dense shell |
 | `android-app` | Kotlin | Activity, touch shell |
@@ -295,5 +298,5 @@ reached by `check`, not by `test`.
 
 **All rights reserved.** The application may be downloaded, compiled, installed, and used to play
 games for personal, non-commercial purposes. Modification, redistribution, forks, and reuse in other
-projects are not permitted. The Italian SRD content pack remains separately available under CC BY
+projects are not permitted. The Italian and English SRD content pack remains separately available under CC BY
 4.0. The full terms are in [`LICENSE.md`](LICENSE.md).

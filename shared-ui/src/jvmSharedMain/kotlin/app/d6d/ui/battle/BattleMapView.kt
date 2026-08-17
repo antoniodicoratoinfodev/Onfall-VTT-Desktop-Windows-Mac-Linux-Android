@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import app.d6d.sheet.metresLabel
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.components.Chip
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -796,7 +798,7 @@ private fun onCellTapped(viewModel: BattleViewModel, column: Int, row: Int) {
     val occupant = viewModel.occupantAt(column, row)
     if (viewModel.singleTargeting != null) {
         if (occupant == null) {
-            viewModel.showMessage("Scegli una creatura come bersaglio, oppure annulla la mira.")
+            viewModel.showMessage { it.battle.chooseCreatureOrCancelAim }
         } else {
             viewModel.onCombatantClicked(occupant)
         }
@@ -812,7 +814,7 @@ private fun onCellTapped(viewModel: BattleViewModel, column: Int, row: Int) {
     } else if (viewModel.inspectedCombatantId == active) {
         viewModel.move(active, column, row)
     } else {
-        viewModel.showMessage("Stai consultando un altro combattente: seleziona quello di turno per muoverlo.")
+        viewModel.showMessage { it.battle.inspectingAnotherCombatant }
     }
 }
 
@@ -970,6 +972,7 @@ private fun MapToken(
     cellSize: Dp,
     mapOffset: Offset,
 ) {
+    val words = strings.battle
     val id = placement.combatantId()
     val combatant = viewModel.combatant(id) ?: return
     val snapshot = combatant.snapshot()
@@ -1048,11 +1051,16 @@ private fun MapToken(
                 role = Role.Button
                 contentDescription = snapshot.name()
                 stateDescription = buildString {
-                    append("${combatant.currentHitPoints()} su ${snapshot.maxHitPoints()} punti ferita")
-                    if (active) append(", turno attivo")
-                    if (targeted) append(", bersaglio selezionato")
-                    if (inspected) append(", scheda in esame")
-                    if (defeated) append(", fuori combattimento")
+                    append(
+                        words.hitPointsLongSentence(
+                            combatant.currentHitPoints(),
+                            snapshot.maxHitPoints(),
+                        ),
+                    )
+                    if (active) append(words.turnActiveSuffix)
+                    if (targeted) append(words.targetSelectedSuffix)
+                    if (inspected) append(words.inspectedSuffix)
+                    if (defeated) append(words.outOfCombatSuffix)
                 }
             }
             // Modalità modifica: qualunque segnaposto si trascina liberamente per
@@ -1253,6 +1261,7 @@ private const val MIN_TOKEN_LABEL_SP = 9f
 /** Invito alla configurazione quando la mappa non esiste ancora. */
 @Composable
 private fun MapNotConfigured(viewModel: BattleViewModel, modifier: Modifier = Modifier) {
+    val words = strings.battle
     Box(
         modifier.fillMaxSize().background(Palette.Abyss),
         contentAlignment = Alignment.Center,
@@ -1277,15 +1286,14 @@ private fun MapNotConfigured(viewModel: BattleViewModel, modifier: Modifier = Mo
                 fontSize = 46.sp,
             )
             Text(
-                text = "Nessuna mappa configurata",
+                text = words.noMapConfigured,
                 color = Palette.Text,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleLarge,
             )
             OrnateDivider(color = Palette.GoldDim)
             Text(
-                text = "Senza griglia l'incontro resta una simulazione astratta: " +
-                    "portate e distanze le dichiara il tavolo, non il motore.",
+                text = words.noMapBody,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
@@ -1293,10 +1301,10 @@ private fun MapNotConfigured(viewModel: BattleViewModel, modifier: Modifier = Mo
                 overflow = TextOverflow.Ellipsis,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GameButton("Griglia 20 × 15", accent = Palette.Gold, onClick = {
+                GameButton(words.grid20x15, accent = Palette.Gold, onClick = {
                     viewModel.configureMap(20, 15, 5)
                 })
-                GameButton("Griglia 40 × 30", accent = Palette.TextMuted, onClick = {
+                GameButton(words.grid40x30, accent = Palette.TextMuted, onClick = {
                     viewModel.configureMap(40, 30, 5)
                 })
             }
@@ -1412,6 +1420,9 @@ private fun AreaTargetingBanner(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = strings
+    val words = strings.battle
+    val language = strings.language
     val shape = RoundedCornerShape(10.dp)
     Row(
         modifier
@@ -1425,19 +1436,21 @@ private fun AreaTargetingBanner(
     ) {
         Column(Modifier.weight(1f, fill = false)) {
             Text(
-                text = "Mira · ${targeting.name}",
+                text = words.aimingAt(targeting.name),
                 color = Palette.Text,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
-                text = "Area ${metresLabel(targeting.radiusFeet)} · gittata ${metresLabel(targeting.rangeFeet)}" +
-                    " · clicca sulla mappa per centrare",
+                text = words.areaAndRange(
+                    distanceLabel(targeting.radiusFeet, language),
+                    distanceLabel(targeting.rangeFeet, language),
+                ) + words.clickMapToCentre,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
-        GameButton("Annulla", accent = Palette.TextMuted, dense = true, onClick = onCancel)
+        GameButton(strings.common.cancel, accent = Palette.TextMuted, dense = true, onClick = onCancel)
     }
 }
 
@@ -1449,6 +1462,7 @@ private fun AreaManualCard(
     onDrag: (Offset) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.battle
     val shape = RoundedCornerShape(12.dp)
     Column(
         modifier
@@ -1489,26 +1503,26 @@ private fun AreaManualCard(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "Tiri salvezza · CD ${pending.saveDc} · tocca un nome per cambiarne l'esito",
+                    text = words.savingThrowsHeader(pending.saveDc),
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            Chip("${pending.targets.size} nell'area", Palette.Gold)
+            Chip(words.countInArea(pending.targets.size), Palette.Gold)
             Text(
                 text = "⋮⋮",
                 color = Palette.TextMuted,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.semantics {
-                    contentDescription = "Trascina per spostare il pannello"
+                    contentDescription = words.dragToMovePanel
                 },
             )
         }
         OrnateDivider(color = Palette.GoldDim)
         if (pending.targets.isEmpty()) {
             Text(
-                text = "Nessuna creatura nell'area.",
+                text = words.noCreatureInArea,
                 color = Palette.TextFaint,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -1537,7 +1551,7 @@ private fun AreaManualCard(
                             modifier = Modifier.weight(1f),
                         )
                         Chip(
-                            if (choice.saved) "TS superato · metà" else "TS fallito · pieno",
+                            if (choice.saved) words.savePassedHalf else words.saveFailedFull,
                             if (choice.saved) Palette.Heal else Palette.Crit,
                         )
                     }
@@ -1549,12 +1563,12 @@ private fun AreaManualCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            GameButton("Annulla", accent = Palette.TextMuted, dense = true, onClick = { viewModel.cancelAreaTargeting() })
+            GameButton(strings.common.cancel, accent = Palette.TextMuted, dense = true, onClick = { viewModel.cancelAreaTargeting() })
             Box(Modifier.weight(1f))
             if (pending.targets.isEmpty()) {
-                GameButton("Chiudi", accent = Palette.TextMuted, dense = true, onClick = { viewModel.cancelAreaTargeting() })
+                GameButton(strings.common.close, accent = Palette.TextMuted, dense = true, onClick = { viewModel.cancelAreaTargeting() })
             } else {
-                GameButton("Applica", accent = Palette.Enemy, dense = true, primary = true, onClick = { viewModel.applyPendingArea() })
+                GameButton(strings.common.apply, accent = Palette.Enemy, dense = true, primary = true, onClick = { viewModel.applyPendingArea() })
             }
         }
     }

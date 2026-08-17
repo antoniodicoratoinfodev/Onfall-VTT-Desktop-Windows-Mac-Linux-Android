@@ -54,6 +54,8 @@ import app.d6d.ui.components.HealthBar
 import app.d6d.ui.components.ResourcePips
 import app.d6d.ui.components.color
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 
 /**
@@ -91,13 +93,14 @@ fun CombatantRailCard(
         inspected -> Modifier.border(1.5.dp, Palette.Text.copy(alpha = 0.82f), shape)
         else -> Modifier.border(1.dp, Palette.Line, shape)
     }
+    val words = strings.battle
     val cardState = buildString {
-        append("${combatant.currentHitPoints()} punti ferita su ${snapshot.maxHitPoints()}.")
-        if (targeted) append(" Bersaglio selezionato.")
-        if (active) append(" Turno attivo.")
-        if (inspected) append(" Scheda in esame.")
-        if (combatant.dead()) append(" Morto.")
-        else if (defeated) append(" Sconfitto.")
+        append(words.hitPointsSentence(combatant.currentHitPoints(), snapshot.maxHitPoints()))
+        if (targeted) append(words.selectedTargetSentence)
+        if (active) append(words.activeTurnSentence)
+        if (inspected) append(words.inspectedReadOnlySentence)
+        if (combatant.dead()) append(words.deadSentence)
+        else if (defeated) append(words.defeatedSentence)
     }
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -136,16 +139,16 @@ fun CombatantRailCard(
                 }
                 .then(outline)
                 .semantics {
-                    contentDescription = "Combattente ${snapshot.name()}"
+                    contentDescription = words.combatantNamed(snapshot.name())
                     stateDescription = cardState
                     selected = inspected
                 }
                 .clickable(
                     role = Role.Button,
                     onClickLabel = if (viewModel.singleTargeting != null) {
-                        "Scegli ${snapshot.name()} come bersaglio"
+                        words.chooseAsTarget(snapshot.name())
                     } else {
-                        "Mostra capacita' e informazioni di ${snapshot.name()}"
+                        words.showAbilitiesOf(snapshot.name())
                     },
                 ) { viewModel.onCombatantClicked(combatantId) }
                 .padding(9.dp)
@@ -159,9 +162,9 @@ fun CombatantRailCard(
             ) {
                 Text(
                     text = buildList {
-                        if (active) add("IN TURNO")
-                        if (targeted) add("BERSAGLIO")
-                        if (inspected && !active) add("IN ESAME")
+                        if (active) add(words.inTurnBadge)
+                        if (targeted) add(words.targetBadge)
+                        if (inspected && !active) add(words.inspectedBadge)
                     }.joinToString(" · "),
                     color = when {
                         targeted -> faction.color
@@ -171,14 +174,14 @@ fun CombatantRailCard(
                     style = MaterialTheme.typography.labelSmall,
                 )
                 Text(
-                    text = "SCHEDA ↗",
+                    text = words.openSheetBadge,
                     color = Palette.TextMuted,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
                         .clickable(
                             role = Role.Button,
-                            onClickLabel = "Apri la scheda completa di ${snapshot.name()}",
+                            onClickLabel = words.openFullSheetOf(snapshot.name()),
                         ) { onOpenSheet(snapshot.definitionId()) }
                         .padding(horizontal = 4.dp, vertical = 2.dp),
                 )
@@ -246,12 +249,21 @@ fun CombatantRailCard(
     }
 }
 
-internal enum class SpellSlotKind(
-    val visibleLabel: String,
-    val accessibleLabel: String,
-) {
-    STANDARD("SLOT INCANTESIMO", "Slot incantesimo"),
-    PACT("SLOT DEL PATTO", "Slot del Patto"),
+internal enum class SpellSlotKind {
+    STANDARD,
+    PACT,
+}
+
+/** Intestazione in maiuscolo sopra i pallini degli slot. */
+internal fun SpellSlotKind.visibleLabel(strings: Strings): String = when (this) {
+    SpellSlotKind.STANDARD -> strings.battle.spellSlotsCapitalized
+    SpellSlotKind.PACT -> strings.battle.pactSlotsCapitalized
+}
+
+/** Nome pronunciabile, per chi ascolta invece di guardare. */
+internal fun SpellSlotKind.accessibleLabel(strings: Strings): String = when (this) {
+    SpellSlotKind.STANDARD -> strings.battle.spellSlots
+    SpellSlotKind.PACT -> strings.battle.pactSlots
 }
 
 internal data class SpellSlotIndicator(
@@ -285,12 +297,17 @@ internal fun spellSlotIndicators(resources: List<CombatResourceState>): List<Spe
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SpellSlotIndicators(slots: List<SpellSlotIndicator>) {
+    val strings = strings
     Column(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.semantics {
             contentDescription = slots.joinToString("; ") {
-                "${it.kind.accessibleLabel} livello ${it.level}: " +
-                    "${it.remaining} rimanenti su ${it.total}"
+                strings.battle.slotsRemaining(
+                    kind = it.kind.accessibleLabel(strings),
+                    level = it.level,
+                    remaining = it.remaining,
+                    total = it.total,
+                )
             }
         },
     ) {
@@ -301,7 +318,7 @@ private fun SpellSlotIndicators(slots: List<SpellSlotIndicator>) {
             }
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
-                    text = kind.visibleLabel,
+                    text = kind.visibleLabel(strings),
                     color = slotColor,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelSmall,
@@ -480,6 +497,7 @@ private fun CombatantStats(
     currentHitPoints: Int,
     narrow: Boolean,
 ) {
+    val words = strings.battle
     val armorClass = @Composable {
         EditableValue(
             value = snapshot.armorClass().toString(),
@@ -493,7 +511,7 @@ private fun CombatantStats(
             },
         ) {
             Text(
-                text = "CA ${snapshot.armorClass()}",
+                text = words.armorClassShort(snapshot.armorClass()),
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -512,7 +530,7 @@ private fun CombatantStats(
             },
         ) {
             Text(
-                text = "PF max ${snapshot.maxHitPoints()}",
+                text = "${words.maxHitPointsAbbrev} ${snapshot.maxHitPoints()}",
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -531,7 +549,7 @@ private fun CombatantStats(
             },
         ) {
             Text(
-                text = "PF att. $currentHitPoints",
+                text = "${words.currentHitPointsAbbrev} $currentHitPoints",
                 color = if (currentHitPoints == 0) Palette.Critical else Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -551,7 +569,7 @@ private fun CombatantStats(
                 },
             ) {
                 Text(
-                    text = "Iniz. $score",
+                    text = "${words.initiativeAbbrev} $score",
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )

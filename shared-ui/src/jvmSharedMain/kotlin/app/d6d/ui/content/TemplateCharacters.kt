@@ -1,6 +1,5 @@
 package app.d6d.ui.content
 
-import app.d6d.content.srd521it.Srd521ItContent
 import app.d6d.content.srd521it.SrdChoiceOption
 import app.d6d.content.srd521it.SrdChoiceResolver
 import app.d6d.rules.character.Ability
@@ -17,6 +16,8 @@ import app.d6d.sheet.GuidedCharacterService
 import app.d6d.sheet.WeaponEntry
 import app.d6d.sheet.proficiencyBonusForLevel
 import app.d6d.sheet.toWeaponEntry
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.pick
 
 /**
  * Ricetta di un personaggio incluso nei template.
@@ -68,8 +69,6 @@ internal data class TemplateCharacterPlan(
  */
 internal object TemplateCharacters {
 
-    private val service by lazy { GuidedCharacterService(Srd521ItContent.pack) }
-
     /**
      * Le scelte si generano a cascata — una sottoclasse ne apre altre, che a loro
      * volta possono aprirne — quindi le passate si ripetono finche' l'elenco non
@@ -78,10 +77,16 @@ internal object TemplateCharacters {
      */
     private const val MAX_PASSES = 6
 
-    fun build(plan: TemplateCharacterPlan): CharacterSheet {
-        val backgroundIncreases = plannedBackgroundIncreases(plan)
+    fun build(plan: TemplateCharacterPlan, language: AppLanguage): CharacterSheet {
+        val service = guidedCharacterServiceFor(language)
+        val backgroundIncreases = plannedBackgroundIncreases(plan, language)
         var sheet = CharacterSheet(
             id = plan.id,
+            // La lingua in cui il modello sta per essere scritto. Senza, un seme
+            // generato in inglese finiva salvato come testo inglese marcato
+            // italiano, e al riavvio la ritraduzione lo avrebbe peggiorato
+            // invece di sistemarlo.
+            contentLanguage = language,
             characterName = plan.name,
             species = plan.species,
             background = plan.background,
@@ -103,18 +108,23 @@ internal object TemplateCharacters {
             // esige che il personaggio se lo sia guadagnato prima di salire.
             sheet = sheet.copy(experiencePoints = ExperienceProgression.thresholdForLevel(index + 1))
             val current = sheet
-            sheet = runCatching { service.advance(current, levelUpRequest(current, plan)) }
+            sheet = runCatching {
+                service.advance(current, levelUpRequest(current, plan, language, service))
+            }
                 .getOrElse { failure ->
                     // Una ricetta sbagliata deve dire subito dove: senza il livello,
                     // il messaggio della progressione non basta a ritrovarne il punto.
                     throw IllegalStateException(
-                        "«${plan.name}» non supera il ${index + 1}º livello: ${failure.message}",
+                        language.pick(
+                            "«${plan.name}» non supera il ${index + 1}º livello: ${failure.message}",
+                            "“${plan.name}” cannot pass level ${index + 1}: ${failure.message}",
+                        ),
                         failure,
                     )
                 }
         }
         return sheet.copy(
-            weapons = sheet.weapons.map { it.atCurrentLevel(sheet) },
+            weapons = sheet.weapons.map { it.atCurrentLevel(sheet, language) },
             armorClassMethod = plan.armorClassMethod,
             shieldEquipped = plan.shieldEquipped,
             equipment = plan.equipment,
@@ -129,16 +139,25 @@ internal object TemplateCharacters {
      * al 20º in un colpo solo: senza questo ricalcolo si presenterebbe al tavolo
      * col tiro per colpire del 1º livello.
      */
-    private fun WeaponEntry.atCurrentLevel(sheet: CharacterSheet): WeaponEntry {
-        val definition = Srd521ItContent.pack.weapons.firstOrNull { it.name == name } ?: return this
+    private fun WeaponEntry.atCurrentLevel(
+        sheet: CharacterSheet,
+        language: AppLanguage,
+    ): WeaponEntry {
+        val definition = srdPackFor(language).weapons.firstOrNull { it.name == name } ?: return this
         val refreshed = definition.toWeaponEntry(
             abilityScores = sheet.abilityScores,
             proficiencyBonus = proficiencyBonusForLevel(sheet.effectiveLevel),
+            language = language,
         )
         return copy(attackBonus = refreshed.attackBonus, damageModifier = refreshed.damageModifier)
     }
 
-    private fun levelUpRequest(sheet: CharacterSheet, plan: TemplateCharacterPlan): LevelUpRequest {
+    private fun levelUpRequest(
+        sheet: CharacterSheet,
+        plan: TemplateCharacterPlan,
+        language: AppLanguage,
+        service: GuidedCharacterService,
+    ): LevelUpRequest {
         val classLevel = sheet.progression.levelIn(plan.classId) + 1
         var chosen = linkedMapOf<String, List<String>>()
         repeat(MAX_PASSES) {
@@ -155,8 +174,9 @@ internal object TemplateCharacters {
                     classLevel,
                     sheet,
                     chosen.selections(),
+                    language,
                 )
-                chosen[choice.id] = pick(choice, options, plan, sheet)
+                chosen[choice.id] = pick(choice, options, plan, sheet, language)
             }
         }
         // L'elenco definitivo e' quello che vede la progressione con le scelte
@@ -174,7 +194,7 @@ internal object TemplateCharacters {
             backgroundAbilityScoreIncreases = if (sheet.progression.configured) {
                 emptyMap()
             } else {
-                plannedBackgroundIncreases(plan)
+                plannedBackgroundIncreases(plan, language)
             },
         )
     }
@@ -185,9 +205,10 @@ internal object TemplateCharacters {
         options: List<SrdChoiceOption>,
         plan: TemplateCharacterPlan,
         sheet: CharacterSheet,
+        language: AppLanguage,
     ): List<String> {
         if (choice.kind == ChoiceKind.BACKGROUND) {
-            val id = plannedBackground(plan).id
+            val id = plannedBackground(plan, language).id
             return options.firstOrNull { it.id == id }?.let { listOf(it.id) }.orEmpty()
         }
         val wanted = if (choice.kind == ChoiceKind.ABILITY_SCORE_INCREASE) {
@@ -207,7 +228,7 @@ internal object TemplateCharacters {
                 .filter { it.id.contains(fragment) && it.id.isWorthTakingAgain(owned) }
                 .forEach { option -> if (taken.size < choice.count) taken += option.id }
         }
-        fallbackOrder(choice, options, sheet).forEach { option ->
+        fallbackOrder(choice, options, sheet, language).forEach { option ->
             if (taken.size < choice.count) taken += option.id
         }
         return taken.toList()
@@ -246,6 +267,7 @@ internal object TemplateCharacters {
         choice: ChoiceDefinition,
         options: List<SrdChoiceOption>,
         sheet: CharacterSheet,
+        language: AppLanguage,
     ): List<SrdChoiceOption> {
         val owned = ownedOptionIds(sheet)
         val fresh = options.sortedBy { if (it.id in owned) 1 else 0 }
@@ -254,13 +276,13 @@ internal object TemplateCharacters {
             ChoiceKind.SPELLBOOK_SPELL,
             ChoiceKind.ALWAYS_PREPARED_SPELL,
             ChoiceKind.MAGICAL_DISCOVERY,
-            -> fresh.sortedByDescending { spellLevel(it.id) }
+            -> fresh.sortedByDescending { spellLevel(it.id, language) }
             else -> fresh
         }
     }
 
-    private fun spellLevel(optionId: String): Int =
-        Srd521ItContent.pack.element(optionId)?.spell?.level ?: 0
+    private fun spellLevel(optionId: String, language: AppLanguage): Int =
+        srdPackFor(language).element(optionId)?.spell?.level ?: 0
 
     /**
      * Gli aumenti di caratteristica hanno due sorgenti che non convivono mai.
@@ -299,8 +321,11 @@ internal object TemplateCharacters {
         return Ability.entries.firstOrNull { it.name.lowercase() == slug }
     }
 
-    private fun plannedBackground(plan: TemplateCharacterPlan): BackgroundDefinition {
-        val backgrounds = Srd521ItContent.pack.backgrounds
+    private fun plannedBackground(
+        plan: TemplateCharacterPlan,
+        language: AppLanguage,
+    ): BackgroundDefinition {
+        val backgrounds = srdPackFor(language).backgrounds
         val preferredFeat = plan.preferences.firstOrNull { ":feat:origin:" in it }
         val matchingFeat = backgrounds.filter { background ->
             preferredFeat != null && background.featId.contains(preferredFeat)
@@ -327,8 +352,11 @@ internal object TemplateCharacters {
         )
     }
 
-    private fun plannedBackgroundIncreases(plan: TemplateCharacterPlan): Map<Ability, Int> {
-        val background = plannedBackground(plan)
+    private fun plannedBackgroundIncreases(
+        plan: TemplateCharacterPlan,
+        language: AppLanguage,
+    ): Map<Ability, Int> {
+        val background = plannedBackground(plan, language)
         val order = (plan.abilityPriority + background.abilityOptions.sortedBy { it.ordinal })
             .distinct()
             .filter { it in background.abilityOptions }

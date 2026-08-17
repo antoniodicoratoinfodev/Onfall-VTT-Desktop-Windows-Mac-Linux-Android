@@ -1,14 +1,16 @@
 package app.d6d.ui.content
 
-import app.d6d.content.srd521it.Srd521ItContent
 import app.d6d.domain.combat.CombatantSetup
 import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.pick
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.MonsterStatBlock
 import app.d6d.ui.roster.squaresPerSide
+import app.d6d.ui.i18n.AppLocale
 
 /** Un gruppo di creature uguali schierate nello stesso incontro. */
 internal data class TemplateOpponent(
@@ -26,6 +28,7 @@ internal data class TemplateOpponent(
  */
 internal data class SessionTemplate(
     val id: String,
+    private val language: AppLanguage,
     val name: String,
     val partyLevel: Int,
     /** Una riga sola, quella che si legge nel selettore. */
@@ -44,7 +47,9 @@ internal data class SessionTemplate(
      * Costruirle significa far salire di livello quattro personaggi un passo alla
      * volta: al 20º sono ottanta avanzamenti, che non vanno rifatti a ogni lettura.
      */
-    val party: List<CharacterSheet> by lazy { partyPlans.map(TemplateCharacters::build) }
+    val party: List<CharacterSheet> by lazy {
+        partyPlans.map { plan -> TemplateCharacters.build(plan, language) }
+    }
 
     /** Dimensione della squadra senza materializzare le costose schede di livello alto. */
     val partyCount: Int get() = partyPlans.size
@@ -57,7 +62,7 @@ internal data class SessionTemplate(
     internal fun buildMissingParty(knownIds: Set<String>): List<CharacterSheet> =
         partyPlans.asSequence()
             .filterNot { it.id in knownIds }
-            .map(TemplateCharacters::build)
+            .map { plan -> TemplateCharacters.build(plan, language) }
             .toList()
 
     val monsters: List<MonsterStatBlock> get() = opponents.map { it.statBlock }
@@ -80,13 +85,13 @@ internal data class SessionTemplate(
             // di classe della scheda non diventerebbero comandi giocabili.
             setups += CombatantSetup(
                 sheet.id,
-                sheet.toActorDefinition(abilityCatalog = Srd521ItContent.catalog),
+                sheet.toActorDefinition(abilityCatalog = srdCatalogFor(language)),
             )
             footprints[sheet.id] = sheet.size.squaresPerSide
         }
         val opponentIds = mutableListOf<String>()
         opponents.forEach { opponent ->
-            val definition = opponent.statBlock.toActorDefinition()
+            val definition = opponent.statBlock.toActorDefinition(language = AppLocale.language)
             repeat(opponent.quantity) { index ->
                 val instanceId = if (opponent.quantity == 1) {
                     definition.id()
@@ -158,21 +163,34 @@ internal data class SessionTemplate(
  * tutte le dodici classi dello SRD, e gli avversari sono tarati sui PE
  * dell'incontro, non sul gusto del momento.
  */
-internal object SessionTemplates {
+internal class SessionTemplates private constructor(private val language: AppLanguage) {
+
+    private val bestiary = TemplateBestiary.of(language)
+    private val parties = TemplateParties.of(language)
+    private fun say(italian: String, english: String): String = language.pick(italian, english)
 
     val ruins = SessionTemplate(
         id = "template-vallecupa",
-        name = "Le rovine di Vallecupa",
+        language = language,
+        name = say("Le rovine di Vallecupa", "The Ruins of Deepvale"),
         partyLevel = 1,
-        summary = "Quattro esordienti contro i predoni accampati fra i muri crollati.",
-        description = "Il primo incontro di una campagna: nessun potere che cambia le regole, " +
-            "solo una squadra al 1º livello, un capobanda che urla ordini e un cane che morde " +
-            "alle spalle. Serve a prendere confidenza con turni, azioni e mappa.",
-        partyPlans = TemplateParties.novices,
+        summary = say(
+            "Quattro esordienti contro i predoni accampati fra i muri crollati.",
+            "Four newcomers against the raiders camped among the fallen walls.",
+        ),
+        description = say(
+            "Il primo incontro di una campagna: nessun potere che cambia le regole, " +
+                "solo una squadra al 1º livello, un capobanda che urla ordini e un cane che " +
+                "morde alle spalle. Serve a prendere confidenza con turni, azioni e mappa.",
+            "A campaign's first fight: nothing that bends the rules, just a 1st-level party, " +
+                "a chief barking orders and a hound that bites from behind. It is here to get " +
+                "you used to turns, actions and the map.",
+        ),
+        partyPlans = parties.novices,
         opponents = listOf(
-            TemplateOpponent(TemplateBestiary.raider, quantity = 2),
-            TemplateOpponent(TemplateBestiary.ashHound),
-            TemplateOpponent(TemplateBestiary.raiderChief),
+            TemplateOpponent(bestiary.raider, quantity = 2),
+            TemplateOpponent(bestiary.ashHound),
+            TemplateOpponent(bestiary.raiderChief),
         ),
         gridColumns = 20,
         gridRows = 15,
@@ -180,17 +198,26 @@ internal object SessionTemplates {
 
     val ford = SessionTemplate(
         id = "template-guado",
-        name = "Il guado di ferro",
+        language = language,
+        name = say("Il guado di ferro", "The Iron Ford"),
         partyLevel = 4,
-        summary = "Una squadra rodata al 4º livello deve passare un guado tenuto da mercenari.",
-        description = "La squadra ha la prima sottoclasse e sa cosa sa fare. Dall'altra parte " +
-            "dell'acqua bassa c'è chi riscuote il pedaggio con l'alabarda: due lancieri in " +
-            "formazione, i cani sulle secche e una comandante che non arretra.",
-        partyPlans = TemplateParties.veterans,
+        summary = say(
+            "Una squadra rodata al 4º livello deve passare un guado tenuto da mercenari.",
+            "A seasoned 4th-level party has to cross a ford held by mercenaries.",
+        ),
+        description = say(
+            "La squadra ha la prima sottoclasse e sa cosa sa fare. Dall'altra parte " +
+                "dell'acqua bassa c'è chi riscuote il pedaggio con l'alabarda: due lancieri in " +
+                "formazione, i cani sulle secche e una comandante che non arretra.",
+            "The party has its first subclass and knows what it can do. On the far side of the " +
+                "shallows somebody collects the toll with a halberd: two lancers in formation, " +
+                "the hounds on the shoals, and a captain who does not give ground.",
+        ),
+        partyPlans = parties.veterans,
         opponents = listOf(
-            TemplateOpponent(TemplateBestiary.ironLancer, quantity = 2),
-            TemplateOpponent(TemplateBestiary.marshCur, quantity = 2),
-            TemplateOpponent(TemplateBestiary.fordCaptain),
+            TemplateOpponent(bestiary.ironLancer, quantity = 2),
+            TemplateOpponent(bestiary.marshCur, quantity = 2),
+            TemplateOpponent(bestiary.fordCaptain),
         ),
         gridColumns = 24,
         gridRows = 18,
@@ -198,16 +225,25 @@ internal object SessionTemplates {
 
     val crown = SessionTemplate(
         id = "template-corona",
-        name = "La corona spezzata",
+        language = language,
+        name = say("La corona spezzata", "The Broken Crown"),
         partyLevel = 20,
-        summary = "Il tetto dello SRD: quattro leggende contro ciò che è rimasto sveglio là sotto.",
-        description = "Ultimo scontro di una campagna. La squadra è al 20º livello, con i Doni " +
-            "epici già presi; Vharok si rialza finché la sua corona non è distrutta, e i suoi " +
-            "custodi non lasciano che ci si arrivi comodamente.",
-        partyPlans = TemplateParties.legends,
+        summary = say(
+            "Il tetto dello SRD: quattro leggende contro ciò che è rimasto sveglio là sotto.",
+            "The ceiling of the SRD: four legends against whatever stayed awake down there.",
+        ),
+        description = say(
+            "Ultimo scontro di una campagna. La squadra è al 20º livello, con i Doni " +
+                "epici già presi; Vharok si rialza finché la sua corona non è distrutta, e i " +
+                "suoi custodi non lasciano che ci si arrivi comodamente.",
+            "A campaign's last fight. The party is 20th level with its Epic Boons already " +
+                "taken; Vharok gets back up until his crown is destroyed, and his wardens do " +
+                "not make getting there comfortable.",
+        ),
+        partyPlans = parties.legends,
         opponents = listOf(
-            TemplateOpponent(TemplateBestiary.ashWarden, quantity = 2),
-            TemplateOpponent(TemplateBestiary.brokenCrown),
+            TemplateOpponent(bestiary.ashWarden, quantity = 2),
+            TemplateOpponent(bestiary.brokenCrown),
         ),
         gridColumns = 30,
         gridRows = 22,
@@ -217,4 +253,18 @@ internal object SessionTemplates {
 
     /** Il template proposto all'avvio, prima che l'utente scelga il suo. */
     val default: SessionTemplate get() = ruins
+
+    companion object {
+        private val byLanguage = mutableMapOf<AppLanguage, SessionTemplates>()
+
+        /**
+         * Le partite incluse in una lingua.
+         *
+         * Costruirle non e' gratis — la squadra del 20º livello sale ottanta
+         * livelli — quindi ogni lingua si costruisce una volta sola.
+         */
+        fun of(language: AppLanguage): SessionTemplates = synchronized(byLanguage) {
+            byLanguage.getOrPut(language) { SessionTemplates(language) }
+        }
+    }
 }

@@ -62,6 +62,7 @@ import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.images.rememberBitmap
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 
 /**
@@ -78,6 +79,7 @@ fun MapArchive(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.maps
     // Legare la composizione a `revision` fa ricomparire miniature e voci appena
     // una mappa viene aggiunta o rimossa.
     @Suppress("UNUSED_EXPRESSION")
@@ -112,7 +114,7 @@ fun MapArchive(
                     modifier = Modifier.fillMaxSize().padding(12.dp),
                 ) {
                     item {
-                        Eyebrow("Mappe (${maps.size})", modifier = Modifier.padding(bottom = 8.dp))
+                        Eyebrow(words.mapsCount(maps.size), modifier = Modifier.padding(bottom = 8.dp))
                     }
                     item {
                         FlowRow(
@@ -141,22 +143,21 @@ fun MapArchive(
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             containerColor = Palette.Surface,
-            title = { Text("Eliminare la mappa?", color = Palette.Text) },
+            title = { Text(words.deleteMapTitle, color = Palette.Text) },
             text = {
                 Text(
-                    "«${map.name}» verrà rimossa dall'archivio. Le partite che la usano come " +
-                        "sfondo resteranno senza immagine.",
+                    words.deleteMapBody(map.name),
                     color = Palette.TextMuted,
                 )
             },
             confirmButton = {
-                GameButton("Elimina", accent = Palette.Enemy, onClick = {
+                GameButton(strings.common.delete, accent = Palette.Enemy, onClick = {
                     portraits.deleteMap(map.id)
                     pendingDelete = null
                 })
             },
             dismissButton = {
-                GameButton("Annulla", accent = Palette.TextMuted, onClick = { pendingDelete = null })
+                GameButton(strings.common.cancel, accent = Palette.TextMuted, onClick = { pendingDelete = null })
             },
         )
     }
@@ -164,11 +165,12 @@ fun MapArchive(
 
 @Composable
 private fun MapArchiveHeader(compact: Boolean, onUpload: () -> Unit) {
+    val words = strings.maps
     val upload = @Composable {
         GameButton(
-            label = "＋ Carica mappa",
+            label = words.uploadMap,
             accent = Palette.Party,
-            subtitle = "${ImageStore.acceptedFormatsLabel} · max ${ImageStore.maxSizeLabel}",
+            subtitle = words.formatsAndLimit(ImageStore.acceptedFormatsLabel, ImageStore.maxSizeLabel),
             onClick = onUpload,
         )
     }
@@ -194,15 +196,16 @@ private fun MapArchiveHeader(compact: Boolean, onUpload: () -> Unit) {
 
 @Composable
 private fun MapArchiveTitle(modifier: Modifier = Modifier) {
+    val words = strings.maps
     Column(modifier) {
         Text(
-            text = "Mappe",
+            text = strings.compendium.maps,
             color = Palette.Text,
             fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
         )
         Text(
-            text = "Il tuo archivio di sfondi. Caricali una volta e riusali in ogni partita da «Scegli sfondo».",
+            text = words.archiveSubtitle,
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -211,9 +214,10 @@ private fun MapArchiveTitle(modifier: Modifier = Modifier) {
 
 @Composable
 private fun MapArchiveEmpty(modifier: Modifier = Modifier) {
+    val words = strings.maps
     Box(modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Text(
-            text = "Nessuna mappa nell'archivio.\nCarica un'immagine per iniziare la tua collezione.",
+            text = words.archiveEmpty,
             color = Palette.TextFaint,
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium,
@@ -243,7 +247,7 @@ private fun MapCard(
         )
         MapNameField(name = map.name, onCommit = onRename)
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-            GameButton("Elimina", accent = Palette.Enemy, dense = true, onClick = onDelete)
+            GameButton(strings.common.delete, accent = Palette.Enemy, dense = true, onClick = onDelete)
         }
     }
 }
@@ -324,6 +328,7 @@ fun MapThumbnail(
     imageName: String,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.maps
     val bitmap = portraits.rememberBitmap(imageName)
     Box(
         modifier
@@ -340,7 +345,7 @@ fun MapThumbnail(
                 modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(7.dp)),
             )
         } else {
-            Chip("Anteprima non disponibile", Palette.TextFaint)
+            Chip(words.previewUnavailable, Palette.TextFaint)
         }
     }
 }

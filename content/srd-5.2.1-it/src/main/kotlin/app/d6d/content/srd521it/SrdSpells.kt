@@ -1,5 +1,7 @@
 package app.d6d.content.srd521it
 
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.label
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ClassEligibility
 import app.d6d.rules.character.RuleElementDefinition
@@ -34,18 +36,25 @@ private data class SpellRecord(
 )
 
 /**
- * I 339 incantesimi del capitolo Incantesimi del PDF italiano SRD 5.2.1.
+ * I 339 incantesimi del capitolo corrispondente dei PDF SRD 5.2.1 italiano e inglese.
  *
  * Il JSON è generato da `tools/srd/extract_srd_spells.py`; caricarlo come
  * risorsa evita di trasformare centinaia di descrizioni in codice eseguibile.
  */
 object SrdSpells {
     private val json = Json { ignoreUnknownKeys = true }
+    private val cache = HashMap<AppLanguage, List<RuleElementDefinition>>()
 
-    val all: List<RuleElementDefinition> by lazy {
-        val stream = checkNotNull(
-            SrdSpells::class.java.getResourceAsStream("/srd/5.2.1-it/spells.json"),
-        ) { "Risorsa SRD degli incantesimi non trovata." }
+    fun all(language: AppLanguage = AppLanguage.ITALIAN): List<RuleElementDefinition> = synchronized(cache) {
+        cache.getOrPut(language) { load(language) }
+    }
+
+    private fun load(language: AppLanguage): List<RuleElementDefinition> {
+        val identity = SrdIdentity.of(language)
+        val path = "/srd/${identity.resourceDirectory}/spells.json"
+        val stream = checkNotNull(SrdSpells::class.java.getResourceAsStream(path)) {
+            "Risorsa SRD degli incantesimi non trovata: $path."
+        }
         val document = stream.bufferedReader(Charsets.UTF_8).use {
             json.decodeFromString<SpellDocument>(it.readText())
         }
@@ -55,7 +64,7 @@ object SrdSpells {
         check(document.spellCount == document.spells.size) {
             "Catalogo incantesimi SRD incompleto: ${document.spells.size}/${document.spellCount}."
         }
-        document.spells.map(SpellRecord::toRuleElement).also { elements ->
+        return document.spells.map { it.toRuleElement(identity) }.also { elements ->
             check(elements.size == 339) { "Attesi 339 incantesimi SRD, trovati ${elements.size}." }
             check(elements.count { it.kind == RuleElementKind.CANTRIP } == 27) {
                 "Il catalogo deve contenere 27 trucchetti."
@@ -67,11 +76,11 @@ object SrdSpells {
     }
 }
 
-val srdSpells: List<RuleElementDefinition> get() = SrdSpells.all
+val srdSpells: List<RuleElementDefinition> get() = SrdSpells.all(AppLanguage.ITALIAN)
 
-private fun SpellRecord.toRuleElement(): RuleElementDefinition =
+private fun SpellRecord.toRuleElement(identity: SrdIdentity): RuleElementDefinition =
     RuleElementDefinition(
-        id = "srd521-it:spell:${name.toContentSlug()}",
+        id = identity.spellId(name),
         name = name,
         kind = if (isCantrip) RuleElementKind.CANTRIP else RuleElementKind.SPELL,
         description = description,
@@ -89,8 +98,12 @@ private fun SpellRecord.toRuleElement(): RuleElementDefinition =
             range = range,
             components = components,
             duration = duration,
-            ritual = "rituale" in castingTime.lowercase(Locale.ROOT),
-            concentration = "concentrazione" in duration.lowercase(Locale.ROOT),
+            // Le due edizioni scrivono «Rituale»/«Ritual» e «Concentrazione»/
+            // «Concentration»: cercarle entrambe costa meno di un ramo per lingua,
+            // e nessuna delle due parole compare per caso nell'altra edizione.
+            ritual = castingTime.lowercase(Locale.ROOT).let { "rituale" in it || "ritual" in it },
+            concentration = duration.lowercase(Locale.ROOT)
+                .let { "concentrazione" in it || "concentration" in it },
         ),
         sourcePage = sourcePages.firstOrNull() ?: 0,
         activation = castingTime,
@@ -104,5 +117,17 @@ internal fun String.toContentSlug(): String =
         .replace(Regex("[^a-z0-9]+"), "-")
         .trim('-')
 
-private val classByContentId: Map<String, CharacterClassId> =
-    CharacterClassId.entries.associateBy { it.contentId }
+/**
+ * Le classi come le nomina il JSON, in una lingua o nell'altra.
+ *
+ * Il `contentId` e' italiano ed e' la chiave di dominio; il PDF inglese pero'
+ * elenca «wizard» dove quello italiano dice «mago». L'alias si ricava
+ * dall'etichetta inglese della classe invece di essere scritto a mano: una
+ * classe nuova lo ottiene da sola.
+ */
+private val classByContentId: Map<String, CharacterClassId> = buildMap {
+    CharacterClassId.entries.forEach { classId ->
+        put(classId.contentId, classId)
+        put(classId.label(AppLanguage.ENGLISH).lowercase(Locale.ROOT), classId)
+    }
+}

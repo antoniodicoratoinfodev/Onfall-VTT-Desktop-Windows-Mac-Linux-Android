@@ -35,6 +35,8 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.runDiskIo
+import app.d6d.ui.i18n.SessionStrings
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import kotlinx.coroutines.launch
 
@@ -69,6 +71,7 @@ private fun EmptyWorkspacePanel(
     onNewSession: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.session
     Column(
         modifier
             .fillMaxWidth()
@@ -76,13 +79,13 @@ private fun EmptyWorkspacePanel(
             .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Eyebrow("Nessuna partita aperta")
+        Eyebrow(words.noOpenGame)
         Text(
-            "Scegli una partita inclusa, parti dai tuoi template oppure riapri una sessione salvata.",
+            words.noOpenGameHint,
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
         )
-        GameButton("Nuova partita", accent = Palette.Gold, dense = true, onClick = onNewSession)
+        GameButton(words.newGame, accent = Palette.Gold, dense = true, onClick = onNewSession)
 
         workspace.status?.let { message ->
             Text(
@@ -109,6 +112,7 @@ private fun OpenSessionsPanelContent(
     compact: Boolean,
     modifier: Modifier,
 ) {
+    val words = strings.session
     val scope = rememberCoroutineScope()
     var closeCandidate by remember { mutableStateOf<OpenGameSession?>(null) }
     var compactMenuOpen by remember { mutableStateOf(false) }
@@ -149,8 +153,8 @@ private fun OpenSessionsPanelContent(
     ) {
         if (compact) {
             GameButton(
-                label = shortDisplayName(active),
-                subtitle = "${workspace.openSessions.size} aperte · ${saveState(active)} · Gestisci",
+                label = shortDisplayName(active, words),
+                subtitle = words.openCount(workspace.openSessions.size, saveState(active, words)),
                 accent = if (active.manager.hasUnsavedChanges) Palette.Bloodied else Palette.Gold,
                 selected = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -161,10 +165,10 @@ private fun OpenSessionsPanelContent(
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Eyebrow("Sessioni aperte")
+                Eyebrow(words.openSessions)
                 Chip("${workspace.openSessions.size}", Palette.Gold)
                 Text(
-                    "Mappe, turni, dadi, registro e Annulla restano indipendenti.",
+                    words.openSessionsHint,
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -177,8 +181,8 @@ private fun OpenSessionsPanelContent(
                 items(workspace.openSessions, key = { it.id }) { opened ->
                     val selected = opened.id == active.id
                     GameButton(
-                        label = shortDisplayName(opened),
-                        subtitle = saveState(opened),
+                        label = shortDisplayName(opened, words),
+                        subtitle = saveState(opened, words),
                         accent = when {
                             selected -> Palette.Gold
                             opened.manager.hasUnsavedChanges -> Palette.Bloodied
@@ -197,13 +201,13 @@ private fun OpenSessionsPanelContent(
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                GameButton("Vai alla mappa", accent = Palette.Party, dense = true, onClick = onOpenBattle)
-                GameButton("Salva / gestisci", accent = Palette.Heal, dense = true, onClick = {
+                GameButton(words.goToMap, accent = Palette.Party, dense = true, onClick = onOpenBattle)
+                GameButton(words.saveOrManage, accent = Palette.Heal, dense = true, onClick = {
                     active.manager.menuOpen = true
                     scope.launch { runDiskIo { active.manager.refresh() } }
                 })
                 GameButton(
-                    label = "Chiudi scheda",
+                    label = words.closeTab,
                     accent = Palette.TextMuted,
                     dense = true,
                     onClick = {
@@ -213,7 +217,7 @@ private fun OpenSessionsPanelContent(
                         }
                     },
                 )
-                GameButton("Nuova partita", accent = Palette.Gold, dense = true, onClick = onNewSession)
+                GameButton(words.newGame, accent = Palette.Gold, dense = true, onClick = onNewSession)
             }
         }
 
@@ -250,7 +254,7 @@ private fun OpenSessionsPanelContent(
             containerColor = Palette.Surface,
             title = {
                 Text(
-                    "Sessioni aperte · ${workspace.openSessions.size}",
+                    words.openSessionsCount(workspace.openSessions.size),
                     color = Palette.Text,
                     fontWeight = FontWeight.Bold,
                 )
@@ -266,26 +270,26 @@ private fun OpenSessionsPanelContent(
                     verticalArrangement = Arrangement.spacedBy(9.dp),
                 ) {
                     Text(
-                        "Seleziona una partita. Ogni scheda conserva la propria mappa e il proprio combattimento.",
+                        words.pickAGame,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Eyebrow("Azioni sulla sessione attiva")
+                    Eyebrow(words.actionsOnActive)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
-                        GameButton("Vai alla mappa", accent = Palette.Party, onClick = {
+                        GameButton(words.goToMap, accent = Palette.Party, onClick = {
                             compactMenuOpen = false
                             onOpenBattle()
                         })
-                        GameButton("Salva / gestisci", accent = Palette.Heal, onClick = {
+                        GameButton(words.saveOrManage, accent = Palette.Heal, onClick = {
                             compactMenuOpen = false
                             active.manager.menuOpen = true
                             scope.launch { runDiskIo { active.manager.refresh() } }
                         })
                         GameButton(
-                            label = "Chiudi scheda",
+                            label = words.closeTab,
                             accent = Palette.TextMuted,
                             onClick = {
                                 compactMenuOpen = false
@@ -295,21 +299,21 @@ private fun OpenSessionsPanelContent(
                                 }
                             },
                         )
-                        GameButton("Nuova partita", accent = Palette.Gold, onClick = {
+                        GameButton(words.newGame, accent = Palette.Gold, onClick = {
                             compactMenuOpen = false
                             onNewSession()
                         })
                     }
 
-                    Eyebrow("Cambia sessione")
+                    Eyebrow(words.switchSession)
                     Column(
                         Modifier.fillMaxWidth().selectableGroup(),
                         verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
                         workspace.openSessions.forEach { opened ->
                             GameButton(
-                                label = shortDisplayName(opened),
-                                subtitle = saveState(opened),
+                                label = shortDisplayName(opened, words),
+                                subtitle = saveState(opened, words),
                                 accent = if (opened.manager.hasUnsavedChanges) Palette.Bloodied else Palette.Gold,
                                 selected = opened.id == active.id,
                                 role = Role.Tab,
@@ -324,7 +328,7 @@ private fun OpenSessionsPanelContent(
                 }
             },
             confirmButton = {
-                GameButton("Fine", accent = Palette.TextMuted, onClick = {
+                GameButton(strings.common.done, accent = Palette.TextMuted, onClick = {
                     compactMenuOpen = false
                 })
             },
@@ -338,7 +342,7 @@ private fun OpenSessionsPanelContent(
             containerColor = Palette.Surface,
             title = {
                 Text(
-                    if (isDraft) "Bozza non salvata" else "Modifiche non salvate",
+                    if (isDraft) words.unsavedDraft else words.unsavedChanges,
                     color = Palette.Text,
                     fontWeight = FontWeight.Bold,
                 )
@@ -346,16 +350,15 @@ private fun OpenSessionsPanelContent(
             text = {
                 Text(
                     if (isDraft) {
-                        "«${opened.displayName}» non è mai stata salvata. Chiudendo la scheda la bozza verrà persa."
+                        words.closingLosesDraft(opened.displayName)
                     } else {
-                        "«${opened.displayName}» rimarrà nell'archivio solo fino all'ultimo salvataggio. " +
-                            "La chiusura della scheda non elimina il file salvato."
+                        words.closingKeepsFile(opened.displayName)
                     },
                     color = Palette.TextMuted,
                 )
             },
             confirmButton = {
-                GameButton("Salva prima", accent = Palette.Heal, onClick = {
+                GameButton(words.saveFirst, accent = Palette.Heal, onClick = {
                     workspace.activate(opened.id)
                     opened.manager.menuOpen = true
                     scope.launch { runDiskIo { opened.manager.refresh() } }
@@ -368,10 +371,10 @@ private fun OpenSessionsPanelContent(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    GameButton("Annulla", accent = Palette.TextMuted, onClick = {
+                    GameButton(strings.common.cancel, accent = Palette.TextMuted, onClick = {
                         closeCandidate = null
                     })
-                    GameButton("Chiudi senza salvare", accent = Palette.Enemy, onClick = {
+                    GameButton(words.closeWithoutSaving, accent = Palette.Enemy, onClick = {
                         workspace.requestClose(opened.id, discardUnsavedChanges = true)
                         closeCandidate = null
                     })
@@ -381,13 +384,17 @@ private fun OpenSessionsPanelContent(
     }
 }
 
-private fun saveState(opened: OpenGameSession): String = when {
-    opened.manager.currentSlug == null -> "Bozza da salvare"
-    opened.manager.hasUnsavedChanges -> "Modifiche da salvare"
-    else -> "Salvata · round ${opened.battle.round}"
+private fun saveState(opened: OpenGameSession, words: SessionStrings): String = when {
+    opened.manager.currentSlug == null -> words.draftToSave
+    opened.manager.hasUnsavedChanges -> words.changesToSave
+    else -> words.savedAtRound(opened.battle.round)
 }
 
-internal fun shortDisplayName(opened: OpenGameSession, maxLength: Int = 30): String {
-    val name = opened.displayName.ifBlank { "Partita senza nome" }
+internal fun shortDisplayName(
+    opened: OpenGameSession,
+    words: SessionStrings,
+    maxLength: Int = 30,
+): String {
+    val name = opened.displayName.ifBlank { words.unnamedGame }
     return if (name.length <= maxLength) name else name.take(maxLength - 1).trimEnd() + "…"
 }

@@ -38,6 +38,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 
 /**
@@ -60,6 +61,7 @@ fun EditableValue(
     fieldWidth: Dp = 74.dp,
     display: @Composable () -> Unit,
 ) {
+    val strings = strings
     var editing by remember { mutableStateOf(false) }
     var draft by remember(value) { mutableStateOf(value) }
     val focusRequester = remember { FocusRequester() }
@@ -127,7 +129,7 @@ fun EditableValue(
                             .padding(horizontal = 3.dp)
                             .semantics {
                                 role = Role.Button
-                                stateDescription = "Campo modificabile"
+                                stateDescription = strings.compendium.editableField
                             }
                     } else {
                         Modifier

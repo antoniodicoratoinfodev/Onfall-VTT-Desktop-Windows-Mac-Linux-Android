@@ -37,9 +37,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.engine.CombatSession
 import app.d6d.engine.ai.EnemyCpuDifficulty
-import app.d6d.ui.state.EnemyCpuSpeed
-import app.d6d.ui.state.italianLabel
-import app.d6d.sheet.metresFromFeet
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.strings
+import app.d6d.ui.state.label
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
@@ -57,8 +59,8 @@ fun EncounterBuilderScreen(
     viewModel: EncounterBuilderViewModel,
     compact: Boolean,
     workspace: SessionWorkspace,
-    // La presentazione iniziale arriva gia' composta: difficolta' e ritmo sono
-    // scelte della procedura, non di chi apre la scheda.
+    // La presentazione iniziale arriva gia' composta: la difficolta' e' una scelta
+    // della procedura, non di chi apre la scheda.
     onStarted: (CombatSession, String, Map<String, String>) -> Unit,
     onOpenBattle: () -> Unit,
     onOpenCompendium: () -> Unit,
@@ -137,6 +139,7 @@ fun EncounterBuilderScreen(
 
 @Composable
 private fun EncounterHeader(step: NewGameStep, compact: Boolean) {
+    val words = strings.encounter
     Column(
         Modifier.fillMaxWidth().background(Palette.Surface).padding(
             horizontal = if (compact) 12.dp else 18.dp,
@@ -145,19 +148,18 @@ private fun EncounterHeader(step: NewGameStep, compact: Boolean) {
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
-            text = "Partita",
+            text = strings.nav.game,
             color = Palette.Text,
             fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
         )
         Text(
             text = when (step) {
-                NewGameStep.TEMPLATE -> "1 di 5 · Parti da una partita inclusa, dai tuoi template o da zero."
-                NewGameStep.PARTECIPANTI -> "2 di 5 · Scegli personaggi, mob, quantità e schieramenti."
-                NewGameStep.GRIGLIA -> "3 di 5 · Imposta dimensioni e scala metrica della griglia."
-                NewGameStep.MODALITA -> "4 di 5 · Scegli l'esperienza con cui iniziare."
-                NewGameStep.DIFFICOLTA ->
-                    "5 di 5 · Scegli l'avversario: nessuna CPU, oppure quanto sarà spietata e con che ritmo."
+                NewGameStep.TEMPLATE -> words.step(1, 5, words.stepSource)
+                NewGameStep.PARTECIPANTI -> words.step(2, 5, words.stepParticipants)
+                NewGameStep.GRIGLIA -> words.step(3, 5, words.stepGrid)
+                NewGameStep.MODALITA -> words.step(4, 5, words.stepMode)
+                NewGameStep.DIFFICOLTA -> words.step(5, 5, words.stepDifficulty)
             },
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
@@ -174,6 +176,7 @@ private fun TemplateChoiceStep(
     onCreateFromScratch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.encounter
     val people = viewModel.participants.count { it.kind == RosterKind.PERSONAGGIO }
     val creatures = viewModel.participants.count { it.kind == RosterKind.CREATURA }
     Box(
@@ -189,14 +192,13 @@ private fun TemplateChoiceStep(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                "Da dove vuoi partire?",
+                words.whereToStart,
                 color = Palette.Text,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(
-                "I personaggi possono partecipare a più sessioni: ogni partita riceve una copia " +
-                    "indipendente di PF, condizioni, turni e posizione. Creare da zero non elimina i template.",
+                words.whereToStartBody,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -204,7 +206,7 @@ private fun TemplateChoiceStep(
             // Le partite incluse stanno in cima: sono la strada piu' corta per
             // avere un tavolo giocabile, e chi apre l'app la prima volta non ha
             // ancora niente di proprio da usare.
-            Eyebrow("Partite incluse")
+            Eyebrow(words.includedGames)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -212,43 +214,46 @@ private fun TemplateChoiceStep(
                 viewModel.includedTemplates.forEach { template ->
                     GameButton(
                         label = template.name,
-                        subtitle = "Livello ${template.partyLevel} · ${template.partyCount} personaggi · " +
-                            "${template.opponentCount} avversari",
+                        subtitle = words.templateSummary(
+                            template.partyLevel,
+                            template.partyCount,
+                            template.opponentCount,
+                        ),
                         accent = Palette.Gold,
                         onClick = { viewModel.useIncludedTemplate(template) },
                     )
                 }
             }
             Text(
-                viewModel.includedTemplates.joinToString("\n") { "«${it.name}» — ${it.summary}" },
+                viewModel.includedTemplates.joinToString("\n") { words.templateOpponentLine(it.name, it.summary) },
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
 
-            Eyebrow("Oppure")
+            Eyebrow(words.orElse)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 GameButton(
-                    label = "Usa template già creati",
-                    subtitle = "$people personaggi · $creatures mob",
+                    label = words.useExistingTemplates,
+                    subtitle = words.peopleAndCreatures(people, creatures),
                     accent = Palette.Party,
                     enabled = people + creatures > 0,
                     onClick = { viewModel.useExistingTemplates() },
                 )
                 GameButton(
-                    label = "Crea personaggi e mob da zero",
-                    subtitle = "Apre il Compendio per creare nuove schede",
+                    label = words.createFromScratch,
+                    subtitle = words.createFromScratchHint,
                     accent = Palette.Gold,
                     onClick = onCreateFromScratch,
                 )
                 GameButton(
-                    label = "Apri sessione salvata",
+                    label = words.openSavedSession,
                     subtitle = when (savedCount) {
-                        0 -> "Nessuna sessione salvata"
-                        1 -> "1 sessione salvata"
-                        else -> "$savedCount sessioni salvate"
+                        0 -> words.noSavedSession
+                        1 -> words.oneSavedSession
+                        else -> words.savedSessions(savedCount)
                     },
                     accent = Palette.Heal,
                     onClick = onOpenSaved,
@@ -265,6 +270,7 @@ private fun ParticipantsStep(
     onOpenCompendium: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.encounter
     Column(modifier.fillMaxWidth()) {
         Column(
             Modifier.fillMaxWidth().padding(
@@ -273,7 +279,7 @@ private fun ParticipantsStep(
             ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Eyebrow("Nome partita")
+            Eyebrow(words.gameName)
             BasicTextField(
                 value = viewModel.encounterName,
                 onValueChange = { viewModel.encounterName = it; viewModel.dismissStatus() },
@@ -289,9 +295,9 @@ private fun ParticipantsStep(
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                Chip("${viewModel.selectedCount} partecipanti", Palette.Gold)
-                Chip("${viewModel.allyCount} alleati", Palette.Party)
-                Chip("${viewModel.opponentCount} avversari", Palette.Enemy)
+                Chip(words.participants(viewModel.selectedCount), Palette.Gold)
+                Chip(words.allies(viewModel.allyCount), Palette.Party)
+                Chip(words.opponents(viewModel.opponentCount), Palette.Enemy)
             }
         }
 
@@ -314,11 +320,11 @@ private fun ParticipantsStep(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (people.isNotEmpty()) {
-                    item { Eyebrow("Personaggi (${people.size})", Palette.Party) }
+                    item { Eyebrow(words.charactersCount(people.size), Palette.Party) }
                     items(people, key = { "personaggio-${it.id}" }) { ParticipantCard(it, viewModel) }
                 }
                 if (creatures.isNotEmpty()) {
-                    item { Eyebrow("Mob e creature (${creatures.size})", Palette.Enemy, Modifier.padding(top = 7.dp)) }
+                    item { Eyebrow(words.creaturesCount(creatures.size), Palette.Enemy, Modifier.padding(top = 7.dp)) }
                     items(creatures, key = { "creatura-${it.id}" }) { ParticipantCard(it, viewModel) }
                 }
             }
@@ -332,6 +338,7 @@ private fun ParticipantCard(
     participant: EncounterParticipant,
     viewModel: EncounterBuilderViewModel,
 ) {
+    val words = strings.encounter
     val accent = when {
         !participant.selected -> Palette.TextFaint
         participant.faction == EncounterFaction.ALLEATI -> Palette.Party
@@ -372,7 +379,7 @@ private fun ParticipantCard(
                 )
             }
             Chip(
-                if (participant.kind == RosterKind.PERSONAGGIO) "Personaggio" else "Creatura",
+                if (participant.kind == RosterKind.PERSONAGGIO) strings.compendium.characterLabel else strings.compendium.creatureLabel,
                 if (participant.kind == RosterKind.PERSONAGGIO) Palette.Party else Palette.Enemy,
             )
         }
@@ -388,7 +395,7 @@ private fun ParticipantCard(
                     enabled = participant.quantity > 1,
                     onClick = { viewModel.changeQuantity(participant.id, -1) },
                 )
-                Chip("Quantità ${participant.quantity}", Palette.Text)
+                Chip(words.quantity(participant.quantity), Palette.Text)
                 GameButton(
                     label = "+",
                     accent = Palette.TextMuted,
@@ -397,7 +404,7 @@ private fun ParticipantCard(
                 EncounterFaction.entries.forEach { faction ->
                     val selected = participant.faction == faction
                     GameButton(
-                        label = faction.label,
+                        label = faction.label(strings),
                         accent = if (selected) {
                             if (faction == EncounterFaction.ALLEATI) Palette.Party else Palette.Enemy
                         } else {
@@ -417,27 +424,28 @@ private fun EmptyCompendium(
     creatingFromScratch: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.encounter
     Box(modifier.padding(18.dp), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = if (creatingFromScratch) "Crea i protagonisti della partita." else "Il Compendio è vuoto.",
+                text = if (creatingFromScratch) words.emptyCompendiumBody else words.emptyCompendiumTitle,
                 color = Palette.Text,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
                 text = if (creatingFromScratch) {
-                    "Crea e salva personaggi e mob; tornando qui vedrai soltanto i nuovi template."
+                    words.emptyCompendiumHint
                 } else {
-                    "Crea e salva almeno una scheda o uno stat block."
+                    words.emptyCompendiumRequirement
                 },
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
-            GameButton("Apri Compendio", accent = Palette.Party, onClick = onOpenCompendium)
+            GameButton(words.openCompendium, accent = Palette.Party, onClick = onOpenCompendium)
         }
     }
 }
@@ -449,6 +457,8 @@ private fun GridStep(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.encounter
+    val language = currentLanguage
     Column(
         modifier
             .fillMaxWidth()
@@ -457,7 +467,7 @@ private fun GridStep(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Text(
-            "Dimensione della griglia",
+            words.gridSize,
             color = Palette.Text,
             fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
@@ -469,8 +479,8 @@ private fun GridStep(
             listOf(20 to 15, 30 to 20, 40 to 30).forEach { (columns, rows) ->
                 val selected = viewModel.gridColumns == columns && viewModel.gridRows == rows
                 GameButton(
-                    label = "$columns × $rows",
-                    subtitle = if (columns == 20 && rows == 15) "Predefinita" else null,
+                    label = words.gridDimensions(columns, rows),
+                    subtitle = if (columns == 20 && rows == 15) words.defaultFeminine else null,
                     accent = if (selected) Palette.Gold else Palette.TextMuted,
                     selected = selected,
                     onClick = { viewModel.useGridPreset(columns, rows) },
@@ -481,24 +491,24 @@ private fun GridStep(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            GameButton("− colonne", accent = Palette.TextMuted, onClick = {
+            GameButton(words.fewerColumns, accent = Palette.TextMuted, onClick = {
                 viewModel.updateGridColumns(viewModel.gridColumns - 1)
             })
-            Chip("${viewModel.gridColumns} colonne", Palette.Text)
-            GameButton("+ colonne", accent = Palette.TextMuted, onClick = {
+            Chip(words.columnsCount(viewModel.gridColumns), Palette.Text)
+            GameButton(words.moreColumns, accent = Palette.TextMuted, onClick = {
                 viewModel.updateGridColumns(viewModel.gridColumns + 1)
             })
-            GameButton("− righe", accent = Palette.TextMuted, onClick = {
+            GameButton(words.fewerRows, accent = Palette.TextMuted, onClick = {
                 viewModel.updateGridRows(viewModel.gridRows - 1)
             })
-            Chip("${viewModel.gridRows} righe", Palette.Text)
-            GameButton("+ righe", accent = Palette.TextMuted, onClick = {
+            Chip(words.rowsCount(viewModel.gridRows), Palette.Text)
+            GameButton(words.moreRows, accent = Palette.TextMuted, onClick = {
                 viewModel.updateGridRows(viewModel.gridRows + 1)
             })
         }
 
         Text(
-            "Metri rappresentati da ogni quadratino",
+            words.squareScaleLabel,
             color = Palette.Text,
             fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
@@ -510,8 +520,8 @@ private fun GridStep(
             listOf(5, 10, 20, 50).forEach { feet ->
                 val selected = viewModel.feetPerSquare == feet
                 GameButton(
-                    label = "${metresFromFeet(feet)} m / quadratino",
-                    subtitle = if (feet == 5) "Predefinito" else null,
+                    label = words.scalePerSquare(distanceLabel(feet, language)),
+                    subtitle = if (feet == 5) words.defaultMasculine else null,
                     accent = if (selected) Palette.Gold else Palette.TextMuted,
                     selected = selected,
                     onClick = { viewModel.updateFeetPerSquare(feet) },
@@ -522,19 +532,18 @@ private fun GridStep(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            GameButton("− 0,3 m", accent = Palette.TextMuted, onClick = {
+            GameButton(words.decreaseScale(distanceLabel(1, language)), accent = Palette.TextMuted, onClick = {
                 viewModel.updateFeetPerSquare(viewModel.feetPerSquare - 1)
             })
-            Chip("Scala scelta: ${metresFromFeet(viewModel.feetPerSquare)} m", Palette.GoldBright)
-            GameButton("+ 0,3 m", accent = Palette.TextMuted, onClick = {
+            Chip(words.chosenScale(distanceLabel(viewModel.feetPerSquare, language)), Palette.GoldBright)
+            GameButton(words.increaseScale(distanceLabel(1, language)), accent = Palette.TextMuted, onClick = {
                 viewModel.updateFeetPerSquare(viewModel.feetPerSquare + 1)
             })
         }
-        val widthMetres = metresFromFeet(viewModel.gridColumns * viewModel.feetPerSquare)
-        val heightMetres = metresFromFeet(viewModel.gridRows * viewModel.feetPerSquare)
+        val width = distanceLabel(viewModel.gridColumns * viewModel.feetPerSquare, language)
+        val height = distanceLabel(viewModel.gridRows * viewModel.feetPerSquare, language)
         Text(
-            "Area totale: $widthMetres × $heightMetres m · " +
-                "${viewModel.gridColumns} × ${viewModel.gridRows} quadratini.",
+            words.totalArea(width, height, viewModel.gridColumns, viewModel.gridRows),
             color = Palette.GoldBright,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.fillMaxWidth()
@@ -551,6 +560,7 @@ private fun ModeStep(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.encounter
     Box(
         modifier
             .fillMaxWidth()
@@ -564,7 +574,7 @@ private fun ModeStep(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                "Come vuoi iniziare?",
+                words.howToStart,
                 color = Palette.Text,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.headlineSmall,
@@ -576,8 +586,8 @@ private fun ModeStep(
                 EncounterMode.entries.forEach { mode ->
                     val selected = viewModel.mode == mode
                     GameButton(
-                        label = mode.label,
-                        subtitle = mode.description,
+                        label = mode.label(strings),
+                        subtitle = mode.description(strings),
                         accent = if (selected) Palette.GoldBright else Palette.TextMuted,
                         selected = selected,
                         onClick = { viewModel.mode = mode },
@@ -586,9 +596,9 @@ private fun ModeStep(
             }
             Text(
                 if (viewModel.mode == EncounterMode.FIGHT) {
-                    "I token verranno disposti al centro in due schieramenti vicini. Potrai trascinarli in Modifica."
+                    words.fightPlacementNote
                 } else {
-                    "La griglia sarà pronta ma vuota: potrai preparare liberamente esplorazione e scene narrative."
+                    words.fullPlacementNote
                 },
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodyMedium,
@@ -604,6 +614,8 @@ private fun DifficultyStep(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val strings = strings
+    val words = strings.encounter
     Box(
         modifier
             .fillMaxWidth()
@@ -617,21 +629,19 @@ private fun DifficultyStep(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                "Quanto devono essere pericolosi i nemici?",
+                words.howDangerous,
                 color = Palette.Text,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(
-                "Medio è il livello normale. La difficoltà cambia le decisioni della CPU, " +
-                    "non le statistiche delle creature né le regole del combattimento. " +
-                    "Con Sandbox la CPU resta spenta e comandi tu anche gli avversari.",
+                words.difficultyBody,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodyMedium,
             )
             viewModel.enemyCpuInactiveReason?.let { warning ->
                 Text(
-                    enemyCpuInactiveWarning(warning),
+                    enemyCpuInactiveWarning(warning, strings),
                     color = Palette.Enemy,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyMedium,
@@ -644,8 +654,8 @@ private fun DifficultyStep(
             // le tre sotto scelgono soltanto quanto sara' tattica.
             val sandbox = viewModel.enemyCpuDifficulty == null
             GameButton(
-                label = SANDBOX_LABEL,
-                subtitle = SANDBOX_DESCRIPTION,
+                label = words.sandbox,
+                subtitle = words.sandboxHint,
                 accent = if (sandbox) Palette.Party else Palette.TextMuted,
                 selected = sandbox,
                 onClick = { viewModel.enemyCpuDifficulty = null },
@@ -654,109 +664,32 @@ private fun DifficultyStep(
             EnemyCpuDifficulty.values().forEach { difficulty ->
                 val selected = viewModel.enemyCpuDifficulty == difficulty
                 GameButton(
-                    label = difficulty.italianLabel,
-                    subtitle = difficulty.italianComparison,
+                    label = difficulty.label(strings),
+                    subtitle = difficulty.comparison(strings),
                     accent = if (selected) difficulty.accent else Palette.TextMuted,
                     selected = selected,
                     onClick = { viewModel.enemyCpuDifficulty = difficulty },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            if (!sandbox) EnemyCpuSpeedStep(viewModel, compact)
+            // Il ritmo non si chiede piu' qui: e' una preferenza di chi guarda, non
+            // una proprieta' dello scontro, e vive nelle Impostazioni.
         }
     }
 }
 
-/**
- * Ritmo con cui si vedra' giocare la CPU.
- *
- * Sta sotto la difficolta' perche' e' la seconda meta' della stessa domanda: non
- * quanto sara' brava, ma quanto in fretta la vedrai muovere. Resta poi cambiabile
- * durante la partita dalla fascia nemica.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun EnemyCpuSpeedStep(viewModel: EncounterBuilderViewModel, compact: Boolean) {
-    Column(
-        Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            "Con che ritmo vuoi vedere i turni nemici?",
-            color = Palette.Text,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            "La CPU incatena spesso spostamento e attacchi nello stesso turno: la pausa fra un " +
-                "comando e il successivo serve a vederli uno per uno. Non cambia le regole.",
-            color = Palette.TextMuted,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            EnemyCpuSpeed.values().forEach { speed ->
-                val selected = viewModel.enemyCpuSpeed == speed
-                GameButton(
-                    label = speed.italianLabel,
-                    subtitle = if (compact) null else speed.italianPace,
-                    accent = if (selected) Palette.Gold else Palette.TextMuted,
-                    selected = selected,
-                    dense = compact,
-                    onClick = { viewModel.enemyCpuSpeed = speed },
-                )
-            }
-        }
-    }
+internal fun enemyCpuInactiveWarning(reason: String, strings: Strings): String =
+    strings.encounter.singleFactionNote(reason)
+
+// Il nome dei livelli vive in `ui.state` accanto al modello di battaglia, che lo
+// usa per il riepilogo del turno CPU: una copia qui rischiava di divergere da
+// quella senza che nulla se ne accorgesse. Restano invece di questa schermata il
+// confronto fra livelli e il colore, che nessun altro mostra.
+internal fun EnemyCpuDifficulty.comparison(strings: Strings): String = when (this) {
+    EnemyCpuDifficulty.EASY -> strings.encounter.easyHint
+    EnemyCpuDifficulty.MEDIUM -> strings.encounter.mediumHint
+    EnemyCpuDifficulty.SORRY_FOR_YOU -> strings.encounter.sorryForYouHint
 }
-
-internal val EnemyCpuSpeed.italianPace: String
-    get() = when (this) {
-        EnemyCpuSpeed.SLOW -> "Una pausa lunga fra un comando e l'altro."
-        EnemyCpuSpeed.NORMAL -> "Il ritmo consigliato per seguire lo scontro."
-        EnemyCpuSpeed.FAST -> "Si vede ogni comando, con pause molto brevi."
-        EnemyCpuSpeed.INSTANT -> "Nessuna pausa: il turno nemico si risolve tutto insieme."
-    }
-
-internal fun enemyCpuInactiveWarning(reason: String): String =
-    "$reason Puoi comunque avviare questa sessione mono-fazione."
-
-internal const val SANDBOX_LABEL = "Sandbox"
-
-/**
- * Il testo dice cosa cambia davvero: chi decide le mosse nemiche. Le regole, i
- * tiri e i budget del turno restano quelli del motore anche qui.
- */
-internal const val SANDBOX_DESCRIPTION =
-    "Nessuna CPU: gli avversari li muovi e li fai agire tu, come gli alleati. " +
-        "Utile per arbitrare a mano, provare una scena o preparare un incontro. " +
-        "Le regole restano quelle del motore: cambia solo chi sceglie le mosse nemiche."
-
-internal val EnemyCpuDifficulty.italianLabel: String
-    get() = when (this) {
-        EnemyCpuDifficulty.EASY -> "Facile"
-        EnemyCpuDifficulty.MEDIUM -> "Medio"
-        EnemyCpuDifficulty.SORRY_FOR_YOU -> "Mi dispiace per te!"
-    }
-
-internal val EnemyCpuDifficulty.italianComparison: String
-    get() = when (this) {
-        EnemyCpuDifficulty.EASY ->
-            "Rispetto a Medio usa scelte semplici: attacca il bersaglio più vicino e cura solo " +
-                "nelle emergenze, con lo slot minimo sufficiente e senza focus o accerchiamenti. " +
-                "È molto meno efficiente di «Mi dispiace per te!»."
-        EnemyCpuDifficulty.MEDIUM ->
-            "Il livello normale: coordina attacchi e cure e cerca buone posizioni. Rispetto a Facile gioca " +
-                "di squadra e potenzia una cura quanto basta per uscire dal pericolo; rispetto a " +
-                "«Mi dispiace per te!» insiste meno sul bersaglio prioritario e accetta scelte più prudenti."
-        EnemyCpuDifficulty.SORRY_FOR_YOU ->
-            "Rispetto al normale concentra il fuoco sui bersagli vulnerabili, accerchia, evita il fuoco " +
-                "amico e investe slot superiori per rimettere subito in sicurezza la squadra. " +
-                "È la CPU più aggressiva e coordinata."
-    }
 
 private val EnemyCpuDifficulty.accent
     get() = when (this) {
@@ -770,11 +703,13 @@ private val EnemyCpuDifficulty.accent
 private fun NewGameFooter(
     viewModel: EncounterBuilderViewModel,
     compact: Boolean,
-    // La presentazione iniziale arriva gia' composta: difficolta' e ritmo sono
-    // scelte della procedura, non di chi apre la scheda.
+    // La presentazione iniziale arriva gia' composta: la difficolta' e' una scelta
+    // della procedura, non di chi apre la scheda.
     onStarted: (CombatSession, String, Map<String, String>) -> Unit,
     onOpenCompendium: () -> Unit,
 ) {
+    val strings = strings
+    val words = strings.encounter
     if (viewModel.step == NewGameStep.TEMPLATE) return
     FlowRow(
         modifier = Modifier.fillMaxWidth().background(Palette.Surface).padding(
@@ -787,44 +722,47 @@ private fun NewGameFooter(
         when (viewModel.step) {
             NewGameStep.TEMPLATE -> Unit
             NewGameStep.PARTECIPANTI -> {
-                GameButton("Indietro", accent = Palette.TextMuted, onClick = { viewModel.back() })
-                GameButton("Azzera", accent = Palette.TextMuted, onClick = { viewModel.clearSelection() })
+                GameButton(strings.common.back, accent = Palette.TextMuted, onClick = { viewModel.back() })
+                GameButton(strings.common.clear, accent = Palette.TextMuted, onClick = { viewModel.clearSelection() })
                 if (viewModel.templateSource == TemplateSource.ESISTENTI) {
-                    GameButton("Squadra base", accent = Palette.Party, onClick = { viewModel.resetRecommended() })
+                    GameButton(words.baseParty, accent = Palette.Party, onClick = { viewModel.resetRecommended() })
                 } else {
-                    GameButton("Crea altri da zero", accent = Palette.Party, onClick = onOpenCompendium)
+                    GameButton(words.createMoreFromScratch, accent = Palette.Party, onClick = onOpenCompendium)
                 }
                 GameButton(
-                    label = "Avanti · Griglia",
+                    label = words.nextGrid,
                     accent = Palette.Heal,
                     enabled = viewModel.canStart,
                     onClick = { viewModel.continueFromParticipants() },
                 )
             }
             NewGameStep.GRIGLIA -> {
-                GameButton("Indietro", accent = Palette.TextMuted, onClick = { viewModel.back() })
-                GameButton("Ripristina 20 × 15", accent = Palette.TextMuted, onClick = {
+                GameButton(strings.common.back, accent = Palette.TextMuted, onClick = { viewModel.back() })
+                GameButton(words.resetGrid, accent = Palette.TextMuted, onClick = {
                     viewModel.useGridPreset(20, 15)
                     viewModel.updateFeetPerSquare(5)
                 })
-                GameButton("Avanti · Modalità", accent = Palette.Heal, onClick = { viewModel.continueFromGrid() })
+                GameButton(words.nextMode, accent = Palette.Heal, onClick = { viewModel.continueFromGrid() })
             }
             NewGameStep.MODALITA -> {
-                GameButton("Indietro", accent = Palette.TextMuted, onClick = { viewModel.back() })
+                GameButton(strings.common.back, accent = Palette.TextMuted, onClick = { viewModel.back() })
                 GameButton(
-                    label = "Avanti · Difficoltà",
-                    subtitle = "Poi scegli se e quanto sarà tattica la CPU nemica",
+                    label = words.nextDifficulty,
+                    subtitle = words.nextDifficultyHint,
                     accent = Palette.Heal,
                     onClick = { viewModel.continueFromMode() },
                 )
             }
             NewGameStep.DIFFICOLTA -> {
-                GameButton("Indietro", accent = Palette.TextMuted, onClick = { viewModel.back() })
+                GameButton(strings.common.back, accent = Palette.TextMuted, onClick = { viewModel.back() })
                 GameButton(
-                    label = "Avvia partita",
+                    label = words.startGame,
                     subtitle = viewModel.enemyCpuInactiveReason
-                        ?: "${viewModel.mode.label} · " +
-                        (viewModel.enemyCpuDifficulty?.let { "CPU ${it.italianLabel}" } ?: SANDBOX_LABEL),
+                        ?: words.startSummary(
+                            viewModel.mode.label(strings),
+                            viewModel.enemyCpuDifficulty?.let { "CPU ${it.label(strings)}" }
+                                ?: words.sandbox,
+                        ),
                     accent = Palette.Heal,
                     enabled = viewModel.canStart,
                     onClick = {

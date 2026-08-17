@@ -36,10 +36,10 @@ import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.SaveAbility
-import app.d6d.sheet.italianLabel
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
-import app.d6d.ui.components.italianLabel
+import app.d6d.i18n.label
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
@@ -62,6 +62,9 @@ fun BattleToolsDialog(
 ) {
     if (!open) return
 
+    val strings = strings
+    val words = strings.battle
+    val language = strings.language
     val combatantIds = viewModel.partyIds + viewModel.enemyIds
     var targetId by remember(viewModel.sessionGeneration) {
         mutableStateOf(
@@ -110,7 +113,7 @@ fun BattleToolsDialog(
             ) {
                 if (cpuLocked) {
                     Text(
-                        "Strumenti sospesi mentre la CPU risolve la parte nemica del turno.",
+                        words.toolsSuspendedDuringCpu,
                         color = Palette.Enemy,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -122,22 +125,22 @@ fun BattleToolsDialog(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            "Strumenti del tavolo",
+                            words.tableToolsTitle,
                             color = Palette.Text,
                             fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            "Prove, danni, cure e condizioni del combattente scelto.",
+                            words.tableToolsSubtitle,
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
+                    GameButton(strings.common.close, accent = Palette.TextMuted, onClick = onDismiss)
                 }
                 OrnateDivider(color = Palette.GoldDim)
 
-                Eyebrow("Combattente interessato")
+                Eyebrow(words.affectedCombatant)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalArrangement = Arrangement.spacedBy(7.dp),
@@ -162,23 +165,31 @@ fun BattleToolsDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
-                        Chip("${combatant.currentHitPoints()}/${combatant.snapshot().maxHitPoints()} PF", Palette.Text)
+                        Chip(
+                            words.hitPointsShort(
+                                combatant.currentHitPoints(),
+                                combatant.snapshot().maxHitPoints(),
+                            ),
+                            Palette.Text,
+                        )
                         if (combatant.temporaryHitPoints() > 0) {
-                            Chip("${combatant.temporaryHitPoints()} PF temporanei", Palette.Temporary)
+                            Chip(
+                                words.temporaryHitPointsOf(combatant.temporaryHitPoints()),
+                                Palette.Temporary,
+                            )
                         }
-                        Chip("Sfinimento ${combatant.exhaustionLevel()}", Palette.Bloodied)
+                        Chip(words.exhaustionLevel(combatant.exhaustionLevel()), Palette.Bloodied)
                         when {
-                            combatant.dead() -> Chip("Morto", Palette.Critical)
-                            combatant.stable() -> Chip("Stabile", Palette.Heal)
-                            combatant.unconscious() -> Chip("Privo di sensi", Palette.Bloodied)
+                            combatant.dead() -> Chip(words.dead, Palette.Critical)
+                            combatant.stable() -> Chip(words.stable, Palette.Heal)
+                            combatant.unconscious() -> Chip(words.unconscious, Palette.Bloodied)
                         }
                     }
                 }
 
-                Eyebrow("Prova di caratteristica")
+                Eyebrow(words.abilityCheck)
                 Text(
-                    "Scegli la caratteristica e inserisci il modificatore della prova. " +
-                        "Sfinimento e penalità dell'armatura vengono applicati dal motore.",
+                    words.abilityCheckHint,
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -189,7 +200,7 @@ fun BattleToolsDialog(
                     SaveAbility.entries.forEach { ability ->
                         val selected = ability == abilityCheckAbility
                         GameButton(
-                            label = ability.italianLabel,
+                            label = ability.label(language),
                             accent = if (selected) Palette.Gold else Palette.TextFaint,
                             selected = selected,
                             onClick = { abilityCheckAbility = ability },
@@ -202,7 +213,7 @@ fun BattleToolsDialog(
                     verticalAlignment = Alignment.Bottom,
                 ) {
                     LabeledNumberField(
-                        label = "Modificatore",
+                        label = strings.sheet.modifier,
                         value = abilityCheckModifierText,
                         onValueChange = { abilityCheckModifierText = signedIntegerInput(it) },
                         modifier = Modifier.weight(1f),
@@ -212,12 +223,12 @@ fun BattleToolsDialog(
                         horizontalAlignment = Alignment.End,
                     ) {
                         Text(
-                            "Modalità dalla barra: ${viewModel.rollMode.italianLabel}",
+                            words.rollModeFromBar(viewModel.rollMode.label(language)),
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                         )
                         GameButton(
-                            "Tira prova",
+                            words.rollCheck,
                             accent = Palette.Party,
                             enabled = commandsEnabled && abilityCheckModifier != null,
                             onClick = {
@@ -235,9 +246,9 @@ fun BattleToolsDialog(
                     }
                 }
 
-                Eyebrow("Punti ferita")
+                Eyebrow(words.hitPoints)
                 LabeledNumberField(
-                    label = "Quantità",
+                    label = words.amount,
                     value = amountText,
                     onValueChange = { amountText = it.filter(Char::isDigit).take(5) },
                 )
@@ -246,32 +257,32 @@ fun BattleToolsDialog(
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     GameButton(
-                        "Applica danno",
+                        words.applyDamage,
                         accent = Palette.Enemy,
                         enabled = commandsEnabled && amount > 0,
                         onClick = { targetId?.let { viewModel.applyManualDamage(it, amount, damageType) } },
                     )
                     GameButton(
-                        "Cura",
+                        strings.sheet.heal,
                         accent = Palette.Heal,
                         enabled = commandsEnabled && amount > 0,
                         onClick = { targetId?.let { viewModel.heal(it, amount) } },
                     )
                     GameButton(
-                        "PF temporanei",
+                        words.temporaryHitPoints,
                         accent = Palette.Temporary,
                         enabled = commandsEnabled && amount > 0,
                         onClick = { targetId?.let { viewModel.grantTemporary(it, amount) } },
                     )
                 }
-                Text("Tipo del danno", color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+                Text(words.damageTypeLabel, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     DamageType.entries.forEach { type ->
                         GameButton(
-                            label = type.italianLabel,
+                            label = type.label(language),
                             accent = if (type == damageType) Palette.Gold else Palette.TextFaint,
                             selected = type == damageType,
                             onClick = { damageType = type },
@@ -279,7 +290,7 @@ fun BattleToolsDialog(
                     }
                 }
 
-                Eyebrow("Condizioni")
+                Eyebrow(strings.sheet.conditions)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -288,7 +299,7 @@ fun BattleToolsDialog(
                         .filterNot { it == ConditionType.EXHAUSTION || it == ConditionType.CUSTOM }
                         .forEach { type ->
                             GameButton(
-                                label = type.italianLabel,
+                                label = type.label(language),
                                 accent = if (type == conditionType) Palette.Gold else Palette.TextFaint,
                                 selected = type == conditionType,
                                 onClick = { conditionType = type },
@@ -301,27 +312,27 @@ fun BattleToolsDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     LabeledNumberField(
-                        label = "Round (0 = manuale)",
+                        label = words.roundsManualHint,
                         value = durationText,
                         onValueChange = { durationText = it.filter(Char::isDigit).take(3) },
                         modifier = Modifier.weight(1f),
                     )
                     GameButton(
-                        "Aggiungi condizione",
+                        words.addCondition,
                         accent = Palette.Bloodied,
                         enabled = commandsEnabled,
                         onClick = { targetId?.let { viewModel.addCondition(it, conditionType, duration) } },
                     )
                 }
                 if (!target?.conditions().isNullOrEmpty()) {
-                    Text("Clicca una condizione per rimuoverla", color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+                    Text(words.clickConditionToRemove, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         target.conditions().forEach { condition ->
                             GameButton(
-                                label = "Rimuovi ${condition.type().italianLabel}",
+                                label = words.removeCondition(condition.type().label(language)),
                                 accent = Palette.TextMuted,
                                 enabled = commandsEnabled,
                                 onClick = { targetId?.let { viewModel.removeCondition(it, condition.id()) } },
@@ -330,26 +341,26 @@ fun BattleToolsDialog(
                     }
                 }
 
-                Eyebrow("Morte e sfinimento")
+                Eyebrow(words.deathAndExhaustion)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     GameButton(
-                        "Tiro contro morte",
+                        words.deathSaveRoll,
                         accent = Palette.Bloodied,
                         enabled = commandsEnabled,
                         onClick = { targetId?.let(viewModel::rollDeathSave) },
                     )
                     GameButton(
-                        "Stabilizza",
+                        strings.sheet.stabilize,
                         accent = Palette.Heal,
                         enabled = commandsEnabled,
                         onClick = { targetId?.let(viewModel::stabilize) },
                     )
                     (0..6).forEach { level ->
                         GameButton(
-                            label = "Sfinimento $level",
+                            label = words.exhaustionLevel(level),
                             accent = if (target?.exhaustionLevel() == level) Palette.Gold else Palette.TextFaint,
                             selected = target?.exhaustionLevel() == level,
                             enabled = commandsEnabled,
@@ -367,23 +378,6 @@ private fun signedIntegerInput(value: String): String {
     val digits = value.filter(Char::isDigit).take(6)
     return if (negative) "-$digits" else digits
 }
-
-private val SaveAbility.italianLabel: String
-    get() = when (this) {
-        SaveAbility.STRENGTH -> "Forza"
-        SaveAbility.DEXTERITY -> "Destrezza"
-        SaveAbility.CONSTITUTION -> "Costituzione"
-        SaveAbility.INTELLIGENCE -> "Intelligenza"
-        SaveAbility.WISDOM -> "Saggezza"
-        SaveAbility.CHARISMA -> "Carisma"
-    }
-
-private val D20Mode.italianLabel: String
-    get() = when (this) {
-        D20Mode.NORMAL -> "Normale"
-        D20Mode.ADVANTAGE -> "Vantaggio"
-        D20Mode.DISADVANTAGE -> "Svantaggio"
-    }
 
 @Composable
 private fun LabeledNumberField(

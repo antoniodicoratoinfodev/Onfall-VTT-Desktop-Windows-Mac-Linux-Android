@@ -1,5 +1,9 @@
 package app.d6d.content.srd521it
 
+import app.d6d.domain.combat.DamageType
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.label
+import app.d6d.i18n.pick
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.ChoiceKind
@@ -23,14 +27,25 @@ data class SrdChoiceOption(
 )
 
 object SrdChoiceResolver {
+    /** Etichetta corrente seguita dagli alias delle altre edizioni, per dati salvati portabili. */
+    fun labelsForId(id: String, language: AppLanguage): List<String> =
+        (listOf(language) + AppLanguage.entries.filterNot { it == language })
+            .map { targetLanguage ->
+                val targetPack = Srd521ItContent.packFor(targetLanguage)
+                optionForId(id, targetPack.element(id), targetLanguage).label
+            }
+            .filter(String::isNotBlank)
+            .distinct()
+
     fun options(
         choice: ChoiceDefinition,
         classId: CharacterClassId,
         classLevel: Int,
         sheet: CharacterSheet,
         provisionalSelections: List<ChoiceSelection> = emptyList(),
+        language: AppLanguage = AppLanguage.ITALIAN,
     ): List<SrdChoiceOption> {
-        val pack = Srd521ItContent.pack
+        val pack = Srd521ItContent.packFor(language)
         val provisionalBackground = provisionalSelections
             .asSequence()
             .flatMap { it.optionIds.asSequence() }
@@ -63,9 +78,8 @@ object SrdChoiceResolver {
                                     sheet.skillProficiencies[it] != Proficiency.EXPERTISE
                             } != false
                         ChoiceKind.LANGUAGE_PROFICIENCY ->
-                            id.substringAfterLast(':') !in sheet.languages
-                                .split(',', ';', '\n')
-                                .mapTo(mutableSetOf()) { it.toContentSlug() } &&
+                            labelsForId(id, language)
+                                .none(sheet.languages::containsListedEntry) &&
                                 id !in otherProvisionalIds
                         ChoiceKind.FEAT, ChoiceKind.EPIC_BOON ->
                             id !in otherProvisionalIds &&
@@ -79,7 +93,7 @@ object SrdChoiceResolver {
                         else -> true
                     }
                 }
-                .map { id -> optionForId(id, pack.element(id)) }
+                .map { id -> optionForId(id, pack.element(id), language) }
         }
         val semantic = choice.poolId.orEmpty().removePrefix("${pack.manifest.id}:pool:")
         val elements = pack.elements
@@ -102,11 +116,15 @@ object SrdChoiceResolver {
                     }
                 }
                 return skills.map {
-                    SrdChoiceOption(skillId(it), it.italianLabel, it.ability.italianLabel)
+                    SrdChoiceOption(
+                        id = skillId(it),
+                        label = it.label(language),
+                        secondaryLabel = it.ability.label(language),
+                    )
                 }
             }
-            semantic.startsWith("skills-or-tools:") -> return (
-                Skill.entries
+            semantic.startsWith("skills-or-tools:") -> {
+                val skillOptions = Skill.entries
                     .filter {
                         sheet.skillProficiencies[it].let { proficiency ->
                             proficiency == null || proficiency == Proficiency.NONE
@@ -114,44 +132,46 @@ object SrdChoiceResolver {
                     }
                     .map {
                         SrdChoiceOption(
-                            skillId(it),
-                            it.italianLabel,
-                            "Abilità · ${it.ability.italianLabel}",
+                            id = skillId(it),
+                            label = it.label(language),
+                            secondaryLabel = language.pick("Abilità", "Skill") +
+                                " · ${it.ability.label(language)}",
                         )
-                    } + (artisanTools + musicalInstruments + otherTools)
-                    .map(::toolOption)
-                    .filter {
-                        it.id !in otherProvisionalIds &&
-                            !sheet.toolProficiencies.containsListedEntry(it.label)
                     }
+                return skillOptions + toolOptions(
+                    artisanTools + musicalInstruments + otherTools,
+                    language,
+                    otherProvisionalIds,
+                    sheet.toolProficiencies,
                 )
-            semantic == "tools:musical-instruments" -> return musicalInstruments
-                .map(::toolOption)
-                .filter {
-                    it.id !in otherProvisionalIds &&
-                        !sheet.toolProficiencies.containsListedEntry(it.label)
-                }
+            }
+            semantic == "tools:musical-instruments" -> return toolOptions(
+                musicalInstruments,
+                language,
+                otherProvisionalIds,
+                sheet.toolProficiencies,
+            )
             semantic == "tools:artisan-or-musical" ->
-                return (artisanTools + musicalInstruments)
-                    .map(::toolOption)
-                    .filter {
-                        it.id !in otherProvisionalIds &&
-                            !sheet.toolProficiencies.containsListedEntry(it.label)
-                    }
-            semantic == "tools:any" -> return (artisanTools + musicalInstruments + otherTools)
-                .map(::toolOption)
-                .filter {
-                    it.id !in otherProvisionalIds &&
-                        !sheet.toolProficiencies.containsListedEntry(it.label)
-                }
-            semantic == "tools:gaming-set" -> return gamingSets
-                .map(::toolOption)
-                .filter {
-                    it.id !in otherProvisionalIds &&
-                        !sheet.toolProficiencies.containsListedEntry(it.label)
-                }
-            semantic.startsWith("weapons:mastery:") -> return SrdWeapons.all
-                .map(::weaponOption)
+                return toolOptions(
+                    artisanTools + musicalInstruments,
+                    language,
+                    otherProvisionalIds,
+                    sheet.toolProficiencies,
+                )
+            semantic == "tools:any" -> return toolOptions(
+                artisanTools + musicalInstruments + otherTools,
+                language,
+                otherProvisionalIds,
+                sheet.toolProficiencies,
+            )
+            semantic == "tools:gaming-set" -> return toolOptions(
+                gamingSets,
+                language,
+                otherProvisionalIds,
+                sheet.toolProficiencies,
+            )
+            semantic.startsWith("weapons:mastery:") -> return SrdWeapons.all(language)
+                .map { weaponOption(it, language) }
                 .filter { it.id !in sheet.progression.selectedFeatureIds }
             semantic == "feats:general" -> elements.filter {
                 it.kind == RuleElementKind.GENERAL_FEAT || it.kind == RuleElementKind.ORIGIN_FEAT
@@ -172,14 +192,14 @@ object SrdChoiceResolver {
             }
             semantic == "spells:bardo:magical-discoveries" -> elements.filter { element ->
                 val spell = element.spell ?: return@filter false
-                spell.level in 0..maximumSpellLevel(classId, classLevel) &&
+                spell.level in 0..maximumSpellLevel(classId, classLevel, language) &&
                     element.classEligibility.any {
                         it.classId in magicalDiscoveryClasses
                     }
             }
             semantic == "spells:bardo:magical-secrets" -> elements.filter { element ->
                 val spell = element.spell ?: return@filter false
-                spell.level in 1..maximumSpellLevel(classId, classLevel) &&
+                spell.level in 1..maximumSpellLevel(classId, classLevel, language) &&
                     element.classEligibility.any {
                         it.classId in magicalSecretsClasses
                     }
@@ -187,11 +207,11 @@ object SrdChoiceResolver {
             semantic == "spells:mago:evocation" -> elements.filter { element ->
                 val spell = element.spell ?: return@filter false
                 spell.level > 0 &&
-                    spell.school == "Invocazione" &&
+                    spell.school.equals(language.pick("Invocazione", "Evocation"), ignoreCase = true) &&
                     element.classEligibility.any { eligibility ->
                         eligibility.classId == CharacterClassId.WIZARD
                     } &&
-                    spell.level <= maximumSpellLevel(classId, classLevel)
+                    spell.level <= maximumSpellLevel(classId, classLevel, language)
             }
             semantic.startsWith("spells:magic-initiate:") -> {
                 val requiredLevel = if (semantic.endsWith(":cantrip")) 0 else 1
@@ -234,11 +254,11 @@ object SrdChoiceResolver {
                     eligible && when {
                         semantic.endsWith(":cantrip") -> spell.level == 0
                         exactLevel != null -> spell.level == exactLevel
-                        else -> spell.level in 1..maximumSpellLevel(classId, classLevel)
+                        else -> spell.level in 1..maximumSpellLevel(classId, classLevel, language)
                     }
                 }
             }
-            semantic.startsWith("beasts:") -> return SrdBeasts.availableAt(classLevel)
+            semantic.startsWith("beasts:") -> return SrdBeasts.availableAt(classLevel, language)
                 .map { form ->
                     SrdChoiceOption(
                         id = form.id,
@@ -292,7 +312,9 @@ object SrdChoiceResolver {
         val wizardCastingTimeOptions = if (
             isWizardBookFeatureChoice && choice.id.contains(":maestria-incantesimo-")
         ) {
-            wizardBookOptions.filter { it.spell?.castingTime?.trim()?.lowercase() == "azione" }
+            wizardBookOptions.filter {
+                it.spell?.castingTime?.trim()?.lowercase() == language.pick("azione", "action")
+            }
         } else {
             wizardBookOptions
         }
@@ -317,7 +339,7 @@ object SrdChoiceResolver {
             .filterNot { it.choiceId == choice.id }
             .flatMap { selection ->
                 selection.optionIds.mapNotNull { optionId ->
-                    provisionalAcquisitionBucket(selection.choiceId, optionId)
+                    provisionalAcquisitionBucket(selection.choiceId, optionId, pack)
                         ?.let { bucket -> bucket to optionId }
                 }
             }
@@ -368,11 +390,15 @@ object SrdChoiceResolver {
             .filter { it.id !in previousAncientKnowledgeFeats }
             .distinctBy { it.id }
             .sortedWith(compareBy({ it.spell?.level ?: -1 }, { it.name.lowercase() }))
-            .map { optionForId(it.id, it) }
+            .map { optionForId(it.id, it, language) }
     }
 
-    private fun maximumSpellLevel(classId: CharacterClassId, classLevel: Int): Int {
-        val level = SrdClasses.all.first { it.id == classId }.level(classLevel)
+    private fun maximumSpellLevel(
+        classId: CharacterClassId,
+        classLevel: Int,
+        language: AppLanguage,
+    ): Int {
+        val level = SrdClasses.all(language).first { it.id == classId }.level(classLevel)
         return if (level.pactSlotLevel > 0) {
             level.pactSlotLevel
         } else {
@@ -380,21 +406,31 @@ object SrdChoiceResolver {
         }
     }
 
-    private fun optionForId(id: String, element: RuleElementDefinition?): SrdChoiceOption {
-        Srd521ItContent.pack.background(id)?.let { background ->
+    private fun optionForId(
+        id: String,
+        element: RuleElementDefinition?,
+        language: AppLanguage,
+    ): SrdChoiceOption {
+        val pack = Srd521ItContent.packFor(language)
+        pack.background(id)?.let { background ->
             return SrdChoiceOption(
                 id = id,
                 label = background.name,
                 description = background.description,
-                secondaryLabel = "Background SRD · p. ${background.sourcePage}",
+                secondaryLabel = language.pick("Background SRD", "SRD background") +
+                    " · p. ${background.sourcePage}",
             )
         }
-        Srd521ItContent.pack.equipmentPackage(id)?.let { equipment ->
+        pack.equipmentPackage(id)?.let { equipment ->
             return SrdChoiceOption(
                 id = id,
                 label = equipment.name,
                 description = equipment.description,
-                secondaryLabel = if (equipment.goldPieces > 0) "${equipment.goldPieces} mo" else "Dotazione",
+                secondaryLabel = if (equipment.goldPieces > 0) {
+                    "${equipment.goldPieces} ${language.pick("mo", "gp")}"
+                } else {
+                    language.pick("Dotazione", "Equipment")
+                },
             )
         }
         if (element != null) {
@@ -406,32 +442,53 @@ object SrdChoiceResolver {
                 // a capo dove finisce la riga di codice, non dove finisce la frase.
                 description = element.description.reflowRulesText(),
                 secondaryLabel = element.spell?.let {
-                    if (it.level == 0) "Trucchetto · ${it.school}" else "${it.level}º · ${it.school}"
+                    SrdWords.of(language).spellLevelTag(it.level, it.school)
                 } ?: element.prerequisite,
                 effects = element.effects,
             )
         }
         val skill = Skill.entries.firstOrNull { skillId(it) == id }
-        if (skill != null) return SrdChoiceOption(id, skill.italianLabel, skill.ability.italianLabel)
-        SrdWeapons.byId(id)?.let { weapon ->
+        if (skill != null) {
+            return SrdChoiceOption(
+                id = id,
+                label = skill.label(language),
+                secondaryLabel = skill.ability.label(language),
+            )
+        }
+        SrdWeapons.byId(id, language)?.let { weapon ->
             return SrdChoiceOption(
                 id = id,
                 label = weapon.name,
-                description = weapon.summary,
-                secondaryLabel = weapon.damageText,
+                description = weapon.summary(language),
+                secondaryLabel = weapon.damageText(language),
             )
+        }
+        localizedToolsById[id]?.let { return toolOption(it, language) }
+        localizedLanguagesById[id]?.let { knownLanguage ->
+            return SrdChoiceOption(
+                id = id,
+                label = language.pick(knownLanguage.italian, knownLanguage.english),
+                secondaryLabel = language.pick("Lingua standard", "Standard language"),
+            )
+        }
+        damageTypesById[id]?.let { damageType ->
+            return SrdChoiceOption(id = id, label = damageType.label(language))
         }
         if (id.startsWith("srd521-it:ability:")) {
             val ability = app.d6d.rules.character.Ability.entries.firstOrNull {
                 it.name.lowercase() == id.substringAfterLast(':')
             }
-            if (ability != null) return SrdChoiceOption(id, ability.italianLabel, ability.abbreviation)
+            if (ability != null) return SrdChoiceOption(id, ability.label(language), ability.abbreviation)
         }
         if (id.startsWith("srd521-it:spell-list:")) {
+            val classId = CharacterClassId.entries.firstOrNull {
+                it.contentId == id.substringAfterLast(':')
+            }
             return SrdChoiceOption(
                 id,
-                id.substringAfterLast(':').replaceFirstChar { it.uppercase() },
-                "Lista degli incantesimi",
+                classId?.label(language)
+                    ?: id.substringAfterLast(':').replaceFirstChar { it.uppercase() },
+                language.pick("Lista degli incantesimi", "Spell list"),
             )
         }
         return SrdChoiceOption(
@@ -455,8 +512,12 @@ private fun acquisitionBucket(
     else -> null
 }
 
-private fun provisionalAcquisitionBucket(choiceId: String, optionId: String): String? {
-    val spellLevel = Srd521ItContent.pack.element(optionId)?.spell?.level
+private fun provisionalAcquisitionBucket(
+    choiceId: String,
+    optionId: String,
+    pack: app.d6d.rules.character.RulesContentPack,
+): String? {
+    val spellLevel = pack.element(optionId)?.spell?.level
     return when {
         choiceId.endsWith(":cantrips") -> "cantrip"
         choiceId.endsWith(":scoperte-magiche") ->
@@ -497,14 +558,31 @@ private fun invocationPrerequisitesMet(
     }
 }
 
-private fun toolOption(name: String) =
-    SrdChoiceOption("srd521-it:tool:${name.toContentSlug()}", name, "Competenza negli strumenti")
+private fun toolOption(tool: LocalizedTool, language: AppLanguage) =
+    SrdChoiceOption(
+        tool.id,
+        language.pick(tool.italian, tool.english),
+        SrdWords.of(language).toolProficiency,
+    )
+
+private fun toolOptions(
+    tools: List<LocalizedTool>,
+    language: AppLanguage,
+    unavailableIds: Set<String>,
+    ownedLabels: String,
+): List<SrdChoiceOption> = tools
+    .filter { tool ->
+        tool.id !in unavailableIds &&
+            !ownedLabels.containsListedEntry(tool.italian) &&
+            !ownedLabels.containsListedEntry(tool.english)
+    }
+    .map { toolOption(it, language) }
 
 private fun String.containsListedEntry(label: String): Boolean =
     split(',', ';', '\n').any { it.trim().equals(label, ignoreCase = true) }
 
-private fun weaponOption(weapon: WeaponDefinition) =
-    SrdChoiceOption(weapon.id, weapon.name, weapon.summary, weapon.mastery)
+private fun weaponOption(weapon: WeaponDefinition, language: AppLanguage) =
+    SrdChoiceOption(weapon.id, weapon.name, weapon.summary(language), weapon.mastery)
 
 private val magicalDiscoveryClasses = setOf(
     CharacterClassId.CLERIC,
@@ -543,26 +621,107 @@ private val repeatableIds = setOf(
     "srd521-it:feature:warlock:lancia-occulta",
 )
 
+private data class LocalizedTool(val italian: String, val english: String) {
+    val id: String get() = "srd521-it:tool:${italian.toContentSlug()}"
+
+    fun name(language: AppLanguage): String = language.pick(italian, english)
+}
+
 private val artisanTools = listOf(
-    "Scorte da alchimista", "Scorte da birraio", "Scorte da calligrafo",
-    "Strumenti da falegname", "Strumenti da cartografo", "Strumenti da calzolaio",
-    "Utensili da cuoco", "Strumenti da soffiatore", "Strumenti da gioielliere",
-    "Strumenti da conciatore", "Strumenti da muratore", "Strumenti da pittore",
-    "Strumenti da vasaio", "Strumenti da fabbro", "Strumenti da inventore",
-    "Strumenti da tessitore", "Strumenti da intagliatore",
+    LocalizedTool("Scorte da alchimista", "Alchemist's Supplies"),
+    LocalizedTool("Scorte da birraio", "Brewer's Supplies"),
+    LocalizedTool("Scorte da calligrafo", "Calligrapher's Supplies"),
+    LocalizedTool("Strumenti da falegname", "Carpenter's Tools"),
+    LocalizedTool("Strumenti da cartografo", "Cartographer's Tools"),
+    LocalizedTool("Strumenti da calzolaio", "Cobbler's Tools"),
+    LocalizedTool("Utensili da cuoco", "Cook's Utensils"),
+    LocalizedTool("Strumenti da soffiatore", "Glassblower's Tools"),
+    LocalizedTool("Strumenti da gioielliere", "Jeweler's Tools"),
+    LocalizedTool("Strumenti da conciatore", "Leatherworker's Tools"),
+    LocalizedTool("Strumenti da muratore", "Mason's Tools"),
+    LocalizedTool("Strumenti da pittore", "Painter's Supplies"),
+    LocalizedTool("Strumenti da vasaio", "Potter's Tools"),
+    LocalizedTool("Strumenti da fabbro", "Smith's Tools"),
+    LocalizedTool("Strumenti da inventore", "Tinker's Tools"),
+    LocalizedTool("Strumenti da tessitore", "Weaver's Tools"),
+    LocalizedTool("Strumenti da intagliatore", "Woodcarver's Tools"),
 )
 
 private val musicalInstruments = listOf(
-    "Cornamusa", "Tamburo", "Dulcimer", "Flauto", "Corno",
-    "Liuto", "Lira", "Flauto di Pan", "Ciaramella", "Viola",
+    LocalizedTool("Cornamusa", "Bagpipes"), LocalizedTool("Tamburo", "Drum"),
+    LocalizedTool("Dulcimer", "Dulcimer"), LocalizedTool("Flauto", "Flute"),
+    LocalizedTool("Corno", "Horn"), LocalizedTool("Liuto", "Lute"),
+    LocalizedTool("Lira", "Lyre"), LocalizedTool("Flauto di Pan", "Pan Flute"),
+    LocalizedTool("Ciaramella", "Shawm"), LocalizedTool("Viola", "Viol"),
 )
 
 private val otherTools = listOf(
-    "Arnesi da scasso", "Arnesi da falsario", "Borsa da erborista",
-    "Sostanze da avvelenatore", "Strumenti da navigatore", "Trucchi per il camuffamento",
-    "Dadi", "Scacchi dei draghi", "Carte da gioco", "Tre draghi al buio",
+    LocalizedTool("Arnesi da scasso", "Thieves' Tools"),
+    LocalizedTool("Arnesi da falsario", "Forgery Kit"),
+    LocalizedTool("Borsa da erborista", "Herbalism Kit"),
+    LocalizedTool("Sostanze da avvelenatore", "Poisoner's Kit"),
+    LocalizedTool("Strumenti da navigatore", "Navigator's Tools"),
+    LocalizedTool("Trucchi per il camuffamento", "Disguise Kit"),
+    LocalizedTool("Dadi", "Dice Set"), LocalizedTool("Scacchi dei draghi", "Dragonchess Set"),
+    LocalizedTool("Carte da gioco", "Playing Card Set"),
+    LocalizedTool("Tre draghi al buio", "Three-Dragon Ante Set"),
 )
 
 private val gamingSets = listOf(
-    "Dadi", "Scacchi dei draghi", "Carte da gioco", "Tre draghi al buio",
+    LocalizedTool("Dadi", "Dice Set"), LocalizedTool("Scacchi dei draghi", "Dragonchess Set"),
+    LocalizedTool("Carte da gioco", "Playing Card Set"),
+    LocalizedTool("Tre draghi al buio", "Three-Dragon Ante Set"),
 )
+
+private val localizedToolsById: Map<String, LocalizedTool> =
+    (artisanTools + musicalInstruments + otherTools + gamingSets)
+        .distinctBy { it.id }
+        .associateBy { it.id }
+
+private data class LocalizedLanguage(val italian: String, val english: String) {
+    val id: String get() = "srd521-it:language:${italian.toContentSlug()}"
+
+    fun name(language: AppLanguage): String = language.pick(italian, english)
+}
+
+private val localizedLanguagesById: Map<String, LocalizedLanguage> = listOf(
+    LocalizedLanguage("Comune", "Common"),
+    LocalizedLanguage("Lingua dei Segni Comune", "Common Sign Language"),
+    LocalizedLanguage("Draconico", "Draconic"),
+    LocalizedLanguage("Nanico", "Dwarvish"),
+    LocalizedLanguage("Elfico", "Elvish"),
+    LocalizedLanguage("Gigante", "Giant"),
+    LocalizedLanguage("Gnomesco", "Gnomish"),
+    LocalizedLanguage("Goblin", "Goblin"),
+    LocalizedLanguage("Halfling", "Halfling"),
+    LocalizedLanguage("Orchesco", "Orc"),
+).associateBy { it.id }
+
+private val damageTypesById = mapOf(
+    "srd521-it:damage:acido" to DamageType.ACID,
+    "srd521-it:damage:contundente" to DamageType.BLUDGEONING,
+    "srd521-it:damage:freddo" to DamageType.COLD,
+    "srd521-it:damage:fuoco" to DamageType.FIRE,
+    "srd521-it:damage:fulmine" to DamageType.LIGHTNING,
+    "srd521-it:damage:necrotico" to DamageType.NECROTIC,
+    "srd521-it:damage:perforante" to DamageType.PIERCING,
+    "srd521-it:damage:veleno" to DamageType.POISON,
+    "srd521-it:damage:psichico" to DamageType.PSYCHIC,
+    "srd521-it:damage:radioso" to DamageType.RADIANT,
+    "srd521-it:damage:tagliente" to DamageType.SLASHING,
+    "srd521-it:damage:tuono" to DamageType.THUNDER,
+)
+
+/**
+ * Strumenti e lingue, dal nome in una lingua a quello nell'altra.
+ *
+ * Il vocabolario e' gia' bilingue e con identificativi stabili; questa e' la
+ * porta con cui lo raggiunge chi deve riportare nella lingua corrente una scheda
+ * scritta in quella precedente. Espone le corrispondenze, non le strutture:
+ * cosi' l'elenco resta libero di cambiare forma.
+ */
+fun srdToolAndLanguageNames(source: AppLanguage, target: AppLanguage): Map<String, String> =
+    buildMap {
+        localizedToolsById.values.forEach { put(it.name(source), it.name(target)) }
+        localizedLanguagesById.values.forEach { put(it.name(source), it.name(target)) }
+    }.filterKeys { it.isNotBlank() }

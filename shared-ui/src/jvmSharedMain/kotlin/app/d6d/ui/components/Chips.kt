@@ -13,28 +13,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.ConditionType
+import app.d6d.i18n.label
+import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.theme.Palette
-
-/** Nome italiano delle condizioni. Le quindici dello SRD piu' il caso personalizzato. */
-val ConditionType.italianLabel: String
-    get() = when (this) {
-        ConditionType.BLINDED -> "Accecato"
-        ConditionType.CHARMED -> "Affascinato"
-        ConditionType.DEAFENED -> "Assordato"
-        ConditionType.EXHAUSTION -> "Sfinimento"
-        ConditionType.FRIGHTENED -> "Spaventato"
-        ConditionType.GRAPPLED -> "Afferrato"
-        ConditionType.INCAPACITATED -> "Incapacitato"
-        ConditionType.INVISIBLE -> "Invisibile"
-        ConditionType.PARALYZED -> "Paralizzato"
-        ConditionType.PETRIFIED -> "Pietrificato"
-        ConditionType.POISONED -> "Avvelenato"
-        ConditionType.PRONE -> "Prono"
-        ConditionType.RESTRAINED -> "Trattenuto"
-        ConditionType.STUNNED -> "Stordito"
-        ConditionType.UNCONSCIOUS -> "Privo di sensi"
-        ConditionType.CUSTOM -> "Personalizzata"
-    }
 
 /** Glifo compatto, per leggere le condizioni a colpo d'occhio nelle barre laterali. */
 val ConditionType.glyph: String
@@ -92,7 +73,7 @@ fun Chip(
 fun ConditionChip(type: ConditionType, rounds: Int = 0, modifier: Modifier = Modifier) {
     val color = if (type.severe) Palette.Critical else Palette.Bloodied
     val suffix = if (rounds > 0) " ${rounds}r" else ""
-    Chip(text = "${type.glyph} ${type.italianLabel}$suffix", color = color, modifier = modifier)
+    Chip(text = "${type.glyph} ${type.label(currentLanguage)}$suffix", color = color, modifier = modifier)
 }
 
 @Composable

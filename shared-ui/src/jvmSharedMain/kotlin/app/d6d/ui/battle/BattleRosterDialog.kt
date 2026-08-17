@@ -39,6 +39,7 @@ import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.OrnateDivider
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
@@ -56,9 +57,10 @@ fun BattleRosterDialog(
 ) {
     if (!open) return
 
+    val words = strings.battle
     val party = targetFaction == Faction.PARTY
     val accent = if (party) Palette.Party else Palette.Enemy
-    val destination = if (party) "Squadra" else "Nemici"
+    val destination = if (party) strings.battle.squad else strings.battle.enemies
     val people = roster.items.filter { it.kind == RosterKind.PERSONAGGIO }
     val creatures = roster.items.filter { it.kind == RosterKind.CREATURA }
 
@@ -89,7 +91,7 @@ fun BattleRosterDialog(
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            "Aggiungi a $destination",
+                            words.addTo(destination),
                             color = Palette.Text,
                             fontWeight = FontWeight.Black,
                             maxLines = 1,
@@ -97,12 +99,12 @@ fun BattleRosterDialog(
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            "Scegli una voce dal Grimorio o creane una nuova nel Compendio.",
+                            words.pickFromGrimoireOrCreate,
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    GameButton("Chiudi", accent = Palette.TextMuted, onClick = onDismiss)
+                    GameButton(strings.common.close, accent = Palette.TextMuted, onClick = onDismiss)
                 }
                 OrnateDivider(color = accent.copy(alpha = 0.65f))
 
@@ -110,8 +112,8 @@ fun BattleRosterDialog(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    GameButton("+ Personaggio", accent = Palette.Party, onClick = onCreateCharacter)
-                    GameButton("+ Creatura", accent = Palette.Enemy, onClick = onCreateCreature)
+                    GameButton(words.addCharacter, accent = Palette.Party, onClick = onCreateCharacter)
+                    GameButton(words.addCreature, accent = Palette.Enemy, onClick = onCreateCreature)
                 }
 
                 val listState = rememberLazyListState()
@@ -122,29 +124,29 @@ fun BattleRosterDialog(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         if (people.isNotEmpty()) {
-                            item { Eyebrow("Personaggi (${people.size})", color = Palette.Party) }
+                            item { Eyebrow(words.charactersCount(people.size), color = Palette.Party) }
                             items(people, key = { it.id }) { item ->
                                 RosterCombatantRow(item, Palette.Party) {
                                     roster.definitionFor(item.id)?.let { actor ->
                                         if (viewModel.addRosterCombatant(actor, party) != null) onDismiss()
-                                    } ?: viewModel.showMessage("La scheda «${item.name}» non è disponibile.")
+                                    } ?: viewModel.showMessage(words.sheetUnavailable(item.name))
                                 }
                             }
                         }
                         if (creatures.isNotEmpty()) {
-                            item { Eyebrow("Creature (${creatures.size})", color = Palette.Enemy) }
+                            item { Eyebrow(words.creaturesCount(creatures.size), color = Palette.Enemy) }
                             items(creatures, key = { it.id }) { item ->
                                 RosterCombatantRow(item, Palette.Enemy) {
                                     roster.definitionFor(item.id)?.let { actor ->
                                         if (viewModel.addRosterCombatant(actor, party) != null) onDismiss()
-                                    } ?: viewModel.showMessage("La scheda «${item.name}» non è disponibile.")
+                                    } ?: viewModel.showMessage(words.sheetUnavailable(item.name))
                                 }
                             }
                         }
                         if (people.isEmpty() && creatures.isEmpty()) {
                             item {
                                 Text(
-                                    "Il Grimorio è vuoto: crea prima un personaggio o una creatura.",
+                                    words.grimoireEmpty,
                                     color = Palette.TextMuted,
                                     style = MaterialTheme.typography.bodySmall,
                                 )
@@ -185,6 +187,6 @@ private fun RosterCombatantRow(
             )
             Chip(item.subtitle, accent)
         }
-        GameButton("Aggiungi", accent = accent, dense = true, onClick = onClick)
+        GameButton(strings.common.add, accent = accent, dense = true, onClick = onClick)
     }
 }

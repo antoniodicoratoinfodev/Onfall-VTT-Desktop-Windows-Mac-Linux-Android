@@ -4,6 +4,7 @@ import app.d6d.sheet.ImageStore
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -21,6 +22,16 @@ class PortraitRepositoryTest {
         // PNG completo 1×1: oltre ai controlli dell'archivio può essere decodificato
         // davvero dai test della cache Compose.
         ImageIO.write(BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB), "png", source.toFile())
+    }
+
+    @Test
+    fun `il cambio lingua scarta un messaggio gia risolto`() {
+        val repository = PortraitRepository(ImageStore(directory.resolve("dati")))
+        repository.message = "Ritratto assegnato."
+
+        repository.onLanguageChanged()
+
+        assertNull(repository.message)
     }
 
     @Test

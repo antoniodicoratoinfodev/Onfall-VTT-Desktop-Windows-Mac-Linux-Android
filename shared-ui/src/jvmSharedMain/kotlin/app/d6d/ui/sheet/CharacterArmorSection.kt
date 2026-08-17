@@ -27,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import app.d6d.sheet.metresLabel
 import app.d6d.rules.character.EffectTarget
 import app.d6d.sheet.Ability
 import app.d6d.sheet.ArmorCategory
@@ -38,6 +37,14 @@ import app.d6d.sheet.ArmorSpecialRule
 import app.d6d.sheet.CharacterSheet
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.abbreviationIn
+import app.d6d.i18n.pick
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.sheet.i18n.label
+import app.d6d.ui.i18n.SheetStrings
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 
 // --- classe armatura ---------------------------------------------------------------
@@ -56,7 +63,9 @@ internal fun ArmorClassSection(
     compact: Boolean,
     update: (CharacterSheet) -> Unit,
 ) {
-    SheetBox("Calcolo della classe armatura", Modifier.fillMaxWidth()) {
+    val language = currentLanguage
+    val words = strings.sheet
+    SheetBox(words.armorClassCalculation, Modifier.fillMaxWidth()) {
         sheet.armorClassOverride?.let { override ->
             Column(
                 Modifier
@@ -67,13 +76,12 @@ internal fun ArmorClassSection(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    "Override attivo: la CA $override sostituisce temporaneamente il calcolo " +
-                        "senza cancellarne i dettagli.",
+                    words.overrideActive(override),
                     color = Palette.Text,
                     style = MaterialTheme.typography.bodySmall,
                 )
                 GameButton(
-                    "Ripristina CA calcolata (${sheet.calculatedArmorClass})",
+                    words.restoreCalculatedArmorClass(sheet.calculatedArmorClass),
                     accent = Palette.Bloodied,
                     dense = !compact,
                     onClick = { update(sheet.copy(armorClassOverride = null)) },
@@ -100,16 +108,16 @@ internal fun ArmorClassSection(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            Chip("CA base ${sheet.baseArmorClass}", Palette.Party)
+            Chip(words.baseArmorClass(sheet.baseArmorClass), Palette.Party)
             if (sheet.armorClassMethod != ArmorClassMethod.MANUAL_TOTAL) {
-                Chip("Modificatori ${signed(sheet.armorClassAdjustmentTotal)}", Palette.Gold)
-                Chip("CA calcolata ${sheet.calculatedArmorClass}", Palette.Heal)
+                Chip(words.armorClassModifiers(signed(sheet.armorClassAdjustmentTotal)), Palette.Gold)
+                Chip(words.calculatedArmorClass(sheet.calculatedArmorClass), Palette.Heal)
             }
-            sheet.armorClassOverride?.let { Chip("Override $it", Palette.Bloodied) }
+            sheet.armorClassOverride?.let { Chip(words.overrideValue(it), Palette.Bloodied) }
         }
 
         Text(
-            armorClassFormula(sheet),
+            armorClassFormula(sheet, words, language),
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -118,6 +126,8 @@ internal fun ArmorClassSection(
 
 @Composable
 private fun ArmorRuleWarnings(sheet: CharacterSheet) {
+    val words = strings.sheet
+    val language = currentLanguage
     val missingTraining = sheet.wearingArmorWithoutTraining
     val insufficientStrength = sheet.armorStrengthRequirementNotMet
     val stealthDisadvantage = sheet.armorStealthDisadvantage
@@ -133,9 +143,9 @@ private fun ArmorRuleWarnings(sheet: CharacterSheet) {
     ) {
         if (missingTraining) {
             Text(
-                "Manca la competenza in ${sheet.wornArmorCategory?.italianLabel}. " +
-                    "Svantaggio a tutte le prove d20 relative a Forza o Destrezza; " +
-                    "il lancio degli incantesimi è bloccato.",
+                words.missingArmorProficiency(
+                    sheet.wornArmorCategory?.label(language).orEmpty(),
+                ),
                 color = Palette.Bloodied,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.bodySmall,
@@ -143,16 +153,18 @@ private fun ArmorRuleWarnings(sheet: CharacterSheet) {
         }
         if (insufficientStrength) {
             Text(
-                "Forza ${sheet.score(Ability.STRENGTH)} inferiore al requisito " +
-                    "${sheet.effectiveArmorMinimumStrength}: velocità ridotta di 3 m " +
-                    "(${metresLabel(sheet.armorSpeedPenaltyFeet)}).",
+                words.strengthBelowRequirement(
+                    sheet.score(Ability.STRENGTH),
+                    sheet.effectiveArmorMinimumStrength,
+                    distanceLabel(sheet.armorSpeedPenaltyFeet, language),
+                ),
                 color = Palette.Bloodied,
                 style = MaterialTheme.typography.bodySmall,
             )
         }
         if (stealthDisadvantage) {
             Text(
-                "Questa armatura impone svantaggio alle prove di Destrezza (Furtività).",
+                words.stealthDisadvantageWarning,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -167,6 +179,8 @@ private fun ArmorClassBaseEditor(
     update: (CharacterSheet) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val language = currentLanguage
+    val words = strings.sheet
     Column(
         modifier
             .background(Palette.Night, RoundedCornerShape(7.dp))
@@ -174,7 +188,7 @@ private fun ArmorClassBaseEditor(
             .padding(9.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Text("METODO BASE", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+        Text(words.baseMethodCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
         ArmorClassMethodSelector(
             selected = sheet.armorClassMethod,
             compact = compact,
@@ -227,7 +241,7 @@ private fun ArmorClassBaseEditor(
 
         when (sheet.armorClassMethod) {
             ArmorClassMethod.MANUAL_TOTAL -> {
-                SheetNumberField("CA finale manuale", sheet.armorClass) {
+                SheetNumberField(words.manualFinalArmorClass, sheet.armorClass) {
                     update(
                         sheet.copy(
                             armorClass = it.coerceAtLeast(0),
@@ -236,10 +250,9 @@ private fun ArmorClassBaseEditor(
                     )
                 }
                 Text(
-                    "Il valore viene usato esattamente com'è: scudo e altri modificatori " +
-                        "non vengono sommati una seconda volta." +
+                    words.manualFinalHint +
                         if (sheet.effectiveArmorSpecialRule == ArmorSpecialRule.ELVEN_CHAIN) {
-                            " Deve quindi comprendere anche il +1 del giaco elfico."
+                            words.elvenChainManualHint
                         } else {
                             ""
                         },
@@ -249,7 +262,7 @@ private fun ArmorClassBaseEditor(
             }
 
             ArmorClassMethod.CUSTOM_BASE -> {
-                SheetNumberField("Valore iniziale della base", sheet.armorClass) {
+                SheetNumberField(words.baseStartingValue, sheet.armorClass) {
                     update(
                         sheet.copy(
                             armorClass = it.coerceAtLeast(0),
@@ -301,7 +314,7 @@ private fun ArmorClassBaseEditor(
             sheet.manualArmorCategory?.let {
                 if (sheet.manualArmorCategory == ArmorCategory.HEAVY) {
                     SheetNumberField(
-                        "Requisito di Forza dell'armatura (0 = nessuno)",
+                        words.armorStrengthRequirement,
                         sheet.manualArmorMinimumStrength,
                     ) {
                         update(
@@ -313,7 +326,7 @@ private fun ArmorClassBaseEditor(
                     }
                 }
                 SheetCheck(
-                    "Svantaggio a Destrezza (Furtività)",
+                    words.stealthDisadvantage,
                     sheet.manualArmorStealthDisadvantage,
                 ) {
                     update(
@@ -331,19 +344,18 @@ private fun ArmorClassBaseEditor(
                 update(sheet.copy(armorSpecialRule = specialRule, armorClassOverride = null))
             }
             Text(
-                "Equipaggiamento SRD: ${sheet.armorDonMinutes} min per indossare, " +
-                    "${sheet.armorDoffMinutes} min per togliere.",
+                words.donDoffMinutes(sheet.armorDonMinutes, sheet.armorDoffMinutes),
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
             when (sheet.effectiveArmorSpecialRule) {
                 ArmorSpecialRule.MITHRAL -> Text(
-                    "Mithral: nessun requisito di Forza e nessuno svantaggio a Furtività.",
+                    words.mithralNote,
                     color = Palette.Heal,
                     style = MaterialTheme.typography.bodySmall,
                 )
                 ArmorSpecialRule.ELVEN_CHAIN -> Text(
-                    "Giaco elfico: +1 alla CA e competenza garantita in questa armatura.",
+                    words.elvenChainNote,
                     color = Palette.Heal,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -352,7 +364,7 @@ private fun ArmorClassBaseEditor(
         }
 
         Text(
-            armorClassBaseFormula(sheet),
+            armorClassBaseFormula(sheet, words, language),
             color = Palette.Party,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodySmall,
@@ -366,10 +378,11 @@ private fun ArmorClassMethodSelector(
     compact: Boolean,
     onSelect: (ArmorClassMethod) -> Unit,
 ) {
+    val language = currentLanguage
     var expanded by remember { mutableStateOf(false) }
     Box {
         GameButton(
-            label = selected.italianLabel,
+            label = selected.label(language),
             accent = Palette.Party,
             selected = true,
             dense = !compact,
@@ -387,7 +400,7 @@ private fun ArmorClassMethodSelector(
                 DropdownMenuItem(
                     text = {
                         Text(
-                            method.italianLabel,
+                            method.label(language),
                             color = if (method == selected) Palette.GoldBright else Palette.Text,
                         )
                     },
@@ -407,12 +420,14 @@ private fun ArmorClassDexteritySelector(
     compact: Boolean,
     onSelect: (ArmorClassDexterity) -> Unit,
 ) {
+    val words = strings.sheet
+    val language = currentLanguage
     var expanded by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("CONTRIBUTO DI DESTREZZA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(words.dexterityContributionCaps, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         Box {
             GameButton(
-                label = selected.italianLabel,
+                label = selected.label(language),
                 accent = Palette.TextMuted,
                 dense = !compact,
                 onClick = { expanded = true },
@@ -424,7 +439,7 @@ private fun ArmorClassDexteritySelector(
             ) {
                 ArmorClassDexterity.entries.forEach { rule ->
                     DropdownMenuItem(
-                        text = { Text(rule.italianLabel, color = Palette.Text) },
+                        text = { Text(rule.label(language), color = Palette.Text) },
                         onClick = {
                             expanded = false
                             onSelect(rule)
@@ -442,12 +457,14 @@ private fun ArmorCategorySelector(
     compact: Boolean,
     onSelect: (ArmorCategory?) -> Unit,
 ) {
+    val words = strings.sheet
+    val language = currentLanguage
     var expanded by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("ARMATURA REALMENTE INDOSSATA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(words.wornArmorCaps, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         Box {
             GameButton(
-                label = selected?.italianLabel?.replaceFirstChar { it.uppercase() } ?: "Nessuna armatura",
+                label = selected?.label(language)?.replaceFirstChar { it.uppercase() } ?: words.noArmor,
                 accent = Palette.Party,
                 dense = !compact,
                 onClick = { expanded = true },
@@ -461,7 +478,7 @@ private fun ArmorCategorySelector(
                     DropdownMenuItem(
                         text = {
                             Text(
-                                category?.italianLabel?.replaceFirstChar { it.uppercase() } ?: "Nessuna armatura",
+                                category?.label(language)?.replaceFirstChar { it.uppercase() } ?: words.noArmor,
                                 color = Palette.Text,
                             )
                         },
@@ -482,15 +499,17 @@ private fun ArmorSpecialRuleSelector(
     compact: Boolean,
     onSelect: (ArmorSpecialRule) -> Unit,
 ) {
+    val words = strings.sheet
+    val language = currentLanguage
     val choices = ArmorSpecialRule.entries.filter { rule ->
         sheet.copy(armorSpecialRule = rule).effectiveArmorSpecialRule == rule
     }
     var expanded by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("VARIANTE DELL'ARMATURA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(words.armorVariantCaps, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         Box {
             GameButton(
-                label = sheet.effectiveArmorSpecialRule.italianLabel,
+                label = sheet.effectiveArmorSpecialRule.label(language),
                 accent = Palette.Heal,
                 dense = !compact,
                 onClick = { expanded = true },
@@ -502,7 +521,7 @@ private fun ArmorSpecialRuleSelector(
             ) {
                 choices.forEach { rule ->
                     DropdownMenuItem(
-                        text = { Text(rule.italianLabel, color = Palette.Text) },
+                        text = { Text(rule.label(language), color = Palette.Text) },
                         onClick = {
                             expanded = false
                             onSelect(rule)
@@ -528,6 +547,7 @@ private fun ArmorClassAdjustmentsEditor(
     update: (CharacterSheet) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.sheet
     Column(
         modifier
             .background(Palette.Night, RoundedCornerShape(7.dp))
@@ -535,28 +555,28 @@ private fun ArmorClassAdjustmentsEditor(
             .padding(9.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Text("MODIFICATORI ALLA CA", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+        Text(words.armorClassModifiersCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
 
         SheetCheck(
             label = when {
-                !sheet.shieldEquipped -> "Scudo non equipaggiato"
+                !sheet.shieldEquipped -> words.shieldNotEquipped
                 sheet.armorClassMethod == ArmorClassMethod.MANUAL_TOTAL ->
-                    "Scudo equipaggiato · già compreso nella CA manuale"
-                sheet.armorTraining.shields -> "Scudo equipaggiato · +2"
-                else -> "Scudo equipaggiato · +0 (manca competenza)"
+                    words.shieldAlreadyInManual
+                sheet.armorTraining.shields -> words.shieldEquipped
+                else -> words.shieldWithoutProficiency
             },
             checked = sheet.shieldEquipped,
         ) {
             update(sheet.copy(shieldEquipped = it, armorClassOverride = null))
         }
         Text(
-            "Indossare o togliere lo scudo richiede un'azione di Utilizzo.",
+            words.shieldActionNote,
             color = Palette.TextMuted,
             style = MaterialTheme.typography.labelSmall,
         )
         if (sheet.shieldEquipped && !sheet.armorTraining.shields) {
             Text(
-                "Il bonus dello scudo richiede competenza negli scudi.",
+                words.shieldNeedsProficiency,
                 color = Palette.Bloodied,
                 style = MaterialTheme.typography.labelSmall,
             )
@@ -564,8 +584,7 @@ private fun ArmorClassAdjustmentsEditor(
 
         if (sheet.armorClassMethod == ArmorClassMethod.MANUAL_TOTAL) {
             Text(
-                "La CA manuale è già il totale finale. Scegli un altro metodo base per " +
-                    "gestire separatamente scudo, bonus e penalità.",
+                words.manualTotalNote,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -576,7 +595,7 @@ private fun ArmorClassAdjustmentsEditor(
         // mostrano perche' chi legge la CA possa risalire a chi la produce.
         sheet.activeEffects(EffectTarget.ARMOR_CLASS).forEach { effect ->
             Text(
-                text = "◆ ${effect.source} · ${effect.readableText()}",
+                text = words.effectRow(effect.source, effect.readableText(strings)),
                 color = Palette.Heal,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -584,8 +603,7 @@ private fun ArmorClassAdjustmentsEditor(
 
         if (sheet.armorClassAdjustments.isEmpty()) {
             Text(
-                "Nessun altro modificatore. Puoi aggiungere oggetti magici, privilegi, " +
-                    "incantesimi o penalità.",
+                words.noOtherModifier,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -621,12 +639,12 @@ private fun ArmorClassAdjustmentsEditor(
         }
 
         GameButton(
-            label = "+ Aggiungi modificatore",
+            label = words.addModifier,
             accent = Palette.Party,
             dense = !compact,
             onClick = {
                 val adjustment = ArmorClassAdjustment(
-                    source = "Nuovo modificatore",
+                    source = words.newModifier,
                     id = "ca-${System.nanoTime()}-${sheet.armorClassAdjustments.size}",
                 )
                 update(
@@ -647,6 +665,8 @@ private fun ArmorClassAdjustmentRow(
     onChange: (ArmorClassAdjustment) -> Unit,
     onRemove: () -> Unit,
 ) {
+    val words = strings.sheet
+    val language = currentLanguage
     val container = Modifier
         .fillMaxWidth()
         .background(Palette.Surface, RoundedCornerShape(6.dp))
@@ -659,16 +679,18 @@ private fun ArmorClassAdjustmentRow(
 
     if (compact) {
         Column(container, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            SheetField("Fonte", adjustment.source) { onChange(adjustment.copy(source = it)) }
+            SheetField(language.pick("Fonte", "Source"), adjustment.source) {
+                onChange(adjustment.copy(source = it))
+            }
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SheetCheck("Attivo", adjustment.active, Modifier.weight(1f)) {
+                SheetCheck(strings.sheet.activeLabel, adjustment.active, Modifier.weight(1f)) {
                     onChange(adjustment.copy(active = it))
                 }
-                SheetNumberField("Bonus/penalità", adjustment.value, Modifier.width(92.dp)) {
+                SheetNumberField(words.bonusOrPenalty, adjustment.value, Modifier.width(92.dp)) {
                     onChange(adjustment.copy(value = it))
                 }
                 GameButton("−1", dense = false, accent = Palette.TextMuted, onClick = {
@@ -678,7 +700,7 @@ private fun ArmorClassAdjustmentRow(
                     onChange(adjustment.copy(value = adjustment.value + 1))
                 })
             }
-            GameButton("Rimuovi", accent = Palette.Enemy, onClick = onRemove)
+            GameButton(strings.common.remove, accent = Palette.Enemy, onClick = onRemove)
         }
     } else {
         Row(
@@ -686,27 +708,31 @@ private fun ArmorClassAdjustmentRow(
             horizontalArrangement = Arrangement.spacedBy(7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SheetCheck("Attivo", adjustment.active) { onChange(adjustment.copy(active = it)) }
-            SheetField("Fonte", adjustment.source, Modifier.weight(1f)) {
+            SheetCheck(strings.sheet.activeLabel, adjustment.active) { onChange(adjustment.copy(active = it)) }
+            SheetField(language.pick("Fonte", "Source"), adjustment.source, Modifier.weight(1f)) {
                 onChange(adjustment.copy(source = it))
             }
             GameButton("−", dense = true, accent = Palette.TextMuted, onClick = {
                 onChange(adjustment.copy(value = adjustment.value - 1))
             })
-            SheetNumberField("Bonus/penalità", adjustment.value, Modifier.width(90.dp)) {
+            SheetNumberField(words.bonusOrPenalty, adjustment.value, Modifier.width(90.dp)) {
                 onChange(adjustment.copy(value = it))
             }
             GameButton("+", dense = true, accent = Palette.TextMuted, onClick = {
                 onChange(adjustment.copy(value = adjustment.value + 1))
             })
-            GameButton("Rimuovi", dense = true, accent = Palette.Enemy, onClick = onRemove)
+            GameButton(strings.common.remove, dense = true, accent = Palette.Enemy, onClick = onRemove)
         }
     }
 }
 
-private fun armorClassBaseFormula(sheet: CharacterSheet): String {
+private fun armorClassBaseFormula(
+    sheet: CharacterSheet,
+    words: SheetStrings,
+    language: AppLanguage,
+): String {
     if (sheet.armorClassMethod == ArmorClassMethod.MANUAL_TOTAL) {
-        return "CA finale inserita manualmente: ${sheet.armorClass}"
+        return words.manualFinalArmorClassIs(sheet.armorClass)
     }
     val base = if (sheet.armorClassMethod == ArmorClassMethod.CUSTOM_BASE) {
         sheet.armorClass
@@ -721,32 +747,41 @@ private fun armorClassBaseFormula(sheet: CharacterSheet): String {
     val dexterity = sheet.modifier(Ability.DEXTERITY)
     val contribution = rule.contribution(dexterity)
     val detail = when (rule) {
-        ArmorClassDexterity.FULL -> "$base + DES (${signed(dexterity)})"
-        ArmorClassDexterity.MAX_TWO -> "$base + DES (${signed(contribution)}, massimo +2)"
-        ArmorClassDexterity.NONE -> "$base, senza Destrezza"
+        ArmorClassDexterity.FULL -> words.baseWithFullDexterity(base, signed(dexterity))
+        ArmorClassDexterity.MAX_TWO -> words.baseWithCappedDexterity(base, signed(contribution))
+        ArmorClassDexterity.NONE -> words.baseWithoutDexterity(base)
     }
     val secondary = sheet.armorClassMethod.secondaryAbility?.let { ability ->
-        " + ${ability.abbreviation} (${signed(sheet.modifier(ability))})"
+        words.plusSecondaryAbility(ability.abbreviationIn(language), signed(sheet.modifier(ability)))
     }.orEmpty()
-    return "$detail$secondary = CA base ${sheet.baseArmorClass}"
+    return words.equalsBaseArmorClass(detail, secondary, sheet.baseArmorClass)
 }
 
-private fun armorClassFormula(sheet: CharacterSheet): String {
+private fun armorClassFormula(
+    sheet: CharacterSheet,
+    words: SheetStrings,
+    language: AppLanguage,
+): String {
     if (sheet.armorClassMethod == ArmorClassMethod.MANUAL_TOTAL) {
-        return "CA attuale = CA finale manuale ${sheet.armorClass}" +
-            (sheet.armorClassOverride?.let { " · override $it" } ?: "")
+        return words.manualFinalArmorClassIs(sheet.armorClass) +
+            (sheet.armorClassOverride?.let { words.overrideSuffix(it) } ?: "")
     }
     val pieces = buildList {
-        add("CA base ${sheet.baseArmorClass}")
-        if (sheet.shieldArmorClassBonus != 0) add("scudo ${signed(sheet.shieldArmorClassBonus)}")
+        add(words.baseArmorClass(sheet.baseArmorClass))
+        if (sheet.shieldArmorClassBonus != 0) add(words.shieldRow(signed(sheet.shieldArmorClassBonus)))
         if (sheet.armorSpecialArmorClassBonus != 0) {
-            add("${sheet.effectiveArmorSpecialRule.italianLabel} ${signed(sheet.armorSpecialArmorClassBonus)}")
+            add(
+                words.armorRuleRow(
+                    sheet.effectiveArmorSpecialRule.label(language),
+                    signed(sheet.armorSpecialArmorClassBonus),
+                ),
+            )
         }
         sheet.armorClassAdjustments
             .filter { it.active && it.value != 0 }
-            .forEach { add("${it.source.ifBlank { "Modificatore" }} ${signed(it.value)}") }
+            .forEach { add("${it.source.ifBlank { words.unnamedModifier }} ${signed(it.value)}") }
     }
-    return pieces.joinToString(" · ") + " = CA calcolata ${sheet.calculatedArmorClass}" +
-        (sheet.armorClassOverride?.let { " · CA attuale $it (override)" } ?: "")
+    return pieces.joinToString(" · ") +
+        words.equalsCalculatedArmorClass(sheet.calculatedArmorClass) +
+        (sheet.armorClassOverride?.let { words.currentArmorClassOverride(it) } ?: "")
 }
-

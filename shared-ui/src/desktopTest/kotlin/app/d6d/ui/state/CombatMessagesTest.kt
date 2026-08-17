@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import app.d6d.i18n.AppLanguage
+import app.d6d.ui.i18n.ItalianStrings
 
 /**
  * I rifiuti del motore arrivano al tavolo in italiano.
@@ -105,11 +107,11 @@ class CombatMessagesTest {
     fun `le distanze fuori gittata sono annunciate in metri`() {
         assertEquals(
             "Il bersaglio è a 18 m: oltre la gittata di 1,5 m della capacità.",
-            italianRuleMessage("Target is 60 feet away, beyond the ability range of 5 feet"),
+            translateRuleMessage("Target is 60 feet away, beyond the ability range of 5 feet", AppLanguage.ITALIAN),
         )
         assertEquals(
             "Il centro dell'area è a 60 m: oltre la gittata di 45 m.",
-            italianRuleMessage("The area centre is 200 feet away, beyond the range of 150 feet"),
+            translateRuleMessage("The area centre is 200 feet away, beyond the range of 150 feet", AppLanguage.ITALIAN),
         )
     }
 
@@ -117,7 +119,7 @@ class CombatMessagesTest {
     fun `lo stato richiesto dal comando e' tradotto in parole`() {
         assertEquals(
             "Il comando richiede uno scontro in corso, ma questo è in preparazione.",
-            italianRuleMessage("Command requires ACTIVE but encounter is DRAFT"),
+            translateRuleMessage("Command requires ACTIVE but encounter is DRAFT", AppLanguage.ITALIAN),
         )
     }
 
@@ -125,15 +127,15 @@ class CombatMessagesTest {
     fun `un messaggio sconosciuto passa immutato`() {
         val ignoto = "A brand new rule the engine learned yesterday"
 
-        assertEquals(ignoto, italianRuleMessage(ignoto))
-        assertNull(italianRuleMessage(null))
+        assertEquals(ignoto, translateRuleMessage(ignoto, AppLanguage.ITALIAN))
+        assertNull(ruleMessage(null)?.resolve(ItalianStrings))
     }
 
     @Test
     fun `un messaggio gia' italiano non viene toccato`() {
         val italiano = "Le coordinate dello sfondo devono essere numeri finiti"
 
-        assertEquals(italiano, italianRuleMessage(italiano))
+        assertEquals(italiano, translateRuleMessage(italiano, AppLanguage.ITALIAN))
     }
 
     @Test
@@ -148,7 +150,7 @@ class CombatMessagesTest {
         )
 
         campione.forEach { inglese ->
-            val tradotto = italianRuleMessage(inglese)
+            val tradotto = translateRuleMessage(inglese, AppLanguage.ITALIAN)
             assertNotNull(tradotto, "«$inglese» non è tradotto")
             assertTrue(tradotto.orEmpty().isNotBlank(), "«$inglese» ha una traduzione vuota")
             assertFalse(tradotto == inglese, "«$inglese» è rimasto in inglese")

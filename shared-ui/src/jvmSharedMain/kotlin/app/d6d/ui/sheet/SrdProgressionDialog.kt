@@ -37,6 +37,12 @@ import app.d6d.rules.character.RuleEffect
 import app.d6d.sheet.formatModifier
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
+import app.d6d.i18n.abbreviationIn
+import app.d6d.i18n.label
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -45,6 +51,7 @@ fun SrdProgressionDialog(
     viewModel: SheetViewModel,
     onDismiss: () -> Unit,
 ) {
+    val words = strings.sheet
     val sheet = viewModel.character
     val initialClass = sheet.progression.classLevels.firstOrNull()?.classId
         ?: CharacterClassId.BARBARIAN
@@ -104,14 +111,14 @@ fun SrdProgressionDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
-                    if (firstLevel) "Creazione guidata SRD" else "Passaggio di livello SRD",
+                    if (firstLevel) words.guidedCreationTitle else words.srdLevelUpTitle,
                     color = Palette.Text,
                 )
                 Text(
                     if (firstLevel) {
-                        "Scegli esattamente le opzioni richieste per il 1º livello."
+                        words.chooseExactlyForFirstLevel
                     } else {
-                        "Livello ${sheet.effectiveLevel + 1} · ${sheet.experiencePoints} PE"
+                        words.levelAndExperience(sheet.effectiveLevel + 1, sheet.experiencePoints)
                     },
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
@@ -126,7 +133,7 @@ fun SrdProgressionDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("CLASSE", color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                Text(strings.abilities.classCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -157,7 +164,7 @@ fun SrdProgressionDialog(
 
                 if (!firstLevel && sheet.progression.levelIn(selectedClass) == 0) {
                     Text(
-                        "Multiclasse: verranno verificati i punteggi minimi della classe attuale e di quella nuova.",
+                        words.multiclassNote,
                         color = Palette.Temporary,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -202,25 +209,25 @@ fun SrdProgressionDialog(
                     )
                 }
 
-                SheetBox("Punti ferita del nuovo livello") {
+                SheetBox(words.newLevelHitPoints) {
                     if (firstLevel) {
                         Text(
-                            "Al 1º livello si usa il massimo del Dado Vita + Costituzione.",
+                            words.firstLevelUsesMaximum,
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                         )
-                        Chip("${viewModel.fixedHitPointIncrease(selectedClass)} PF", Palette.Heal)
+                        Chip(words.fixedHitPoints(viewModel.fixedHitPointIncrease(selectedClass)), Palette.Heal)
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             GameButton(
-                                "Valore fisso",
+                                words.fixedValue,
                                 accent = if (useFixedHitPoints) Palette.Heal else Palette.TextMuted,
                                 selected = useFixedHitPoints,
                                 dense = true,
                                 onClick = { useFixedHitPoints = true },
                             )
                             GameButton(
-                                "Tiro del dado",
+                                words.rollTheDie,
                                 accent = if (!useFixedHitPoints) Palette.Heal else Palette.TextMuted,
                                 selected = !useFixedHitPoints,
                                 dense = true,
@@ -228,9 +235,9 @@ fun SrdProgressionDialog(
                             )
                         }
                         if (useFixedHitPoints) {
-                            Chip("${viewModel.fixedHitPointIncrease(selectedClass)} PF", Palette.Heal)
+                            Chip(words.fixedHitPoints(viewModel.fixedHitPointIncrease(selectedClass)), Palette.Heal)
                         } else {
-                            SheetNumberField("Risultato dado + COS (minimo 1)", rolledHitPoints) {
+                            SheetNumberField(words.dieResultPlusConstitution, rolledHitPoints) {
                                 rolledHitPoints = it.coerceAtLeast(1)
                             }
                         }
@@ -244,7 +251,7 @@ fun SrdProgressionDialog(
         },
         confirmButton = {
             GameButton(
-                label = if (firstLevel) "Crea personaggio" else "Applica livello",
+                label = if (firstLevel) words.createCharacter else words.applyLevel,
                 accent = if (complete && abilityAllocationValid && backgroundAllocationValid) {
                     Palette.Heal
                 } else {
@@ -278,7 +285,7 @@ fun SrdProgressionDialog(
             )
         },
         dismissButton = {
-            GameButton("Annulla", accent = Palette.TextMuted, onClick = onDismiss)
+            GameButton(strings.common.cancel, accent = Palette.TextMuted, onClick = onDismiss)
         },
     )
 }
@@ -343,6 +350,7 @@ private fun ChoicePicker(
     selectedIds: List<String>,
     onChange: (List<String>) -> Unit,
 ) {
+    val words = strings.sheet
     var search by remember(choice.id) { mutableStateOf("") }
     var previewed by remember(choice.id) { mutableStateOf<String?>(null) }
     val visible = options.filter {
@@ -364,12 +372,12 @@ private fun ChoicePicker(
     ) {
         Text(choice.title, color = Palette.Text, style = MaterialTheme.typography.bodyMedium)
         Text(
-            "${selectedIds.size}/${choice.count} scelte",
+            words.choicesMade(selectedIds.size, choice.count),
             color = if (selectedIds.size == choice.count) Palette.Heal else Palette.Gold,
             style = MaterialTheme.typography.labelSmall,
         )
         if (options.size > 18) {
-            SheetField("Cerca tra ${options.size} opzioni", search) { search = it }
+            SheetField(words.searchAmongOptions(options.size), search) { search = it }
         }
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -409,7 +417,7 @@ private fun ChoicePicker(
         detailed.forEach { option -> OptionDetails(option) }
         if (visible.isEmpty()) {
             Text(
-                "Nessuna opzione disponibile per classe e livello correnti.",
+                words.noOptionForClassAndLevel,
                 color = Palette.Bloodied,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -425,6 +433,8 @@ private fun ChoicePicker(
  */
 @Composable
 private fun OptionDetails(option: SrdChoiceOption) {
+    val strings = strings
+    val words = strings.sheet
     if (option.description.isBlank() && option.effects.isEmpty()) return
     Column(
         Modifier
@@ -443,7 +453,7 @@ private fun OptionDetails(option: SrdChoiceOption) {
         }
         option.effects.forEach { effect ->
             Text(
-                text = "Applicato: ${effect.readableText()}",
+                text = words.applied(effect.readableText(strings)),
                 color = Palette.Heal,
                 style = MaterialTheme.typography.labelSmall,
             )
@@ -452,16 +462,23 @@ private fun OptionDetails(option: SrdChoiceOption) {
 }
 
 /** Come si legge un effetto: "+1 alla Classe Armatura con un'armatura indossata". */
-internal fun RuleEffect.readableText(): String = buildString {
-    append(formatModifier(amount)).append(" ")
-    append(
-        when (target) {
-            EffectTarget.ARMOR_CLASS -> "alla ${target.italianLabel}"
-            EffectTarget.SPEED_FEET -> "metri di ${target.italianLabel.lowercase()}"
-            else -> "ai ${target.italianLabel.lowercase()}"
-        },
-    )
-    if (condition != EffectCondition.ALWAYS) append(" ").append(condition.italianLabel)
+internal fun RuleEffect.readableText(strings: Strings): String {
+    val strings = strings
+    val language = strings.language
+    val words = strings.sheet
+    // La condizione, quando c'e', arriva gia' preceduta dallo spazio: cosi' la
+    // frase resta pulita anche quando l'effetto vale sempre.
+    val when_ = if (condition == EffectCondition.ALWAYS) "" else " " + condition.label(language)
+    return when (target) {
+        EffectTarget.ARMOR_CLASS -> words.effectOnArmorClass(formatModifier(amount), when_)
+        // L'importo e' in piedi, come dice il nome del bersaglio: va convertito
+        // nella misura di chi legge, non solo etichettato con un'altra unita'.
+        EffectTarget.SPEED_FEET -> words.effectOnSpeed(
+            (if (amount >= 0) "+" else "−") + distanceLabel(kotlin.math.abs(amount), language),
+            when_,
+        )
+        else -> words.effectOnAttack(formatModifier(amount), target.label(language), when_)
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -472,9 +489,11 @@ private fun BackgroundAbilityScorePicker(
     increases: Map<Ability, Int>,
     onChange: (Map<Ability, Int>) -> Unit,
 ) {
-    SheetBox("Punteggi di caratteristica · ${background.name}") {
+    val words = strings.sheet
+    val language = currentLanguage
+    SheetBox(words.backgroundAbilityScoresTitle(background.name)) {
         Text(
-            "Assegna +2 e +1 a due caratteristiche, oppure +1 a tutte e tre (massimo 20).",
+            words.backgroundAbilityScoresBody,
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -486,7 +505,7 @@ private fun BackgroundAbilityScorePicker(
                 val current = sheetScores[ability] ?: 10
                 val value = increases[ability] ?: 0
                 GameButton(
-                    "${ability.abbreviation} $current${if (value > 0) " +$value" else ""}",
+                    "${ability.abbreviationIn(language)} $current${if (value > 0) " +$value" else ""}",
                     accent = if (value > 0) Palette.Gold else Palette.TextMuted,
                     selected = value > 0,
                     dense = true,
@@ -505,7 +524,7 @@ private fun BackgroundAbilityScorePicker(
         val distribution = increases.values.sorted()
         val valid = distribution == listOf(1, 2) || distribution == listOf(1, 1, 1)
         Text(
-            "Assegnati ${increases.values.sum()}/3",
+            words.assignedOutOf(increases.values.sum(), 3),
             color = if (valid) Palette.Heal else Palette.Gold,
             style = MaterialTheme.typography.labelSmall,
         )
@@ -519,9 +538,11 @@ private fun AbilityScoreIncreasePicker(
     increases: Map<Ability, Int>,
     onChange: (Map<Ability, Int>) -> Unit,
 ) {
-    SheetBox("Aumento dei punteggi di caratteristica") {
+    val words = strings.sheet
+    val language = currentLanguage
+    SheetBox(words.abilityScoreIncreaseTitle) {
         Text(
-            "Assegna +2 a una caratteristica oppure +1 a due (massimo 20).",
+            words.abilityScoreIncreaseBody,
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -533,7 +554,7 @@ private fun AbilityScoreIncreasePicker(
                 val current = sheetScores[ability] ?: 10
                 val value = increases[ability] ?: 0
                 GameButton(
-                    "${ability.abbreviation} $current${if (value > 0) " +$value" else ""}",
+                    "${ability.abbreviationIn(language)} $current${if (value > 0) " +$value" else ""}",
                     accent = if (value > 0) Palette.Gold else Palette.TextMuted,
                     selected = value > 0,
                     dense = true,
@@ -550,7 +571,7 @@ private fun AbilityScoreIncreasePicker(
             }
         }
         Text(
-            "Assegnati ${increases.values.sum()}/2",
+            words.assignedOutOf(increases.values.sum(), 2),
             color = if (increases.values.sum() == 2) Palette.Heal else Palette.Gold,
             style = MaterialTheme.typography.labelSmall,
         )

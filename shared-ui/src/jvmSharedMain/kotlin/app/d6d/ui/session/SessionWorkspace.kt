@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import app.d6d.engine.CombatSession
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.persistence.session.SessionSummary
+import app.d6d.ui.i18n.AppLocale
+import app.d6d.ui.i18n.localizedSessionError
 import app.d6d.ui.state.BattleViewModel
 import java.io.IOException
 
@@ -76,6 +78,10 @@ class SessionWorkspace(
     private val battleFactory: (CombatSession) -> BattleViewModel = { BattleViewModel(it) },
     private val refreshManagersOnCreate: Boolean = true,
 ) {
+
+    /** Vocabolario in uso: qui non arriva `LocalStrings`, siamo fuori da Compose. */
+    private val words get() = AppLocale.current.session
+
     private val entries = mutableStateListOf<OpenGameSession>()
     private var nextId = 1L
 
@@ -91,11 +97,23 @@ class SessionWorkspace(
         get() = when (autosaveWarnings.size) {
             0 -> null
             1 -> autosaveWarnings.values.first()
-            else -> "${autosaveWarnings.size} autosave non riusciti: " +
+            else -> words.autosaveFailures(autosaveWarnings.size, "") +
                 autosaveWarnings.values.joinToString(" · ")
         }
 
     val openSessions: List<OpenGameSession> get() = entries
+
+    internal fun onLanguageChanged() {
+        status = null
+        autosaveWarnings = emptyMap()
+        entries.forEach {
+            it.manager.clearLocalizedStatus()
+            // Anche il riscontro gia' composto dentro ogni partita aperta: la
+            // conferma di un attacco e i numeri sopra i combattenti non sanno
+            // ridirsi, e restare nella lingua di prima si vede.
+            it.battle.onLanguageChanged()
+        }
+    }
 
     /**
      * Partita in primo piano, oppure null.
@@ -129,7 +147,7 @@ class SessionWorkspace(
         try {
             savedSessions = store.list()
         } catch (failure: IOException) {
-            status = "Errore su disco: ${failure.message}"
+            status = words.diskError(localizedDetail(failure))
         }
     }
 
@@ -155,7 +173,7 @@ class SessionWorkspace(
         val opened = OpenGameSession(id, battle, manager)
         entries += opened
         activeId = id
-        status = "Partita «${opened.displayName}» aperta in una nuova scheda."
+        status = words.gameOpenedInNewTab(opened.displayName)
         return opened
     }
 
@@ -163,7 +181,7 @@ class SessionWorkspace(
     fun openSaved(summary: SessionSummary): WorkspaceOpenResult {
         entries.firstOrNull { it.manager.currentSlug == summary.slug }?.let { existing ->
             activeId = existing.id
-            status = "«${existing.displayName}» era già aperta: scheda attivata."
+            status = words.alreadyOpenTabActivated(existing.displayName)
             existing.manager.menuOpen = false
             return WorkspaceOpenResult.ALREADY_OPEN
         }
@@ -180,16 +198,16 @@ class SessionWorkspace(
             val opened = OpenGameSession(id, battle, manager)
             entries += opened
             activeId = id
-            status = "Sessione «${opened.displayName}» aperta in una nuova scheda."
+            status = words.sessionOpenedInNewTab(opened.displayName)
             WorkspaceOpenResult.OPENED
         } catch (failure: IOException) {
-            status = "Errore su disco: ${failure.message}"
+            status = words.diskError(localizedDetail(failure))
             WorkspaceOpenResult.FAILED
         } catch (failure: IllegalArgumentException) {
-            status = "Sessione non valida: ${failure.message}"
+            status = words.invalidSession(localizedDetail(failure))
             WorkspaceOpenResult.FAILED
         } catch (failure: IllegalStateException) {
-            status = "Sessione non valida: ${failure.message}"
+            status = words.invalidSession(localizedDetail(failure))
             WorkspaceOpenResult.FAILED
         }
     }
@@ -217,7 +235,7 @@ class SessionWorkspace(
         val closing = entries[index]
         if (closing.manager.hasUnsavedChanges && !discardUnsavedChanges) {
             activeId = closing.id
-            status = "«${closing.displayName}» contiene modifiche non salvate."
+            status = words.hasUnsavedChanges(closing.displayName)
             return WorkspaceCloseResult.UNSAVED_CHANGES
         }
 
@@ -227,9 +245,9 @@ class SessionWorkspace(
             activeId = entries.getOrNull(index.coerceAtMost(entries.lastIndex))?.id
         }
         status = if (entries.isEmpty()) {
-            "Scheda «${closing.displayName}» chiusa: nessuna partita aperta."
+            words.tabClosedNoneLeft(closing.displayName)
         } else {
-            "Scheda «${closing.displayName}» chiusa."
+            words.tabClosed(closing.displayName)
         }
         return WorkspaceCloseResult.CLOSED
     }
@@ -337,9 +355,9 @@ class SessionWorkspace(
         autosaveWarnings = emptyMap()
         activeId = restored[recovery.activeIndex.coerceIn(0, restored.lastIndex)].id
         status = if (restored.size == 1) {
-            "Bozza della sessione precedente recuperata."
+            words.previousDraftRecovered
         } else {
-            "Recuperate ${restored.size} sessioni dalla chiusura precedente."
+            words.recoveredSessions(restored.size)
         }
         return true
     }
@@ -379,7 +397,7 @@ class SessionWorkspace(
             result == SessionSaveResult.NAME_COLLISION
         ) {
             val message = "«$displayName»: " +
-                (opened.manager.status ?: "controlla il salvataggio della sessione.")
+                (opened.manager.status ?: words.checkSessionSave)
             autosaveWarnings = autosaveWarnings + (opened.id to message)
         } else if (result == SessionSaveResult.SAVED || result == SessionSaveResult.NOT_NEEDED) {
             clearAutosaveWarning(opened.id)
@@ -426,6 +444,9 @@ class SessionWorkspace(
     private fun clearAutosaveWarning(ownerId: String) {
         if (ownerId in autosaveWarnings) autosaveWarnings = autosaveWarnings - ownerId
     }
+
+    private fun localizedDetail(failure: Throwable): String =
+        localizedSessionError(failure.message.orEmpty(), AppLocale.language)
 
     private fun newId(): String = "sessione-aperta-${nextId++}"
 }

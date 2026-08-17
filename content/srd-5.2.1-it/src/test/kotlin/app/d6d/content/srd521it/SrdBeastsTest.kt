@@ -10,7 +10,7 @@ class SrdBeastsTest {
 
     @Test
     fun `il catalogo contiene tutte e sole le bestie SRD con GS massimo uno`() {
-        val forms = SrdBeasts.all
+        val forms = SrdBeasts.all()
 
         assertEquals(64, forms.size)
         assertEquals(64, forms.mapTo(mutableSetOf()) { it.id }.size)
@@ -38,11 +38,11 @@ class SrdBeastsTest {
 
     @Test
     fun `ogni forma ha una proiezione da combattimento con gli attacchi dello stat block`() {
-        val actors = SrdBeasts.all.map { it.toActorDefinition() }
+        val actors = SrdBeasts.all().map { it.toActorDefinition() }
 
         assertEquals(64, actors.size)
         assertTrue(actors.all { it.armorClass() > 0 && it.maxHitPoints() > 0 })
-        SrdBeasts.all.zip(actors)
+        SrdBeasts.all().zip(actors)
             .filter { (form, _) -> "Tiro per colpire" in form.statBlock }
             .forEach { (form, actor) ->
                 assertTrue(actor.abilities().isNotEmpty(), "Attacco non proiettato per ${form.name}")

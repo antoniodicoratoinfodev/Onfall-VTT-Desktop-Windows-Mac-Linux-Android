@@ -39,8 +39,6 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
-import app.d6d.ui.cursors.CursorArchive
-import app.d6d.ui.cursors.CursorPreferences
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.maps.MapArchive
 import app.d6d.ui.sheet.CharacterSheetEditor
@@ -48,6 +46,8 @@ import app.d6d.ui.sheet.MonsterStatBlockEditor
 import app.d6d.ui.sheet.SheetKind
 import app.d6d.ui.sheet.SheetNavigationResult
 import app.d6d.ui.theme.GoldenRule
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 
 /**
@@ -66,9 +66,10 @@ fun RosterScreen(
     onRequestedItemHandled: () -> Unit = {},
     requestedNewKind: RosterKind? = null,
     onRequestedNewHandled: () -> Unit = {},
-    cursorPreferences: CursorPreferences? = null,
     modifier: Modifier = Modifier,
 ) {
+    val strings = strings
+    val words = strings.compendium
     var section by remember { mutableStateOf(RosterSection.SCHEDE) }
     var compactPane by remember { mutableStateOf(CompactRosterPane.LIST) }
     var pendingNavigation by remember { mutableStateOf<RosterNavigation?>(null) }
@@ -150,12 +151,6 @@ fun RosterScreen(
         }
     }
 
-    LaunchedEffect(cursorPreferences != null) {
-        if (cursorPreferences == null && section == RosterSection.CURSORI) {
-            section = RosterSection.SCHEDE
-        }
-    }
-
     val editor: @Composable (Modifier) -> Unit = { editorModifier ->
         when (viewModel.editorKind) {
             RosterKind.PERSONAGGIO ->
@@ -176,20 +171,12 @@ fun RosterScreen(
             section == RosterSection.SCHEDE &&
             compactPane == CompactRosterPane.DETAIL
         if (!editingCompactSheet) {
-            RosterSectionBar(
-                current = section,
-                cursorsAvailable = cursorPreferences != null,
-                onSelect = { section = it },
-            )
+            RosterSectionBar(current = section, onSelect = { section = it })
         }
 
         when (section) {
             RosterSection.MAPPE -> MapArchive(portraits, compact, Modifier.weight(1f))
             RosterSection.ABILITA -> AbilityArchive(viewModel.sheets, compact, Modifier.weight(1f))
-            RosterSection.CURSORI -> cursorPreferences?.let {
-                CursorArchive(it, compact, Modifier.weight(1f))
-            }
-
             RosterSection.SCHEDE ->
                 if (compact && compactPane == CompactRosterPane.DETAIL) {
                     CompactEditorHeader(viewModel) { compactPane = CompactRosterPane.LIST }
@@ -235,15 +222,15 @@ fun RosterScreen(
         AlertDialog(
             onDismissRequest = { pendingNavigation = null },
             containerColor = Palette.Surface,
-            title = { Text("Scartare la bozza?", color = Palette.Text) },
+            title = { Text(words.discardDraftTitle, color = Palette.Text) },
             text = {
                 Text(
-                    "La scheda contiene modifiche non salvate. Continuando verranno perse.",
+                    words.discardDraftBody,
                     color = Palette.TextMuted,
                 )
             },
             confirmButton = {
-                GameButton("Scarta e continua", accent = Palette.Enemy, onClick = {
+                GameButton(words.discardAndContinue, accent = Palette.Enemy, onClick = {
                     if (applyNavigation(navigation, true) == SheetNavigationResult.APPLIED) {
                         compactPane = CompactRosterPane.DETAIL
                     }
@@ -251,7 +238,7 @@ fun RosterScreen(
                 })
             },
             dismissButton = {
-                GameButton("Annulla", accent = Palette.TextMuted, onClick = { pendingNavigation = null })
+                GameButton(strings.common.cancel, accent = Palette.TextMuted, onClick = { pendingNavigation = null })
             },
         )
     }
@@ -259,22 +246,32 @@ fun RosterScreen(
 
 private enum class CompactRosterPane { LIST, DETAIL }
 
-/** Sezioni del Compendio: attori, capacità, mappe e personalizzazione desktop. */
-private enum class RosterSection(val label: String) {
-    SCHEDE("Schede"),
-    ABILITA("Abilità"),
-    MAPPE("Mappe"),
-    CURSORI("Cursori"),
+/**
+ * Sezioni del Compendio: attori, capacita' e mappe.
+ *
+ * Sono tutti archivi di contenuto di gioco. I cursori stavano qui per comodita' ma
+ * sono una preferenza dell'applicazione, e vivono ora nelle Impostazioni.
+ */
+private enum class RosterSection {
+    SCHEDE,
+    ABILITA,
+    MAPPE,
 }
 
-/** Barra in cima al Compendio; la sezione cursori compare solo sul desktop. */
+private fun RosterSection.label(strings: Strings): String = when (this) {
+    RosterSection.SCHEDE -> strings.compendium.sheets
+    RosterSection.ABILITA -> strings.compendium.abilities
+    RosterSection.MAPPE -> strings.compendium.maps
+}
+
+/** Barra in cima al Compendio. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RosterSectionBar(
     current: RosterSection,
-    cursorsAvailable: Boolean,
     onSelect: (RosterSection) -> Unit,
 ) {
+    val strings = strings
     FlowRow(
         Modifier
             .fillMaxWidth()
@@ -284,17 +281,15 @@ private fun RosterSectionBar(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        RosterSection.entries
-            .filter { it != RosterSection.CURSORI || cursorsAvailable }
-            .forEach { entry ->
-                GameButton(
-                    label = entry.label,
-                    accent = if (current == entry) Palette.Gold else Palette.TextMuted,
-                    selected = current == entry,
-                    dense = true,
-                    onClick = { onSelect(entry) },
-                )
-            }
+        RosterSection.entries.forEach { entry ->
+            GameButton(
+                label = entry.label(strings),
+                accent = if (current == entry) Palette.Gold else Palette.TextMuted,
+                selected = current == entry,
+                dense = true,
+                onClick = { onSelect(entry) },
+            )
+        }
     }
 }
 
@@ -311,6 +306,8 @@ private fun RosterHeader(
     onNewCharacter: () -> Unit,
     onNewCreature: () -> Unit,
 ) {
+    val strings = strings
+    val words = strings.compendium
     if (compact) {
         Column(
             Modifier.fillMaxWidth().background(Palette.Surface).padding(14.dp, 10.dp),
@@ -321,8 +318,8 @@ private fun RosterHeader(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                GameButton("+ Personaggio", accent = Palette.Party, onClick = onNewCharacter)
-                GameButton("+ Creatura", accent = Palette.Enemy, onClick = onNewCreature)
+                GameButton(words.addCharacter, accent = Palette.Party, onClick = onNewCharacter)
+                GameButton(words.addCreature, accent = Palette.Enemy, onClick = onNewCreature)
             }
         }
     } else {
@@ -332,24 +329,25 @@ private fun RosterHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             RosterTitle(Modifier.weight(1f))
-            GameButton("+ Personaggio", accent = Palette.Party, onClick = onNewCharacter)
-            GameButton("+ Creatura", accent = Palette.Enemy, onClick = onNewCreature)
+            GameButton(words.addCharacter, accent = Palette.Party, onClick = onNewCharacter)
+            GameButton(words.addCreature, accent = Palette.Enemy, onClick = onNewCreature)
         }
     }
 }
 
 @Composable
 private fun RosterTitle(modifier: Modifier = Modifier) {
+    val strings = strings
+    val words = strings.compendium
     Column(modifier) {
         Text(
-            text = "Compendio",
+            text = strings.compendium.title,
             color = Palette.Text,
             fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
         )
         Text(
-            text = "Personaggi come schede complete, creature come stat block. " +
-                "Il catalogo di combattimento discende da qui.",
+            words.subtitle,
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -358,15 +356,17 @@ private fun RosterTitle(modifier: Modifier = Modifier) {
 
 @Composable
 private fun CompactEditorHeader(viewModel: RosterViewModel, onBack: () -> Unit) {
+    val strings = strings
+    val words = strings.compendium
     Row(
         Modifier.fillMaxWidth().background(Palette.Surface).padding(10.dp),
         horizontalArrangement = Arrangement.spacedBy(9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GameButton("← Compendio", accent = Palette.TextMuted, onClick = onBack)
+        GameButton(words.backToCompendium, accent = Palette.TextMuted, onClick = onBack)
         Column(Modifier.weight(1f)) {
             Text(
-                text = if (viewModel.editorKind == RosterKind.PERSONAGGIO) "Scheda personaggio" else "Stat block",
+                text = if (viewModel.editorKind == RosterKind.PERSONAGGIO) words.characterSheet else words.statBlock,
                 color = Palette.Text,
                 fontWeight = FontWeight.Black,
                 maxLines = 1,
@@ -374,7 +374,7 @@ private fun CompactEditorHeader(viewModel: RosterViewModel, onBack: () -> Unit) 
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = if (viewModel.selectedId == null) "Nuovo elemento" else "Modifica elemento",
+                text = if (viewModel.selectedId == null) words.newElement else words.editElement,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.labelSmall,
             )
@@ -402,6 +402,8 @@ private fun RosterList(
     modifier: Modifier = Modifier,
     onSelect: (RosterItem) -> Unit,
 ) {
+    val strings = strings
+    val words = strings.compendium
     val items = viewModel.items
     val people = items.filter { it.kind == RosterKind.PERSONAGGIO }
     val creatures = items.filter { it.kind == RosterKind.CREATURA }
@@ -421,13 +423,13 @@ private fun RosterList(
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 if (people.isNotEmpty()) {
-                    item { Eyebrow("Personaggi (${people.size})", color = Palette.Party) }
+                    item { Eyebrow(words.charactersCount(people.size), color = Palette.Party) }
                     items(people) { RosterRow(it, viewModel, onSelect) }
                 }
                 if (creatures.isNotEmpty()) {
                     item {
                         Eyebrow(
-                            "Creature (${creatures.size})",
+                            words.creaturesCount(creatures.size),
                             color = Palette.Enemy,
                             modifier = Modifier.padding(top = 6.dp),
                         )

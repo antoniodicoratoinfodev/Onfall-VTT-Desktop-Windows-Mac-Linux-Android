@@ -2,6 +2,9 @@
 
 package app.d6d.sheet
 
+import app.d6d.i18n.AppLanguage
+import app.d6d.sheet.i18n.unnamedActor
+
 import kotlinx.serialization.UseSerializers
 import app.d6d.domain.combat.AbilityDefinition
 import app.d6d.domain.combat.ActivationCost
@@ -342,6 +345,20 @@ data class Money(
 @Serializable
 data class CharacterSheet(
     val id: String = "pg-nuovo",
+
+    /**
+     * La lingua in cui e' scritto il testo SRD gia' materializzato nella scheda.
+     *
+     * La procedura guidata non lascia nella scheda solo identificativi: scrive
+     * anche il testo di classe, background, armi, strumenti, lingue. Per
+     * riportarlo in un'altra lingua bisogna sapere da quale si parte, e l'unico
+     * posto che lo sa con certezza e' la scheda stessa.
+     *
+     * L'italiano e' il predefinito perche' e' cio' che contiene ogni scheda
+     * salvata prima che questo campo esistesse: una scheda vecchia si rilegge
+     * senza migrazioni.
+     */
+    val contentLanguage: AppLanguage = AppLanguage.ITALIAN,
 
     // --- intestazione ---
     val characterName: String = "",
@@ -771,6 +788,7 @@ data class CharacterSheet(
     fun toActorDefinition(
         rulesetVersion: String = "5.2.1",
         abilityCatalog: List<CatalogAbility> = emptyList(),
+        language: AppLanguage = AppLanguage.ITALIAN,
     ): ActorDefinition {
         val combatAbilities = weapons.mapIndexedNotNull { index, weapon ->
             if (
@@ -857,7 +875,7 @@ data class CharacterSheet(
             id,
             "1.0.0",
             rulesetVersion,
-            characterName.ifBlank { "Senza nome" },
+            characterName.ifBlank { unnamedActor(language) },
             effectiveArmorClass,
             maxHitPoints.coerceAtLeast(1),
             currentHitPoints.coerceIn(0, maxHitPoints.coerceAtLeast(1)),
@@ -911,7 +929,7 @@ val DamageType.italianLabel: String
         DamageType.PIERCING -> "perforante"
         DamageType.POISON -> "veleno"
         DamageType.PSYCHIC -> "psichico"
-        DamageType.RADIANT -> "radiante"
+        DamageType.RADIANT -> "radioso"
         DamageType.SLASHING -> "tagliente"
         DamageType.THUNDER -> "tuono"
         DamageType.UNTYPED -> "non tipizzato"

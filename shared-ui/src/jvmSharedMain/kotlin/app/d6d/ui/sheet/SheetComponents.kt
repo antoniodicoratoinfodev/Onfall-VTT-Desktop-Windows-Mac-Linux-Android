@@ -44,9 +44,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.d6d.sheet.formatModifier
-import app.d6d.sheet.feetFromMetres
-import app.d6d.sheet.metresFromFeet
-import app.d6d.sheet.parseMetres
+import app.d6d.sheet.i18n.distanceValue
+import app.d6d.sheet.i18n.distanceUnit
+import app.d6d.sheet.i18n.feetFromDistance
+import app.d6d.sheet.i18n.parseDistance
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 
 /**
@@ -153,12 +156,13 @@ fun SheetNumberField(
 }
 
 /**
- * Distanza in metri.
+ * Distanza nell'unita' della lingua corrente.
  *
  * Il motore misura in piedi interi, ma quella e' una sua contabilita' interna:
- * qui si scrive e si legge in metri, con la conversione del regolamento. I
- * decimali servono davvero — 1,5 e 4,5 sono misure ordinarie — quindi il campo
- * accetta la virgola oltre al punto.
+ * in italiano qui si scrive e si legge in metri, con la conversione del
+ * regolamento; in inglese si usano direttamente i piedi. I decimali servono
+ * davvero nel sistema metrico — 1,5 e 4,5 sono misure ordinarie — quindi il
+ * campo accetta la virgola oltre al punto.
  */
 @Composable
 fun SheetMetreField(
@@ -167,29 +171,33 @@ fun SheetMetreField(
     modifier: Modifier = Modifier,
     onChange: (Int) -> Unit,
 ) {
-    var draft by remember { mutableStateOf(metresFromFeet(feet)) }
+    val words = strings.sheet
+    val language = currentLanguage
+    var draft by remember(language) { mutableStateOf(distanceValue(feet, language)) }
     // Il testo NON puo' essere ricreato a ogni cambio di `feet`: il valore che
     // arriva qui e' spesso il risultato della battitura in corso, e riscriverlo
     // in forma canonica sotto le dita cancellerebbe la misura a meta'. Chi digita
     // «1,5» passa per «1», che vale 3 piedi: rigenerare il testo lo riporterebbe
     // a «0,9» al secondo carattere. Si riallinea solo quando il valore cambia
     // davvero da fuori — un Undo, il caricamento di un'altra scheda.
-    LaunchedEffect(feet) {
-        if (metreDraftIsStale(draft, feet)) draft = metresFromFeet(feet)
+    LaunchedEffect(feet, language) {
+        if (distanceDraftIsStale(draft, feet, language)) {
+            draft = distanceValue(feet, language)
+        }
     }
     SheetField(
-        label = "$label (m)",
+        label = words.labelWithUnit(label, distanceUnit(language)),
         value = draft,
         modifier = modifier,
         decimal = true,
         // Uscendo dal campo la misura torna in forma canonica: «1,» diventa «0,9»
         // e «1.5» diventa «1,5», cosi' a schermo resta cio' che la scheda conserva.
-        onFocusLost = { draft = metresFromFeet(feet) },
+        onFocusLost = { draft = distanceValue(feet, language) },
     ) { text ->
         val cleaned = text.trim()
         if (cleaned.matches(Regex("""-?\d*(?:[,.]\d*)?"""))) {
             draft = cleaned
-            parseMetres(cleaned)?.let { onChange(feetFromMetres(it)) }
+            parseDistance(cleaned)?.let { onChange(feetFromDistance(it, language)) }
         }
     }
 }
@@ -201,8 +209,11 @@ fun SheetMetreField(
  * stessa misura scritta in tre modi, e nessuna delle tre va sostituita mentre
  * l'utente sta scrivendo.
  */
-internal fun metreDraftIsStale(draft: String, feet: Int): Boolean =
-    parseMetres(draft)?.let(::feetFromMetres) != feet
+internal fun distanceDraftIsStale(
+    draft: String,
+    feet: Int,
+    language: app.d6d.i18n.AppLanguage,
+): Boolean = parseDistance(draft)?.let { feetFromDistance(it, language) } != feet
 
 /**
  * Valore derivato e non modificabile, mostrato in risalto.
@@ -253,6 +264,7 @@ fun ProficiencyDot(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.sheet
     val color = when {
         expertise -> Palette.GoldBright
         filled -> Palette.Gold
@@ -266,9 +278,9 @@ fun ProficiencyDot(
                 role = Role.Checkbox
                 selected = filled || expertise
                 stateDescription = when {
-                    expertise -> "Maestria"
-                    filled -> "Competente"
-                    else -> "Non competente"
+                    expertise -> words.expertise
+                    filled -> words.proficient
+                    else -> words.notProficient
                 }
             }
             .clickable(role = Role.Checkbox) { onClick() },
@@ -291,11 +303,12 @@ fun SheetCheck(
     modifier: Modifier = Modifier,
     onChange: (Boolean) -> Unit,
 ) {
+    val words = strings.sheet
     Row(
         modifier
             .minimumInteractiveComponentSize()
             .toggleable(value = checked, role = Role.Checkbox) { onChange(it) }
-            .semantics { stateDescription = if (checked) "Selezionato" else "Non selezionato" }
+            .semantics { stateDescription = if (checked) words.selected else words.notSelected }
             .padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -325,6 +338,7 @@ fun PipRow(
     color: Color = Palette.Gold,
     onSet: (Int) -> Unit,
 ) {
+    val words = strings.sheet
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         repeat(total) { index ->
             val on = index < filled
@@ -335,7 +349,7 @@ fun PipRow(
                     .semantics {
                         role = Role.Checkbox
                         selected = on
-                        stateDescription = if (on) "Segnato" else "Non segnato"
+                        stateDescription = if (on) words.marked else words.notMarked
                     }
                     // Ricliccare la casella gia' accesa la spegne: cosi' si corregge
                     // un tocco sbagliato senza azzerare tutta la riga.

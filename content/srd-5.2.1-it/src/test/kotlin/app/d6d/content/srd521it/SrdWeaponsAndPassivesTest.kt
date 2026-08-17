@@ -1,5 +1,7 @@
 package app.d6d.content.srd521it
 
+import app.d6d.i18n.AppLanguage
+import app.d6d.sheet.i18n.damageText
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceKind
@@ -35,16 +37,16 @@ class SrdWeaponsAndPassivesTest {
 
     @Test
     fun `la tabella armi rispetta i quattro gruppi dello SRD`() {
-        val bucket = SrdWeapons.all.groupingBy { it.category to it.reach }.eachCount()
+        val bucket = SrdWeapons.all().groupingBy { it.category to it.reach }.eachCount()
 
-        assertEquals(38, SrdWeapons.all.size)
+        assertEquals(38, SrdWeapons.all().size)
         assertEquals(10, bucket[WeaponCategory.SIMPLE to WeaponReach.MELEE])
         assertEquals(4, bucket[WeaponCategory.SIMPLE to WeaponReach.RANGED])
         assertEquals(18, bucket[WeaponCategory.MARTIAL to WeaponReach.MELEE])
         assertEquals(6, bucket[WeaponCategory.MARTIAL to WeaponReach.RANGED])
         assertEquals(
-            SrdWeapons.all.size,
-            SrdWeapons.all.mapTo(mutableSetOf()) { it.id }.size,
+            SrdWeapons.all().size,
+            SrdWeapons.all().mapTo(mutableSetOf()) { it.id }.size,
             "Gli identificatori delle armi devono essere unici.",
         )
     }
@@ -63,10 +65,21 @@ class SrdWeaponsAndPassivesTest {
     }
 
     @Test
+    fun `anche le armi da lancio mostrano la gittata nelle due lingue`() {
+        val spear = requireNotNull(SrdWeapons.byId("srd521-it:weapon:lancia"))
+        val englishSpear = requireNotNull(
+            SrdWeapons.byId("srd521-it:weapon:lancia", AppLanguage.ENGLISH),
+        )
+
+        assertTrue("gittata 6/18 m" in spear.summary(AppLanguage.ITALIAN))
+        assertTrue("range 20/60 ft" in englishSpear.summary(AppLanguage.ENGLISH))
+    }
+
+    @Test
     fun `la cerbottana usa davvero un danno fisso e non un dado inesistente`() {
         val blowgun = requireNotNull(SrdWeapons.byId("srd521-it:weapon:cerbottana"))
         assertEquals(1, blowgun.fixedDamage)
-        assertEquals("1 perforante", blowgun.damageText)
+        assertEquals("1 perforante", blowgun.damageText(AppLanguage.ITALIAN))
 
         val entry = blowgun.toWeaponEntry(
             abilityScores = Ability.entries.associateWith {
@@ -75,7 +88,7 @@ class SrdWeaponsAndPassivesTest {
             proficiencyBonus = 2,
         )
         assertEquals(1, entry.fixedDamage)
-        assertEquals("1+3 perforante", entry.damageText)
+        assertEquals("1+3 perforante", entry.damageText(AppLanguage.ITALIAN))
 
         val formula = CharacterSheet(weapons = listOf(entry))
             .toActorDefinition()
@@ -268,7 +281,7 @@ class SrdWeaponsAndPassivesTest {
         // diventa la portata dell'attacco.
         val javelin = fighter.weapons.single { it.name == "Giavellotto" }
         assertEquals(5, javelin.rangeFeet)
-        assertTrue(javelin.note.contains("gittata 30/120"), "L'arma da lancio riporta la gittata.")
+        assertTrue(javelin.note.contains("gittata 9/36 m"), "L'arma da lancio riporta la gittata.")
         assertEquals(ArmorClassMethod.CHAIN_MAIL, fighter.armorClassMethod)
         assertEquals(18, fighter.money.gold)
 

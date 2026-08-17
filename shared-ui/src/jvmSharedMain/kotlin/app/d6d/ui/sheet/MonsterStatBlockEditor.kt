@@ -39,15 +39,18 @@ import app.d6d.sheet.Skill
 import app.d6d.sheet.StatBlockEntry
 import app.d6d.sheet.WeaponEntry
 import app.d6d.sheet.abilityModifier
-import app.d6d.sheet.italianLabel as sheetDamageLabel
+import app.d6d.sheet.i18n.label as sheetLabel
+import app.d6d.sheet.i18n.subtitle
 import app.d6d.sheet.suggestedProficiencyBonus
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.images.PortraitPicker
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.runDiskIo
 import app.d6d.ui.components.Chip
-import app.d6d.ui.components.italianLabel as conditionLabel
-import app.d6d.ui.compendium.italianLabel as damageLabel
+import app.d6d.i18n.label
+import app.d6d.i18n.pick
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import kotlinx.coroutines.launch
 
@@ -67,6 +70,8 @@ fun MonsterStatBlockEditor(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.sheet
+    val language = currentLanguage
     val scope = rememberCoroutineScope()
     val block = viewModel.monster
     val update: (MonsterStatBlock) -> Unit = { viewModel.monster = it }
@@ -91,34 +96,46 @@ fun MonsterStatBlockEditor(
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Text(
-                text = block.name.ifBlank { "Creatura senza nome" },
+                text = block.name.ifBlank { words.unnamedCreature },
                 color = Palette.GoldBright,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.displaySmall,
             )
-            Text(block.subtitle, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
-            StatLine("CA", "${block.armorClass}")
-            StatLine("Iniziativa", "${signed(block.initiativeModifier)} (${block.initiativeScore})")
-            StatLine("PF", block.hitPointsText)
-            StatLine("Velocita'", block.speeds.text)
-            StatLine("Percezione", "passiva ${block.passivePerception}")
-            StatLine("GS", "${block.challengeRating} (PE ${block.baseXp}" +
-                (block.lairXp?.let { "; in tana $it" } ?: "") + "; BC ${signed(block.proficiencyBonus)})")
+            Text(block.subtitle(language), color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+            StatLine(language.pick("CA", "AC"), "${block.armorClass}")
+            StatLine(
+                words.initiativeLabel,
+                words.initiativeSummary(signed(block.initiativeModifier), block.initiativeScore),
+            )
+            StatLine(language.pick("PF", "HP"), block.hitPointsText)
+            StatLine(language.pick("Velocita'", "Speed"), block.speeds.sheetLabel(language))
+            StatLine(words.perceptionLabel, words.passive(block.passivePerception))
+            StatLine(
+                words.challengeRatingShort,
+                words.challengeRatingSummary(
+                    rating = block.challengeRating,
+                    xp = block.baseXp,
+                    lairXp = block.lairXp,
+                    proficiency = signed(block.proficiencyBonus),
+                ),
+            )
         }
 
-        SheetBox("Ritratto") {
+        SheetBox(language.pick("Ritratto", "Portrait")) {
             PortraitPicker(portraits, block.id, block.name)
         }
 
-        SheetBox("Intestazione") {
+        SheetBox(strings.sheet.header) {
             AdaptiveFormRow(
                 compact = compact,
                 items = arrayOf(
                     adaptiveFormItem(2f) { fieldModifier ->
-                        SheetField("Nome", block.name, fieldModifier) { update(block.copy(name = it)) }
+                        SheetField(strings.common.nameLabel, block.name, fieldModifier) { update(block.copy(name = it)) }
                     },
                     adaptiveFormItem(1.4f) { fieldModifier ->
-                        SheetField("Identificatore", block.id, fieldModifier) { update(block.copy(id = it)) }
+                        SheetField(language.pick("Identificatore", "Identifier"), block.id, fieldModifier) {
+                            update(block.copy(id = it))
+                        }
                     },
                 ),
             )
@@ -127,47 +144,49 @@ fun MonsterStatBlockEditor(
                 compactColumns = if (compact) 2 else 3,
                 items = arrayOf(
                     adaptiveFormItem { fieldModifier ->
-                        SheetField("Tipo", block.type, fieldModifier) { update(block.copy(type = it)) }
+                        SheetField(language.pick("Tipo", "Type"), block.type, fieldModifier) {
+                            update(block.copy(type = it))
+                        }
                     },
                     adaptiveFormItem { fieldModifier ->
                         SheetField("Tag", block.tags, fieldModifier) { update(block.copy(tags = it)) }
                     },
                     adaptiveFormItem(1.2f) { fieldModifier ->
-                        SheetField("Allineamento", block.alignment, fieldModifier) {
+                        SheetField(words.alignment, block.alignment, fieldModifier) {
                             update(block.copy(alignment = it))
                         }
                     },
                 ),
             )
-            Text("Taglia", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+            Text(language.pick("Taglia", "Size"), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 CreatureSize.entries.forEach { size ->
-                    SheetCheck(size.italianLabel, block.size == size) {
+                    SheetCheck(size.sheetLabel(language), block.size == size) {
                         if (it) update(block.copy(size = size))
                     }
                 }
             }
         }
 
-        SheetBox("Difesa, iniziativa e punti ferita") {
+        SheetBox(words.defenceInitiativeHitPoints) {
             AdaptiveFormRow(
                 compact = compact,
                 compactColumns = 2,
                 items = arrayOf(
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Classe Armatura", block.armorClass, fieldModifier) {
+                        SheetNumberField(words.armorClass, block.armorClass, fieldModifier) {
                             update(block.copy(armorClass = it))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Mod. iniziativa", block.initiativeModifier, fieldModifier) {
+                        SheetNumberField(words.initiativeModifier, block.initiativeModifier, fieldModifier) {
                             // Il punteggio statico segue il modificatore, ma resta un campo
                             // distinto e modificabile a parte.
                             update(block.copy(initiativeModifier = it, initiativeScore = 10 + it))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Punteggio statico", block.initiativeScore, fieldModifier) {
+                        SheetNumberField(words.staticScore, block.initiativeScore, fieldModifier) {
                             update(block.copy(initiativeScore = it))
                         }
                     },
@@ -178,22 +197,22 @@ fun MonsterStatBlockEditor(
                 compactColumns = 2,
                 items = arrayOf(
                     adaptiveFormItem(1.2f) { fieldModifier ->
-                        SheetNumberField("PF medi", block.averageHitPoints, fieldModifier) {
+                        SheetNumberField(words.averageHitPoints, block.averageHitPoints, fieldModifier) {
                             update(block.copy(averageHitPoints = it.coerceAtLeast(1)))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Numero dadi", block.hitDiceCount, fieldModifier) {
+                        SheetNumberField(words.diceCount, block.hitDiceCount, fieldModifier) {
                             update(block.copy(hitDiceCount = it.coerceAtLeast(1)))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Facce", block.hitDiceSides, fieldModifier) {
+                        SheetNumberField(language.pick("Facce", "Sides"), block.hitDiceSides, fieldModifier) {
                             update(block.copy(hitDiceSides = it.coerceAtLeast(2)))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Modificatore", block.hitDiceModifier, fieldModifier) {
+                        SheetNumberField(words.modifier, block.hitDiceModifier, fieldModifier) {
                             update(block.copy(hitDiceModifier = it))
                         }
                     },
@@ -201,44 +220,44 @@ fun MonsterStatBlockEditor(
             )
         }
 
-        SheetBox("Velocita'") {
+        SheetBox(language.pick("Velocita'", "Speed")) {
             AdaptiveFormRow(
                 compact = compact,
                 compactColumns = 2,
                 items = arrayOf(
                     adaptiveFormItem { fieldModifier ->
-                        SheetMetreField("A piedi", block.speeds.walk, fieldModifier) {
+                        SheetMetreField(words.onFoot, block.speeds.walk, fieldModifier) {
                             update(block.copy(speeds = block.speeds.copy(walk = it.coerceAtLeast(0))))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetMetreField("Volo", block.speeds.fly, fieldModifier) {
+                        SheetMetreField(language.pick("Volo", "Fly"), block.speeds.fly, fieldModifier) {
                             update(block.copy(speeds = block.speeds.copy(fly = it.coerceAtLeast(0))))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetMetreField("Nuoto", block.speeds.swim, fieldModifier) {
+                        SheetMetreField(language.pick("Nuoto", "Swim"), block.speeds.swim, fieldModifier) {
                             update(block.copy(speeds = block.speeds.copy(swim = it.coerceAtLeast(0))))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetMetreField("Scalata", block.speeds.climb, fieldModifier) {
+                        SheetMetreField(language.pick("Scalata", "Climb"), block.speeds.climb, fieldModifier) {
                             update(block.copy(speeds = block.speeds.copy(climb = it.coerceAtLeast(0))))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetMetreField("Scavo", block.speeds.burrow, fieldModifier) {
+                        SheetMetreField(language.pick("Scavo", "Burrow"), block.speeds.burrow, fieldModifier) {
                             update(block.copy(speeds = block.speeds.copy(burrow = it.coerceAtLeast(0))))
                         }
                     },
                 ),
             )
-            SheetCheck("Puo' fluttuare", block.speeds.hover) {
+            SheetCheck(words.canHover, block.speeds.hover) {
                 update(block.copy(speeds = block.speeds.copy(hover = it)))
             }
         }
 
-        SheetBox("Caratteristiche") {
+        SheetBox(language.pick("Caratteristiche", "Abilities")) {
             AdaptiveFormRow(
                 compact = compact,
                 compactColumns = 2,
@@ -302,7 +321,7 @@ fun MonsterStatBlockEditor(
             )
         }
 
-        SheetBox("Abilita'") {
+        SheetBox(strings.sheet.abilitiesLabel) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -325,20 +344,23 @@ fun MonsterStatBlockEditor(
                         },
                     ) {
                         val suffix = if (level != Proficiency.NONE) " ${signed(block.skillBonus(skill))}" else ""
-                        Chip("${skill.italianLabel}$suffix", color)
+                        Chip("${skill.label(language)}$suffix", color)
                     }
                 }
             }
         }
 
-        SheetBox("Difese tipizzate") {
-            DamageToggleRow("Resistenze", block.resistances) { update(block.copy(resistances = it)) }
-            DamageToggleRow("Vulnerabilita'", block.vulnerabilities) { update(block.copy(vulnerabilities = it)) }
-            DamageToggleRow("Immunita' ai danni", block.damageImmunities) {
+        SheetBox(words.typedDefences) {
+            DamageToggleRow(language.pick("Resistenze", "Resistances"), block.resistances) {
+                update(block.copy(resistances = it))
+            }
+            DamageToggleRow(words.vulnerabilities, block.vulnerabilities) { update(block.copy(vulnerabilities = it)) }
+            DamageToggleRow(words.damageImmunities, block.damageImmunities) {
                 update(block.copy(damageImmunities = it))
             }
+            val language = currentLanguage
             Text(
-                "Immunita' alle condizioni",
+                words.conditionImmunities,
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.labelSmall,
             )
@@ -358,54 +380,56 @@ fun MonsterStatBlockEditor(
                             )
                         },
                     ) {
-                        Chip(condition.conditionLabel, if (on) Palette.Bloodied else Palette.TextFaint)
+                        Chip(condition.label(language), if (on) Palette.Bloodied else Palette.TextFaint)
                     }
                 }
             }
         }
 
-        SheetBox("Sensi, lingue ed equipaggiamento") {
+        SheetBox(words.sensesLanguagesGear) {
             AdaptiveFormRow(
                 compact = compact,
                 items = arrayOf(
                     adaptiveFormItem(1.4f) { fieldModifier ->
-                        SheetField("Sensi", block.senses, fieldModifier) { update(block.copy(senses = it)) }
+                        SheetField(language.pick("Sensi", "Senses"), block.senses, fieldModifier) {
+                            update(block.copy(senses = it))
+                        }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetField("Lingue", block.languages, fieldModifier) {
+                        SheetField(language.pick("Lingue", "Languages"), block.languages, fieldModifier) {
                             update(block.copy(languages = it))
                         }
                     },
                 ),
             )
             // Gear elenca solo gli oggetti recuperabili: non e' tutto cio' che indossa.
-            SheetField("Gear (oggetti recuperabili)", block.gear) { update(block.copy(gear = it)) }
+            SheetField(words.gear, block.gear) { update(block.copy(gear = it)) }
         }
 
-        SheetBox("Sfida") {
+        SheetBox(language.pick("Sfida", "Challenge")) {
             AdaptiveFormRow(
                 compact = compact,
                 compactColumns = 2,
                 items = arrayOf(
                     adaptiveFormItem { fieldModifier ->
-                        SheetField("Grado di Sfida", block.challengeRating, fieldModifier) { rating ->
+                        SheetField(words.challengeRating, block.challengeRating, fieldModifier) { rating ->
                             val suggested = rating.trim().toDoubleOrNull()
                                 ?.let { suggestedProficiencyBonus(it) } ?: block.proficiencyBonus
                             update(block.copy(challengeRating = rating, proficiencyBonus = suggested))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("PE base", block.baseXp.toInt(), fieldModifier) {
+                        SheetNumberField(words.baseXp, block.baseXp.toInt(), fieldModifier) {
                             update(block.copy(baseXp = it.toLong().coerceAtLeast(0)))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("PE in tana", (block.lairXp ?: 0L).toInt(), fieldModifier) {
+                        SheetNumberField(words.lairXp, (block.lairXp ?: 0L).toInt(), fieldModifier) {
                             update(block.copy(lairXp = if (it <= 0) null else it.toLong()))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetNumberField("Bonus competenza", block.proficiencyBonus, fieldModifier) {
+                        SheetNumberField(words.proficiencyBonus, block.proficiencyBonus, fieldModifier) {
                             update(block.copy(proficiencyBonus = it))
                         }
                     },
@@ -415,12 +439,12 @@ fun MonsterStatBlockEditor(
                 compact = compact,
                 items = arrayOf(
                     adaptiveFormItem { fieldModifier ->
-                        SheetField("Habitat", block.habitat, fieldModifier) {
+                        SheetField(language.pick("Habitat", "Habitat"), block.habitat, fieldModifier) {
                             update(block.copy(habitat = it))
                         }
                     },
                     adaptiveFormItem { fieldModifier ->
-                        SheetField("Tema del tesoro", block.treasureTheme, fieldModifier) {
+                        SheetField(words.treasureTheme, block.treasureTheme, fieldModifier) {
                             update(block.copy(treasureTheme = it))
                         }
                     },
@@ -428,11 +452,13 @@ fun MonsterStatBlockEditor(
             )
         }
 
-        EntrySection("Tratti", block.traits, compact) { update(block.copy(traits = it)) }
-        EntrySection("Azioni", block.actions, compact) { update(block.copy(actions = it)) }
-        EntrySection("Azioni Bonus", block.bonusActions, compact) { update(block.copy(bonusActions = it)) }
-        EntrySection("Reazioni", block.reactions, compact) { update(block.copy(reactions = it)) }
-        EntrySection("Azioni Leggendarie", block.legendaryActions, compact) {
+        EntrySection(language.pick("Tratti", "Traits"), block.traits, compact) {
+            update(block.copy(traits = it))
+        }
+        EntrySection(strings.sheet.actions, block.actions, compact) { update(block.copy(actions = it)) }
+        EntrySection(words.bonusActions, block.bonusActions, compact) { update(block.copy(bonusActions = it)) }
+        EntrySection(strings.sheet.reactions, block.reactions, compact) { update(block.copy(reactions = it)) }
+        EntrySection(words.legendaryActions, block.legendaryActions, compact) {
             update(block.copy(legendaryActions = it))
         }
 
@@ -446,15 +472,15 @@ fun MonsterStatBlockEditor(
             horizontalArrangement = Arrangement.spacedBy(9.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            GameButton("Salva stat block", accent = Palette.Heal, onClick = {
+            GameButton(words.saveStatBlock, accent = Palette.Heal, onClick = {
                 scope.launch { runDiskIo { viewModel.save() } }
             })
             viewModel.selectedId?.let { id ->
-                GameButton("Elimina", accent = Palette.Enemy, onClick = { deleteId = id })
+                GameButton(strings.common.delete, accent = Palette.Enemy, onClick = { deleteId = id })
             }
             if (viewModel.isDirty) {
                 Text(
-                    "Modifiche non salvate",
+                    words.unsavedChanges,
                     color = Palette.Bloodied,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.align(Alignment.CenterVertically),
@@ -467,15 +493,15 @@ fun MonsterStatBlockEditor(
         AlertDialog(
             onDismissRequest = { deleteId = null },
             containerColor = Palette.Surface,
-            title = { Text("Eliminare lo stat block?", color = Palette.Text) },
+            title = { Text(words.deleteStatBlockTitle, color = Palette.Text) },
             text = {
                 Text(
-                    "«${block.name.ifBlank { "Creatura senza nome" }}» verrà eliminata definitivamente.",
+                    words.deleteStatBlockBody(block.name.ifBlank { words.unnamedCreature }),
                     color = Palette.TextMuted,
                 )
             },
             confirmButton = {
-                GameButton("Elimina", accent = Palette.Enemy, onClick = {
+                GameButton(strings.common.delete, accent = Palette.Enemy, onClick = {
                     scope.launch {
                         runDiskIo { viewModel.delete(id) }
                         deleteId = null
@@ -483,7 +509,7 @@ fun MonsterStatBlockEditor(
                 })
             },
             dismissButton = {
-                GameButton("Annulla", accent = Palette.TextMuted, onClick = { deleteId = null })
+                GameButton(strings.common.cancel, accent = Palette.TextMuted, onClick = { deleteId = null })
             },
         )
     }
@@ -496,13 +522,14 @@ private fun DamageToggleRow(
     selected: Set<DamageType>,
     onChange: (Set<DamageType>) -> Unit,
 ) {
+    val language = currentLanguage
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             DamageType.entries.forEach { type ->
                 val on = type in selected
                 Box(Modifier.clickable { onChange(if (on) selected - type else selected + type) }) {
-                    Chip(type.damageLabel, if (on) Palette.Bloodied else Palette.TextFaint)
+                    Chip(type.label(language), if (on) Palette.Bloodied else Palette.TextFaint)
                 }
             }
         }
@@ -522,7 +549,9 @@ private fun EntrySection(
     compact: Boolean,
     onChange: (List<StatBlockEntry>) -> Unit,
 ) {
-    SheetBox("$title (${entries.size})") {
+    val words = strings.sheet
+    val language = currentLanguage
+    SheetBox(words.sectionCount(title, entries.size)) {
         entries.forEachIndexed { index, entry ->
             Column(
                 Modifier
@@ -533,11 +562,15 @@ private fun EntrySection(
             ) {
                 if (compact) {
                     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        SheetField("Nome", entry.name) {
+                        SheetField(strings.common.nameLabel, entry.name) {
                             onChange(entries.toMutableList().also { l -> l[index] = entry.copy(name = it) })
                         }
                         Chip(
-                            if (entry.automated) "Automatica" else "Manuale",
+                            if (entry.automated) {
+                                language.pick("Automatica", "Automatic")
+                            } else {
+                                language.pick("Manuale", "Manual")
+                            },
                             if (entry.automated) Palette.Heal else Palette.Bloodied,
                         )
                     }
@@ -546,11 +579,15 @@ private fun EntrySection(
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        SheetField("Nome", entry.name, Modifier.weight(1f)) {
+                        SheetField(strings.common.nameLabel, entry.name, Modifier.weight(1f)) {
                             onChange(entries.toMutableList().also { l -> l[index] = entry.copy(name = it) })
                         }
                         Chip(
-                            if (entry.automated) "Automatica" else "Manuale",
+                            if (entry.automated) {
+                                language.pick("Automatica", "Automatic")
+                            } else {
+                                language.pick("Manuale", "Manual")
+                            },
                             if (entry.automated) Palette.Heal else Palette.Bloodied,
                         )
                     }
@@ -561,7 +598,7 @@ private fun EntrySection(
 
                 val attack = entry.attack
                 if (attack == null) {
-                    GameButton("Rendi attacco eseguibile", accent = Palette.Party, onClick = {
+                    GameButton(words.makeAttackExecutable, accent = Palette.Party, onClick = {
                         onChange(
                             entries.toMutableList().also { l ->
                                 l[index] = entry.copy(attack = WeaponEntry(name = entry.name))
@@ -574,7 +611,7 @@ private fun EntrySection(
                         compactColumns = 2,
                         items = arrayOf(
                             adaptiveFormItem { fieldModifier ->
-                                SheetNumberField("Bonus att.", attack.attackBonus, fieldModifier) {
+                                SheetNumberField(words.attackBonusShort, attack.attackBonus, fieldModifier) {
                                     onChange(
                                         entries.toMutableList().also { l ->
                                             l[index] = entry.copy(attack = attack.copy(attackBonus = it))
@@ -583,7 +620,7 @@ private fun EntrySection(
                                 }
                             },
                             adaptiveFormItem { fieldModifier ->
-                                SheetMetreField("Portata", attack.rangeFeet, fieldModifier) {
+                                SheetMetreField(language.pick("Portata", "Reach"), attack.rangeFeet, fieldModifier) {
                                     onChange(
                                         entries.toMutableList().also { l ->
                                             l[index] = entry.copy(attack = attack.copy(rangeFeet = it))
@@ -593,7 +630,7 @@ private fun EntrySection(
                             },
                             adaptiveFormItem { fieldModifier ->
                                 if (attack.fixedDamage > 0) {
-                                    SheetNumberField("Danno fisso", attack.fixedDamage, fieldModifier) {
+                                    SheetNumberField(words.fixedDamage, attack.fixedDamage, fieldModifier) {
                                         onChange(
                                             entries.toMutableList().also { l ->
                                                 l[index] = entry.copy(
@@ -603,7 +640,7 @@ private fun EntrySection(
                                         )
                                     }
                                 } else {
-                                    SheetNumberField("Dadi", attack.diceCount, fieldModifier) {
+                                    SheetNumberField(language.pick("Dadi", "Dice"), attack.diceCount, fieldModifier) {
                                         onChange(
                                             entries.toMutableList().also { l ->
                                                 l[index] = entry.copy(
@@ -616,11 +653,11 @@ private fun EntrySection(
                             },
                             adaptiveFormItem { fieldModifier ->
                                 if (attack.fixedDamage > 0) {
-                                    SheetBox("Tipo", fieldModifier) {
-                                        Text(attack.damageType.sheetDamageLabel, color = Palette.Text)
+                                    SheetBox(language.pick("Tipo", "Type"), fieldModifier) {
+                                        Text(attack.damageType.label(language), color = Palette.Text)
                                     }
                                 } else {
-                                    SheetNumberField("Facce", attack.diceSides, fieldModifier) {
+                                    SheetNumberField(language.pick("Facce", "Sides"), attack.diceSides, fieldModifier) {
                                         onChange(
                                             entries.toMutableList().also { l ->
                                                 l[index] = entry.copy(
@@ -644,12 +681,12 @@ private fun EntrySection(
                     )
                 }
 
-                GameButton("Rimuovi", accent = Palette.Enemy, onClick = {
+                GameButton(strings.common.remove, accent = Palette.Enemy, onClick = {
                     onChange(entries.filterIndexed { i, _ -> i != index })
                 })
             }
         }
-        GameButton("+ Aggiungi voce", accent = Palette.Party, onClick = {
+        GameButton(words.addEntry, accent = Palette.Party, onClick = {
             onChange(entries + StatBlockEntry())
         })
     }

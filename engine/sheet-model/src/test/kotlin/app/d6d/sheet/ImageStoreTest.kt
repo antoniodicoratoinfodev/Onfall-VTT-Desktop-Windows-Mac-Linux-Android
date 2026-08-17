@@ -1,5 +1,6 @@
 package app.d6d.sheet
 
+import app.d6d.i18n.AppLanguage
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -128,6 +129,18 @@ class ImageStoreTest {
         assertThrows(IllegalArgumentException::class.java) {
             store().importImage(dataDirectory.resolve("mai-esistito.png"))
         }
+    }
+
+    @Test
+    fun `gli errori di importazione seguono la lingua richiesta`() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            store().importImage(
+                dataDirectory.resolve("missing.png"),
+                AppLanguage.ENGLISH,
+            )
+        }
+
+        assertTrue(error.message!!.startsWith("The file does not exist:"))
     }
 
     @Test

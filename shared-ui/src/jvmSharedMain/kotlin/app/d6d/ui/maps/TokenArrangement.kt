@@ -2,6 +2,7 @@ package app.d6d.ui.maps
 
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
+import app.d6d.ui.i18n.LocalizedText
 import kotlin.math.abs
 
 /** Segnaposto ancora da collocare: identita', schieramento e ingombro in caselle. */
@@ -76,5 +77,5 @@ fun arrangeTokens(
 }
 
 /** Motivo del rifiuto, con le misure che il tavolo legge sullo schermo. */
-fun gridTooSmallMessage(grid: MapGrid): String =
-    "La griglia ${grid.columns()}×${grid.rows()} è troppo piccola per tutti i token selezionati."
+fun gridTooSmallMessage(grid: MapGrid): LocalizedText =
+    LocalizedText { it.maps.gridTooSmall(grid.columns(), grid.rows()) }

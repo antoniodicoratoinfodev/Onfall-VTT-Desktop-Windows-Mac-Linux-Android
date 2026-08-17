@@ -56,11 +56,16 @@ import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.CombatStatus
 import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.HealingTarget
-import app.d6d.sheet.metresLabel
 import app.d6d.sheet.rulesTextLead
-import app.d6d.sheet.withMetricDistances
-import app.d6d.ui.compendium.italianAbbreviation
-import app.d6d.ui.compendium.italianLabel
+import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.abbreviation
+import app.d6d.i18n.inlineLabel
+import app.d6d.i18n.label
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.sheet.i18n.withLocalizedDistances
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.rememberTooltipPosition
@@ -186,40 +191,24 @@ fun GameButton(
     }
 }
 
-private val ActivationCost.italianLabel: String
-    get() = when (this) {
-        ActivationCost.ACTION -> "Azione"
-        ActivationCost.BONUS_ACTION -> "Azione Bonus"
-        ActivationCost.REACTION -> "Reazione"
-        ActivationCost.LEGENDARY_ACTION -> "Azione Leggendaria"
-        ActivationCost.NONE -> "Gratuita"
-    }
-
-private val D20Mode.italianLabel: String
-    get() = when (this) {
-        D20Mode.NORMAL -> "Normale"
-        D20Mode.ADVANTAGE -> "Vantaggio"
-        D20Mode.DISADVANTAGE -> "Svantaggio"
-    }
-
 /**
  * Riepilogo del danno leggibile: per ogni componente la formula (quanti dadi, che
  * dado, il modificatore) e come colpisce (il tipo di danno). Piu' componenti si
  * sommano — un colpo che fa taglio e fuoco insieme si legge "1d8+3 tagliente + 1d6
  * fuoco". I danni fissi mostrano il numero secco.
  */
-private fun AbilityDefinition.damageSummary(): String =
+private fun AbilityDefinition.damageSummary(language: AppLanguage): String =
     damage().joinToString("  +  ") { formula ->
         val amount = if (formula.usesDice()) formula.dice().notation() else formula.fixedAmount().toString()
-        "$amount ${formula.type().italianLabel.lowercase()}"
+        "$amount ${formula.type().inlineLabel(language)}"
     }
 
-private fun AbilityDefinition.healingSummary(): String? = healing()?.let { healing ->
+private fun AbilityDefinition.healingSummary(strings: Strings): String? = healing()?.let { healing ->
     val amount = if (healing.usesDice()) healing.dice().notation() else healing.fixedAmount().toString()
     val target = when (healing.target()) {
-        HealingTarget.SELF -> "sé"
-        HealingTarget.ALLY -> "alleato"
-        HealingTarget.SELF_OR_ALLY -> "sé/alleato"
+        HealingTarget.SELF -> strings.battle.healingSelfShort
+        HealingTarget.ALLY -> strings.battle.healingAllyShort
+        HealingTarget.SELF_OR_ALLY -> strings.battle.selfOrAllyShort
     }
     "$amount · $target"
 }
@@ -233,6 +222,9 @@ private fun AbilityDefinition.healingSummary(): String? = healing()?.let { heali
  */
 @Composable
 private fun PassiveTraitChip(ability: AbilityDefinition) {
+    val strings = strings
+    val words = strings.battle
+    val language = strings.language
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     var pinned by remember { mutableStateOf(false) }
@@ -282,8 +274,8 @@ private fun PassiveTraitChip(ability: AbilityDefinition) {
                         style = MaterialTheme.typography.labelSmall,
                     )
                     Text(
-                        text = ability.rulesText().rulesTextLead().withMetricDistances().ifBlank {
-                            "Vale sempre, senza spendere nulla nel turno."
+                        text = ability.rulesText().rulesTextLead().withLocalizedDistances(language).ifBlank {
+                            words.alwaysAvailableNoCost
                         },
                         color = Palette.Text,
                         style = MaterialTheme.typography.bodySmall,
@@ -311,6 +303,9 @@ private fun AbilityCard(
     onClick: () -> Unit,
     onHoverChange: (Boolean) -> Unit,
 ) {
+    val strings = strings
+    val words = strings.battle
+    val language = strings.language
     val accent = when {
         selected -> Palette.GoldBright
         manual -> Palette.Party
@@ -392,7 +387,7 @@ private fun AbilityCard(
                 style = MaterialTheme.typography.bodyMedium,
             )
             Chip(
-                text = ability.activationCost().italianLabel,
+                text = ability.activationCost().label(language),
                 color = if (enabled) accent else Palette.TextFaint,
             )
         }
@@ -403,37 +398,39 @@ private fun AbilityCard(
         ) {
             if (!manual && !ability.isArea && ability.healing() == null) {
                 val bonus = ability.attackBonus()
-                AbilityStat("Colpire", if (bonus >= 0) "+$bonus" else bonus.toString(), enabled)
+                AbilityStat(words.abilityStatToHit, if (bonus >= 0) "+$bonus" else bonus.toString(), enabled)
                 ability.attackAbility()?.let {
-                    AbilityStat("Car.", it.italianAbbreviation, enabled)
+                    AbilityStat(words.abilityStatAbility, it.abbreviation(language), enabled)
                 }
             }
             if (ability.isArea) {
-                AbilityStat("Area", metresLabel(ability.areaRadiusFeet()), enabled)
-                ability.saveAbility()?.let { AbilityStat("TS", it.italianAbbreviation, enabled) }
+                AbilityStat(words.abilityStatArea, distanceLabel(ability.areaRadiusFeet(), language), enabled)
+                ability.saveAbility()?.let {
+                    AbilityStat(words.abilityStatSave, it.abbreviation(language), enabled)
+                }
             }
             if (ability.rangeFeet() > 0) {
-                AbilityStat("Gittata", metresLabel(ability.rangeFeet()), enabled)
+                AbilityStat(words.abilityStatRange, distanceLabel(ability.rangeFeet(), language), enabled)
             }
-            val damage = ability.damageSummary()
+            val damage = ability.damageSummary(language)
             if (damage.isNotBlank()) {
-                AbilityStat("Danno", damage, enabled)
+                AbilityStat(words.abilityStatDamage, damage, enabled)
             }
-            ability.healingSummary()?.let { healing ->
-                AbilityStat("Cura", healing, enabled)
+            ability.healingSummary(strings)?.let { healing ->
+                AbilityStat(words.abilityStatHealing, healing, enabled)
             }
-            resourceLabel?.let { AbilityStat("Usi", it, enabled) }
+            resourceLabel?.let { AbilityStat(words.abilityStatUses, it, enabled) }
         }
 
         if (manual) {
             Text(
-                text = "Risoluzione manuale · tocca per le regole",
+                text = words.manualResolutionTapForRules,
                 color = Palette.TextFaint,
                 style = MaterialTheme.typography.labelSmall,
             )
         } else if (selected) {
             Text(
-                text = "IN MIRA · RICLICCA PER ANNULLARE",
+                text = words.aimingClickAgainToCancel,
                 color = Palette.GoldBright,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
@@ -478,6 +475,9 @@ fun CommandBar(
     compact: Boolean = false,
 ) {
     val layout = LocalUiLayout.current
+    val strings = strings
+    val words = strings.battle
+    val language = strings.language
     var toolsOpen by remember { mutableStateOf(false) }
     var itemsOpen by remember { mutableStateOf(false) }
     // Il collasso vive nel layout persistito, cosi' si ricorda fra un avvio e
@@ -493,7 +493,7 @@ fun CommandBar(
     val displayedActorCanAct = inspectedId?.let(viewModel::canUseAbilitiesOf) == true
 
     BattleToolsDialog(viewModel, open = toolsOpen, onDismiss = { toolsOpen = false })
-    BattleItemsDialog(items = sampleBattleItems, open = itemsOpen, onDismiss = { itemsOpen = false })
+    BattleItemsDialog(items = sampleBattleItems(strings), open = itemsOpen, onDismiss = { itemsOpen = false })
 
     // Sul desktop la fascia ha l'altezza scelta dall'utente. Intestazione e riga dei
     // comandi restano di dimensione fissa e sempre visibili; sono solo le capacita'
@@ -531,13 +531,13 @@ fun CommandBar(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                activeId?.let { Eyebrow("Turno: ${viewModel.name(it)}", Palette.Gold) }
+                activeId?.let { Eyebrow(words.turnOfShort(viewModel.name(it)), Palette.Gold) }
                 inspectedId?.takeIf { it != activeId }?.let {
-                    Eyebrow("In esame: ${viewModel.name(it)}", Palette.Party)
+                    Eyebrow(words.inspectingShort(viewModel.name(it)), Palette.Party)
                 }
                 viewModel.selectedTargetId?.let {
                     Text(
-                        text = "Bersaglio: ${viewModel.name(it)}",
+                        text = words.targetShort(viewModel.name(it)),
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -550,8 +550,8 @@ fun CommandBar(
             }
             CollapseToggle(
                 collapsed = collapsed,
-                expandedLabel = "Comandi ▾",
-                collapsedLabel = "Comandi ▸",
+                expandedLabel = words.commandsCollapse,
+                collapsedLabel = words.commandsExpand,
                 onToggle = { layout.commandsCollapsed = !layout.commandsCollapsed },
             )
         }
@@ -573,7 +573,7 @@ fun CommandBar(
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Chi agisce:", color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+                Text(words.whoActs, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
                 viewModel.activeCombatantIds.forEach { id ->
                     val selected = id == activeId
                     GameButton(
@@ -589,9 +589,9 @@ fun CommandBar(
         if (inspectedId != null && !displayedActorCanAct) {
             Text(
                 text = if (viewModel.combatant(inspectedId)?.let { it.defeated() || it.dead() } == true) {
-                    "Solo consultazione · 0 PF, il suo turno viene saltato."
+                    words.readOnlyZeroHitPoints
                 } else {
-                    "Solo consultazione · non è il turno di ${viewModel.name(inspectedId)}."
+                    words.readOnlyNotTurnOf(viewModel.name(inspectedId))
                 },
                 color = Palette.TextFaint,
                 fontWeight = FontWeight.Bold,
@@ -607,14 +607,13 @@ fun CommandBar(
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Scegli il bersaglio di «${targeting.name}» · " +
-                        "riclicca l'abilità o annulla per tornare all'ispezione.",
+                    text = words.chooseTargetOf(targeting.name) + words.chooseTargetHint,
                     color = Palette.GoldBright,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodySmall,
                 )
                 GameButton(
-                    label = "Annulla mira",
+                    label = words.cancelAim,
                     accent = Palette.TextMuted,
                     dense = true,
                     onClick = viewModel::cancelSingleTargeting,
@@ -624,7 +623,7 @@ fun CommandBar(
 
         if (abilities.isEmpty()) {
             Text(
-                text = "Nessuna capacità disponibile per questo combattente.",
+                text = words.noAbilityAvailable,
                 color = Palette.TextFaint,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -654,8 +653,8 @@ fun CommandBar(
                             onClick = {
                                 if (manual) {
                                     viewModel.showMessage(
-                                        ability.rulesText().withMetricDistances().ifBlank {
-                                            "«${ability.name()}» richiede una risoluzione manuale al tavolo."
+                                        ability.rulesText().withLocalizedDistances(language).ifBlank {
+                                            words.abilityNeedsManualResolution(ability.name())
                                         },
                                     )
                                 } else {
@@ -696,7 +695,7 @@ fun CommandBar(
                 listOf(D20Mode.ADVANTAGE, D20Mode.DISADVANTAGE).forEach { mode ->
                     val selected = viewModel.rollMode == mode
                     GameButton(
-                        label = mode.italianLabel,
+                        label = mode.label(language),
                         accent = if (selected) Palette.TextMuted else Palette.TextFaint,
                         selected = selected,
                         enabled = displayedActorCanAct,
@@ -708,26 +707,43 @@ fun CommandBar(
                 }
                 // Compatti e su una riga sola: la fascia comandi resta bassa e lascia
                 // spazio alle schede delle capacita' sopra.
+                //
+                // `enemyCpuBatchPending` esclude gia' la modalita' Modifica ed e' la
+                // stessa condizione che il modello applica da se' prima di ogni
+                // mutazione: negarla basta perche' il tasto sia spento esattamente
+                // quando il clic verrebbe rifiutato. Vale anche per «Annulla mossa».
                 GameButton(
-                    label = "Strumenti",
+                    label = strings.battle.tools,
                     accent = Palette.TextMuted,
-                    enabled = !viewModel.enemyCpuBatchPending || viewModel.editMode,
+                    enabled = !viewModel.enemyCpuBatchPending,
                     dense = true,
                     onClick = { toolsOpen = true },
                 )
                 GameButton(
-                    label = "Oggetti",
+                    label = strings.items.title,
                     accent = Palette.TextMuted,
                     dense = true,
                     onClick = { itemsOpen = true },
                 )
+                // «Mossa» e non solo «Annulla»: la mappa usa gia' quella parola per
+                // abbandonare una mira in corso, e i due comandi possono trovarsi a
+                // schermo insieme. A batch CPU concluso non si e' piu' in pending,
+                // quindi annullare il turno nemico appena giocato resta possibile —
+                // ed e' da li' che si raggiunge «Riprendi CPU».
+                GameButton(
+                    label = words.cancelMove,
+                    accent = Palette.TextFaint,
+                    enabled = viewModel.canUndo && !viewModel.enemyCpuBatchPending,
+                    dense = true,
+                    onClick = viewModel::undo,
+                )
             }
 
             GameButton(
-                label = "Movimento residuo",
+                label = words.movementLeft,
                 subtitle = movementRemaining
-                    ?.let { metresLabel(it) }
-                    ?: "Non disponibile",
+                    ?.let { distanceLabel(it, language) }
+                    ?: words.notAvailable,
                 accent = Palette.Party,
                 enabled = viewModel.movementReachAvailable,
                 selected = viewModel.movementReachVisible,
@@ -737,8 +753,19 @@ fun CommandBar(
                 // a tenere l'alone acceso dopo che il puntatore se n'è andato.
                 onHoverChange = viewModel::setMovementReachHovered,
             )
+            // Un turno CPU sospeso e' l'unico stato senza via d'uscita automatica:
+            // il motivo lo dice gia' la fascia dei messaggi, qui sta il modo di
+            // rimetterlo in moto. Compare solo quando serve davvero.
+            if (viewModel.enemyCpuTurnSuppressed) {
+                GameButton(
+                    label = words.resumeCpu,
+                    accent = Palette.Enemy,
+                    dense = true,
+                    onClick = viewModel::resumeEnemyCpuTurn,
+                )
+            }
             GameButton(
-                label = if (activeId == null) "Salta turno" else "Fine turno",
+                label = if (activeId == null) words.skipTurn else words.endTurn,
                 accent = Palette.Heal,
                 enabled = combatActive && viewModel.hasStandingCombatants &&
                     !viewModel.enemyCpuBatchPending && !viewModel.enemyCpuControlsCurrentTurn,

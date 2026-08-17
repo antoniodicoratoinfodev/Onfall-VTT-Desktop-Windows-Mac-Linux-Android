@@ -31,7 +31,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.d6d.sheet.metresLabel
+import app.d6d.i18n.label
+import app.d6d.i18n.pick
+import app.d6d.sheet.i18n.damageText
+import app.d6d.sheet.i18n.distanceLabel
+import app.d6d.ui.i18n.Strings
+import app.d6d.ui.i18n.currentLanguage
 import app.d6d.domain.combat.ActivationCost
 import app.d6d.domain.combat.AbilityEffect
 import app.d6d.domain.combat.AutomationStatus
@@ -45,7 +50,6 @@ import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CatalogDamage
 import app.d6d.sheet.CatalogHealing
 import app.d6d.sheet.CatalogHealingBonusSource
-import app.d6d.sheet.italianLabel
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.sheet.SheetBox
@@ -57,6 +61,7 @@ import app.d6d.ui.sheet.SheetTextArea
 import app.d6d.ui.sheet.SheetViewModel
 import app.d6d.ui.sheet.readableText
 import app.d6d.ui.runDiskIo
+import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import kotlinx.coroutines.launch
 
@@ -74,6 +79,9 @@ fun AbilityArchive(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val strings = strings
+    val words = strings.abilities
+    val language = strings.language
     val scope = rememberCoroutineScope()
     val catalog = viewModel.abilityCatalog.sortedBy { it.name.lowercase() }
     var categoryFilter by remember { mutableStateOf<RuleElementKind?>(null) }
@@ -90,7 +98,7 @@ fun AbilityArchive(
     }
     val first = catalog.firstOrNull()
     var selectedId by remember { mutableStateOf(first?.id) }
-    var draft by remember { mutableStateOf(first ?: newAbility()) }
+    var draft by remember { mutableStateOf(first ?: newAbility(strings)) }
     var compactDetail by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<CatalogAbility?>(null) }
 
@@ -101,14 +109,14 @@ fun AbilityArchive(
     }
 
     fun create() {
-        val created = newAbility()
+        val created = newAbility(strings)
         selectedId = null
         draft = created
         compactDetail = true
     }
 
     fun duplicate(ability: CatalogAbility) {
-        val copy = ability.asCustomCopy()
+        val copy = ability.asCustomCopy(strings)
         selectedId = null
         draft = copy
         compactDetail = true
@@ -149,9 +157,9 @@ fun AbilityArchive(
                     horizontalArrangement = Arrangement.spacedBy(9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    GameButton("← Abilità", accent = Palette.TextMuted, onClick = { compactDetail = false })
+                    GameButton(words.backToAbilities, accent = Palette.TextMuted, onClick = { compactDetail = false })
                     Text(
-                        text = draft.name.ifBlank { "Nuova abilità" },
+                        text = draft.name.ifBlank { words.newAbility },
                         color = Palette.Text,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -241,27 +249,25 @@ fun AbilityArchive(
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             containerColor = Palette.Surface,
-            title = { Text("Eliminare l’abilità?", color = Palette.Text) },
+            title = { Text(words.deleteAbilityTitle, color = Palette.Text) },
             text = {
                 Text(
                     if (usage == 0) {
-                        "«${ability.name}» verrà rimossa dal catalogo."
+                        words.deleteAbilityBody(ability.name)
                     } else {
-                        "«${ability.name}» è usata da $usage " +
-                            if (usage == 1) "scheda. Rimuovila prima dal personaggio." else
-                                "schede. Rimuovila prima dai personaggi."
+                        words.abilityInUse(ability.name, usage)
                     },
                     color = Palette.TextMuted,
                 )
             },
             confirmButton = {
                 if (usage == 0 && !ability.immutable) {
-                    GameButton("Elimina", accent = Palette.Enemy, onClick = {
+                    GameButton(strings.common.delete, accent = Palette.Enemy, onClick = {
                         scope.launch {
                             if (runDiskIo { viewModel.deleteAbility(ability.id) }) {
                                 val remaining = viewModel.abilityCatalog.firstOrNull()
                                 selectedId = remaining?.id
-                                draft = remaining ?: newAbility()
+                                draft = remaining ?: newAbility(strings)
                             }
                             pendingDelete = null
                         }
@@ -269,7 +275,7 @@ fun AbilityArchive(
                 }
             },
             dismissButton = {
-                GameButton("Annulla", accent = Palette.TextMuted, onClick = { pendingDelete = null })
+                GameButton(strings.common.cancel, accent = Palette.TextMuted, onClick = { pendingDelete = null })
             },
         )
     }
@@ -315,6 +321,9 @@ private fun ReadOnlyAbilityDetails(
     onPassiveChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.abilities
+    val language = currentLanguage
+    val strings = strings
     Column(modifier.fillMaxSize()) {
         Column(
             Modifier
@@ -324,51 +333,51 @@ private fun ReadOnlyAbilityDetails(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            SheetBox("Contenuto SRD") {
+            SheetBox(words.srdContent) {
                 Text(
-                    text = ability.name.ifBlank { "Senza nome" },
+                    text = ability.name.ifBlank { strings.compendium.unnamed },
                     color = Palette.Text,
                     fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleLarge,
                 )
                 AbilityMetadataChips(ability)
                 Text(
-                    text = "ID ${ability.id}",
+                    text = words.abilityId(ability.id),
                     color = Palette.TextFaint,
                     style = MaterialTheme.typography.labelSmall,
                 )
                 if (ability.prerequisite.isNotBlank()) {
                     Text(
-                        text = "Prerequisito: ${ability.prerequisite}",
+                        text = words.prerequisite(ability.prerequisite),
                         color = Palette.GoldBright,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
 
-            SheetBox("Regole") {
+            SheetBox(language.pick("Regole", "Rules")) {
                 Text(
-                    text = ability.rulesText.ifBlank { "Nessun testo di regole disponibile." },
+                    text = ability.rulesText.ifBlank { words.noRulesText },
                     color = Palette.Text,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
 
-            SheetBox("Funzionamento") {
+            SheetBox(strings.abilities.howItWorks) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    Chip(ability.activationCost.label, Palette.Gold)
-                    Chip(ability.resolutionMethod.label, Palette.Party)
-                    if (ability.dealsDamage) Chip(ability.damageText, Palette.Enemy)
+                    Chip(ability.activationCost.labelIn(strings), Palette.Gold)
+                    Chip(ability.resolutionMethod.labelIn(strings), Palette.Party)
+                    if (ability.dealsDamage) Chip(ability.damageText(language), Palette.Enemy)
                     ability.healing?.let { healing ->
                         Chip(
-                            "Cura ${healing.amountText} · ${healing.target.label}",
+                            words.healingSummary(healing.amountText(strings), healing.target.label(strings)),
                             Palette.Heal,
                         )
                     }
-                    if (ability.isArea) Chip("Area ${metresLabel(ability.areaRadiusFeet)}", Palette.Crit)
+                    if (ability.isArea) Chip(words.areaOf(distanceLabel(ability.areaRadiusFeet, language)), Palette.Crit)
                 }
                 if (ability.healing == null) {
                     PassiveSelector(
@@ -378,14 +387,14 @@ private fun ReadOnlyAbilityDetails(
                     )
                 } else {
                     Text(
-                        "Cura attiva: viene risolta dall'app e non può essere resa passiva.",
+                        words.activeHealingNote,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
                 if (ability.effects.isNotEmpty()) {
                     Text(
-                        "APPLICATO DALL'APP",
+                        words.appliedByApp,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.labelSmall,
                     )
@@ -394,15 +403,16 @@ private fun ReadOnlyAbilityDetails(
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         ability.effects.forEach { effect ->
-                            Chip(effect.readableText(), Palette.Heal)
+                            Chip(effect.readableText(strings), Palette.Heal)
                         }
                     }
                 }
                 if (ability.resourceId != null || ability.resourceCost > 0) {
                     Text(
                         text = buildString {
-                            append("Risorsa: ").append(ability.resourceId ?: "specifica")
-                            if (ability.resourceCost > 0) append(" · costo ").append(ability.resourceCost)
+                            append(language.pick("Risorsa: ", "Resource: "))
+                                .append(ability.resourceId ?: language.pick("specifica", "specific"))
+                            if (ability.resourceCost > 0) append(words.costSuffix(ability.resourceCost.toString()))
                         },
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
@@ -417,25 +427,31 @@ private fun ReadOnlyAbilityDetails(
                 ability.components.isNotBlank() ||
                 ability.duration.isNotBlank()
             ) {
-                SheetBox("Incantesimo") {
+                SheetBox(strings.abilities.spell) {
                     ability.spellLevel?.let { level ->
                         ReadOnlyProperty(
-                            "Livello",
-                            if (level == 0) "Trucchetto" else "$level",
+                            strings.common.level,
+                            if (level == 0) strings.abilities.cantrip else "$level",
                         )
                     }
-                    if (ability.school.isNotBlank()) ReadOnlyProperty("Scuola", ability.school)
-                    if (ability.castingTime.isNotBlank()) {
-                        ReadOnlyProperty("Tempo di lancio", ability.castingTime)
+                    if (ability.school.isNotBlank()) {
+                        ReadOnlyProperty(language.pick("Scuola", "School"), ability.school)
                     }
-                    if (ability.components.isNotBlank()) ReadOnlyProperty("Componenti", ability.components)
-                    if (ability.duration.isNotBlank()) ReadOnlyProperty("Durata", ability.duration)
+                    if (ability.castingTime.isNotBlank()) {
+                        ReadOnlyProperty(words.castingTime, ability.castingTime)
+                    }
+                    if (ability.components.isNotBlank()) {
+                        ReadOnlyProperty(language.pick("Componenti", "Components"), ability.components)
+                    }
+                    if (ability.duration.isNotBlank()) {
+                        ReadOnlyProperty(language.pick("Durata", "Duration"), ability.duration)
+                    }
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
-                        if (ability.concentration) Chip("Concentrazione", Palette.Gold)
-                        if (ability.ritual) Chip("Rituale", Palette.Party)
+                        if (ability.concentration) Chip(strings.abilities.concentration, Palette.Gold)
+                        if (ability.ritual) Chip(language.pick("Rituale", "Ritual"), Palette.Party)
                     }
                 }
             }
@@ -447,17 +463,15 @@ private fun ReadOnlyAbilityDetails(
         ) {
             Text(
                 text = if (ability.healing != null) {
-                    "Questa cura proviene dal pacchetto SRD, è protetta dalle modifiche " +
-                        "e resta una capacità attiva automatizzata."
+                    words.srdHealingProtected
                 } else {
-                    "Questa voce proviene dal pacchetto SRD ed è protetta dalle modifiche. " +
-                        "Puoi comunque decidere tu se giocarla come attiva o come passiva."
+                    words.srdEntryProtected
                 },
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
             GameButton(
-                label = "Duplica come personalizzata",
+                label = words.duplicateAsCustom,
                 accent = Palette.Party,
                 onClick = onDuplicate,
             )
@@ -481,33 +495,34 @@ private fun PassiveSelector(
     overridden: Boolean,
     onChange: (Boolean) -> Unit,
 ) {
-    Text("NEL TURNO", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+    val words = strings.abilities
+    Text(words.duringTurn, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         GameButton(
-            label = "Attiva",
+            label = strings.abilities.activeLabel,
             accent = if (!passive) Palette.Gold else Palette.TextMuted,
             selected = !passive,
             dense = true,
             onClick = { onChange(false) },
         )
         GameButton(
-            label = "Passiva",
+            label = currentLanguage.pick("Passiva", "Passive"),
             accent = if (passive) Palette.Crit else Palette.TextMuted,
             selected = passive,
             dense = true,
             onClick = { onChange(true) },
         )
-        if (overridden) Chip("Scelta del tavolo", Palette.Crit)
+        if (overridden) Chip(words.tableChoice, Palette.Crit)
     }
     Text(
         text = if (passive) {
-            "Tratto permanente: vale sempre, resta fuori dai comandi e compare accanto a chi ha il turno."
+            words.passiveTraitHint
         } else {
-            "Capacità da spendere: compare fra i comandi di chi ha il turno."
+            words.activeAbilityHint
         },
         color = Palette.TextMuted,
         style = MaterialTheme.typography.bodySmall,
@@ -545,6 +560,8 @@ private fun AbilityEditor(
     onDelete: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    val words = strings.abilities
+    val language = currentLanguage
     Column(modifier.fillMaxSize()) {
         Column(
             Modifier
@@ -554,17 +571,17 @@ private fun AbilityEditor(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            SheetBox("Informazioni") {
-                SheetField("Nome", draft.name) { onChange(draft.copy(name = it)) }
+            SheetBox(strings.abilities.information) {
+                SheetField(strings.common.nameLabel, draft.name) { onChange(draft.copy(name = it)) }
                 Text(
-                    text = "ID ${draft.id}",
+                    text = words.abilityId(draft.id),
                     color = Palette.TextFaint,
                     style = MaterialTheme.typography.labelSmall,
                 )
                 SheetTextArea(draft.rulesText, minLines = 4) { onChange(draft.copy(rulesText = it)) }
             }
 
-            SheetBox("Funzionamento") {
+            SheetBox(strings.abilities.howItWorks) {
                 if (draft.healing == null) {
                     PassiveSelector(
                         passive = draft.passive,
@@ -573,20 +590,20 @@ private fun AbilityEditor(
                     )
                 } else {
                     Text(
-                        "Una cura è una capacità attiva e automatizzata.",
+                        words.healingIsActiveAutomated,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
 
-                Text("COSTO", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                Text(language.pick("COSTO", "COST"), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     ActivationCost.entries.forEach { cost ->
                         GameButton(
-                            label = cost.label,
+                            label = cost.labelIn(strings),
                             accent = if (draft.activationCost == cost) Palette.Gold else Palette.TextMuted,
                             selected = draft.activationCost == cost,
                             dense = true,
@@ -595,9 +612,9 @@ private fun AbilityEditor(
                     }
                 }
 
-                Text("RISOLUZIONE", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                Text(strings.abilities.resolutionCaps, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                 if (draft.healing != null) {
-                    Chip(ResolutionMethod.AUTOMATIC.label, Palette.Heal)
+                    Chip(ResolutionMethod.AUTOMATIC.labelIn(strings), Palette.Heal)
                 } else {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -605,7 +622,7 @@ private fun AbilityEditor(
                     ) {
                         ResolutionMethod.entries.forEach { method ->
                             GameButton(
-                                label = method.label,
+                                label = method.labelIn(strings),
                                 accent = if (draft.resolutionMethod == method) Palette.Party else Palette.TextMuted,
                                 selected = draft.resolutionMethod == method,
                                 dense = true,
@@ -639,29 +656,29 @@ private fun AbilityEditor(
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     if (draft.resolutionMethod == ResolutionMethod.ATTACK_ROLL) {
-                        SheetNumberField("Bonus attacco", draft.attackBonus, Modifier.width(130.dp)) {
+                        SheetNumberField(words.attackBonus, draft.attackBonus, Modifier.width(130.dp)) {
                             onChange(draft.copy(attackBonus = it))
                         }
                     }
-                    SheetMetreField("Gittata", draft.rangeFeet, Modifier.width(150.dp)) {
+                    SheetMetreField(language.pick("Gittata", "Range"), draft.rangeFeet, Modifier.width(150.dp)) {
                         onChange(draft.copy(rangeFeet = it.coerceAtLeast(0)))
                     }
                     if (!draft.isArea) {
-                        SheetNumberField("Bersagli", draft.maxTargets, Modifier.width(120.dp)) {
+                        SheetNumberField(strings.abilities.targets, draft.maxTargets, Modifier.width(120.dp)) {
                             onChange(draft.copy(maxTargets = it.coerceAtLeast(1)))
                         }
                     }
                 }
 
                 SheetCheck(
-                    "Incantesimo o trucchetto",
+                    words.spellOrCantrip,
                     draft.isSpellOrCantrip,
                 ) { spell ->
                     onChange(draft.copy(spellOrCantrip = spell))
                 }
                 if (draft.resolutionMethod == ResolutionMethod.ATTACK_ROLL) {
                     Text(
-                        "CARATTERISTICA DEL TIRO PER COLPIRE",
+                        words.attackAbilityCaps,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.labelSmall,
                     )
@@ -670,7 +687,7 @@ private fun AbilityEditor(
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         GameButton(
-                            label = "Non specificata",
+                            label = words.unspecified,
                             accent = if (draft.attackAbility == null) Palette.Gold else Palette.TextMuted,
                             selected = draft.attackAbility == null,
                             dense = true,
@@ -690,7 +707,7 @@ private fun AbilityEditor(
 
                 if (draft.healing == null) {
                     SheetCheck(
-                        "Risoluzione manuale al tavolo",
+                        words.manualResolution,
                         draft.automationStatus == AutomationStatus.MANUAL_REQUIRED,
                     ) { manual ->
                         onChange(
@@ -706,8 +723,8 @@ private fun AbilityEditor(
                 }
             }
 
-            SheetBox("Cura") {
-                SheetCheck("Recupera punti ferita", draft.healing != null) { enabled ->
+            SheetBox(strings.abilities.healing) {
+                SheetCheck(words.restoresHitPoints, draft.healing != null) { enabled ->
                     onChange(
                         if (enabled) {
                             draft.copy(
@@ -719,14 +736,14 @@ private fun AbilityEditor(
                     )
                 }
                 draft.healing?.let { healing ->
-                    Text("BERSAGLIO", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                    Text(strings.abilities.targetCaps, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         HealingTarget.entries.forEach { target ->
                             GameButton(
-                                label = target.label,
+                                label = target.label(strings),
                                 accent = if (healing.target == target) Palette.Heal else Palette.TextMuted,
                                 selected = healing.target == target,
                                 dense = true,
@@ -735,13 +752,13 @@ private fun AbilityEditor(
                         }
                     }
 
-                    Text("QUANTITÀ", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                    Text(words.quantityCaps, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         GameButton(
-                            label = "Dadi",
+                            label = language.pick("Dadi", "Dice"),
                             accent = if (healing.dice != null) Palette.Heal else Palette.TextMuted,
                             selected = healing.dice != null,
                             dense = true,
@@ -756,7 +773,7 @@ private fun AbilityEditor(
                             },
                         )
                         GameButton(
-                            label = "Fissa",
+                            label = language.pick("Fissa", "Fixed"),
                             accent = if (healing.fixedAmount != null) Palette.Heal else Palette.TextMuted,
                             selected = healing.fixedAmount != null,
                             dense = true,
@@ -776,7 +793,7 @@ private fun AbilityEditor(
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                             verticalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
-                            SheetNumberField("Numero dadi", dice.count, Modifier.width(120.dp)) {
+                            SheetNumberField(words.diceCount, dice.count, Modifier.width(120.dp)) {
                                 onChange(
                                     draft.copy(
                                         healing = healing.copy(
@@ -785,7 +802,7 @@ private fun AbilityEditor(
                                     ),
                                 )
                             }
-                            SheetNumberField("Facce", dice.sides, Modifier.width(105.dp)) {
+                            SheetNumberField(language.pick("Facce", "Sides"), dice.sides, Modifier.width(105.dp)) {
                                 onChange(
                                     draft.copy(
                                         healing = healing.copy(
@@ -794,7 +811,7 @@ private fun AbilityEditor(
                                     ),
                                 )
                             }
-                            SheetNumberField("Modificatore", dice.modifier, Modifier.width(130.dp)) {
+                            SheetNumberField(language.pick("Modificatore", "Modifier"), dice.modifier, Modifier.width(130.dp)) {
                                 onChange(
                                     draft.copy(
                                         healing = healing.copy(dice = dice.copy(modifier = it)),
@@ -803,7 +820,7 @@ private fun AbilityEditor(
                             }
                         }
                         Text(
-                            "BONUS DINAMICO",
+                            words.dynamicBonusCaps,
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.labelSmall,
                         )
@@ -813,7 +830,7 @@ private fun AbilityEditor(
                         ) {
                             CatalogHealingBonusSource.entries.forEach { source ->
                                 GameButton(
-                                    label = source.label,
+                                    label = source.label(strings),
                                     accent = if (healing.bonusSource == source) Palette.Heal else Palette.TextMuted,
                                     selected = healing.bonusSource == source,
                                     dense = true,
@@ -838,7 +855,7 @@ private fun AbilityEditor(
                         }
                         if (healing.bonusSource == CatalogHealingBonusSource.CLASS_LEVEL) {
                             Text(
-                                "CLASSE DEL BONUS",
+                                words.bonusClassCaps,
                                 color = Palette.TextMuted,
                                 style = MaterialTheme.typography.labelSmall,
                             )
@@ -848,7 +865,7 @@ private fun AbilityEditor(
                             ) {
                                 CharacterClassId.entries.forEach { classId ->
                                     GameButton(
-                                        label = classId.italianLabel,
+                                        label = classId.label(language),
                                         accent = if (healing.bonusClassId == classId) {
                                             Palette.Heal
                                         } else {
@@ -869,7 +886,7 @@ private fun AbilityEditor(
                         }
                     }
                     healing.fixedAmount?.let { amount ->
-                        SheetNumberField("Punti ferita", amount, Modifier.width(150.dp)) {
+                        SheetNumberField(words.hitPoints, amount, Modifier.width(150.dp)) {
                             onChange(
                                 draft.copy(
                                     healing = CatalogHealing.fixed(healing.target, it.coerceAtLeast(1)),
@@ -878,23 +895,23 @@ private fun AbilityEditor(
                         }
                     }
                     Text(
-                        "La cura non infligge danno, non usa un'area e viene risolta automaticamente.",
+                        words.healingNoDamageNote,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
 
-            SheetBox("Danno") {
+            SheetBox(strings.abilities.damage) {
                 if (draft.healing != null) {
                     Text(
-                        "Non applicabile: questa capacità recupera punti ferita.",
+                        words.notApplicableHealing,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 } else {
                     SheetCheck(
-                        "Infligge danno",
+                        words.dealsDamage,
                         draft.dealsDamage,
                     ) { enabled ->
                         if (draft.resolutionMethod != ResolutionMethod.ATTACK_ROLL || enabled) {
@@ -907,17 +924,17 @@ private fun AbilityEditor(
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
-                        SheetNumberField("Numero dadi", draft.diceCount, Modifier.width(120.dp)) {
+                        SheetNumberField(words.diceCount, draft.diceCount, Modifier.width(120.dp)) {
                             onChange(draft.copy(diceCount = it.coerceAtLeast(1)))
                         }
-                        SheetNumberField("Facce", draft.diceSides, Modifier.width(105.dp)) {
+                        SheetNumberField(language.pick("Facce", "Sides"), draft.diceSides, Modifier.width(105.dp)) {
                             onChange(draft.copy(diceSides = it.coerceAtLeast(2)))
                         }
-                        SheetNumberField("Modificatore", draft.damageModifier, Modifier.width(130.dp)) {
+                        SheetNumberField(language.pick("Modificatore", "Modifier"), draft.damageModifier, Modifier.width(130.dp)) {
                             onChange(draft.copy(damageModifier = it))
                         }
                     }
-                    DamageTypeSelector("TIPO PRINCIPALE", draft.damageType) { type ->
+                    DamageTypeSelector(words.mainTypeCaps, draft.damageType) { type ->
                         onChange(draft.copy(damageType = type))
                     }
 
@@ -936,12 +953,12 @@ private fun AbilityEditor(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    "COMPONENTE AGGIUNTIVA ${index + 1}",
+                                    words.extraComponentCaps(index + 1),
                                     color = Palette.TextMuted,
                                     style = MaterialTheme.typography.labelSmall,
                                     modifier = Modifier.weight(1f),
                                 )
-                                GameButton("Rimuovi", accent = Palette.Enemy, dense = true, onClick = {
+                                GameButton(strings.common.remove, accent = Palette.Enemy, dense = true, onClick = {
                                     onChange(
                                         draft.copy(
                                             additionalDamage = draft.additionalDamage
@@ -954,36 +971,36 @@ private fun AbilityEditor(
                                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                                 verticalArrangement = Arrangement.spacedBy(7.dp),
                             ) {
-                                SheetNumberField("Numero dadi", component.diceCount, Modifier.width(120.dp)) {
+                                SheetNumberField(words.diceCount, component.diceCount, Modifier.width(120.dp)) {
                                     onChange(draft.withAdditionalDamage(index, component.copy(diceCount = it.coerceAtLeast(1))))
                                 }
-                                SheetNumberField("Facce", component.diceSides, Modifier.width(105.dp)) {
+                                SheetNumberField(language.pick("Facce", "Sides"), component.diceSides, Modifier.width(105.dp)) {
                                     onChange(draft.withAdditionalDamage(index, component.copy(diceSides = it.coerceAtLeast(2))))
                                 }
-                                SheetNumberField("Modificatore", component.modifier, Modifier.width(130.dp)) {
+                                SheetNumberField(language.pick("Modificatore", "Modifier"), component.modifier, Modifier.width(130.dp)) {
                                     onChange(draft.withAdditionalDamage(index, component.copy(modifier = it)))
                                 }
                             }
-                            DamageTypeSelector("TIPO AGGIUNTIVO", component.type) { type ->
+                            DamageTypeSelector(words.extraTypeCaps, component.type) { type ->
                                 onChange(draft.withAdditionalDamage(index, component.copy(type = type)))
                             }
                         }
                     }
-                    GameButton("＋ Aggiungi componente di danno", accent = Palette.Party, onClick = {
+                    GameButton(words.addDamageComponent, accent = Palette.Party, onClick = {
                         onChange(draft.copy(additionalDamage = draft.additionalDamage + CatalogDamage()))
                     })
                 }
             }
 
-            SheetBox("Area e tiro salvezza") {
+            SheetBox(words.areaAndSave) {
                 if (draft.healing != null) {
                     Text(
-                        "Non applicabile: la cura sceglie un singolo bersaglio amico.",
+                        words.notApplicableSingleTarget,
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 } else {
-                    SheetCheck("Effetto ad area", draft.isArea) { enabled ->
+                    SheetCheck(words.areaEffect, draft.isArea) { enabled ->
                         onChange(
                             draft.copy(
                                 areaRadiusFeet = if (enabled) draft.areaRadiusFeet.takeIf { it > 0 } ?: 20 else 0,
@@ -995,7 +1012,7 @@ private fun AbilityEditor(
                     }
                 }
                 if (draft.isArea && draft.healing == null) {
-                    SheetMetreField("Raggio", draft.areaRadiusFeet, Modifier.width(150.dp)) {
+                    SheetMetreField(strings.abilities.radius, draft.areaRadiusFeet, Modifier.width(150.dp)) {
                         onChange(draft.copy(areaRadiusFeet = it.coerceAtLeast(1)))
                     }
                 }
@@ -1003,7 +1020,7 @@ private fun AbilityEditor(
                     draft.healing == null &&
                     (draft.resolutionMethod == ResolutionMethod.SAVING_THROW || draft.isArea)
                 ) {
-                    Text("TIRO SALVEZZA", color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                    Text(words.savingThrowCaps, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -1018,7 +1035,7 @@ private fun AbilityEditor(
                             )
                         }
                     }
-                    SheetCheck("Metà danni con TS superato", draft.halfOnSave) {
+                    SheetCheck(words.halfDamageOnSave, draft.halfOnSave) {
                         onChange(draft.copy(halfOnSave = it))
                     }
                 }
@@ -1030,23 +1047,23 @@ private fun AbilityEditor(
             horizontalArrangement = Arrangement.spacedBy(9.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            GameButton("Salva abilità", accent = Palette.Heal, onClick = onSave)
+            GameButton(words.saveAbility, accent = Palette.Heal, onClick = onSave)
             onDelete?.let { delete ->
-                GameButton("Elimina", accent = Palette.Enemy, onClick = delete)
+                GameButton(strings.common.delete, accent = Palette.Enemy, onClick = delete)
             }
         }
     }
 }
 
-private fun newAbility(): CatalogAbility = CatalogAbility(
+private fun newAbility(strings: Strings): CatalogAbility = CatalogAbility(
     id = "abilita-${System.currentTimeMillis()}",
-    name = "Nuova abilità",
+    name = strings.abilities.newAbility,
     attackAbility = Ability.STRENGTH,
 )
 
-private fun CatalogAbility.asCustomCopy(): CatalogAbility = copy(
+private fun CatalogAbility.asCustomCopy(strings: Strings): CatalogAbility = copy(
     id = "abilita-${System.currentTimeMillis()}",
-    name = "$name (copia)",
+    name = strings.abilities.copyOf(name),
     spellOrCantrip = isSpellOrCantrip,
     category = RuleElementKind.CUSTOM,
     classEligibility = emptyList(),
@@ -1060,6 +1077,7 @@ private fun CatalogAbility.asCustomCopy(): CatalogAbility = copy(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DamageTypeSelector(label: String, selected: DamageType, onSelect: (DamageType) -> Unit) {
+    val language = currentLanguage
     Text(label, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -1067,7 +1085,7 @@ private fun DamageTypeSelector(label: String, selected: DamageType, onSelect: (D
     ) {
         DamageType.entries.forEach { type ->
             GameButton(
-                label = type.italianLabel.replaceFirstChar { it.uppercase() },
+                label = type.label(language),
                 accent = if (selected == type) Palette.Enemy else Palette.TextMuted,
                 selected = selected == type,
                 dense = true,
@@ -1099,17 +1117,20 @@ private fun CatalogAbility.enforceHealingConstraints(): CatalogAbility =
         )
     }
 
-private val CatalogHealing.amountText: String
-    get() = dice?.let { value ->
+private fun CatalogHealing.amountText(strings: Strings): String =
+    dice?.let { value ->
         buildString {
             append(value.count).append('d').append(value.sides)
             if (value.modifier > 0) append('+')
             if (value.modifier != 0) append(value.modifier)
             when (bonusSource) {
                 CatalogHealingBonusSource.NONE -> Unit
-                CatalogHealingBonusSource.SPELLCASTING_ABILITY -> append(" + mod. incantatore")
+                CatalogHealingBonusSource.SPELLCASTING_ABILITY ->
+                    append(strings.abilities.plusSpellcastingModifier)
                 CatalogHealingBonusSource.CLASS_LEVEL -> append(
-                    " + livello ${bonusClassId?.italianLabel ?: "classe"}",
+                    strings.abilities.plusClassLevel(
+                        bonusClassId?.label(strings.language) ?: strings.abilities.classLevel,
+                    ),
                 )
             }
             slotScaling?.let { scaling ->
@@ -1117,41 +1138,25 @@ private val CatalogHealing.amountText: String
                     .append(scaling.additionalDicePerSlotLevel)
                     .append('d')
                     .append(value.sides)
-                    .append("/livello oltre ")
-                    .append(scaling.baseSlotLevel)
-                    .append('°')
+                    .append(strings.abilities.perLevelAbove(scaling.baseSlotLevel))
             }
         }
     } ?: fixedAmount.toString()
 
-private val CatalogHealingBonusSource.label: String
-    get() = when (this) {
-        CatalogHealingBonusSource.NONE -> "Nessuno"
-        CatalogHealingBonusSource.SPELLCASTING_ABILITY -> "Mod. incantatore"
-        CatalogHealingBonusSource.CLASS_LEVEL -> "Livello di classe"
-    }
+private fun CatalogHealingBonusSource.label(strings: Strings): String = when (this) {
+    CatalogHealingBonusSource.NONE -> strings.common.none
+    CatalogHealingBonusSource.SPELLCASTING_ABILITY -> strings.abilities.spellcastingModifier
+    CatalogHealingBonusSource.CLASS_LEVEL -> strings.abilities.classLevel
+}
 
-private val HealingTarget.label: String
-    get() = when (this) {
-        HealingTarget.SELF -> "Solo sé"
-        HealingTarget.ALLY -> "Solo alleato"
-        HealingTarget.SELF_OR_ALLY -> "Sé o alleato"
-    }
+private fun HealingTarget.label(strings: Strings): String = when (this) {
+    HealingTarget.SELF -> strings.abilities.healingSelfOnly
+    HealingTarget.ALLY -> strings.abilities.healingAllyOnly
+    HealingTarget.SELF_OR_ALLY -> strings.abilities.healingSelfOrAlly
+}
 
-internal val ActivationCost.label: String
-    get() = when (this) {
-        ActivationCost.ACTION -> "Azione"
-        ActivationCost.BONUS_ACTION -> "Azione bonus"
-        ActivationCost.REACTION -> "Reazione"
-        ActivationCost.LEGENDARY_ACTION -> "Azione leggendaria"
-        ActivationCost.NONE -> "Nessun costo"
-    }
+// Il costo e il metodo di risoluzione hanno gia' un nome nel vocabolario del
+// motore: qui si rimanda a quello invece di tenerne una seconda copia.
+internal fun ActivationCost.labelIn(strings: Strings): String = label(strings.language)
 
-internal val ResolutionMethod.label: String
-    get() = when (this) {
-        ResolutionMethod.ATTACK_ROLL -> "Tiro per colpire"
-        ResolutionMethod.SAVING_THROW -> "Tiro salvezza"
-        ResolutionMethod.ABILITY_CHECK -> "Prova"
-        ResolutionMethod.AUTOMATIC -> "Automatica"
-        ResolutionMethod.MANUAL -> "Manuale"
-    }
+internal fun ResolutionMethod.labelIn(strings: Strings): String = label(strings.language)

@@ -43,6 +43,7 @@ import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.math.roundToInt
 import org.jetbrains.skiko.GraphicsApi
+import app.d6d.ui.i18n.AppLocale
 
 /**
  * Cartella dati locale.
@@ -80,7 +81,11 @@ internal fun atmosphericFrameIntervalMillis(renderApi: GraphicsApi, windows: Boo
  * la validazione vera la fa l'archivio delle immagini.
  */
 private fun desktopFilePicker() = FilePicker {
-    val dialog = FileDialog(null as Frame?, "Scegli un'immagine", FileDialog.LOAD)
+    val dialog = FileDialog(
+        null as Frame?,
+        AppLocale.current.maps.chooseImageDialogTitle,
+        FileDialog.LOAD,
+    )
     dialog.setFilenameFilter { _, name ->
         val lower = name.lowercase()
         listOf(".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif").any(lower::endsWith)
@@ -263,7 +268,7 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
     val windowState = rememberWindowState(width = 1480.dp, height = 940.dp)
     Window(
         onCloseRequest = { exitRequested = true },
-        title = AppIdentity.windowTitle,
+        title = AppIdentity.windowTitle(AppLocale.language),
         state = windowState,
         icon = windowIcon,
     ) {

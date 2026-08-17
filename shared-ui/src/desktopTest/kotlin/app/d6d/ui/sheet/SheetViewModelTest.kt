@@ -1,6 +1,7 @@
 package app.d6d.ui.sheet
 
 import app.d6d.content.srd521it.Srd521ItContent
+import app.d6d.i18n.AppLanguage
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.SheetStore
@@ -9,8 +10,10 @@ import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.CharacterProgression
 import app.d6d.rules.character.ClassLevelState
 import app.d6d.rules.character.RuleElementKind
+import app.d6d.ui.i18n.AppLocale
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -117,6 +120,55 @@ class SheetViewModelTest {
 
         val reopened = model()
         assertEquals(ability, reopened.library.abilities.first { it.id == ability.id })
+    }
+
+    @Test
+    fun `il catalogo SRD segue ogni cambio di lingua senza restare memorizzato`() {
+        val model = model()
+        val fireballId = "srd521-it:spell:palla-di-fuoco"
+
+        assertEquals("Palla di fuoco", model.abilityCatalog.first { it.id == fireballId }.name)
+        AppLocale.use(AppLanguage.ENGLISH)
+        assertEquals("Fireball", model.abilityCatalog.first { it.id == fireballId }.name)
+        AppLocale.use(AppLanguage.ITALIAN)
+        assertEquals("Palla di fuoco", model.abilityCatalog.first { it.id == fireballId }.name)
+    }
+
+    @Test
+    fun `classe e sottoclasse guidate seguono la lingua senza riscrivere la scheda`() {
+        val model = model()
+        val tarvos = model.library.characters.first { it.id == "pg-tarvos" }
+        val gudrun = model.library.characters.first { it.id == "pg-gudrun" }
+
+        assertEquals("Guerriero 1", model.displayedClassName(tarvos))
+        AppLocale.use(AppLanguage.ENGLISH)
+        assertEquals("Fighter 1", model.displayedClassName(tarvos))
+        assertEquals("Path of the Berserker", model.displayedSubclassName(gudrun))
+        assertEquals("Guerriero 1", tarvos.className, "lo switch non deve modificare il documento")
+        AppLocale.use(AppLanguage.ITALIAN)
+    }
+
+    @Test
+    fun `il cambio lingua scarta un messaggio di scheda gia materializzato`() {
+        val model = model()
+        val surgeId = "srd521-it:feature:guerriero:azione-impetuosa"
+        assertFalse(model.setAbilityPassive(surgeId, true))
+        assertTrue(model.status?.isNotBlank() == true)
+
+        model.onLanguageChanged()
+
+        assertNull(model.status)
+    }
+
+    @Test
+    fun `la validazione di una capacita personale parla inglese`() {
+        val model = model()
+        AppLocale.use(AppLanguage.ENGLISH)
+
+        assertFalse(model.upsertAbility(CatalogAbility(id = "custom-invalid", name = "")))
+
+        assertEquals("Invalid sheet: The ability name can't be blank.", model.status)
+        AppLocale.use(AppLanguage.ITALIAN)
     }
 
     @Test

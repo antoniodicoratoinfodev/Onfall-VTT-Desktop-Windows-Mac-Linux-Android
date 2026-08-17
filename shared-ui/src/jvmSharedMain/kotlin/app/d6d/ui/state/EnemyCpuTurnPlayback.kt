@@ -8,6 +8,9 @@ import app.d6d.engine.ai.EnemyCpuActionType
 import app.d6d.engine.ai.EnemyCpuOutcome
 import app.d6d.engine.ai.EnemyCpuReason
 import app.d6d.engine.ai.EnemyCpuResult
+import app.d6d.ui.i18n.AppLocale
+import app.d6d.ui.i18n.LocalizedText
+import app.d6d.ui.i18n.literalText
 import kotlinx.coroutines.flow.first
 
 /**
@@ -94,7 +97,7 @@ internal class EnemyCpuTurnPlayback(
         combatant.snapshot().definitionId() to combatant.resources()
     }
     private var shownReports = 0
-    private var failure: String? = null
+    private var failure: LocalizedText? = null
     private var completed = false
     private var completing = false
     private var persistedResourceChanges = emptyMap<String, EnemyCpuResourceDelta>()
@@ -129,7 +132,8 @@ internal class EnemyCpuTurnPlayback(
             publish()
             executed
         } catch (failed: RuntimeException) {
-            failure = failed.message ?: "La CPU non ha potuto completare il turno."
+            failure = failed.message?.let(::literalText)
+                ?: LocalizedText { it.battle.cpuCouldNotFinishTurn }
             false
         }
     }
@@ -154,7 +158,10 @@ internal class EnemyCpuTurnPlayback(
             }
             consolidate(runner.result())
         } catch (failed: RuntimeException) {
-            rollbackOrPreserve(failed.message ?: "La CPU non ha potuto completare il turno.")
+            rollbackOrPreserve(
+                failed.message?.let(::literalText)
+                    ?: LocalizedText { it.battle.cpuCouldNotFinishTurn },
+            )
         } finally {
             completing = false
             completed = true
@@ -180,7 +187,7 @@ internal class EnemyCpuTurnPlayback(
             model.sync()
         } else {
             preserveOwnedCommandsAndSuppress(
-                "Turno CPU sospeso: il tavolo è cambiato prima dell'ingresso in Modifica.",
+                LocalizedText { it.battle.cpuSuspendedTableChangedBeforeEdit },
                 resourceChanges,
             )
         }
@@ -197,7 +204,7 @@ internal class EnemyCpuTurnPlayback(
             // la guardia. Non va attribuita alle risorse CPU, inglobata nell'Undo
             // del batch o rimossa tornando a startingRevision.
             preserveOwnedCommandsAndSuppress(
-                "Turno CPU sospeso: lo stato del tavolo è cambiato durante la riproduzione.",
+                LocalizedText { it.battle.cpuSuspendedTableChangedDuringPlayback },
                 ownedResourceChanges(),
             )
             return
@@ -208,7 +215,7 @@ internal class EnemyCpuTurnPlayback(
         persistedResourceChanges = resourceChanges
         val resourceSyncFailure = model.persistEnemyCpuResourceChanges(resourceChanges)
         if (resourceSyncFailure != null) {
-            rollbackOrPreserve("$resourceSyncFailure")
+            rollbackOrPreserve(literalText("$resourceSyncFailure"))
             return
         }
 
@@ -217,15 +224,14 @@ internal class EnemyCpuTurnPlayback(
         // revisione finisca nel checkpoint CPU.
         if (externalRevisionPresent()) {
             persistedResourceChanges = emptyMap()
-            suppressTurn("Turno CPU sospeso: lo stato del tavolo è cambiato durante il consolidamento.")
+            suppressTurn(LocalizedText { it.battle.cpuSuspendedTableChangedDuringCommit })
             return
         }
         if (result.acted()) summarize(result)
         if (result.decisionLimitReached() && model.enemyCpuTurnSignature == scheduledSignature) {
             model.suppressedEnemyCpuTurnSignature = scheduledSignature
             model.completedEnemyCpuTurnSignature = null
-            model.message =
-                "La CPU ha raggiunto il limite di sicurezza: il turno resta disponibile al tavolo."
+            model.showMessage(LocalizedText { it.battle.cpuSafetyLimitReached })
         } else if (
             result.partialMixedGroup() && result.waitingForPlayer() &&
             model.enemyCpuTurnSignature == scheduledSignature
@@ -242,7 +248,7 @@ internal class EnemyCpuTurnPlayback(
         // lancia, rollbackOrPreserve non puo' lasciare un UndoEffect gia' inserito.
         persistedResourceChanges = emptyMap()
         if (externalRevisionPresent()) {
-            suppressTurn("Turno CPU sospeso: lo stato del tavolo è cambiato durante il consolidamento.")
+            suppressTurn(LocalizedText { it.battle.cpuSuspendedTableChangedDuringCommit })
             return
         }
         model.recordEnemyCpuUndoBatch(
@@ -262,14 +268,14 @@ internal class EnemyCpuTurnPlayback(
             .takeIf(String::isNotBlank)
             ?.let(model::name)
         model.actionResolution = ActionResolution(
-            text = buildString {
-                append("CPU ").append(model.enemyCpuDifficulty.italianLabel)
-                focus?.let { append(" · bersaglio: ").append(it) }
-                append(" · ").append(attacks).append(" attacchi")
-                if (heals > 0) append(" · ").append(heals).append(" cure")
-                if (moves > 0) append(" · ").append(moves).append(" movimenti")
-                if (result.encounterResolved()) append(" · scontro concluso")
-            },
+            text = AppLocale.current.battle.cpuSummary(
+                difficulty = model.enemyCpuDifficulty.label(AppLocale.current),
+                focus = focus,
+                attacks = attacks,
+                heals = heals,
+                moves = moves,
+                encounterResolved = result.encounterResolved(),
+            ),
             isHit = result.actions().any {
                 (it.type() == EnemyCpuActionType.ATTACK && it.hit()) ||
                     (it.type() == EnemyCpuActionType.AREA_ATTACK && it.amount() > 0)
@@ -277,11 +283,11 @@ internal class EnemyCpuTurnPlayback(
         )
     }
 
-    private fun suppressTurn(reason: String) {
+    private fun suppressTurn(reason: LocalizedText) {
         model.sync()
         model.suppressedEnemyCpuTurnSignature = model.enemyCpuTurnSignature ?: scheduledSignature
         model.completedEnemyCpuTurnSignature = null
-        model.message = reason
+        model.showMessage(reason)
     }
 
     /** Delta prodotto soltanto dalle revisioni che il runner dichiara proprie. */
@@ -302,33 +308,47 @@ internal class EnemyCpuTurnPlayback(
      * Se una revisione esterna e' gia' arrivata, conserva entrambi i contributi e
      * sincronizza esclusivamente le risorse osservate nell'ultima state owned.
      */
-    private fun rollbackOrPreserve(reason: String) {
+    private fun rollbackOrPreserve(reason: LocalizedText) {
         val ownedChanges = ownedResourceChanges()
         if (runner.rollbackOwnedCommandsIfCurrent()) {
             val restoreFailure = model.restoreEnemyCpuResourceChanges(persistedResourceChanges)
             persistedResourceChanges = emptyMap()
             model.floating = emptyMap()
             model.actionResolution = null
-            val suffix = restoreFailure?.let { " Risorse non riallineate: $it" }.orEmpty()
-            suppressTurn("Turno CPU annullato: $reason$suffix")
+            suppressTurn(
+                LocalizedText { strings ->
+                    val suffix = restoreFailure
+                        ?.let { strings.battle.cpuResourcesNotRealigned(it) }
+                        .orEmpty()
+                    strings.battle.cpuTurnUndone(reason.resolve(strings), suffix)
+                },
+            )
             return
         }
 
         persistedResourceChanges = emptyMap()
         preserveOwnedCommandsAndSuppress(
-            "Turno CPU sospeso senza rimuovere le modifiche esterne: $reason",
+            LocalizedText { strings ->
+                strings.battle.cpuSuspendedKeepingChanges(reason.resolve(strings))
+            },
             ownedChanges,
         )
     }
 
     private fun preserveOwnedCommandsAndSuppress(
-        reason: String,
+        reason: LocalizedText,
         resourceChanges: Map<String, EnemyCpuResourceDelta>,
     ) {
         val syncFailure = model.persistEnemyCpuResourceChanges(resourceChanges)
         persistedResourceChanges = emptyMap()
-        val suffix = syncFailure?.let { " Risorse CPU non sincronizzate: $it" }.orEmpty()
-        suppressTurn(reason + suffix)
+        suppressTurn(
+            LocalizedText { strings ->
+                val suffix = syncFailure
+                    ?.let { strings.battle.cpuResourcesOutOfSync(it) }
+                    .orEmpty()
+                reason.resolve(strings) + suffix
+            },
+        )
     }
 
     /**
@@ -373,25 +393,30 @@ internal class EnemyCpuTurnPlayback(
     private fun summaryOf(action: EnemyCpuActionReport): String? {
         val actor = action.actorId().takeIf { it.isNotBlank() }?.let(model::name) ?: return null
         val target = action.targetId().takeIf { it.isNotBlank() }?.let(model::name)
+        val words = AppLocale.current.battle
         return when (action.type()) {
             EnemyCpuActionType.MOVE -> when (action.reason()) {
-                EnemyCpuReason.SURROUND_TARGET -> "$actor accerchia il bersaglio"
-                else -> "$actor si sposta"
+                EnemyCpuReason.SURROUND_TARGET -> words.cpuFlanks(actor)
+                else -> words.cpuMoves(actor)
             }
             EnemyCpuActionType.ATTACK -> when {
                 target == null -> null
-                !action.hit() -> "$actor manca $target"
-                action.amount() <= 0 -> "$actor colpisce $target"
+                !action.hit() -> words.cpuMisses(actor, target)
+                action.amount() <= 0 -> words.cpuHits(actor, target)
                 action.reason() == EnemyCpuReason.FOCUS_FIRE ->
-                    "$actor si concentra su $target · -${action.amount()}"
-                else -> "$actor colpisce $target · -${action.amount()}"
+                    words.cpuConcentratesOn(actor, target, action.amount())
+                else -> words.cpuHitsForDamage(actor, target, action.amount())
             }
-            EnemyCpuActionType.AREA_ATTACK -> "$actor colpisce ${action.targets().size} bersagli"
+            EnemyCpuActionType.AREA_ATTACK -> words.cpuHitsSeveral(actor, action.targets().size)
             EnemyCpuActionType.HEAL -> target?.let {
-                val verb = if (action.reason() == EnemyCpuReason.RAISE_ALLY) "rialza" else "cura"
-                "$actor $verb $it · +${action.amount()}"
+                words.cpuHeals(
+                    actor = actor,
+                    target = it,
+                    amount = action.amount(),
+                    raising = action.reason() == EnemyCpuReason.RAISE_ALLY,
+                )
             }
-            EnemyCpuActionType.ACTIVATE -> "$actor usa una capacità"
+            EnemyCpuActionType.ACTIVATE -> words.cpuUsesAbility(actor)
             else -> null
         }
     }

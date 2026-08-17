@@ -13,6 +13,8 @@ import app.d6d.sheet.suggestedProficiencyBonus
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import app.d6d.i18n.AppLanguage
+import app.d6d.ui.i18n.AppLocale
 
 /**
  * Verifica che il contenuto incluso regga il confronto con il documento.
@@ -26,7 +28,49 @@ import org.junit.jupiter.api.Test
  */
 class SessionTemplatesTest {
 
-    private val templates = SessionTemplates.all
+    private val included = SessionTemplates.of(AppLanguage.ITALIAN)
+    private val templates = included.all
+
+    @Test
+    fun `un template inglese resta inglese anche se la lingua globale e italiana`() {
+        AppLocale.use(AppLanguage.ITALIAN)
+        val englishTemplates = SessionTemplates.of(AppLanguage.ENGLISH)
+        val english = englishTemplates.ruins
+
+        assertEquals("The Ruins of Deepvale", english.name)
+        assertTrue(english.party.any { it.className == "Fighter 1" })
+        assertTrue(english.party.none { it.className.startsWith("Guerriero") })
+
+        val state = english.startedSession().currentState()
+        val englishAbilities = english.party.flatMap { sheet ->
+            state.combatants().getValue(sheet.id).snapshot().abilities().map { it.name() }
+        }
+        assertTrue("Second Wind" in englishAbilities)
+
+        val characters = englishTemplates.all.flatMap { it.party }
+        assertEquals(
+            mapOf(
+                "pg-tarvos" to "Human",
+                "pg-nerea" to "Human",
+                "pg-ilvo" to "Halfling",
+                "pg-sibilla" to "Elf",
+                "pg-gudrun" to "Half-Orc",
+                "pg-lyra" to "Human",
+                "pg-aelis" to "Half-Elf",
+                "pg-ysolde" to "Dragonborn",
+                "pg-aldemar" to "Human",
+                "pg-maelis" to "Elf",
+                "pg-shen" to "Human",
+                "pg-nyx" to "Tiefling",
+            ),
+            characters.associate { it.id to it.species },
+        )
+        assertEquals(
+            setOf("Neutral"),
+            characters.filter { it.id in setOf("pg-sibilla", "pg-ysolde", "pg-maelis") }
+                .mapTo(mutableSetOf()) { it.alignment },
+        )
+    }
 
     @Test
     fun `tre partite incluse, quattro personaggi ciascuna, ai tre gradi chiesti`() {
@@ -133,7 +177,7 @@ class SessionTemplatesTest {
 
     @Test
     fun `i privilegi con un effetto numerico arrivano fino alla scheda inclusa`() {
-        val tarvos = SessionTemplates.ruins.party.first { it.characterName.startsWith("Tarvos") }
+        val tarvos = included.ruins.party.first { it.characterName.startsWith("Tarvos") }
         assertTrue(
             tarvos.progression.selections.flatMap { it.optionIds }.any { it.endsWith(":difesa") },
             "Tarvos non ha lo Stile Difesa: l'esempio non verifica piu' nulla",
@@ -142,7 +186,7 @@ class SessionTemplatesTest {
         // Cotta di maglia 16, scudo +2, piu' il punto dello stile.
         assertEquals(19, tarvos.effectiveArmorClass)
 
-        val shen = SessionTemplates.crown.party.first { it.characterName.startsWith("Shen") }
+        val shen = included.crown.party.first { it.characterName.startsWith("Shen") }
         // Monaco di 20º senza armatura: 30 piedi piu' i 30 del Movimento senza armatura.
         assertEquals(60, shen.effectiveSpeedFeet)
     }
