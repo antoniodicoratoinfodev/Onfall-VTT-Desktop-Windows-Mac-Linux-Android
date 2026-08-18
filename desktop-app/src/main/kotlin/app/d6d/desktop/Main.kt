@@ -3,13 +3,15 @@ package app.d6d.desktop
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.decodeToImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -208,6 +210,39 @@ internal fun cursorDrawSize(
         (sourceHeight * fit).roundToInt().coerceIn(1, canvasHeight)
 }
 
+private data class DesktopCursorBackend(
+    val drawInScene: Boolean,
+    val hiddenNativeCursor: Cursor,
+)
+
+/**
+ * Sceglie il fallback in base a cio' che il toolkit sa davvero rappresentare.
+ * Se il controllo o il cursore trasparente falliscono si conserva la strada
+ * nativa: un guanto imperfetto e' comunque preferibile a nessun puntatore.
+ */
+private fun desktopCursorBackend(): DesktopCursorBackend {
+    val defaultCursor = Cursor.getDefaultCursor()
+    val toolkit = runCatching { Toolkit.getDefaultToolkit() }.getOrNull()
+        ?: return DesktopCursorBackend(drawInScene = false, hiddenNativeCursor = defaultCursor)
+    val maximumColors = runCatching { toolkit.maximumCursorColors }.getOrNull()
+        ?: return DesktopCursorBackend(drawInScene = false, hiddenNativeCursor = defaultCursor)
+    if (maximumColors >= 256) {
+        return DesktopCursorBackend(drawInScene = false, hiddenNativeCursor = defaultCursor)
+    }
+
+    val hiddenCursor = runCatching {
+        toolkit.createCustomCursor(
+            BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB),
+            Point(0, 0),
+            "Onfall transparent cursor",
+        )
+    }.getOrNull() ?: return DesktopCursorBackend(
+        drawInScene = false,
+        hiddenNativeCursor = defaultCursor,
+    )
+    return DesktopCursorBackend(drawInScene = true, hiddenNativeCursor = hiddenCursor)
+}
+
 private object CursorResourceAnchor
 
 private fun cursorResourceBytes(resource: String): ByteArray =
@@ -242,9 +277,14 @@ private fun applyTaskbarIcon(bytes: ByteArray) {
     }
 }
 
+private data class DesktopCursor(
+    val native: Cursor,
+    val drawn: DrawnCursor,
+)
+
 private data class DesktopCursorPair(
-    val pointer: Cursor,
-    val grab: Cursor,
+    val pointer: DesktopCursor,
+    val grab: DesktopCursor,
     val preview: CursorPairPreview,
 )
 
@@ -262,26 +302,42 @@ private fun desktopCursorPair(
 ): DesktopCursorPair {
     val pointerBytes = cursorResourceBytes(pointerResource)
     val grabBytes = cursorResourceBytes(grabResource)
+    val pointerImage = pointerBytes.decodeToImageBitmap()
+    val grabImage = grabBytes.decodeToImageBitmap()
     val suffix = pair.name.lowercase()
     return DesktopCursorPair(
-        pointer = fantasyCursor(
-            imageBytes = pointerBytes,
-            hotspotAt64Px = pointerHotspot,
-            scale = size.scale,
-            name = "Onfall fantasy pointer $suffix",
-            fallback = Cursor.DEFAULT_CURSOR,
+        pointer = DesktopCursor(
+            native = fantasyCursor(
+                imageBytes = pointerBytes,
+                hotspotAt64Px = pointerHotspot,
+                scale = size.scale,
+                name = "Onfall fantasy pointer $suffix",
+                fallback = Cursor.DEFAULT_CURSOR,
+            ),
+            drawn = DrawnCursor(
+                image = pointerImage,
+                hotspot = Offset(pointerHotspot.x.toFloat(), pointerHotspot.y.toFloat()),
+                scale = size.scale,
+            ),
         ),
-        grab = fantasyCursor(
-            imageBytes = grabBytes,
-            hotspotAt64Px = grabHotspot,
-            scale = size.scale,
-            name = "Onfall fantasy grab $suffix",
-            fallback = Cursor.HAND_CURSOR,
+        grab = DesktopCursor(
+            native = fantasyCursor(
+                imageBytes = grabBytes,
+                hotspotAt64Px = grabHotspot,
+                scale = size.scale,
+                name = "Onfall fantasy grab $suffix",
+                fallback = Cursor.HAND_CURSOR,
+            ),
+            drawn = DrawnCursor(
+                image = grabImage,
+                hotspot = Offset(grabHotspot.x.toFloat(), grabHotspot.y.toFloat()),
+                scale = size.scale,
+            ),
         ),
         preview = CursorPairPreview(
             pair = pair,
-            pointer = pointerBytes.decodeToImageBitmap(),
-            grab = grabBytes.decodeToImageBitmap(),
+            pointer = pointerImage,
+            grab = grabImage,
         ),
     )
 }
@@ -364,6 +420,11 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
         }
         val windows = remember { runningOnWindows }
         val backgroundFrameInterval = atmosphericFrameIntervalMillis(renderApi, windows)
+        val cursorBackend = remember { desktopCursorBackend() }
+        val pointerTrail = remember { PointerTrail() }
+        val pointerInside by remember(pointerTrail) {
+            derivedStateOf { pointerTrail.position != null }
+        }
         val cursorPairs = remember(selectedCursorSize) {
             mapOf(
                 CursorPair.COLD to desktopCursorPair(
@@ -421,6 +482,13 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
         val setGrabbingMap = remember {
             { grabbing: Boolean -> grabbingMap = grabbing }
         }
+        val activeCursor = if (grabbingMap) activeCursors.grab else activeCursors.pointer
+        val hideNativeCursor = cursorBackend.drawInScene && pointerInside
+        val nativeCursor = when {
+            hideNativeCursor -> cursorBackend.hiddenNativeCursor
+            cursorBackend.drawInScene -> Cursor.getDefaultCursor()
+            else -> activeCursor.native
+        }
 
         // La shell densa e' quella predefinita sul desktop, ma se la finestra
         // viene stretta molto si passa al layout compatto invece di comprimere
@@ -428,8 +496,13 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
+                .then(
+                    if (cursorBackend.drawInScene) Modifier.followPointer(pointerTrail)
+                    else Modifier,
+                )
                 .pointerHoverIcon(
-                    PointerIcon(if (grabbingMap) activeCursors.grab else activeCursors.pointer),
+                    icon = PointerIcon(nativeCursor),
+                    overrideDescendants = cursorBackend.drawInScene,
                 )
                 .clickFlameBursts(clickFlames),
         ) {
@@ -448,6 +521,13 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
                 )
             }
             ClickFlameOverlay(clickFlames, Modifier.fillMaxSize())
+            if (cursorBackend.drawInScene) {
+                DrawnCursorOverlay(
+                    cursor = activeCursor.drawn,
+                    trail = pointerTrail,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }

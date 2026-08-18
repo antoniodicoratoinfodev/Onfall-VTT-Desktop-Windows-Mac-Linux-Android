@@ -15,12 +15,14 @@ engine, data, and screens.
 
 ## What it is
 
-Four parts living on the same engine:
+Five parts living on the same engine:
 
 1. the **Compendium**, an editable archive of characters, creatures, and reusable abilities;
 2. an **encounter builder** that turns Compendium templates into an independent game session;
 3. a **combat engine** that is independent from the interface, deterministic, audited, and undoable;
-4. a **game interface** that presents the fight as a turn based battle.
+4. an **enemy CPU** that plays the opposing side when nobody at the table wants to, at three levels
+   of ruthlessness or not at all;
+5. a **game interface** that presents the fight as a turn based battle.
 
 Four destinations hold them together, and the navigation rail on the left collapses to icons, or
 disappears entirely, when the table needs the room. The screenshots below use the Italian labels
@@ -29,30 +31,35 @@ disappears entirely, when the table needs the room. The screenshots below use th
 
 ## Starting a session
 
-A session begins from one of three places: a **bundled encounter**, the **templates** already in the
-Compendium, or a **saved session**. The three bundled encounters are written to be played as they
-are and to show the engine at different points of a campaign: *Le rovine di Vallecupa* (level 1),
-*Il guado di ferro* (level 4), *La corona spezzata* (level 20).
+A session begins from one of four places: a **bundled encounter**, the **templates** already in the
+Compendium, **from scratch** — which opens the Compendium to write the cast first — or a **saved
+session**. The three bundled encounters are written to be played as they are and to show the engine
+at different points of a campaign: *Le rovine di Vallecupa* (level 1), *Il guado di ferro* (level 4),
+*La corona spezzata* (level 20).
 
-The builder then walks through four steps: where to start from, who takes part, the grid, and how to
-begin. In the participants step each template gets a **faction** and a **quantity**, so the same
-stat block can enter the fight four times without being duplicated in the archive. The grid step
-sets columns, rows and the distance one square represents. Distances follow the selected language:
-metres in Italian, using the rules conversion (5 feet = 1.5 m), and feet in English. The last step
-chooses between **Fight mode**, which lays allies and enemies out facing each other and ready to roll,
-and **Roleplay & Fight & Exploration**, which opens the same grid empty and leaves placement to the
-table.
+The builder then walks through five steps: where to start from, who takes part, the grid, how to
+begin, and who commands the opposition. In the participants step each template gets a **faction**
+and a **quantity**, so the same stat block can enter the fight four times without being duplicated
+in the archive. The grid step sets columns, rows and the distance one square represents. Distances
+follow the selected language: metres in Italian, using the rules conversion (5 feet = 1.5 m), and
+feet in English. The mode step chooses between **Fight mode**, which lays allies and enemies out
+facing each other and ready to roll, and **Roleplay & Fight & Exploration**, which opens the same
+grid empty and leaves placement to the table. The last step picks the opposition: **Sandbox**, where
+the table moves the enemies exactly as it moves the allies, or one of the three CPU levels described
+below.
 
 A combatant is **copied** into the session, so ordinary changes to HP, conditions, turns, and
-position never alter its Compendium template. Explicit stat corrections and Action Surge uses
-(including Undo) are instead synchronized with the authoritative sheet. Several sessions stay open
-at once in independent tabs, each with its own map, turn order, dice state, event log and undo history.
+position never alter its Compendium template. Explicit stat corrections and spent resources — Action
+Surge, Wild Shape, spell and Pact slots, healing uses, and each of them under Undo too — are instead
+synchronized with the authoritative sheet, and the log says so plainly when a write does not go
+through. Several sessions stay open at once in independent tabs, each with its own map, turn order,
+dice state, event log and undo history.
 
 <table>
 <tr>
 <td align="center">
 <img src="sample/session-start.png" width="720"/><br/>
-<sub>Starting a session — bundled encounters, saved templates, or a saved session</sub>
+<sub>Starting a session — bundled encounters, saved templates, from scratch, or a saved session</sub>
 </td>
 </tr>
 <tr>
@@ -66,8 +73,9 @@ at once in independent tabs, each with its own map, turn order, dice state, even
 ## The battle
 
 On the desktop the battle screen keeps three areas visible together: the **party** on the left, the
-**battle scene** in the center, the **enemies** on the right. The turn order runs across the top, and
-the event log stays below the enemies. The side columns **resize by dragging their edge**, and when
+**battle scene** in the center, the **enemies** on the right. The turn order runs across the top —
+bare, with each initiative roll beside it, or hidden altogether to give the map the room — and the
+event log stays below the enemies. The side columns **resize by dragging their edge**, and when
 they get narrow each combatant's information folds into a vertical list instead of being truncated.
 
 The active combatant's abilities are listed under the map. Picking one puts the screen in aiming
@@ -75,6 +83,17 @@ mode; picking a target completes it. The engine covers attacks and area effects 
 rolls, advantage and disadvantage, damage types, saving throws, conditions, concentration, death
 saves, healing, temporary hit points and exhaustion, and it refuses what the rules refuse — an
 out-of-range shot is reported as a warning, not silently resolved.
+
+**Healing abilities are resolved by the app**, not called by hand: the engine checks the target is
+on the healer's side, that a self-only or ally-only spell is used as written, and that a dead target
+is not brought back by ordinary healing. **Spell slots and Pact slots** are carried into the fight
+from the sheet, shown on the card of whoever holds them, and spent as part of the same undoable
+command as the spell. A healing spell that upcasts asks which slot to burn and scales its dice to
+the level chosen, up to ninth.
+
+Initiative ties can be played **together or separately**, and the choice is made before the fight
+starts: with ties joined, everyone on the same initiative acts in one shared turn and the screen
+lets you pick which of them is holding the ability bar. Once combat is active the setting is locked.
 
 The tactical map is a grid. You **zoom with the mouse wheel**, drag the tokens to move them, and
 change the scale and the size on screen. Map options set columns and rows, grid visibility and
@@ -116,7 +135,40 @@ would have followed anyway.
 
 Named sessions are saved with the whole combat state, map and token placements, event log and dice
 state, so a reopened session keeps rolling from where it stopped and its subsequent digital rolls
-stay reproducible. They are autosaved after changes, and unsaved work is guarded on close.
+stay reproducible. They are autosaved after changes, and unsaved work is guarded on close. Beside
+those chosen saves the application keeps an atomic **draft of the whole workspace**, deleted after a
+clean exit: if the process is interrupted, the next run offers back every open tab, including the
+sessions that never had a name.
+
+## The enemy CPU
+
+The opposing side can be left to the table or handed to a **deterministic CPU** that commands it and
+nothing else: it never plans for a member of the party, and it never touches a turn that is not its
+own. It reads the combat state to decide and then acts through the same public commands the table
+uses, so its moves land in the same event log, cost the same turn budget, and can be undone from the
+same history.
+
+Difficulty changes only the **quality of the choices**. Rolls, armour class, hit points and the turn
+budget are the engine's, identical at all three levels — nothing is inflated to make the CPU harder.
+
+| Level | How it plays |
+|---|---|
+| **Sandbox** | No CPU at all. You move the opposition and make it act, exactly as you do the allies: useful for refereeing by hand, trying a scene out, or setting an encounter up. |
+| **Easy** | Keeps it simple: the nearest target, the first useful ability, healing only in an emergency and with the smallest slot that will do. No focus fire, no flanking. |
+| **Medium** | The normal level. It coordinates attacks and healing, looks for good positions, plays as a team, and upcasts a heal just enough to pull an ally out of danger. |
+| **Sorry for you!** | Focuses fire on vulnerable targets, flanks, avoids friendly fire and spends higher slots to get its whole side safe at once. |
+
+The turn is played back **one command at a time**, so the table sees each move and each attack
+before the next, with the active enemy followed on the map; the pace is set in Settings, from a long
+pause between commands down to *Instant*, which resolves the enemy turn all at once. When it is
+over, the log carries a summary of the turn: the level played, the priority target the group had
+picked, and how many attacks, heals and moves it took.
+
+The whole CPU turn can be **undone as one batch**, after which automation stays paused until *Resume
+CPU* is pressed, so the table can take the enemy side back at any point. If the state changes
+between one command and the next — someone edits a card, applies damage by hand, resolves something
+at the table — the CPU stops rather than acting on a board it did not plan for, and says so. A
+safety limit of sixteen decisions per combatant guarantees it always hands the turn back.
 
 ## The Compendium
 
@@ -130,8 +182,11 @@ the SRD prescribes, and validates each choice as it is made.
 Existing manual sheets are left untouched until the guided mode is activated on them. From there a
 character advances from level 1 to 20 at the official XP thresholds; class resources, proficiencies,
 feats, cantrips, prepared spells, spellbooks, always-prepared spells and derived Extra Attacks stay
-attached to the sheet and are available to the Compendium and the combat screens. Short and long
-rests restore the resource pools from the sheet itself.
+attached to the sheet and are available to the Compendium and the combat screens. **Spell slots** —
+and the Warlock's Pact slots, counted apart — are derived per level and tracked on the sheet, so the
+fight starts from the pool the character actually has left. Short and long rests restore the
+resource pools from the sheet itself, and a long rest is also where a Druid swaps one known Wild
+Shape form for another.
 
 The armour class is not a single number typed in: the sheet chooses a **base method** — manual final
 AC, unarmoured defence, a class feature such as Draconic Resilience, worn armour — and lists the
@@ -167,8 +222,11 @@ Every rule the application can attach to a sheet lives in one archive, filtered 
 common action, class feature, subclass feature, origin feat, general feat, fighting style, epic boon,
 cantrip, spell, metamagic, eldritch invocation, class option, custom — and by **class**. Each entry
 declares how it behaves at the table: cost, whether it is active or passive, and, for spells, level,
-school, casting time, components, duration and concentration. When an ability is picked from a sheet
-instead, the same catalog is searched by name, rule text or prerequisite.
+school, casting time, components, duration and concentration. An entry that **restores hit points**
+declares the amount and who may receive it — self only, ally only, or either — and how many dice it
+gains per slot level above its own; healing is always active and automated, because the app resolves
+it, so it cannot be marked passive. When an ability is picked from a sheet instead, the same catalog
+is searched by name, rule text or prerequisite.
 
 Entries coming from the SRD pack are **read only** and marked as such; the table decides only whether
 to play them as active or passive. Anything else can be written from scratch, or produced with
@@ -197,8 +255,8 @@ own, shown in the archive, so an existing collection can be dropped in instead o
 one.
 
 On the desktop the pointer is part of the theme: five cursor pairs, each with a pointing pose and a
-map-grabbing pose, in three sizes, applied to the window as soon as they are picked and remembered
-across runs.
+map-grabbing pose, in three sizes, chosen in Settings, applied to the window as soon as they are
+picked and remembered across runs.
 
 <table>
 <tr>
@@ -214,6 +272,30 @@ across runs.
 </td>
 </tr>
 </table>
+
+## Settings
+
+The fourth destination holds the preferences that outlive a single fight. They apply to every game,
+including the ones already open, and they are written to disk as soon as they change.
+
+**Language** switches the whole interface between Italian and English at once, with no restart, and
+carries the units with it: metres in Italian, feet in English. Game terms follow the System
+Reference Document in the language being read. The choice is only recorded once it is actually made
+— until then the application follows the system, so carrying your data to a machine configured in
+another language gives you that machine's language, not the previous one's.
+
+**CPU pace** sets how the enemy turn is played back: *Slow*, *Normal*, *Fast*, or *Instant*, which
+drops the pauses entirely and resolves the whole enemy turn in one go.
+
+**Turn order** decides what the strip above the map shows: hidden, so the map gains the room; the
+order alone, without the numbers; or the order with each combatant's initiative roll beside it.
+
+**Backdrop** trades looks for frames: embers and glow drifting slowly behind the screens, or bare
+still stone.
+
+The last group is about data. **Panel layout** — widths, collapsed panels, map zoom, plate positions
+— can be reset in one move, and the **data folder** the application writes to is shown so it can be
+found, backed up, or copied to another machine.
 
 ## On the phone
 
@@ -235,7 +317,7 @@ eligible for Wild Shape. It is distributed under CC BY 4.0; see [`NOTICE-SRD.md`
 | Module | Language | Role |
 |---|---|---|
 | `engine/domain-model` | Java 17 | actors, abilities, conditions, state, campaigns. Immutable, zero dependencies |
-| `engine/core-engine` | Java 17 | seeded dice, state machine, append only audit, XP budget |
+| `engine/core-engine` | Java 17 | seeded dice, state machine, append only audit, XP budget, enemy CPU |
 | `engine/persistence-json` | Java 17 | atomic saves, backups, import and export |
 | `engine/character-rules` | Kotlin | versioned class choices, XP progression and class resources |
 | `engine/sheet-model` | Kotlin | 2024 character sheet and 2025 monster stat block |
