@@ -84,6 +84,24 @@ class SheetTranslationTest {
     }
 
     @Test
+    fun `la nota personalizzata di un'arma canonica resta intatta`() {
+        // Il nome continua a identificare un'arma del pacchetto e quindi segue la
+        // lingua; non prova pero' che anche la nota sia ancora quella generata.
+        // Quella e' un campo editabile e va preservata quando non coincide piu'
+        // col testo canonico della lingua di partenza.
+        val italian = italianCharacter().copy(
+            weapons = listOf(WeaponEntry(name = "Pugnale", note = "Il cimelio di famiglia")),
+        )
+
+        val english = italian.retranslatedTo(AppLanguage.ENGLISH)
+        assertEquals("Dagger", english.weapons.single().name)
+        assertEquals("Il cimelio di famiglia", english.weapons.single().note)
+
+        val roundTrip = english.retranslatedTo(AppLanguage.ITALIAN)
+        assertEquals(italian, roundTrip)
+    }
+
+    @Test
     fun `la punteggiatura dell'elenco sopravvive`() {
         val english = italianCharacter()
             .retranslatedTo(AppLanguage.ENGLISH)

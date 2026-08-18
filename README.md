@@ -186,8 +186,15 @@ to play them as active or passive. Anything else can be written from scratch, or
 ### Local libraries
 
 Portraits and map backgrounds are uploaded once and reused in every session. Every creature also has
-an immediate **vector portrait drawn from code**, so the default visual set has no external
-image-licensing dependency, and the local libraries only ever hold images the player chose.
+an immediate **vector portrait drawn from code**, so the creature set itself carries no external
+image-licensing dependency.
+
+The map archive is the one exception: it ships with four battle maps, installed on first run so the
+table is usable straight away. They are third-party artwork and their redistribution licence is
+**not yet cleared** — see [NOTICE-MAPS.md](NOTICE-MAPS.md) before publishing a build. Everything
+else in the local libraries is only ever what the player chose. Maps also have a folder of their
+own, shown in the archive, so an existing collection can be dropped in instead of uploaded one by
+one.
 
 On the desktop the pointer is part of the theme: five cursor pairs, each with a pointing pose and a
 map-grabbing pose, in three sizes, applied to the window as soon as they are picked and remembered

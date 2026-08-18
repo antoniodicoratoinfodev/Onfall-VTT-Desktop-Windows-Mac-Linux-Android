@@ -49,6 +49,18 @@ class ImageStore(private val dataDirectory: Path) {
 
     val imagesDirectory: Path get() = dataDirectory.resolve("images")
 
+    /**
+     * Cartella delle mappe.
+     *
+     * Le mappe hanno una cartella tutta loro, separata dai ritratti, perche' e'
+     * l'unica che abbia senso mostrare a chi gioca: chi ha gia' una collezione di
+     * sfondi vuole copiarceli dentro, non caricarli uno a uno dal selettore. E'
+     * quindi una cartella *pubblica* nei fatti, e mescolarci i ritratti
+     * significherebbe invitare qualcuno a rovistare fra le proprie immagini
+     * scambiandole per mappe.
+     */
+    val mapsDirectory: Path get() = dataDirectory.resolve("mappe")
+
     fun isSupported(source: Path): Boolean =
         source.fileName?.toString()?.substringAfterLast('.', "")?.lowercase(Locale.ROOT) in SUPPORTED_FORMATS
 
@@ -68,6 +80,7 @@ class ImageStore(private val dataDirectory: Path) {
     fun importImage(
         source: Path,
         language: AppLanguage = AppLanguage.ITALIAN,
+        destination: Path = imagesDirectory,
     ): String {
         require(Files.isRegularFile(source)) {
             language.pick("Il file non esiste: $source", "The file does not exist: $source")
@@ -97,51 +110,114 @@ class ImageStore(private val dataDirectory: Path) {
                     "Accepted formats: $acceptedFormatsLabel.",
             )
         }
-        val dimensions = imageDimensions(source, format)
-        require(dimensions != null) {
+        // Le dimensioni si leggono ancora, ma non per limitarle: un'intestazione da
+        // cui non si ricavano larghezza e altezza e' un file troncato o danneggiato,
+        // e accorgersene qui e' meglio che scoprirlo quando la mappa non si disegna.
+        require(imageDimensions(source, format) != null) {
             language.pick(
                 "Non è possibile leggere le dimensioni dell'immagine: " +
                     "il file è incompleto o danneggiato.",
                 "The image dimensions cannot be read: the file is incomplete or damaged.",
             )
         }
-        val pixels = dimensions.width.toLong() * dimensions.height.toLong()
-        require(
-            dimensions.width in 1..MAX_IMAGE_SIDE &&
-                dimensions.height in 1..MAX_IMAGE_SIDE &&
-                pixels <= MAX_IMAGE_PIXELS,
-        ) {
-            language.pick(
-                "Immagine troppo grande (${dimensions.width}×${dimensions.height} pixel): " +
-                    "il limite è $maxPixelSizeLabel.",
-                "The image is too large (${dimensions.width}×${dimensions.height} pixels): " +
-                    "the limit is $maxPixelSizeLabelEn.",
-            )
-        }
 
-        Files.createDirectories(imagesDirectory)
-        val original = source.fileName.toString()
-        val extension = original.substringAfterLast('.', "png")
-        val base = original.substringBeforeLast('.').replace(Regex("[^A-Za-z0-9._-]"), "_")
-
-        var candidate = "$base.$extension"
-        var counter = 1
-        while (Files.exists(imagesDirectory.resolve(candidate))) {
-            candidate = "$base-$counter.$extension"
-            counter++
-        }
-
-        AtomicFiles.copy(source, imagesDirectory.resolve(candidate))
+        Files.createDirectories(destination)
+        val candidate = uniqueName(source.fileName.toString())
+        AtomicFiles.copy(source, destination.resolve(candidate))
         return candidate
     }
 
-    /** Percorso di un'immagine dell'archivio, o null se non c'e'. */
+    /** Copia un'immagine nella cartella delle mappe e ne restituisce il nome interno. */
+    fun importMapImage(source: Path, language: AppLanguage = AppLanguage.ITALIAN): String =
+        importImage(source, language, mapsDirectory)
+
+    /**
+     * Scrive fra le mappe un'immagine che arriva dal pacchetto dell'applicazione.
+     *
+     * Non passa dai controlli di [importImage] perche' non ne ha bisogno e non ne
+     * avrebbe i mezzi: quei controlli difendono da un file scelto dall'utente, che
+     * puo' essere qualunque cosa, mentre queste sono risorse nostre, verificate
+     * quando sono entrate nel repository. Qui non c'e' nemmeno un file d'origine
+     * da ispezionare — arrivano come byte da dentro il pacchetto.
+     *
+     * Non sovrascrive: se il file c'e' gia' fra le mappe, quello su disco vince.
+     * Chi ha ritoccato una mappa inclusa se la tiene.
+     *
+     * Restituisce il nome con cui l'immagine e' finita su disco, che puo' non essere
+     * quello richiesto: [resolve] cerca prima fra le mappe, quindi una mappa scritta
+     * col nome di un ritratto gia' esistente glielo coprirebbe, e al posto della
+     * faccia di un personaggio comparirebbe una battlemap. Chi chiama deve registrare
+     * il nome restituito, non quello che aveva chiesto.
+     */
+    fun writeMapImage(preferredName: String, bytes: ByteArray): String {
+        if (Files.isRegularFile(mapsDirectory.resolve(preferredName))) return preferredName
+        Files.createDirectories(mapsDirectory)
+        val name = uniqueName(preferredName)
+        AtomicFiles.write(mapsDirectory.resolve(name), bytes)
+        return name
+    }
+
+    /**
+     * I file immagine presenti nella cartella delle mappe.
+     *
+     * E' cio' che permette di aggiungere una mappa copiandocela dentro invece che
+     * dal selettore: l'archivio confronta questo elenco con il proprio indice e
+     * adotta cio' che non conosce ancora.
+     *
+     * Si guarda dentro i file, non solo il nome. Chi arriva da questa strada non e'
+     * passato dai controlli di [importImage], e l'estensione e' un'intenzione, non
+     * un fatto: un `.png` che non e' un PNG entrerebbe nell'archivio come una mappa
+     * dall'anteprima perennemente rotta, e nessuno saprebbe perche'.
+     */
+    fun mapImageNames(): List<String> {
+        if (!Files.isDirectory(mapsDirectory)) return emptyList()
+        return Files.list(mapsDirectory).use { entries ->
+            entries.filter(Files::isRegularFile)
+                .filter { isSupported(it) && runCatching { sniffFormat(it) }.getOrNull() != null }
+                .map { it.fileName.toString() }
+                .sorted()
+                .toList()
+        }
+    }
+
+    /**
+     * Un nome di file libero in *entrambe* le cartelle.
+     *
+     * Devono essere entrambe perche' [resolve] le percorre tutte e due: due file
+     * omonimi in cartelle diverse non sarebbero due immagini, ma una che ne
+     * nasconde un'altra.
+     */
+    private fun uniqueName(original: String): String {
+        val extension = original.substringAfterLast('.', "png")
+        val base = original.substringBeforeLast('.').replace(Regex("[^A-Za-z0-9._-]"), "_")
+        fun taken(name: String) =
+            Files.exists(imagesDirectory.resolve(name)) || Files.exists(mapsDirectory.resolve(name))
+
+        var candidate = "$base.$extension"
+        var counter = 1
+        while (taken(candidate)) {
+            candidate = "$base-$counter.$extension"
+            counter++
+        }
+        return candidate
+    }
+
+    /**
+     * Percorso di un'immagine dell'archivio, o null se non c'e'.
+     *
+     * Si guarda prima fra le mappe e poi fra i ritratti. L'ordine non e' una
+     * preferenza ma una compatibilita': prima che le mappe avessero una cartella
+     * propria stavano in `images/`, e gli archivi gia' su disco continuano a
+     * nominarle di li'. Cercare in entrambe le cartelle li lascia funzionare senza
+     * spostare i file di nessuno.
+     */
     fun resolve(name: String): Path? {
         if (name.isBlank()) return null
         // Solo nomi semplici: un percorso relativo non deve poter uscire dall'archivio.
         if (name.contains('/') || name.contains('\\') || name.contains("..")) return null
-        val path = imagesDirectory.resolve(name)
-        return if (Files.isRegularFile(path)) path else null
+        return sequenceOf(mapsDirectory, imagesDirectory)
+            .map { it.resolve(name) }
+            .firstOrNull { Files.isRegularFile(it) }
     }
 
     fun readBytes(name: String): ByteArray? = resolve(name)?.let { Files.readAllBytes(it) }
@@ -360,22 +436,25 @@ class ImageStore(private val dataDirectory: Path) {
     }
 
     companion object {
-        /** Limite del file codificato; la dimensione in pixel viene verificata a parte. */
-        const val MAX_IMAGE_BYTES: Long = 32L * 1024 * 1024
-
-        const val MAX_IMAGE_PIXELS: Long = 16_000_000L
-
-        const val MAX_IMAGE_SIDE: Int = 8_192
+        /**
+         * L'unico limite: quanto pesa il file.
+         *
+         * C'era anche un tetto in pixel — sedici megapixel, ottomila per lato — che
+         * proteggeva la memoria: un'immagine decodificata occupa quattro byte per
+         * pixel, molto piu' del file compresso. Serviva a difendere il programma, ma
+         * rifiutava mappe legittime: le battlemap in alta risoluzione superano i
+         * sedici megapixel di regola, non per eccezione, ed erano proprio quelle che
+         * chi gioca voleva caricare. Fra difendere la memoria e accettare il
+         * materiale vero, vince il materiale vero.
+         */
+        const val MAX_IMAGE_BYTES: Long = 1024L * 1024 * 1024
 
         /** Estensioni riconosciute; `decodeToImageBitmap` gestisce questi formati. */
         val SUPPORTED_FORMATS: Set<String> = setOf("png", "jpg", "jpeg", "webp", "bmp", "gif")
 
         /** Testo pronto da mostrare all'utente: formati accettati e limite. */
         const val acceptedFormatsLabel: String = "PNG, JPG, WEBP, BMP, GIF"
-        const val maxSizeLabel: String = "32 MB"
-
-        const val maxPixelSizeLabel: String = "16 megapixel e 8192 pixel per lato"
-        private const val maxPixelSizeLabelEn: String = "16 megapixels and 8192 pixels per side"
+        const val maxSizeLabel: String = "1 GB"
 
         private const val HEADER_BYTES = 32
 

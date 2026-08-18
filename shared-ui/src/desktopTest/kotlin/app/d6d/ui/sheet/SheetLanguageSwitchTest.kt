@@ -371,14 +371,24 @@ class SheetLanguageSwitchTest {
         // Primo avvio in inglese: qui una riscrittura ci sta, l'archivio e' italiano.
         AppLocale.use(AppLanguage.ENGLISH)
         SheetViewModel(store = store, loadOnCreate = false).load()
-        val settled = directory.resolve("schede.json").readText()
+        val archive = directory.resolve("schede.json")
+        val backup = directory.resolve("schede.json.bak")
+        val settled = archive.readText()
+        val settledBackup = backup.readText()
 
-        // Secondo avvio, stessa lingua: non deve toccare nulla.
+        // Secondo avvio, stessa lingua: non deve toccare neppure il backup. Il
+        // solo confronto del file principale non basta, perche' una scrittura
+        // ridondante vi rimette gli stessi byte ma ruota comunque il `.bak`.
         SheetViewModel(store = store, loadOnCreate = false).load()
         assertEquals(
             settled,
-            directory.resolve("schede.json").readText(),
+            archive.readText(),
             "il riavvio ha riscritto l'archivio senza che nulla fosse cambiato",
+        )
+        assertEquals(
+            settledBackup,
+            backup.readText(),
+            "il riavvio ha ruotato il backup senza che nulla fosse cambiato",
         )
     }
 

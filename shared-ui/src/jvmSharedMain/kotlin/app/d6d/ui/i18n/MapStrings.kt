@@ -23,6 +23,10 @@ interface MapStrings {
     val removeBackground: String
     val unnamedMap: String
 
+    /** La cartella dove stanno i file delle mappe, e cosa farci. */
+    val mapsFolder: String
+    val mapsFolderHint: String
+
     val imageSelectionCancelled: String
     val backgroundLoaded: String
     val portraitAssigned: String
@@ -61,6 +65,10 @@ internal object MapStringsIt : MapStrings {
     override val currentBackground = "Sfondo attuale"
     override val removeBackground = "Togli sfondo"
     override val unnamedMap = "Mappa senza nome"
+
+    override val mapsFolder = "Cartella delle mappe"
+    override val mapsFolderHint =
+        "Puoi copiare le immagini direttamente qui: le trovi nell'archivio al prossimo avvio."
 
     override val imageSelectionCancelled = "Selezione immagine annullata."
     override val backgroundLoaded = "Sfondo caricato."
@@ -102,6 +110,10 @@ internal object MapStringsEn : MapStrings {
     override val currentBackground = "Current background"
     override val removeBackground = "Remove background"
     override val unnamedMap = "Unnamed map"
+
+    override val mapsFolder = "Maps folder"
+    override val mapsFolderHint =
+        "You can copy images straight into it: they show up in the archive on the next start."
 
     override val imageSelectionCancelled = "Image selection cancelled."
     override val backgroundLoaded = "Background loaded."

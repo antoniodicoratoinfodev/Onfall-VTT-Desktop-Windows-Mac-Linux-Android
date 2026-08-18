@@ -19,6 +19,12 @@ java {
 dependencies {
     implementation(project(":shared-ui"))
     implementation(compose.desktop.currentOs)
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }
 
 // L'icona ha una sola copia, in `icons/arcano`. Qui ne entra nel classpath la

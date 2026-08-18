@@ -60,6 +60,7 @@ import app.d6d.ui.roster.RosterViewModel
 import app.d6d.sheet.ImageStore
 import app.d6d.ui.images.FilePicker
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.maps.BundledMaps
 import app.d6d.ui.i18n.AppLocale
 import app.d6d.ui.i18n.LocalStrings
 import app.d6d.ui.i18n.Strings
@@ -247,8 +248,18 @@ fun AppRoot(
                 runDiskIo {
                     roster.initialize()
                     roster.installIncludedContent()
-                    portraits.reload()
                 }
+            }
+            // La rilettura dell'indice ha un `runCatching` tutto suo, e non e' un
+            // vezzo di stile: `syncMaps` confronta cio' che c'e' su disco con cio'
+            // che l'indice conosce e **riscrive** l'indice. Su un indice non letto
+            // crederebbe che non ci sia niente e salverebbe quel niente sopra le
+            // mappe di chi gioca. Finche' stavano nello stesso `runCatching`, un
+            // inciampo qualunque delle righe sopra — il Compendio che non si apre —
+            // portava con se' anche questa, e la sincronizzazione partiva lo stesso.
+            val indexRead = runCatching { runDiskIo { portraits.reload() } }.isSuccess
+            if (indexRead) {
+                runCatching { portraits.syncMaps(BundledMaps.seeds()) }
             }
             val recovered = runCatching { runDiskIo { recoveryStore.load() } }.getOrNull()
             // Un recupero riuscito riporta il tavolo dov'era: chi si e' schiantato

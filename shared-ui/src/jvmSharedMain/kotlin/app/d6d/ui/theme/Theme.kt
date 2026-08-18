@@ -12,12 +12,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.d6d.ui.generated.resources.Res
-import app.d6d.ui.generated.resources.alegreya_bold
-import app.d6d.ui.generated.resources.alegreya_medium
-import app.d6d.ui.generated.resources.cinzel_bold
-import app.d6d.ui.generated.resources.cinzel_extrabold
-import org.jetbrains.compose.resources.Font
 
 /**
  * Palette originale dell'applicazione.
@@ -188,21 +182,29 @@ private val AppShapes = Shapes(
     large = RoundedCornerShape(14.dp),
 )
 
+/**
+ * Le due famiglie del tema. Si costruiscono al primo uso e poi restano: leggere i
+ * caratteri e' lavoro d'avvio, non di ricomposizione.
+ */
+private val displayFamily by lazy {
+    themeFontFamily(
+        "cinzel_bold.ttf" to FontWeight.Bold,
+        "cinzel_extrabold.ttf" to FontWeight.Black,
+    )
+}
+
+private val titleFamily by lazy {
+    themeFontFamily(
+        "alegreya_medium.ttf" to FontWeight.Medium,
+        "alegreya_bold.ttf" to FontWeight.Bold,
+    )
+}
+
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-    // `Font` di Compose Resources tiene una cache interna: costruire le famiglie
-    // qui non ricarica i file a ogni ricomposizione.
-    val display = FontFamily(
-        Font(Res.font.cinzel_bold, weight = FontWeight.Bold),
-        Font(Res.font.cinzel_extrabold, weight = FontWeight.Black),
-    )
-    val title = FontFamily(
-        Font(Res.font.alegreya_medium, weight = FontWeight.Medium),
-        Font(Res.font.alegreya_bold, weight = FontWeight.Bold),
-    )
     MaterialTheme(
         colorScheme = DarkScheme,
-        typography = appTypography(display, title),
+        typography = appTypography(displayFamily, titleFamily),
         shapes = AppShapes,
         content = content,
     )

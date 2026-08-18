@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -90,6 +91,7 @@ fun MapArchive(
 
     Column(modifier.fillMaxSize()) {
         MapArchiveHeader(compact, onUpload = { portraits.importMapAsync() })
+        MapsFolderRow(portraits.mapsDirectory.toString())
 
         portraits.message?.let { note ->
             Text(
@@ -206,6 +208,42 @@ private fun MapArchiveTitle(modifier: Modifier = Modifier) {
         )
         Text(
             text = words.archiveSubtitle,
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+/**
+ * Il percorso della cartella delle mappe, scritto per esteso.
+ *
+ * Non e' un dettaglio da impostazioni avanzate: chi arriva con una collezione di
+ * sfondi gia' pronta vuole copiarcela dentro, non caricarne trenta uno a uno dal
+ * selettore. Il percorso e' selezionabile perche' la cosa che ci si fa e'
+ * incollarlo altrove — nel Finder, in un terminale, in una finestra di copia.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MapsFolderRow(path: String) {
+    val words = strings.maps
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.Night)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Eyebrow(words.mapsFolder)
+        SelectionContainer {
+            Text(
+                text = path,
+                color = Palette.Gold,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Text(
+            text = words.mapsFolderHint,
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
         )

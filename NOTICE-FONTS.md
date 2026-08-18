@@ -1,7 +1,7 @@
 # Font incorporati
 
-L'interfaccia incorpora due famiglie tipografiche come risorse Compose
-(`shared-ui/src/commonMain/composeResources/font/`). Sono opere indipendenti,
+L'interfaccia incorpora due famiglie tipografiche come risorse Java
+(`shared-ui/src/jvmSharedMain/resources/font/`). Sono opere indipendenti,
 non provengono da alcun manuale commerciale e sono distribuite dai rispettivi
 autori sotto **SIL Open Font License 1.1** (https://openfontlicense.org):
 

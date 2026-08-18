@@ -6,7 +6,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.decodeToImageBitmap
 import app.d6d.sheet.ImageStore
 import app.d6d.sheet.MapLibrary
 import app.d6d.sheet.PortraitLibrary
@@ -57,11 +56,25 @@ fun interface FilePicker {
 }
 
 /**
+ * Una mappa che arriva insieme al programma.
+ *
+ * I byte si leggono su richiesta e non alla costruzione: sono qualche megabyte
+ * l'una, e chi ha gia' tutte le mappe installate non deve leggerne nemmeno una.
+ */
+class MapSeed(
+    val id: String,
+    val name: String,
+    val fileName: String,
+    val bytes: suspend () -> ByteArray,
+)
+
+/**
  * Ritratti degli attori e sfondi delle mappe.
  *
  * Le immagini decodificate restano in cache: ridisegnare la mappa a ogni fotogramma
- * non deve rileggere e ridecodificare i file. `decodeToImageBitmap` e' disponibile
- * sia su desktop sia su Android, quindi non serve alcuna astrazione di piattaforma.
+ * non deve rileggere e ridecodificare i file. La decodifica passa da [decodeSampled],
+ * che legge dal disco e sottocampiona: una battlemap in alta risoluzione non deve
+ * entrare in memoria per intero solo per essere disegnata su uno schermo.
  */
 class PortraitRepository(
     private val store: ImageStore,
@@ -82,6 +95,15 @@ class PortraitRepository(
     /** Archivio delle mappe caricate dall'utente, riusabili come sfondi. */
     var mapLibrary by mutableStateOf(MapLibrary())
         private set
+
+    /**
+     * Vero quando l'indice delle mappe e' stato letto davvero.
+     *
+     * Il valore iniziale di [mapLibrary] e un archivio vuoto letto da disco sono
+     * indistinguibili, e la differenza conta: solo il secondo autorizza a riscrivere
+     * `mappe.json`.
+     */
+    private var mapLibraryLoaded = false
 
     var message by mutableStateOf<String?>(null)
 
@@ -112,7 +134,10 @@ class PortraitRepository(
         require(maxDecodedEntries >= 0) { "Il numero massimo di immagini in cache non può essere negativo" }
         if (loadOnCreate) {
             runCatching { library = store.loadLibrary() }
-            runCatching { mapLibrary = store.loadMapLibrary() }
+            runCatching {
+                mapLibrary = store.loadMapLibrary()
+                mapLibraryLoaded = true
+            }
         }
     }
 
@@ -120,7 +145,96 @@ class PortraitRepository(
     fun reload() {
         library = store.loadLibrary()
         mapLibrary = store.loadMapLibrary()
+        mapLibraryLoaded = true
         revision++
+    }
+
+    /** Cartella dove vivono i file delle mappe, da mostrare a chi vuole copiarcene. */
+    val mapsDirectory: Path get() = store.mapsDirectory
+
+    /**
+     * Mette l'archivio in pari con la cartella delle mappe.
+     *
+     * Fa due cose che sono la stessa cosa vista da due lati. Installa le mappe che
+     * arrivano col programma, cosi' l'archivio non e' vuoto al primo avvio; e adotta
+     * i file che trova nella cartella e non conosce, cosi' aggiungere una mappa
+     * copiandocela dentro funziona quanto caricarla dal selettore — che e' il motivo
+     * per cui il percorso della cartella e' scritto in chiaro nell'Archivio mappe.
+     *
+     * Nessuno dei due passaggi riporta indietro cio' che l'utente ha tolto: una mappa
+     * inclusa eliminata resta eliminata perche' il suo identificativo rimane fra
+     * quelle installate, e un file eliminato dalla cartella non c'e' piu' da adottare.
+     */
+    suspend fun syncMaps(seeds: List<MapSeed> = emptyList()) {
+        // Non si sincronizza su un indice mai letto. Questa funzione **riscrive**
+        // `mappe.json` a partire da cio' che ha in memoria: se la lettura all'avvio
+        // e' fallita, cio' che ha in memoria e' un archivio vuoto, e lo salverebbe
+        // sopra le mappe di chi gioca.
+        if (!mapLibraryLoaded) return
+
+        val current = mapLibrary
+        // Una mappa inclusa si salta quando c'e' gia': per identificativo, o perche'
+        // l'archivio ne mostra una con lo stesso nome. Il secondo caso non e' teorico
+        // — chi aveva caricato a mano le stesse mappe prima che fossero incluse ne
+        // ha una copia con un altro identificativo — e due righe identiche
+        // nell'archivio sono peggio di una mappa in meno.
+        val alreadyThere = current.maps.mapTo(mutableSetOf()) { it.name.trim().lowercase() }
+        val (skipped, pending) = seeds
+            .filterNot { it.id in current.installedDefaults }
+            .partition { seed ->
+                current.maps.any { it.id == seed.id } ||
+                    seed.name.trim().lowercase() in alreadyThere
+            }
+
+        val updated = withContext(ioDispatcher) {
+            // I byte si leggono fuori dal lock: sono decine di megabyte che arrivano
+            // dal pacchetto dell'applicazione, e tenerci fermo l'archivio mentre si
+            // estraggono non serve a nessuno. Fuori anche dal thread dell'interfaccia,
+            // che e' il motivo per cui si legge qui dentro.
+            val payloads = pending.map { it to runCatching { it.bytes() }.getOrNull() }
+            ioMutex.withLock {
+                var library = current
+                // Si ricorda solo cio' che e' stato saltato di proposito, perche'
+                // quella mappa nell'archivio c'e' gia' e non va rimessa. Un'installazione
+                // *fallita* non entra qui: segnarla come installata la condannerebbe a
+                // non essere piu' ritentata, e un disco pieno per un minuto diventerebbe
+                // una mappa che non arriva mai.
+                library = library.copy(
+                    installedDefaults = (library.installedDefaults + skipped.map { it.id }).distinct(),
+                )
+                payloads.forEach { (seed, bytes) ->
+                    if (bytes == null) return@forEach
+                    runCatching {
+                        // Il nome con cui e' finita su disco, non quello richiesto: puo'
+                        // essere stato cambiato per non coprire un ritratto omonimo.
+                        val stored = store.writeMapImage(seed.fileName, bytes)
+                        library = library.copy(
+                            maps = library.maps + StoredMap(seed.id, seed.name, stored),
+                            installedDefaults = library.installedDefaults + seed.id,
+                        )
+                    }
+                }
+                val known = library.maps.mapTo(mutableSetOf()) { it.image }
+                store.mapImageNames()
+                    .filterNot { it in known }
+                    .forEach { fileName ->
+                        library = library.copy(
+                            maps = library.maps + StoredMap(
+                                "map-${UUID.randomUUID()}",
+                                fileName.substringBeforeLast('.', fileName).ifBlank { words.unnamedMap },
+                                fileName,
+                            ),
+                        )
+                    }
+                if (library != current) store.saveMapLibrary(library)
+                library
+            }
+        }
+
+        if (updated != current) {
+            mapLibrary = updated
+            revision++
+        }
     }
 
     /** Le mappe dell'archivio, nell'ordine in cui sono state aggiunte. */
@@ -139,7 +253,9 @@ class PortraitRepository(
             decoded[name]?.let { return it.image }
             if (decoded.containsKey(name)) return null
         }
-        val image = runCatching { store.readBytes(name)?.decodeToImageBitmap() }.getOrNull()
+        val image = runCatching {
+            store.resolve(name)?.let { decodeSampled(it, MAX_DECODED_PIXELS) }
+        }.getOrNull()
         cache(name, image)
         return image
     }
@@ -348,7 +464,7 @@ class PortraitRepository(
     }
 
     private fun persistMap(chosen: Path): MapImport {
-        val stored = store.importImage(chosen, AppLocale.language)
+        val stored = store.importMapImage(chosen, AppLocale.language)
         val entry = StoredMap("map-${UUID.randomUUID()}", mapDisplayName(chosen), stored)
         val updated = mapLibrary.copy(maps = mapLibrary.maps + entry)
         try {

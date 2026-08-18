@@ -17,6 +17,7 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import app.d6d.ui.AppIdentity
@@ -44,6 +45,19 @@ import javax.imageio.ImageIO
 import kotlin.math.roundToInt
 import org.jetbrains.skiko.GraphicsApi
 import app.d6d.ui.i18n.AppLocale
+
+/**
+ * Il sistema operativo, per le poche decisioni che dipendono davvero da lui.
+ *
+ * Sono due: quanto puo' costare il fondale animato, e come si apre la finestra.
+ */
+private val operatingSystem: String get() = System.getProperty("os.name", "")
+
+private val runningOnWindows: Boolean
+    get() = operatingSystem.startsWith("Windows", ignoreCase = true)
+
+private val runningOnMacOs: Boolean
+    get() = operatingSystem.startsWith("Mac", ignoreCase = true)
 
 /**
  * Cartella dati locale.
@@ -100,6 +114,18 @@ private fun desktopFilePicker() = FilePicker {
  * Carica un cursore fantasy e lo adatta alla dimensione preferita dal sistema.
  * Anche il punto attivo viene scalato: il guanto che afferra mantiene quindi la
  * presa sulla stessa coordinata della mappa su monitor e piattaforme differenti.
+ *
+ * `getBestCursorSize` dice quanto grande **puo'** essere un cursore, non quanto
+ * grande debba essere disegnato questo. Su macOS e Windows i due numeri coincidono
+ * con la misura dei nostri PNG e la differenza non si vedeva; su X11 il server
+ * risponde spesso con il massimo che sopporta — molto oltre i sessantaquattro pixel
+ * del disegno — e il cursore veniva ingrandito fin li'. Ne uscivano puntatori enormi
+ * e sfocati, con il punto attivo lontano dalla punta: strani qualunque coppia si
+ * scegliesse, perche' il difetto non era nei disegni ma in quanto venivano stirati.
+ *
+ * Il disegno non si ingrandisce mai oltre la propria misura naturale. La tela invece
+ * resta quella che il sistema ha chiesto, perche' e' quella che si aspetta di
+ * ricevere: il cursore ci sta dentro in alto a sinistra, dove sta il punto attivo.
  */
 private fun fantasyCursor(
     imageBytes: ByteArray,
@@ -114,9 +140,14 @@ private fun fantasyCursor(
 
     val source = ImageIO.read(ByteArrayInputStream(imageBytes))
     checkNotNull(source) { "Immagine del cursore non valida" }
-    val visualScale = scale.coerceIn(0.5f, 1f)
-    val renderedWidth = (cursorSize.width * visualScale).roundToInt().coerceAtLeast(1)
-    val renderedHeight = (cursorSize.height * visualScale).roundToInt().coerceAtLeast(1)
+    check(source.width > 0 && source.height > 0)
+    val (renderedWidth, renderedHeight) = cursorDrawSize(
+        canvasWidth = cursorSize.width,
+        canvasHeight = cursorSize.height,
+        sourceWidth = source.width,
+        sourceHeight = source.height,
+        scale = scale,
+    )
     val image = BufferedImage(
         cursorSize.width,
         cursorSize.height,
@@ -132,17 +163,49 @@ private fun fantasyCursor(
         }
     }
 
+    // Il punto attivo e' dato sul disegno originale, quindi segue lo stesso rapporto
+    // con cui il disegno e' stato ridotto — non la misura della tela.
     val hotspot = Point(
-        (hotspotAt64Px.x * renderedWidth / 64f)
+        (hotspotAt64Px.x * renderedWidth / source.width.toFloat())
             .roundToInt()
             .coerceIn(0, cursorSize.width - 1),
-        (hotspotAt64Px.y * renderedHeight / 64f)
+        (hotspotAt64Px.y * renderedHeight / source.height.toFloat())
             .roundToInt()
             .coerceIn(0, cursorSize.height - 1),
     )
     toolkit.createCustomCursor(image, hotspot, name)
 }.getOrElse {
     Cursor.getPredefinedCursor(fallback)
+}
+
+/**
+ * Quanto grande disegnare il cursore dentro la tela che il sistema ha chiesto.
+ *
+ * Due limiti, per due guasti diversi. Oltre la tela il cursore verrebbe **tagliato**;
+ * oltre il disegno verrebbe **inventato**, ed e' quest'ultimo che rovinava i cursori
+ * su Linux — il server X dichiara di sopportare cursori molto piu' grandi dei nostri
+ * sessantaquattro pixel, e ci si disegnava dentro fino a riempirla.
+ *
+ * Le proporzioni del disegno si mantengono: i nostri sono quadrati, ma un cursore
+ * che diventa ovale sarebbe un difetto silenzioso, e costa una moltiplicazione.
+ */
+internal fun cursorDrawSize(
+    canvasWidth: Int,
+    canvasHeight: Int,
+    sourceWidth: Int,
+    sourceHeight: Int,
+    scale: Float,
+): Pair<Int, Int> {
+    if (canvasWidth < 1 || canvasHeight < 1 || sourceWidth < 1 || sourceHeight < 1) return 1 to 1
+    val visualScale = scale.coerceIn(0.5f, 1f)
+    // Il fattore che fa stare il disegno nella tela senza mai ingrandirlo.
+    val fit = minOf(
+        1f,
+        canvasWidth / sourceWidth.toFloat(),
+        canvasHeight / sourceHeight.toFloat(),
+    ) * visualScale
+    return (sourceWidth * fit).roundToInt().coerceIn(1, canvasWidth) to
+        (sourceHeight * fit).roundToInt().coerceIn(1, canvasHeight)
 }
 
 private object CursorResourceAnchor
@@ -265,7 +328,18 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
         iconBytes?.let { runCatching { BitmapPainter(it.decodeToImageBitmap()) }.getOrNull() }
     }
 
-    val windowState = rememberWindowState(width = 1480.dp, height = 940.dp)
+    // Massimizzata, non a schermo intero: la finestra riempie lo spazio utile e
+    // lascia barra del titolo e barra delle applicazioni dove sono, cosi' si puo'
+    // ancora passare a un'altra finestra. Su Windows e Linux e' cio' che ci si
+    // aspetta da un programma con cui si lavora per ore; su macOS no — li' lo zoom
+    // e' un gesto diverso e la finestra si apre come sempre.
+    //
+    // Le misure restano: sono quelle a cui la finestra torna quando la si riduce.
+    val windowState = rememberWindowState(
+        placement = if (runningOnMacOs) WindowPlacement.Floating else WindowPlacement.Maximized,
+        width = 1480.dp,
+        height = 940.dp,
+    )
     Window(
         onCloseRequest = { exitRequested = true },
         title = AppIdentity.windowTitle(AppLocale.language),
@@ -288,9 +362,7 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
             window.onRenderApiChanged { renderApi = window.renderApi }
             onDispose { window.removeWindowFocusListener(focusListener) }
         }
-        val windows = remember {
-            System.getProperty("os.name", "").startsWith("Windows", ignoreCase = true)
-        }
+        val windows = remember { runningOnWindows }
         val backgroundFrameInterval = atmosphericFrameIntervalMillis(renderApi, windows)
         val cursorPairs = remember(selectedCursorSize) {
             mapOf(

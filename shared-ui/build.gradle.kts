@@ -38,7 +38,6 @@ kotlin {
                 implementation(libs.jetbrains.compose.foundation)
                 implementation(libs.jetbrains.compose.material3)
                 implementation(libs.jetbrains.compose.ui)
-                implementation(libs.jetbrains.compose.components.resources)
             }
         }
         named("androidMain") { dependsOn(jvmSharedMain) }
@@ -62,15 +61,15 @@ kotlin {
     }
 }
 
-// I font del tema (Cinzel e Alegreya, licenza SIL OFL — vedi NOTICE-FONTS.md)
-// sono risorse Compose incorporate: identita' tipografica identica su desktop e
-// Android, senza dipendere dai font del sistema.
-compose.resources {
-    packageOfResClass = "app.d6d.ui.generated.resources"
-    // La rilevazione automatica non scatta con il source set condiviso dichiarato
-    // a mano: la classe `Res` va generata sempre.
-    generateResClass = always
-}
+// I font del tema (Cinzel e Alegreya, licenza SIL OFL — vedi NOTICE-FONTS.md) sono
+// risorse Java, non risorse Compose: identita' tipografica identica su desktop e
+// Android, senza dipendere dai caratteri di sistema.
+//
+// Erano risorse Compose, e su Android non arrivavano affatto: il plugin KMP di AGP
+// non espone gli asset alla variante (`variant.sources.assets` e' `null`), quindi
+// il task che Compose prepara per copiarceli non ha dove scrivere e nessun aggancio
+// dallo script puo' dargliene uno. Le risorse Java invece entrano nell'APK — lo
+// fanno da sempre i JSON del pacchetto SRD. Il caricamento sta in `ThemeFonts.kt`.
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()

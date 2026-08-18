@@ -1,6 +1,7 @@
 package app.d6d.sheet
 
 import app.d6d.i18n.AppLanguage
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -24,6 +25,17 @@ class ImageStoreTest {
     private fun sampleImage(name: String): Path {
         val source = Files.createTempDirectory("sorgente").resolve(name)
         Files.write(source, pngHeader(1, 1))
+        return source
+    }
+
+    /** Un PNG vero, scritto da ImageIO: si decodifica davvero, non solo si annusa. */
+    private fun realImage(name: String, width: Int, height: Int): Path {
+        val source = Files.createTempDirectory("vera").resolve(name)
+        javax.imageio.ImageIO.write(
+            java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_BYTE_GRAY),
+            "png",
+            source.toFile(),
+        )
         return source
     }
 
@@ -115,13 +127,51 @@ class ImageStoreTest {
     }
 
     @Test
-    fun `un'immagine con troppi pixel viene rifiutata prima della copia`() {
-        val huge = Files.createTempDirectory("pixel").resolve("enorme.png")
-        Files.write(huge, pngHeader(8_000, 8_000))
+    fun `una mappa in alta risoluzione viene accettata`() {
+        // C'era un tetto in pixel, e rifiutava proprio le battlemap che chi gioca
+        // vuole caricare: in alta risoluzione superano i sedici megapixel di regola.
+        // Ora l'unico limite e' il peso del file.
+        //
+        // L'immagine e' vera e decodificabile, non un'intestazione di ventinove byte:
+        // un file finto proverebbe solo che i controlli leggono le prime righe, non
+        // che una mappa autentica entra.
+        val huge = realImage("enorme.png", 5_000, 4_000)
 
-        val error = assertThrows(IllegalArgumentException::class.java) { store().importImage(huge) }
+        assertEquals("enorme.png", store().importImage(huge))
+    }
 
-        assertTrue(error.message!!.contains(ImageStore.maxPixelSizeLabel))
+    @Test
+    fun `un png dichiarato ma corrotto viene rifiutato`() {
+        // Firma giusta, contenuto rotto: il file supera il controllo d'estensione e
+        // pure quello di firma, e cade sulle dimensioni — che e' l'unica cosa che
+        // possa accorgersi di un'immagine troncata a meta' scaricamento.
+        val corrupt = Files.createTempDirectory("corrotto").resolve("mezza.png")
+        Files.write(corrupt, Files.readAllBytes(realImage("intera.png", 64, 64)).copyOfRange(0, 16))
+
+        assertThrows(IllegalArgumentException::class.java) { store().importImage(corrupt) }
+    }
+
+    @Test
+    fun `un file rinominato png non viene adottato come mappa`() {
+        // Chi copia i file nella cartella a mano non passa dai controlli di
+        // importazione: l'elenco guarda dentro i file, non solo il nome.
+        val store = store()
+        Files.createDirectories(store.mapsDirectory)
+        Files.writeString(store.mapsDirectory.resolve("bugiardo.png"), "non sono un PNG")
+        Files.copy(realImage("vera.png", 32, 32), store.mapsDirectory.resolve("vera.png"))
+
+        assertEquals(listOf("vera.png"), store.mapImageNames())
+    }
+
+    @Test
+    fun `un'immagine troncata viene rifiutata`() {
+        // Le dimensioni si leggono ancora, ma per capire se il file e' intero: da
+        // un'intestazione mozzata non si ricavano, ed e' il sintomo di un file
+        // danneggiato che non si disegnerebbe comunque.
+        val truncated = Files.createTempDirectory("mozza").resolve("mezza.png")
+        Files.write(truncated, pngHeader(4, 4).copyOfRange(0, 20))
+
+        assertThrows(IllegalArgumentException::class.java) { store().importImage(truncated) }
     }
 
     @Test
@@ -217,6 +267,89 @@ class ImageStoreTest {
         assertNull(store.resolve(stored))
         // Eliminare due volte non deve sollevare eccezioni.
         store.deleteImage(stored)
+    }
+
+    @Test
+    fun `una mappa va nella cartella delle mappe, non fra i ritratti`() {
+        val store = store()
+
+        val stored = store.importMapImage(sampleImage("cripta.png"))
+
+        assertTrue(Files.isRegularFile(store.mapsDirectory.resolve(stored)))
+        assertFalse(Files.exists(store.imagesDirectory.resolve(stored)))
+    }
+
+    @Test
+    fun `una mappa salvata prima che le mappe avessero una cartella si ritrova ancora`() {
+        // Gli archivi gia' su disco nominano le proprie mappe dentro `images/`:
+        // cercare in una cartella sola le avrebbe fatte sparire tutte insieme.
+        val store = store()
+        val stored = store.importImage(sampleImage("vecchia-mappa.png"))
+
+        assertEquals(store.imagesDirectory.resolve(stored), store.resolve(stored))
+    }
+
+    @Test
+    fun `un ritratto e una mappa non possono chiamarsi allo stesso modo`() {
+        // I nomi si risolvono senza sapere di che cartella siano, quindi due file
+        // omonimi non sarebbero due immagini ma una che ne nasconde un'altra.
+        val store = store()
+        val portrait = store.importImage(sampleImage("torre.png"))
+
+        val map = store.importMapImage(sampleImage("torre.png"))
+
+        assertNotEquals(portrait, map)
+    }
+
+    @Test
+    fun `una mappa inclusa si scrive senza passare dai controlli del selettore`() {
+        val store = store()
+
+        val written = store.writeMapImage("inclusa.png", pngHeader(1, 1))
+
+        assertEquals("inclusa.png", written)
+        assertEquals(listOf("inclusa.png"), store.mapImageNames())
+    }
+
+    @Test
+    fun `una mappa inclusa non copre un ritratto che si chiama allo stesso modo`() {
+        // `resolve` cerca prima fra le mappe: scritta col nome di un ritratto gia'
+        // esistente, la mappa glielo nasconderebbe, e al posto della faccia di un
+        // personaggio comparirebbe una battlemap.
+        val store = store()
+        val portrait = store.importImage(sampleImage("anubis_tomb.png"))
+
+        val written = store.writeMapImage("anubis_tomb.png", pngHeader(2, 2))
+
+        assertNotEquals(portrait, written)
+        assertEquals(store.imagesDirectory.resolve(portrait), store.resolve(portrait))
+    }
+
+    @Test
+    fun `scrivere una mappa inclusa non sovrascrive quella gia' su disco`() {
+        // Chi ha ritoccato una mappa inclusa se la tiene: il riavvio non e' il
+        // momento di rimetterci sopra la nostra versione.
+        val store = store()
+        val mine = pngHeader(2, 2)
+        store.writeMapImage("inclusa.png", mine)
+
+        store.writeMapImage("inclusa.png", pngHeader(1, 1))
+
+        assertArrayEquals(mine, Files.readAllBytes(store.mapsDirectory.resolve("inclusa.png")))
+    }
+
+    @Test
+    fun `l'elenco delle mappe su disco ignora cio' che non e' un'immagine`() {
+        val store = store()
+        store.writeMapImage("cripta.png", pngHeader(1, 1))
+        Files.writeString(store.mapsDirectory.resolve("appunti.txt"), "non sono una mappa")
+
+        assertEquals(listOf("cripta.png"), store.mapImageNames())
+    }
+
+    @Test
+    fun `senza cartella delle mappe l'elenco e' vuoto invece di fallire`() {
+        assertEquals(emptyList<String>(), store().mapImageNames())
     }
 
     @Test

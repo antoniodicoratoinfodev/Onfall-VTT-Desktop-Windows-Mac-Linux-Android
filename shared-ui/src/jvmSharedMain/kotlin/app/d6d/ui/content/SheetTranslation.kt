@@ -100,8 +100,11 @@ private class SrdTerms(
     /** Identificativo dell'elemento a partire dal nome nella lingua di origine. */
     private val sourceIdByName: Map<String, String>,
     private val targetResourceNames: Map<String, String>,
+    /** L'arma del pacchetto di origine, dal proprio nome canonico. */
+    private val sourceWeaponByName: Map<String, WeaponDefinition>,
     /** L'arma corrispondente nel pacchetto di destinazione, dal nome di origine. */
     private val targetWeaponBySourceName: Map<String, WeaponDefinition>,
+    private val source: AppLanguage,
     private val target: AppLanguage,
 ) {
     fun resourceName(resourceId: String): String? = targetResourceNames[resourceId]
@@ -112,7 +115,9 @@ private class SrdTerms(
         targetById = targetById,
         sourceIdByName = sourceIdByName,
         targetResourceNames = targetResourceNames,
+        sourceWeaponByName = sourceWeaponByName,
         targetWeaponBySourceName = targetWeaponBySourceName,
+        source = source,
         target = target,
     )
 
@@ -130,16 +135,30 @@ private class SrdTerms(
      * Cio' che fra le armi non e' un'arma — un incantesimo diventato capacita'
      * lanciabile, un privilegio che tira per colpire — non ha nota generata da
      * riscrivere e segue la regola di sempre: si sostituisce cio' che coincide
-     * con una voce canonica. Come un'arma che l'utente ha rinominata, che resta
-     * sua, nota compresa.
+     * con una voce canonica. Un'arma che l'utente ha rinominato resta sua, nota
+     * compresa; se ha cambiato soltanto la nota, si traduce il nome canonico e si
+     * conserva il testo che ha scritto.
      */
     fun regenerate(entry: WeaponEntry): WeaponEntry {
-        val definition = targetWeaponBySourceName[entry.name.trim().lowercase()]
+        val sourceName = entry.name.trim().lowercase()
+        val sourceDefinition = sourceWeaponByName[sourceName]
+        val definition = targetWeaponBySourceName[sourceName]
             ?: return entry.copy(
                 name = translateWhole(entry.name),
                 note = translateList(entry.note),
             )
-        return entry.copy(name = definition.name, note = definition.weaponNote(target))
+        val generatedSourceNote = sourceDefinition?.weaponNote(source)
+        return entry.copy(
+            name = definition.name,
+            // Il nome canonico identifica l'arma, non la provenienza della nota:
+            // la nota e' modificabile nell'editor. Si rigenera soltanto quella
+            // ancora identica al testo prodotto dal pacchetto di origine.
+            note = if (generatedSourceNote != null && entry.note == generatedSourceNote) {
+                definition.weaponNote(target)
+            } else {
+                entry.note
+            },
+        )
     }
 
     /**
@@ -285,6 +304,7 @@ private class SrdTerms(
                 if (target == AppLanguage.ITALIAN) "Nel libro degli incantesimi" else "In the spellbook",
             )
 
+            val sourceWeapons = SrdWeapons.all(source)
             val targetWeaponsById = SrdWeapons.all(target).associateBy { it.id }
             return SrdTerms(
                 entries = entries,
@@ -293,9 +313,11 @@ private class SrdTerms(
                 targetResourceNames = toPack.classes
                     .flatMap { definition -> definition.resources }
                     .associate { it.id to it.name },
-                targetWeaponBySourceName = SrdWeapons.all(source).mapNotNull { weapon ->
+                sourceWeaponByName = sourceWeapons.associateBy { it.name.lowercase() },
+                targetWeaponBySourceName = sourceWeapons.mapNotNull { weapon ->
                     targetWeaponsById[weapon.id]?.let { weapon.name.lowercase() to it }
                 }.toMap(),
+                source = source,
                 target = target,
             )
         }

@@ -29,4 +29,13 @@ data class StoredMap(
 data class MapLibrary(
     val schemaVersion: Int = 1,
     val maps: List<StoredMap> = emptyList(),
+    /**
+     * Le mappe incluse gia' installate, per identificativo.
+     *
+     * Serve a distinguere «non c'e' ancora» da «c'era e l'utente l'ha tolta». Senza
+     * questa memoria una mappa inclusa eliminata tornerebbe al riavvio successivo,
+     * e non ci sarebbe modo di liberarsene: l'unica cosa peggiore di un archivio
+     * vuoto e' un archivio che si riempie da solo.
+     */
+    val installedDefaults: List<String> = emptyList(),
 )
