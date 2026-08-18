@@ -528,6 +528,10 @@ class GuidedCharacterService(
 
         return withRefreshedEffects(
             sheet.copy(
+                // Il testo che segue lo scrive questo servizio, nella lingua del
+                // proprio pacchetto: la scheda lo registra, altrimenti nessuno
+                // sapra' piu' da quale lingua tradurla.
+                contentLanguage = language,
                 className = classNames,
                 background = sheet.background.ifBlank { selectedBackground?.name.orEmpty() },
                 subclass = subclassNames,

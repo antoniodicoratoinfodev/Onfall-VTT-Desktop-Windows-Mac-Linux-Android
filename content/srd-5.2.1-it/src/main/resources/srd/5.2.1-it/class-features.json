@@ -3896,7 +3896,7 @@
       "subclass": "Guerriero della Mano Aperta",
       "description": "Il monaco ottiene la capacità di scatenare vibrazioni letali nel corpo di un altro. Quando il monaco colpisce una creatura con un colpo senz'armi, può spendere 4 punti concentrazione per dare il via a queste vibrazioni impercettibili, che durano un numero di giorni pari al suo livello da monaco. Le vibrazioni sono innocue, a meno che il monaco non effettui un'azione per interromperle. In alternativa, quando effettua l'azione di Attacco nel proprio turno, può rinunciare a uno degli attacchi per porre fine alle vibrazioni. Per farlo, il monaco e il bersaglio devono trovarsi sullo stesso piano di esistenza. Quando il monaco pone fine alle vibrazioni, il bersaglio deve effettuare un tiro salvezza su Costituzione; subisce 10d12 danni da forza in caso di fallimento, o la metà dei danni in caso di successo.\nIl monaco può tenere soltanto una creatura alla volta sotto l'effetto di questo privilegio. Le vibrazioni possono essere interrotte senza provocare danni (nessuna azione richiesta).",
       "page": 69,
-      "activation": null,
+      "activation": "azione",
       "resource": {
         "name": "punti concentrazione",
         "cost": 4
@@ -4921,7 +4921,7 @@
       "subclass": "Cacciatore",
       "description": "Quando il ranger subisce danni, può utilizzare una reazione per ottenere resistenza a quel danno e ad altri dello stesso tipo fino al termine del turno in corso.",
       "page": 78,
-      "activation": null,
+      "activation": "reazione",
       "resource": null,
       "source_order": 313
     },

@@ -1821,6 +1821,10 @@ class BattleViewModel(
     internal fun onLanguageChanged() {
         actionResolution = null
         floating = emptyMap()
+        // Anche la fascia del turno nemico: e' una frase gia' composta, spesso
+        // col nome del bersaglio dentro, e cambiare lingua a meta' del turno la
+        // lasciava in quella di prima finche' la CPU non ne scriveva un'altra.
+        enemyCpuActionLabel = null
     }
 
     /** Mostra o ritira l'anteprima della portata quando il mouse attraversa una capacita'. */

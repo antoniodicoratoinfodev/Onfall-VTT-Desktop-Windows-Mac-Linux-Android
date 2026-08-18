@@ -115,13 +115,6 @@ private fun ClassFeatureRecord.toRuleElement(
             id.endsWith(":feature:warlock:punizione-occulta") -> "slot-magia-del-patto"
         else -> null
     }
-    val resourceId = explicitResourceSlug
-        ?.let { "$CANONICAL_PREFIX:resource:${classId.contentId}:$it" }
-        ?: resource?.name?.let { resourceName ->
-            classDefinition.resources.firstOrNull {
-                it.name.toContentSlug() == resourceName.toContentSlug()
-            }?.id
-        }
     // Solo quando la descrizione dichiara *un* costo. Un privilegio che ne
     // elenca piu' d'uno e' un menu — «Colpi infidi» presenta tre opzioni da
     // 2d6, 3d6 e 6d6 — e il costo appartiene alle opzioni, non a lui. Prendere
@@ -129,6 +122,27 @@ private fun ClassFeatureRecord.toRuleElement(
     // le opzioni sono in ordine alfabetico e l'alfabeto cambia con la lingua.
     val declaredCosts = SrdWords.of(language).statedCost.findAll(description).toList()
     val statedCost = declaredCosts.singleOrNull()?.groupValues?.get(1)?.toIntOrNull()
+    val spentAmount = resource?.cost?.takeIf { it > 0 } ?: statedCost ?: 0
+
+    /*
+     * L'aggancio alla risorsa deve dipendere solo da cio' che non cambia con la
+     * lingua.
+     *
+     * La tavola degli slug e' per identificativo, quindi e' gia' invariante. Il
+     * riconoscimento del *nome* dentro la descrizione non lo e': dipende dalle
+     * parole, e leggeva una risorsa in un'edizione e nessuna nell'altra — sette
+     * privilegi si agganciavano al proprio contatore in italiano e non in
+     * inglese, o viceversa. Pretendere che ci sia anche un costo lo riporta a
+     * un dato che le due edizioni condividono: nominare una risorsa non e'
+     * consumarla, e «mentre e' in ira» non e' «spendi un'ira».
+     */
+    val resourceId = explicitResourceSlug
+        ?.let { "$CANONICAL_PREFIX:resource:${classId.contentId}:$it" }
+        ?: resource?.name?.takeIf { spentAmount > 0 }?.let { resourceName ->
+            classDefinition.resources.firstOrNull {
+                it.name.toContentSlug() == resourceName.toContentSlug()
+            }?.id
+        }
     // Qui c'era una toppa che alzava a 2 il livello di «Conoscenze degli Antichi»
     // e ne riscriveva il prerequisito a mano. Serviva perche' l'estrattore
     // perdeva quel livello; ora lo legge, in entrambe le edizioni, e la toppa
@@ -179,7 +193,7 @@ private fun ClassFeatureRecord.toRuleElement(
             resourceId == null -> 0
             id.endsWith(":feature:paladino:tocco-rigenerante") -> 5
             id.endsWith(":feature:guerriero:azione-impetuosa") -> 1
-            else -> resource?.cost?.takeIf { it > 0 } ?: statedCost ?: 0
+            else -> spentAmount
         },
         armorTrainingGrant = armorGrant,
         weaponTrainingGrant = weaponGrant,

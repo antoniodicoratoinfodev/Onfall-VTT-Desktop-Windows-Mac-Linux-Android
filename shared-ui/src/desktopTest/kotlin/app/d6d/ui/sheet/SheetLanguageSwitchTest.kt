@@ -157,6 +157,34 @@ class SheetLanguageSwitchTest {
     }
 
     @Test
+    fun `nome, background e dotazione dei modelli non restano indietro`(
+        @TempDir directory: Path,
+    ) = runTest {
+        // Il difetto: la traduzione narrativa copriva specie, allineamento,
+        // aspetto e storia, ma non il nome ne' il background ne' le voci di
+        // dotazione della ricetta. Restavano «Tarvos di Pietrafredda» e
+        // «Sentinella di frontiera» in mezzo a una scheda inglese.
+        val model = SheetViewModel(store = SheetStore(directory.resolve("schede.json")), loadOnCreate = false)
+        model.load()
+        val before = model.library.characters.first { it.id == "pg-tarvos" }
+
+        AppLocale.use(AppLanguage.ENGLISH)
+        model.onLanguageChanged()
+        val after = model.library.characters.first { it.id == "pg-tarvos" }
+
+        assertNotEquals(before.characterName, after.characterName)
+        assertNotEquals(before.background, after.background)
+        assertNotEquals(before.equipment, after.equipment)
+        // E niente frammenti italiani rimasti in giro.
+        val italianisms = listOf(" di ", " della ", " degli ", "à", "è")
+        val leftovers = listOf(
+            after.characterName, after.background, after.species,
+            after.alignment, after.equipment, after.languages,
+        ).filter { field -> italianisms.any { it in field } }
+        assertTrue(leftovers.isEmpty(), "restano frammenti italiani: $leftovers")
+    }
+
+    @Test
     fun `le creature incluse seguono la lingua, quelle modificate no`(
         @TempDir directory: Path,
     ) = runTest {

@@ -230,6 +230,49 @@ class SrdEnglishPackTest {
     }
 
     @Test
+    fun `ogni privilegio ha lo stesso costo di attivazione nelle due edizioni`() {
+        // Il costo di attivazione decide se una capacita' e' passiva, un'azione
+        // o una reazione: leggerlo diverso vuol dire due regole diverse per la
+        // stessa cosa. Il difetto era di lettura, non di libro — l'SRD inglese
+        // scrive «take a Reaction» e l'italiano «utilizzare una reazione», e
+        // nessuna delle due formule era prevista.
+        val italian = Srd521ItContent.catalogFor(AppLanguage.ITALIAN).associateBy { it.id }
+        val english = Srd521ItContent.catalogFor(AppLanguage.ENGLISH).associateBy { it.id }
+        assertEquals(italian.keys, english.keys)
+
+        val divergent = italian.keys.mapNotNull { id ->
+            val left = italian.getValue(id)
+            val right = english.getValue(id)
+            if (left.activationCost != right.activationCost || left.passive != right.passive) {
+                "$id: IT ${left.activationCost}/passiva=${left.passive} · " +
+                    "EN ${right.activationCost}/passiva=${right.passive}"
+            } else {
+                null
+            }
+        }
+        assertTrue(divergent.isEmpty(), divergent.joinToString("\n"))
+    }
+
+    @Test
+    fun `ogni privilegio si aggancia alla stessa risorsa nelle due edizioni`() {
+        // L'identificativo della risorsa lega un privilegio al contatore che
+        // consuma. Un aggancio presente da una parte e assente dall'altra e'
+        // una regola che cambia con la lingua.
+        val italian = italian.elements.associateBy { it.id }
+        val english = english.elements.associateBy { it.id }
+        val divergent = italian.keys.mapNotNull { id ->
+            val left = italian.getValue(id)
+            val right = english.getValue(id)
+            if (left.resourceId != right.resourceId) {
+                "$id: IT ${left.resourceId} · EN ${right.resourceId}"
+            } else {
+                null
+            }
+        }
+        assertTrue(divergent.isEmpty(), divergent.joinToString("\n"))
+    }
+
+    @Test
     fun `il costo dichiarato si legge in entrambe le edizioni`() {
         // «Costo: 2» contro «Cost: 2»: col solo modello italiano ogni privilegio
         // inglese risulterebbe gratuito, e il difetto sarebbe di regole, non di testo.

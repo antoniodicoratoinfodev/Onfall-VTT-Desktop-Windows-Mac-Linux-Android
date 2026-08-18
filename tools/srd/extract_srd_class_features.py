@@ -556,9 +556,42 @@ def activation_from(description: str) -> str | None:
         "",
         lowered,
     )
-    if re.search(r"\b(?:usa(?:re)?|usare la propria|come)\s+(?:la sua |una |un')?reazione\b", lowered):
+    # L'azione che un *oggetto* richiede non e' il costo del privilegio: «Puoi
+    # effettuare l'azione di Utilizzo o di Magia per utilizzare un oggetto
+    # magico che richiede una di quelle azioni» descrive l'oggetto, non chi lo
+    # impugna. Senza questo taglio le due edizioni leggevano cose diverse dalla
+    # stessa frase, perche' la nominano con parole diverse.
+    lowered = re.sub(
+        r"l['’]azione di [^.]*?per (?:utilizzare|usare) un oggetto magico che richiede[^.]*"
+        r"|(?:take|use)\s+the\s+\w+\s+action to use a magic item that requires[^.]*",
+        "",
+        lowered,
+    )
+    # Un'azione *aggiuntiva* e' cio' che il privilegio concede, non cio' che
+    # costa: Azione impetuosa non si paga con un'azione, la regala.
+    lowered = re.sub(
+        r"\b(?:un'|una )azione aggiuntiva\b|\ban? (?:additional|extra) action\b",
+        "",
+        lowered,
+    )
+    # «utilizzare una reazione» quanto «usare la propria reazione»: l'SRD
+    # italiano alterna i verbi, e prevederne uno solo lasciava senza costo
+    # privilegi che una reazione la spendono davvero.
+    if re.search(
+        r"\b(?:usa(?:re)?|utilizza(?:re)?|effettua(?:re|i)?|impiega(?:re)?|come)"
+        r"\s+(?:la sua |la propria |una |un')?reazione\b",
+        lowered,
+    ):
         return "reazione"
-    if re.search(r"\b(?:use|uses|using)\s+(?:your|its|their|a)\s+reaction\b|\bas a reaction\b", lowered):
+    # «take a Reaction» e' la formula ordinaria dell'SRD inglese, piu' di «use
+    # your reaction»: senza di essa otto privilegi difensivi — Controfascino,
+    # Schivata prodigiosa, Devia attacchi, Parole taglienti… — risultavano privi
+    # di costo, e il Compendio li mostrava come tratti passivi.
+    if re.search(
+        r"\b(?:use|uses|using|take|takes|taking)\s+(?:your|its|their|a|an)\s+reaction\b"
+        r"|\bas a reaction\b",
+        lowered,
+    ):
         return "Reaction"
     if "azione bonus" in lowered:
         return "azione bonus"
@@ -568,7 +601,11 @@ def activation_from(description: str) -> str | None:
         return "azione di Magia"
     if re.search(r"\bmagic action\b", lowered):
         return "Magic action"
-    if re.search(r"\bcome (?:un'|una )azione\b|\busare (?:un'|una )azione\b", lowered):
+    if re.search(
+        r"\bcome (?:un'|una )azione\b"
+        r"|\b(?:usa(?:re)?|utilizza(?:re)?|effettu(?:a|are|i))\s+(?:un'|una )azione\b",
+        lowered,
+    ):
         return "azione"
     if re.search(r"\bas an action\b|\b(?:use|uses|using|take|takes|taking) an action\b", lowered):
         return "Action"

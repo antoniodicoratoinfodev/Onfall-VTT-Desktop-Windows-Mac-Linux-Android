@@ -33,11 +33,17 @@ import app.d6d.sheet.Spellcasting
  */
 internal fun CharacterSheet.retranslatedTo(target: AppLanguage): CharacterSheet {
     if (target == contentLanguage) return this
+    // La ricetta da cui la scheda e' nata, quando c'e', e' semplicemente
+    // un'altra sorgente di corrispondenze: nome, specie, background, narrativa
+    // e le singole voci di dotazione e lingue. Cosi' i campi del modello
+    // seguono la stessa regola di tutto il resto — si sostituisce solo cio' che
+    // combacia — senza un secondo meccanismo che si comporta in modo diverso.
     val terms = SrdTerms.between(contentLanguage, target)
-    val narrative = TemplateNarrative.between(id, contentLanguage, target)
+        .plus(templatePairs(id, contentLanguage, target))
 
     return copy(
         contentLanguage = target,
+        characterName = terms.translateWhole(characterName),
         className = terms.translateLevelled(className),
         subclass = terms.translateLevelled(subclass),
         background = terms.translateWhole(background),
@@ -58,10 +64,10 @@ internal fun CharacterSheet.retranslatedTo(target: AppLanguage): CharacterSheet 
         // cui la scheda e' nata esiste in entrambe le lingue: cio' che coincide
         // ancora con la ricetta di partenza e' nostro e segue la lingua, cio'
         // che non coincide piu' l'ha riscritto chi gioca e resta suo.
-        species = narrative.pick(species) { it.species },
-        alignment = narrative.pick(alignment) { it.alignment },
-        appearance = narrative.pick(appearance) { it.appearance },
-        backstory = narrative.pick(backstory) { it.backstory },
+        species = terms.translateWhole(species),
+        alignment = terms.translateWhole(alignment),
+        appearance = terms.translateWhole(appearance),
+        backstory = terms.translateWhole(backstory),
         // I campi generati annidati non si traducono: si **rigenerano** dagli
         // identificativi con il pacchetto di destinazione. E' possibile perche'
         // qui un identificativo c'e' — il pozzo di risorse ne porta uno, e un
@@ -71,6 +77,12 @@ internal fun CharacterSheet.retranslatedTo(target: AppLanguage): CharacterSheet 
         progression = progression.copy(
             resourcePools = progression.resourcePools.map { pool ->
                 pool.copy(name = terms.resourceName(pool.resourceId) ?: pool.name)
+            },
+            // La sorgente di un effetto e' il nome del privilegio che lo
+            // concede, e la scheda la mostra: lasciarla indietro faceva leggere
+            // «Movimento senza armatura» sotto una Classe Armatura inglese.
+            effects = progression.effects.map { effect ->
+                effect.copy(source = terms.translateWhole(effect.source))
             },
         ),
     )
@@ -92,6 +104,14 @@ private class SrdTerms(
     private val targetResourceNames: Map<String, String>,
 ) {
     fun resourceName(resourceId: String): String? = targetResourceNames[resourceId]
+
+    /** Le stesse corrispondenze piu' quelle di una ricetta. */
+    fun plus(extra: Map<String, String>): SrdTerms = if (extra.isEmpty()) this else SrdTerms(
+        entries = entries + extra.mapKeys { it.key.lowercase() },
+        targetById = targetById,
+        sourceIdByName = sourceIdByName,
+        targetResourceNames = targetResourceNames,
+    )
 
     /**
      * Riscrive gli incantesimi della scheda con la voce corrispondente del
@@ -254,25 +274,43 @@ private class SrdTerms(
 }
 
 /**
- * I campi narrativi di un personaggio modello, nelle due lingue.
+ * Le corrispondenze che una ricetta di personaggio modello porta con se'.
  *
- * Un personaggio creato a mano non ha ricetta, e allora nessun campo si tocca.
+ * Nome, specie, background, allineamento, aspetto e storia si accoppiano per
+ * intero. Dotazione e lingue no: il servizio guidato ci *aggiunge* le voci
+ * concesse dall'SRD, quindi il valore salvato non coincide piu' con quello
+ * della ricetta. Si accoppiano allora le singole voci, che restano riconoscibili
+ * dentro l'elenco accresciuto.
+ *
+ * Un personaggio creato a mano non ha ricetta e non riceve nessuna coppia.
  */
-private class TemplateNarrative(
-    private val source: TemplateCharacterPlan?,
-    private val target: TemplateCharacterPlan?,
-) {
-    /** Sostituisce solo se il valore e' ancora quello della ricetta di partenza. */
-    fun pick(current: String, field: (TemplateCharacterPlan) -> String): String {
-        val canonical = source?.let(field) ?: return current
-        val translated = target?.let(field) ?: return current
-        return if (current.trim() == canonical.trim()) translated else current
-    }
+private fun templatePairs(
+    id: String,
+    source: AppLanguage,
+    target: AppLanguage,
+): Map<String, String> {
+    val from = TemplateParties.of(source).plansById[id] ?: return emptyMap()
+    val to = TemplateParties.of(target).plansById[id] ?: return emptyMap()
+    return buildMap {
+        fun whole(left: String, right: String) {
+            if (left.isNotBlank() && right.isNotBlank() && left != right) put(left, right)
+        }
+        whole(from.name, to.name)
+        whole(from.species, to.species)
+        whole(from.background, to.background)
+        whole(from.alignment, to.alignment)
+        whole(from.appearance, to.appearance)
+        whole(from.backstory, to.backstory)
 
-    companion object {
-        fun between(id: String, source: AppLanguage, target: AppLanguage) = TemplateNarrative(
-            source = TemplateParties.of(source).plansById[id],
-            target = TemplateParties.of(target).plansById[id],
-        )
+        fun entries(left: String, right: String) {
+            val a = left.split(',', ';', '\n').map(String::trim).filter(String::isNotEmpty)
+            val b = right.split(',', ';', '\n').map(String::trim).filter(String::isNotEmpty)
+            // Solo se le due liste hanno la stessa forma: se una ricetta cambia
+            // il numero di voci fra le lingue, accoppiarle per posizione
+            // inventerebbe corrispondenze.
+            if (a.size == b.size) a.zip(b).forEach { (x, y) -> whole(x, y) }
+        }
+        entries(from.equipment, to.equipment)
+        entries(from.languages, to.languages)
     }
 }

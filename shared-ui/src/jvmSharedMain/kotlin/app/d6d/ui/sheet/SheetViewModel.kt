@@ -187,10 +187,11 @@ class SheetViewModel(
      * nessuno ha toccato — con l'avviso di modifiche pendenti che blocca la
      * navigazione. Le due cose si muovono insieme, sempre.
      *
-     * L'archivio si traduce **in memoria e basta**: cambiare lingua e' una
-     * preferenza di lettura, non una modifica ai personaggi, e riscrivere i file
-     * di chi gioca per un interruttore delle impostazioni sarebbe una liberta'
-     * che non ci compete. Chi salva, salva quello che vede.
+     * L'archivio si traduce **e si riscrive**, in un colpo solo: e' una
+     * migrazione dichiarata. Tenerla in memoria sembrava piu' prudente ma era
+     * incoerente — ogni salvataggio riscrive tutta la libreria, quindi la
+     * traduzione finiva su disco lo stesso, per meta' e per caso. Il dettaglio
+     * sta in [alignSheetLanguage].
      *
      * Il messaggio invece si scarta: gli errori letterali non si ritraducono.
      */
@@ -222,13 +223,17 @@ class SheetViewModel(
      */
     private fun alignSheetLanguage() {
         val target = AppLocale.language
-        val staleCharacters = library.characters.any { it.contentLanguage != target }
-        val staleMonsters = library.monsters.any { it.contentLanguage != target }
-        if (staleCharacters || staleMonsters) {
-            library = library.copy(
-                characters = library.characters.map { it.retranslatedTo(target) },
-                monsters = library.monsters.map { it.regeneratedIn(target) },
-            )
+        // Si traduce prima e si confronta poi. Guardare il solo marcatore non
+        // basta: una creatura che l'utente ha modificato non si rigenera *e*
+        // conserva il proprio marcatore, quindi resterebbe «da allineare» per
+        // sempre, facendo riscrivere l'archivio a ogni avvio — e ruotare il
+        // backup su una modifica che non c'e'.
+        val aligned = library.copy(
+            characters = library.characters.map { it.retranslatedTo(target) },
+            monsters = library.monsters.map { it.regeneratedIn(target) },
+        )
+        if (aligned != library) {
+            library = aligned
             runCatching { store.save(library) }
         }
         if (monster.contentLanguage != target) {
