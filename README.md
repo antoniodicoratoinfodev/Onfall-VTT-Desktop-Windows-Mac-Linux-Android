@@ -94,8 +94,9 @@ out-of-range shot is reported as a warning, not silently resolved.
 on the healer's side, that a self-only or ally-only spell is used as written, and that a dead target
 is not brought back by ordinary healing. **Spell slots and Pact slots** are carried into the fight
 from the sheet, shown on the card of whoever holds them, and spent as part of the same undoable
-command as the spell. A healing spell that upcasts asks which slot to burn and scales its dice to
-the level chosen, up to ninth.
+command as the spell. The engine can also cast a healing spell from a higher slot and scale its dice
+to the level chosen, up to ninth; today that is the enemy CPU's move, described below, while from
+the table the spell is played at its own level.
 
 Initiative ties can be played **together or separately**, and the choice is made before the fight
 starts: with ties joined, everyone on the same initiative acts in one shared turn and the screen
@@ -165,10 +166,11 @@ budget are the engine's, identical at all three levels — nothing is inflated t
 | **Sorry for you!** | Focuses fire on vulnerable targets, flanks, avoids friendly fire and spends higher slots to get its whole side safe at once. |
 
 The turn is played back **one command at a time**, so the table sees each move and each attack
-before the next, with the active enemy followed on the map; the pace is set in Settings, from a long
-pause between commands down to *Instant*, which resolves the enemy turn all at once. When it is
-over, the log carries a summary of the turn: the level played, the priority target the group had
-picked, and how many attacks, heals and moves it took.
+before the next, the selection following whichever enemy is acting; the pace is set in Settings,
+from a long pause between commands down to *Instant*, which resolves it all at once. Each command
+lands in the event log as it happens, and when the turn is over the strip above the map states the
+outcome: the level played, the priority target the group had picked, and how many attacks, heals and
+moves it took.
 
 The whole CPU turn can be **undone as one batch**, after which automation stays paused until *Resume
 CPU* is pressed, so the table can take the enemy side back at any point. If the state changes
