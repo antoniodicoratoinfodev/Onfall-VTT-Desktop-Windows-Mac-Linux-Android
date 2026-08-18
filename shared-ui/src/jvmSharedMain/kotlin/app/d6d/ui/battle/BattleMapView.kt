@@ -89,6 +89,7 @@ import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumberView
 import app.d6d.ui.components.LocalMapDragCursor
 import app.d6d.ui.components.color
+import app.d6d.ui.components.healthRingColor
 import app.d6d.ui.components.initials
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.images.rememberBitmap
@@ -99,7 +100,6 @@ import app.d6d.ui.state.PendingArea
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.Vignette
-import app.d6d.ui.theme.healthColor
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
 import kotlin.math.abs
@@ -1028,7 +1028,11 @@ private fun MapToken(
     }
 
     val accent = if (defeated) Palette.TextFaint else faction.color
-    val ring = if (defeated) Palette.TextFaint else healthColor(combatant.currentHitPoints(), snapshot.maxHitPoints())
+    val ring = if (defeated) {
+        Palette.TextFaint
+    } else {
+        faction.healthRingColor(combatant.currentHitPoints(), snapshot.maxHitPoints())
+    }
     // Lampo del critico: finche' il numero dorato del colpo fluttua sul token,
     // l'anello si accende. Sparisce da solo quando il numero scade.
     val critFlash = viewModel.floating[id].orEmpty().any { it.kind == FloatKind.CRIT }

@@ -35,6 +35,21 @@ val Faction.color: Color
     get() = if (this == Faction.PARTY) Palette.Party else Palette.Enemy
 
 /**
+ * Colore dell'anello dei PF, che non dipende solo dalla salute.
+ *
+ * Per la squadra restano le tre soglie di [healthColor]: sono schede che si
+ * leggono una per una, e sapere *quanto* manca conta piu' di sapere di chi si
+ * tratta. Gli avversari si contano invece a colpo d'occhio su una mappa piena,
+ * quindi il loro anello e' sempre lo stesso rosso e la ferita si legge da quanto
+ * arco resta acceso.
+ *
+ * Il caso «fuori combattimento» non passa di qui: chi e' a terra perde entrambe
+ * le letture e resta grigio.
+ */
+fun Faction.healthRingColor(current: Int, max: Int): Color =
+    if (this == Faction.ENEMY) Palette.EnemyHealth else healthColor(current, max)
+
+/**
  * Ritratto del combattente: medaglione disegnato a vettori, con anello dei PF.
  *
  * E' generato dal codice e non da immagini, sia per restare entro i vincoli di
@@ -81,7 +96,11 @@ fun CombatantPortrait(
         active -> Palette.Turn
         else -> faction.color
     }
-    val ringColor = if (defeated) Palette.TextFaint else healthColor(currentHitPoints, safeMax)
+    val ringColor = if (defeated) {
+        Palette.TextFaint
+    } else {
+        faction.healthRingColor(currentHitPoints, safeMax)
+    }
 
     Box(modifier.size(diameter), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(diameter)) {

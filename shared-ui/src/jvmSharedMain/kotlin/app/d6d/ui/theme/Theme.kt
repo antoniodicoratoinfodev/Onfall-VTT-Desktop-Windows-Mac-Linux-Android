@@ -79,6 +79,20 @@ object Palette {
     val Bloodied = Color(0xFFD18B57)
     val Critical = Color(0xFFD95353)
 
+    /**
+     * Anello dei PF avversario: un solo rosso a ogni soglia di vita.
+     *
+     * Sul token la fazione va riconosciuta prima della salute, e le tre tinte di
+     * [healthColor] la nascondevano: un nemico intatto portava lo stesso anello
+     * chiaro di un alleato intatto. Quanto e' ferito resta leggibile dalla
+     * lunghezza dell'arco, che e' l'informazione che l'anello porta davvero.
+     *
+     * Piu' profondo e saturo di [Enemy], che cinge lo stesso token a un pelo di
+     * distanza: due rossi identici e concentrici si leggerebbero come un unico
+     * bordo spesso invece che come cerchio e anello.
+     */
+    val EnemyHealth = Color(0xFFC2453F)
+
     /** Punti ferita temporanei: assorbono per primi, quindi hanno colore proprio. */
     val Temporary = Color(0xFF72B3C8)
 

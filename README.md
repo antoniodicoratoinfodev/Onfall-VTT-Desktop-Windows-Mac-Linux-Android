@@ -68,6 +68,12 @@ dice state, event log and undo history.
 <sub>Encounter builder — grid size and the distance each square represents</sub>
 </td>
 </tr>
+<tr>
+<td align="center">
+<img src="sample/session-mode.png" width="720"/><br/>
+<sub>How to begin — Fight mode, or the same grid left empty for roleplay and exploration</sub>
+</td>
+</tr>
 </table>
 
 ## The battle
@@ -169,6 +175,22 @@ CPU* is pressed, so the table can take the enemy side back at any point. If the 
 between one command and the next — someone edits a card, applies damage by hand, resolves something
 at the table — the CPU stops rather than acting on a board it did not plan for, and says so. A
 safety limit of sixteen decisions per combatant guarantees it always hands the turn back.
+
+<table>
+<tr>
+<td align="center">
+<img src="sample/session-difficulty.png" width="720"/><br/>
+<sub>Choosing the opposition — Sandbox, or three levels that change the choices and never the rules</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/battle-cpu-turn.png" width="720"/><br/>
+<sub>After a CPU turn — the enemies closed in and focused one target down to bloodied, with the
+summary above the map and every command in the log</sub>
+</td>
+</tr>
+</table>
 
 ## The Compendium
 
@@ -290,12 +312,22 @@ drops the pauses entirely and resolves the whole enemy turn in one go.
 **Turn order** decides what the strip above the map shows: hidden, so the map gains the room; the
 order alone, without the numbers; or the order with each combatant's initiative roll beside it.
 
-**Backdrop** trades looks for frames: embers and glow drifting slowly behind the screens, or bare
-still stone.
+**Backdrop** is a trade between looks and frames: embers and glow drifting slowly behind the
+screens, or bare still stone, which is a few frames less to draw.
 
 The last group is about data. **Panel layout** — widths, collapsed panels, map zoom, plate positions
 — can be reset in one move, and the **data folder** the application writes to is shown so it can be
-found, backed up, or copied to another machine.
+found, backed up, or copied to another machine. On the desktop a second section holds the cursors;
+on Android, where the pointer is not the application's to set, that section is simply not there.
+
+<table>
+<tr>
+<td align="center">
+<img src="sample/settings.png" width="720"/><br/>
+<sub>Settings — language, CPU pace, what the turn-order strip shows, and the backdrop</sub>
+</td>
+</tr>
+</table>
 
 ## On the phone
 
@@ -311,6 +343,11 @@ never mix. It carries 12 classes with their SRD subclasses, 408 class and subcla
 (including 10 metamagics and 28 eldritch invocations), 4 complete backgrounds, 33
 starting-equipment packages, 17 feats, 339 spells, 38 weapons and 64 complete Beast stat blocks
 eligible for Wild Shape. It is distributed under CC BY 4.0; see [`NOTICE-SRD.md`](NOTICE-SRD.md).
+
+The two editions are two sets of texts over **one set of identifiers**: the English pack adopts the
+Italian ids rather than minting its own, and a generated crosswalk maps the names between them.
+Those ids are what a saved sheet stores, so switching language renames what a character shows
+without orphaning a single feature, spell or feat it had already chosen.
 
 ## Architecture
 
