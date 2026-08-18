@@ -57,3 +57,39 @@ jobs:
           path: '**/build/reports/tests/**'
           retention-days: 14
           if-no-files-found: ignore
+
+  # Il catalogo SRD e' generato, ma finora solo il *prodotto* era sorvegliato:
+  # Gradle legge il JSON committato e non tocca l'estrattore che lo scrive. Una
+  # regressione nei generatori sarebbe quindi passata inosservata fino alla
+  # rigenerazione successiva, quando il JSON sarebbe cambiato sotto i piedi di
+  # chi non c'entrava nulla. Qui si verifica l'altra meta': che gli strumenti
+  # funzionino, e che il JSON committato sia ancora cio' che producono.
+  contenuti:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepara Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Gli estrattori leggono i PDF ufficiali con `pdftohtml`, che tiene la
+      # posizione e il carattere di ogni frammento: e' da li' che si riconoscono
+      # titoli, grassetti e colonne. I due PDF sono versionati nel repository,
+      # quindi il checkout basta.
+      - name: Prepara Poppler
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y poppler-utils
+
+      - name: Test degli estrattori
+        run: python3 -m unittest discover --start-directory tools/srd --pattern 'test_*.py' --verbose
+
+      # Rigenerare e confrontare: se l'estrattore e il JSON committato non
+      # concordano piu', uno dei due e' rimasto indietro.
+      - name: Il catalogo committato e' quello che gli strumenti producono
+        run: |
+          python3 tools/srd/extract_srd_class_features.py --language it --check
+          python3 tools/srd/extract_srd_class_features.py --language en --check
+          python3 tools/srd/build_srd_crosswalk.py --check

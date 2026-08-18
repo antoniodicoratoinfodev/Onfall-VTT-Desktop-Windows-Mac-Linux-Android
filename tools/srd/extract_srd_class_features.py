@@ -171,6 +171,10 @@ class LanguageProfile:
     # l'aggancio all'identificativo della risorsa passa dal nome.
     resource_patterns: tuple[tuple[str, str], ...]
     consumption: "re.Pattern[str]"
+    # «Costo: 2 punti stregoneria»: la spesa dichiarata su una riga a se', senza
+    # verbo. E' la forma delle opzioni di metamagia, e deve restare allineata a
+    # `SrdWords.statedCost`, che la rilegge dal lato Kotlin.
+    stated_cost: "re.Pattern[str]"
     without_spending: "re.Pattern[str]"
     # «consumare uno slot per *ottenere* punti stregoneria»: qui la risorsa si
     # guadagna, non si spende, e senza questa guardia il privilegio che li
@@ -227,6 +231,7 @@ ITALIAN = LanguageProfile(
     consumption=re.compile(
         r"\b(?:spende(?:re)?|consuma(?:re)?|utilizz[ao](?:re)?|uso|utilizzo|utilizzi|riserva)\b",
     ),
+    stated_cost=re.compile(r"costo:\s*\d+"),
     without_spending=re.compile(r"senza\s+(?:spendere|consumare)\b"),
     gains=re.compile(r"\bper\s+(?:ottenere|recuperare|guadagnare)\b"),
     # Il gerundio conta: l'SRD italiano scrive «ignorare questo limite
@@ -281,6 +286,7 @@ ENGLISH = LanguageProfile(
         (r"\brages?\b", "Rage"),
     ),
     consumption=re.compile(r"\b(?:expend(?:s|ing)?|spend(?:s|ing)?|uses?|using|expenditure)\b"),
+    stated_cost=re.compile(r"cost:\s*\d+"),
     without_spending=re.compile(r"without\s+(?:expending|spending)\b"),
     gains=re.compile(r"\bto\s+(?:gain|regain|recover)\b"),
     cost=re.compile(r"(?:expend|spend)(?:s|ing)?\s+(\d+|an?|one)\s+"),
@@ -569,8 +575,14 @@ def activation_from(description: str) -> str | None:
     )
     # Un'azione *aggiuntiva* e' cio' che il privilegio concede, non cio' che
     # costa: Azione impetuosa non si paga con un'azione, la regala.
+    #
+    # «one additional action» quanto «an additional action»: l'SRD inglese usa la
+    # prima, e prevedere solo la seconda lasciava il taglio senza effetto. Non
+    # cambia nessun record — Azione impetuosa se la cavava con l'eccezione
+    # sull'azione di Magia, che viene tagliata poco sopra — ma il ramo era li'
+    # per fare un lavoro che non faceva.
     lowered = re.sub(
-        r"\b(?:un'|una )azione aggiuntiva\b|\ban? (?:additional|extra) action\b",
+        r"\b(?:un'|una )azione aggiuntiva\b|\b(?:an?|one) (?:additional|extra) action\b",
         "",
         lowered,
     )
@@ -612,62 +624,90 @@ def activation_from(description: str) -> str | None:
     return None
 
 
-RESOURCE_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"punt[oi] stregoneria", "punti stregoneria"),
-    (r"punt[oi] concentrazione", "punti concentrazione"),
-    (r"ispirazione bardica", "Ispirazione bardica"),
-    (r"forma selvatica", "Forma selvatica"),
-    (r"incanalare divinità", "Incanalare divinità"),
-    (r"slot incantesimo", "slot incantesimo"),
-    (r"imposizione delle mani", "Imposizione delle mani"),
-    (r"\bira\b", "Ira"),
-)
-
-
 def resource_from(description: str, profile: LanguageProfile) -> dict[str, object] | None:
     lowered = description.lower()
-    consumption = profile.consumption.search(lowered)
     recovery: list[str] = []
     if profile.short_rest in lowered:
         recovery.append(profile.short_rest)
     if profile.long_rest in lowered:
         recovery.append(profile.long_rest)
 
-    for pattern, name in profile.resource_patterns:
-        match = re.search(pattern, lowered)
-        if not match or (not consumption and not recovery):
-            continue
-        # La finestra guarda indietro fin dove puo' stare il verbo: l'italiano
-        # interpone piu' parole fra la spesa e la risorsa («spendere uno slot
-        # incantesimo o un utilizzo di Forma selvatica»), e con quaranta
-        # caratteri il costo restava fuori.
-        window_start = max(0, match.start() - 75)
-        nearby = lowered[window_start : match.end() + 25]
-        if profile.without_spending.search(nearby):
-            continue
-        cost_match = profile.cost.search(nearby)
-        # La guardia guarda il testo intero, non la finestra: quest'ultima si
-        # chiude presto e, quando il nome della risorsa compare gia' nel titolo
-        # del privilegio, «to gain» resterebbe fuori. Allargare la finestra non
-        # e' un'alternativa — serve a delimitare *quale* spesa riguarda questa
-        # risorsa, e allargandola aggancia spese di altre frasi.
-        if cost_match:
-            after = window_start + cost_match.end()
-            if profile.gains.search(lowered[after : after + 80]):
-                cost_match = None
-        cost: int | None = None
-        if cost_match:
-            raw_cost = cost_match.group(1)
-            cost = int(raw_cost) if raw_cost.isdigit() else 1
-        result: dict[str, object] = {"name": name}
-        if cost is not None:
-            result["cost"] = cost
-        if recovery:
-            result["recovery"] = recovery
-        return result
-    if recovery and re.search(r"\b(?:riutilizz|utilizz|usare|uso|volte?)\b", lowered):
-        return {"name": "utilizzo del privilegio", "recovery": recovery}
-    return None
+    # Un privilegio parla di *una* risorsa, e i nomi del profilo sono in ordine
+    # di specificita': la prima che il testo nomina e' quella di cui parla.
+    # Scorrerle tutte finche' una superava il vaglio della spesa faceva ripiegare
+    # su quella sbagliata quando la giusta non era spesa — «Arcidruido» converte
+    # utilizzi di Forma selvatica in slot incantesimo senza spendere ne' l'una ne'
+    # gli altri, e scartata la prima si prendeva i secondi.
+    named = next(
+        (
+            (match, name)
+            for match, name in (
+                (re.search(pattern, lowered), name)
+                for pattern, name in profile.resource_patterns
+            )
+            if match
+        ),
+        None,
+    )
+    # Un privilegio che non nomina nessun contatore di classe non ne dichiara
+    # nessuno. Qui c'era un ripiego che, quando il testo parlava di utilizzi e di
+    # riposi, emetteva una risorsa di nome «utilizzo del privilegio»: non era una
+    # risorsa, non corrispondeva a nessun contatore del pacchetto, quindi non si
+    # agganciava a nulla e nessuno la leggeva. E il suo riconoscimento era scritto
+    # in italiano soltanto, cosi' ventun privilegi dichiaravano una riserva in un
+    # file e niente nell'altro. Un campo che nessuno legge e che le due edizioni
+    # riempiono in modo diverso non e' informazione: e' rumore che somiglia a un
+    # disallineamento.
+    if named is None:
+        return None
+    match, name = named
+
+    # La finestra guarda indietro fin dove puo' stare il verbo: l'italiano
+    # interpone piu' parole fra la spesa e la risorsa («spendere uno slot
+    # incantesimo o un utilizzo di Forma selvatica»), e con quaranta caratteri il
+    # costo restava fuori.
+    window_start = max(0, match.start() - 75)
+    nearby = lowered[window_start : match.end() + 25]
+
+    # La spesa dev'essere di *questa* risorsa. Cercare il verbo nell'intero testo,
+    # come si faceva, bastava che il privilegio spendesse qualcosa da qualche
+    # parte: «Supercanalizzazione» nomina uno slot incantesimo come condizione
+    # d'innesco — l'incantesimo lo lanci comunque — e il «se lo utilizzi di nuovo»
+    # che parla del privilegio gli attribuiva una spesa di slot che non esiste.
+    # L'italiano ne usciva pulito solo perche' scrive «uno slot di livello» e il
+    # nome non combaciava: parita' per caso.
+    #
+    # Le opzioni di metamagia non hanno verbo: dichiarano «Costo: 2 punti
+    # stregoneria» su una riga per conto suo, ed e' una spesa a tutti gli effetti,
+    # la piu' esplicita di tutte. E vale anche il gerundio, che il solo elenco dei
+    # verbi non prende: «ignorare questo limite spendendo 3 punti stregoneria» e'
+    # precisamente il costo di Ali di drago.
+    declares_a_spend = (
+        profile.consumption.search(nearby)
+        or profile.stated_cost.search(nearby)
+        or profile.cost.search(nearby)
+    )
+    if not declares_a_spend or profile.without_spending.search(nearby):
+        return None
+
+    cost_match = profile.cost.search(nearby)
+    # La guardia guarda il testo intero, non la finestra: quest'ultima si chiude
+    # presto e, quando il nome della risorsa compare gia' nel titolo del
+    # privilegio, «to gain» resterebbe fuori. Allargare la finestra non e'
+    # un'alternativa — serve a delimitare *quale* spesa riguarda questa risorsa,
+    # e allargandola aggancia spese di altre frasi.
+    if cost_match:
+        after = window_start + cost_match.end()
+        if profile.gains.search(lowered[after : after + 80]):
+            cost_match = None
+
+    result: dict[str, object] = {"name": name}
+    if cost_match:
+        raw_cost = cost_match.group(1)
+        result["cost"] = int(raw_cost) if raw_cost.isdigit() else 1
+    if recovery:
+        result["recovery"] = recovery
+    return result
 
 
 def invocation_prerequisite(
@@ -847,14 +887,8 @@ def base_record(
     return record, draft.lines
 
 
-def internal_option_records(
-    parent: dict[str, object],
-    lines: Sequence[Line],
-    used_ids: set[str],
-    source_order: int,
-    profile: LanguageProfile,
-) -> list[dict[str, object]]:
-    """Promote initial italic/bold body labels to searchable child records."""
+def option_starts(lines: Sequence[Line]) -> list[tuple[int, str]]:
+    """Dove comincia ogni opzione annidata nel corpo di un privilegio, e come si chiama."""
     starts: list[tuple[int, str]] = []
     index = 0
     while index < len(lines):
@@ -882,8 +916,25 @@ def internal_option_records(
         ):
             starts.append((start_index, prefix.rstrip(".:").strip()))
         index += 1
+    return starts
 
+
+def internal_option_records(
+    parent: dict[str, object],
+    lines: Sequence[Line],
+    used_ids: set[str],
+    source_order: int,
+    profile: LanguageProfile,
+) -> tuple[list[dict[str, object]], int]:
+    """Promuove le etichette in grassetto del corpo a voci figlie ricercabili.
+
+    Restituisce anche dove finisce il testo *proprio* del privilegio: da li' in
+    poi il corpo appartiene alle opzioni, e leggerlo come se fosse del contenitore
+    gli attribuisce costi che non sono suoi.
+    """
+    starts = option_starts(lines)
     records: list[dict[str, object]] = []
+    own_line_count = len(lines)
     parent_slug = slugify(str(parent["name"]))
     for option_index, (start, name) in enumerate(starts):
         end = starts[option_index + 1][0] if option_index + 1 < len(starts) else len(lines)
@@ -891,6 +942,10 @@ def internal_option_records(
         description = description_from_lines(option_lines)
         if not description or slugify(name) == parent_slug:
             continue
+        # Il confine e' la prima opzione *accolta*: una scartata — un'etichetta
+        # che ripete il nome del privilegio — e' testo del contenitore, e
+        # tagliare prima gliene toglierebbe un pezzo.
+        own_line_count = min(own_line_count, start)
         prefix = "subclass-feature" if parent["subclass"] else "feature"
         record_id = allocate_id(
             used_ids,
@@ -918,7 +973,33 @@ def internal_option_records(
                 "source_order": source_order + option_index + 1,
             }
         )
-    return records
+    return records, own_line_count
+
+
+def container_activation(
+    own_description: str, options: Sequence[dict[str, object]]
+) -> str | None:
+    """Il costo di attivazione di un privilegio che elenca opzioni annidate.
+
+    Il testo proprio viene prima: se dichiara un costo, quel costo e' del
+    privilegio, e le opzioni descrivono cosa se ne ottiene. «Forma selvatica» e'
+    un'azione bonus per conto suo, qualunque cosa dicano le sue voci.
+
+    Quando il testo proprio e' un semplice cappello — «…fornendogli i seguenti
+    benefici» — il costo sta nelle opzioni, e il contenitore puo' adottarlo solo
+    se e' uno solo: «Ispirazione bardica» e' un'azione bonus perche' l'unica
+    delle sue voci a costare qualcosa lo e'. Se le opzioni non concordano il
+    contenitore resta passivo, e ciascuna porta il proprio costo. E' il caso che
+    ha rivelato il difetto: «Investitura del Signore delle Catene» ha una voce da
+    azione bonus (Attacco rapido) e una da reazione (Resistenza), e leggere
+    l'intera descrizione la dichiarava reazione — non perche' lo sia, ma perche'
+    quel ramo del riconoscimento viene provato per primo.
+    """
+    own = activation_from(own_description)
+    if own is not None:
+        return own
+    declared = {str(option["activation"]) for option in options if option["activation"]}
+    return declared.pop() if len(declared) == 1 else None
 
 
 def adopt_structural_keys(
@@ -999,9 +1080,13 @@ def build_catalog(
             if not record["description"]:
                 raise ValueError(f"Descrizione vuota per {record['id']} (pagina {record['page']})")
             all_records.append(record)
-            options = internal_option_records(
+            options, own_line_count = internal_option_records(
                 record, body_lines, used_ids, source_order * 100, profile
             )
+            if options:
+                record["activation"] = container_activation(
+                    description_from_lines(body_lines[:own_line_count]), options
+                )
             all_records.extend(options)
             source_order += 1
 

@@ -424,6 +424,25 @@ class BattleViewModelTest {
     }
 
     @Test
+    fun `il cambio lingua non lascia a schermo la fascia del turno nemico`() = runTest {
+        // E' una frase gia' composta, col nome del bersaglio dentro, e nessuno la
+        // riscrive finche' la CPU non agisce di nuovo: cambiare lingua a meta'
+        // del turno la lasciava in quella di prima, unica riga rimasta indietro.
+        val session = enemyCpuResourceSession(heroColumn = 5)
+        val model = BattleViewModel(session)
+        model.adopt(session, mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name))
+        model.enemyCpuSpeed = EnemyCpuSpeed.FAST
+
+        val turn = launch(start = CoroutineStart.UNDISPATCHED) { model.playEnemyCpuTurnPaced() }
+        assertNotNull(model.enemyCpuActionLabel)
+
+        model.onLanguageChanged()
+        assertNull(model.enemyCpuActionLabel)
+
+        turn.join()
+    }
+
+    @Test
     fun `entrare in modifica riavvolge il frammento cpu e ripianifica alla ripresa`() = runTest {
         val session = enemyCpuResourceSession(heroColumn = 5)
         val model = BattleViewModel(session)

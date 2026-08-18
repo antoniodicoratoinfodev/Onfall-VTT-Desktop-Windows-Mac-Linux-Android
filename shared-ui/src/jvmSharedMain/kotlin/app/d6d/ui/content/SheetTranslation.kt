@@ -7,8 +7,11 @@ import app.d6d.content.srd521it.SrdWeapons
 import app.d6d.content.srd521it.srdToolAndLanguageNames
 import app.d6d.i18n.AppLanguage
 import app.d6d.rules.character.RuleElementDefinition
+import app.d6d.rules.character.WeaponDefinition
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.Spellcasting
+import app.d6d.sheet.WeaponEntry
+import app.d6d.sheet.weaponNote
 
 /**
  * Riporta nella lingua richiesta il testo SRD gia' scritto dentro una scheda.
@@ -48,12 +51,7 @@ internal fun CharacterSheet.retranslatedTo(target: AppLanguage): CharacterSheet 
         subclass = terms.translateLevelled(subclass),
         background = terms.translateWhole(background),
         weaponProficiencies = terms.translateList(weaponProficiencies),
-        weapons = weapons.map { entry ->
-            entry.copy(
-                name = terms.translateWhole(entry.name),
-                note = terms.translateList(entry.note),
-            )
-        },
+        weapons = weapons.map(terms::regenerate),
         toolProficiencies = terms.translateList(toolProficiencies),
         languages = terms.translateList(languages),
         equipment = terms.translateList(equipment),
@@ -102,6 +100,9 @@ private class SrdTerms(
     /** Identificativo dell'elemento a partire dal nome nella lingua di origine. */
     private val sourceIdByName: Map<String, String>,
     private val targetResourceNames: Map<String, String>,
+    /** L'arma corrispondente nel pacchetto di destinazione, dal nome di origine. */
+    private val targetWeaponBySourceName: Map<String, WeaponDefinition>,
+    private val target: AppLanguage,
 ) {
     fun resourceName(resourceId: String): String? = targetResourceNames[resourceId]
 
@@ -111,7 +112,35 @@ private class SrdTerms(
         targetById = targetById,
         sourceIdByName = sourceIdByName,
         targetResourceNames = targetResourceNames,
+        targetWeaponBySourceName = targetWeaponBySourceName,
+        target = target,
     )
+
+    /**
+     * Riscrive un'arma della scheda con la voce corrispondente del pacchetto di
+     * destinazione.
+     *
+     * La nota non si traduce: si **rigenera**. E' testo composto — «Padronanza:
+     * Fiaccare · a due mani 1d8 · gittata 6/18 m» — dove cambia il nome della
+     * padronanza, cambiano le parole che li stanno intorno e cambia perfino
+     * l'unita' di misura, perche' l'italiano stampa i metri. Nessuna sostituzione
+     * di voci canoniche puo' arrivarci: la riga intera non e' una voce canonica,
+     * e restava in italiano dentro una scheda inglese.
+     *
+     * Cio' che fra le armi non e' un'arma — un incantesimo diventato capacita'
+     * lanciabile, un privilegio che tira per colpire — non ha nota generata da
+     * riscrivere e segue la regola di sempre: si sostituisce cio' che coincide
+     * con una voce canonica. Come un'arma che l'utente ha rinominata, che resta
+     * sua, nota compresa.
+     */
+    fun regenerate(entry: WeaponEntry): WeaponEntry {
+        val definition = targetWeaponBySourceName[entry.name.trim().lowercase()]
+            ?: return entry.copy(
+                name = translateWhole(entry.name),
+                note = translateList(entry.note),
+            )
+        return entry.copy(name = definition.name, note = definition.weaponNote(target))
+    }
 
     /**
      * Riscrive gli incantesimi della scheda con la voce corrispondente del
@@ -256,6 +285,7 @@ private class SrdTerms(
                 if (target == AppLanguage.ITALIAN) "Nel libro degli incantesimi" else "In the spellbook",
             )
 
+            val targetWeaponsById = SrdWeapons.all(target).associateBy { it.id }
             return SrdTerms(
                 entries = entries,
                 targetById = toPack.elements.associateBy { it.id },
@@ -263,6 +293,10 @@ private class SrdTerms(
                 targetResourceNames = toPack.classes
                     .flatMap { definition -> definition.resources }
                     .associate { it.id to it.name },
+                targetWeaponBySourceName = SrdWeapons.all(source).mapNotNull { weapon ->
+                    targetWeaponsById[weapon.id]?.let { weapon.name.lowercase() to it }
+                }.toMap(),
+                target = target,
             )
         }
 

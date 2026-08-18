@@ -7,6 +7,7 @@ import app.d6d.rules.character.ClassLevelState
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.MonsterStatBlock
 import app.d6d.sheet.SheetStore
+import app.d6d.ui.content.SessionTemplates
 import app.d6d.ui.i18n.AppLocale
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
+import kotlin.io.path.readText
 
 /**
  * Cambiare lingua non e' una modifica alla scheda.
@@ -156,14 +158,27 @@ class SheetLanguageSwitchTest {
         assertEquals("La mia versione dei fatti", migrated.backstory)
     }
 
+    /** Lo stesso personaggio incluso, costruito da zero nella lingua indicata. */
+    private fun seededIn(language: AppLanguage, id: String): CharacterSheet =
+        SessionTemplates.of(language).all
+            .flatMap { it.party }
+            .first { it.id == id }
+
     @Test
-    fun `nome, background e dotazione dei modelli non restano indietro`(
+    fun `un modello tradotto coincide con lo stesso modello nato in inglese`(
         @TempDir directory: Path,
     ) = runTest {
-        // Il difetto: la traduzione narrativa copriva specie, allineamento,
+        // Il difetto era che la traduzione narrativa copriva specie, allineamento,
         // aspetto e storia, ma non il nome ne' il background ne' le voci di
-        // dotazione della ricetta. Restavano «Tarvos di Pietrafredda» e
+        // dotazione della ricetta: restavano «Tarvos di Pietrafredda» e
         // «Sentinella di frontiera» in mezzo a una scheda inglese.
+        //
+        // Cercare «frammenti italiani» — un accento, un « di » — non era pero'
+        // una prova: passava anche una traduzione a meta', purche' cio' che
+        // restava indietro fosse scritto senza accenti. Il termine di paragone
+        // giusto e' l'unico esatto che esista: la stessa ricetta costruita in
+        // inglese. Se i due non coincidono campo per campo, qualcosa e' rimasto
+        // nella lingua di prima — e il messaggio dice subito cosa.
         val model = SheetViewModel(store = SheetStore(directory.resolve("schede.json")), loadOnCreate = false)
         model.load()
         val before = model.library.characters.first { it.id == "pg-tarvos" }
@@ -171,17 +186,91 @@ class SheetLanguageSwitchTest {
         AppLocale.use(AppLanguage.ENGLISH)
         model.onLanguageChanged()
         val after = model.library.characters.first { it.id == "pg-tarvos" }
+        val born = seededIn(AppLanguage.ENGLISH, "pg-tarvos")
 
         assertNotEquals(before.characterName, after.characterName)
-        assertNotEquals(before.background, after.background)
-        assertNotEquals(before.equipment, after.equipment)
-        // E niente frammenti italiani rimasti in giro.
-        val italianisms = listOf(" di ", " della ", " degli ", "à", "è")
-        val leftovers = listOf(
-            after.characterName, after.background, after.species,
-            after.alignment, after.equipment, after.languages,
-        ).filter { field -> italianisms.any { it in field } }
-        assertTrue(leftovers.isEmpty(), "restano frammenti italiani: $leftovers")
+        assertEquals(born.characterName, after.characterName)
+        assertEquals(born.background, after.background)
+        assertEquals(born.equipment, after.equipment)
+        assertEquals(born.species, after.species)
+        assertEquals(born.alignment, after.alignment)
+        assertEquals(born.languages, after.languages)
+        assertEquals(born.className, after.className)
+        assertEquals(born.subclass, after.subclass)
+        assertEquals(born.toolProficiencies, after.toolProficiencies)
+        assertEquals(born.weaponProficiencies, after.weaponProficiencies)
+        assertEquals(born.weapons.map { it.name }, after.weapons.map { it.name })
+        assertEquals(born.weapons.map { it.note }, after.weapons.map { it.note })
+    }
+
+    @Test
+    fun `la sorgente di un effetto segue la lingua`(@TempDir directory: Path) = runTest {
+        // La sorgente e' il nome del privilegio che concede l'effetto, e la
+        // scheda la mostra sotto il valore che modifica: lasciarla indietro
+        // faceva leggere «Movimento senza armatura» sotto una Classe Armatura
+        // inglese. Non e' un campo che l'utente scrive, quindi qui non c'e'
+        // niente da preservare: deve seguire la lingua, tutta.
+        val model = SheetViewModel(store = SheetStore(directory.resolve("schede.json")), loadOnCreate = false)
+        model.load()
+        val id = model.library.characters
+            .first { it.progression.effects.any { effect -> effect.source.isNotBlank() } }
+            .id
+        val before = model.library.characters.first { it.id == id }
+
+        AppLocale.use(AppLanguage.ENGLISH)
+        model.onLanguageChanged()
+
+        val after = model.library.characters.first { it.id == id }
+        val born = seededIn(AppLanguage.ENGLISH, id)
+        assertNotEquals(
+            before.progression.effects.map { it.source },
+            after.progression.effects.map { it.source },
+            "nessuna sorgente e' cambiata: la prova non guarderebbe nulla",
+        )
+        assertEquals(
+            born.progression.effects.map { it.source },
+            after.progression.effects.map { it.source },
+        )
+        // E i nomi dei pozzi di risorse, che stanno accanto e si rigenerano.
+        assertEquals(
+            born.progression.resourcePools.map { it.name },
+            after.progression.resourcePools.map { it.name },
+        )
+    }
+
+    @Test
+    fun `andata e ritorno lascia intatto cio' che l'utente ha scritto`(
+        @TempDir directory: Path,
+    ) = runTest {
+        // La regola e' che si sostituisce solo cio' che coincide *per intero* con
+        // una voce canonica. Il giro completo la mette alla prova due volte: se
+        // una passata riscrivesse un campo personalizzato, tornare indietro non
+        // lo rimetterebbe a posto.
+        val model = SheetViewModel(store = SheetStore(directory.resolve("schede.json")), loadOnCreate = false)
+        model.load()
+        model.selectCharacter("pg-tarvos")
+        model.character = model.character.copy(
+            characterName = "Tarvos il Testardo",
+            background = "Sentinella con licenza",
+            equipment = "Corda impeciata, un dado truccato",
+        )
+        model.save()
+        model.load()
+        val italian = model.library.characters.first { it.id == "pg-tarvos" }
+
+        AppLocale.use(AppLanguage.ENGLISH)
+        model.onLanguageChanged()
+        val english = model.library.characters.first { it.id == "pg-tarvos" }
+        assertEquals("Tarvos il Testardo", english.characterName)
+        assertEquals("Sentinella con licenza", english.background)
+        assertEquals("Corda impeciata, un dado truccato", english.equipment)
+        // Il resto invece ha seguito la lingua.
+        assertEquals(seededIn(AppLanguage.ENGLISH, "pg-tarvos").className, english.className)
+
+        AppLocale.use(AppLanguage.ITALIAN)
+        model.onLanguageChanged()
+        val back = model.library.characters.first { it.id == "pg-tarvos" }
+        assertEquals(italian, back, "il giro di andata e ritorno non e' tornato al punto di partenza")
     }
 
     @Test
@@ -260,6 +349,37 @@ class SheetLanguageSwitchTest {
 
         val onDisk = SheetStore(directory.resolve("schede.json")).load()
         assertTrue(onDisk.characters.none { it.contentLanguage == AppLanguage.ITALIAN })
+    }
+
+    @Test
+    fun `una creatura personalizzata non fa riscrivere l'archivio a ogni avvio`(
+        @TempDir directory: Path,
+    ) = runTest {
+        // Il difetto: l'allineamento decideva guardando il *marcatore*. Una
+        // creatura che l'utente ha modificato non si rigenera e conserva il
+        // proprio, quindi risultava «da allineare» per sempre: l'archivio veniva
+        // riscritto a ogni apertura, e il backup ruotava su una modifica che non
+        // c'era. Si traduce prima e si confronta poi.
+        val store = SheetStore(directory.resolve("schede.json"))
+        val model = SheetViewModel(store = store, loadOnCreate = false)
+        model.load()
+        val included = model.library.monsters.first()
+        model.requestKind(SheetKind.MOSTRO)
+        model.monster = included.copy(id = "mia-creatura", name = "Il mio orco")
+        model.save()
+
+        // Primo avvio in inglese: qui una riscrittura ci sta, l'archivio e' italiano.
+        AppLocale.use(AppLanguage.ENGLISH)
+        SheetViewModel(store = store, loadOnCreate = false).load()
+        val settled = directory.resolve("schede.json").readText()
+
+        // Secondo avvio, stessa lingua: non deve toccare nulla.
+        SheetViewModel(store = store, loadOnCreate = false).load()
+        assertEquals(
+            settled,
+            directory.resolve("schede.json").readText(),
+            "il riavvio ha riscritto l'archivio senza che nulla fosse cambiato",
+        )
     }
 
     @Test

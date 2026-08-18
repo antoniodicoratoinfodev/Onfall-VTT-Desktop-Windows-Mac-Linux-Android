@@ -270,6 +270,20 @@ class GuidedCharacterService(
 
     fun advance(sheet: CharacterSheet, request: LevelUpRequest): CharacterSheet {
         val wasConfigured = sheet.progression.configured
+        // Una scheda vuota nasce nella lingua di chi la crea, e questo servizio la
+        // scrive per intero: puo' marchiarla come vuole. Una scheda gia' scritta
+        // no — il testo che c'e' e' nella *sua* lingua, e aggiungergli sopra
+        // quello di un altro pacchetto la lascerebbe a meta' fra le due, per
+        // giunta marchiata come se fosse tutta nell'ultima arrivata. Da li' la
+        // ritraduzione non la recupera piu': crede di partire da una lingua in
+        // cui meta' della scheda non e' mai stata scritta.
+        //
+        // Non e' una condizione che l'utente possa violare: chi chiama porta la
+        // scheda nella lingua del servizio *prima* di applicarle un livello.
+        require(!wasConfigured || sheet.contentLanguage == language) {
+            "Scheda in ${sheet.contentLanguage} avanzata col pacchetto $language: " +
+                "va tradotta prima di applicarle un livello."
+        }
         val oldClassLevel = sheet.progression.levelIn(request.classId)
         val oldConstitutionModifier = sheet.modifier(Ability.CONSTITUTION)
         val progressed = progressionEngine.applyLevelUp(
@@ -530,7 +544,9 @@ class GuidedCharacterService(
             sheet.copy(
                 // Il testo che segue lo scrive questo servizio, nella lingua del
                 // proprio pacchetto: la scheda lo registra, altrimenti nessuno
-                // sapra' piu' da quale lingua tradurla.
+                // sapra' piu' da quale lingua tradurla. Per una scheda gia'
+                // configurata e' il valore che aveva — lo pretende la guardia in
+                // testa al metodo — quindi qui cambia solo alla prima creazione.
                 contentLanguage = language,
                 className = classNames,
                 background = sheet.background.ifBlank { selectedBackground?.name.orEmpty() },
@@ -790,22 +806,34 @@ fun WeaponDefinition.toWeaponEntry(
         damageModifier = modifier,
         damageType = damageType,
         rangeFeet = attackRangeFeet,
-        note = buildString {
-            append(language.pick("Padronanza: ", "Mastery: ")).append(mastery)
-            if (versatileDiceSides > 0) {
-                append(language.pick(" · a due mani 1d", " · two-handed 1d"))
-                    .append(versatileDiceSides)
-            }
-            if (reach == WeaponReach.RANGED || WeaponProperty.THROWN in properties) {
-                append(language.pick(" · gittata ", " · range "))
-                    .append(distanceValue(normalRangeFeet, language))
-                    .append('/')
-                    .append(distanceValue(longRangeFeet, language))
-                    .append(' ')
-                    .append(distanceUnit(language))
-            }
-        },
+        note = weaponNote(language),
     )
+}
+
+/**
+ * La nota che accompagna un'arma sulla scheda: padronanza, versatilità, gittata.
+ *
+ * E' testo generato per intero — nomi tradotti, unita' convertite — e nient'altro
+ * che l'arma e la lingua lo determinano. Sta qui, e non dentro [toWeaponEntry],
+ * perche' serve anche al cambio di lingua: una nota non si *traduce* parola per
+ * parola, si riscrive dall'arma corrispondente nel pacchetto di destinazione.
+ * Riscriverla altrove sarebbe una seconda formula da tenere allineata a questa,
+ * e prima o poi non lo sarebbe.
+ */
+fun WeaponDefinition.weaponNote(language: AppLanguage): String = buildString {
+    append(language.pick("Padronanza: ", "Mastery: ")).append(mastery)
+    if (versatileDiceSides > 0) {
+        append(language.pick(" · a due mani 1d", " · two-handed 1d"))
+            .append(versatileDiceSides)
+    }
+    if (reach == WeaponReach.RANGED || WeaponProperty.THROWN in properties) {
+        append(language.pick(" · gittata ", " · range "))
+            .append(distanceValue(normalRangeFeet, language))
+            .append('/')
+            .append(distanceValue(longRangeFeet, language))
+            .append(' ')
+            .append(distanceUnit(language))
+    }
 }
 
 /** Azione comune che segnala la capacità di lanciare incantesimi. */

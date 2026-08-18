@@ -106,13 +106,7 @@
       "description": "You can imbue yourself with a primal power called Rage, a force that grants you extraordinary might and resilience. You can enter it as a Bonus Action if you aren’t wearing Heavy armor. You can enter your Rage the number of times shown for your Barbarian level in the Rages column of the Barbarian Features table. You regain one expended use when you finish a Short Rest, and you regain all expended uses when you finish a Long Rest. While active, your Rage follows the rules below.\nDamage Resistance. You have Resistance to Bludgeoning, Piercing, and Slashing damage.\nRage Damage. When you make an attack using Strength—with either a weapon or an Unarmed Strike—and deal damage to the target, you gain a bonus to the damage that increases as you gain levels as a Barbarian, as shown in the Rage Damage column of the Barbarian Features table.\nStrength Advantage. You have Advantage on Strength checks and Strength saving throws.\nNo Concentration or Spells. You can’t maintain Concentration, and you can’t cast spells.\nDuration. The Rage lasts until the end of your next turn, and it ends early if you don Heavy armor or have the Incapacitated condition. If your Rage is still active on your next turn, you can extend the Rage for another round by doing one of the following:\n• Make an attack roll against an enemy.\n• Force an enemy to make a saving throw.\n• Take a Bonus Action to extend your Rage. Each time the Rage is extended, it lasts until the end of your next turn. You can maintain a Rage for up to 10 minutes.",
       "page": 28,
       "activation": "Bonus Action",
-      "resource": {
-        "name": "Rage",
-        "recovery": [
-          "short rest",
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 0
     },
     {
@@ -141,9 +135,7 @@
       "description": "Rage Damage. When you make an attack using Strength—with either a weapon or an Unarmed Strike—and deal damage to the target, you gain a bonus to the damage that increases as you gain levels as a Barbarian, as shown in the Rage Damage column of the Barbarian Features table.",
       "page": 29,
       "activation": null,
-      "resource": {
-        "name": "Rage"
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:barbaro:rage",
       "source_order": 2
     },
@@ -273,9 +265,7 @@
       "description": "You gain proficiency in another skill of your choice from the skill list available to Barbarians at level 1. In addition, while your Rage is active, you can channel primal power when you attempt certain tasks; whenever you make an ability check using one of the following skills, you can make it as a Strength check even if it normally uses a different ability: Acrobatics, Intimidation, Perception, Stealth, or Survival. When you use this ability, your Strength represents primal power coursing through you, honing your agility, bearing, and senses.",
       "page": 29,
       "activation": null,
-      "resource": {
-        "name": "Rage"
-      },
+      "resource": null,
       "source_order": 11
     },
     {
@@ -403,12 +393,7 @@
       "description": "Your Rage can keep you fighting despite grievous wounds. If you drop to 0 Hit Points while your Rage is active and don’t die outright, you can make a DC 10 Constitution saving throw. If you succeed, your Hit Points instead change to a number equal to twice your Barbarian level. Each time you use this feature after the first, the DC increases by 5. When you finish a Short or Long Rest, the DC resets to 10.",
       "page": 30,
       "activation": null,
-      "resource": {
-        "name": "Rage",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 20
     },
     {
@@ -605,12 +590,7 @@
       "description": "You can supernaturally inspire others through words, music, or dance. This inspiration is represented by your Bardic Inspiration die, which is a d6.\nUsing Bardic Inspiration. As a Bonus Action, you can inspire another creature within 60 feet of yourself who can see or hear you. That creature gains one of your Bardic Inspiration dice. A creature can have only one Bardic Inspiration die at a time. Once within the next hour when the creature fails a D20 Test, the creature can roll the Bardic Inspiration die and add the number rolled to the d20, potentially turning the failure into a success. A Bardic Inspiration die is expended when it’s rolled.\nNumber of Uses. You can confer a Bardic Inspiration die a number of times equal to your Charisma modifier (minimum of once), and you regain all expended uses when you finish a Long Rest.\nAt Higher Levels. Your Bardic Inspiration die changes when you reach certain Bard levels, as shown in the Bardic Die column of the Bard Features table. The die becomes a d8 at level 5, a d10 at level 10, and a d12 at level 15.",
       "page": 31,
       "activation": "Bonus Action",
-      "resource": {
-        "name": "Bardic Inspiration",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 33
     },
     {
@@ -676,12 +656,7 @@
       "description": "You have learned to cast spells through your bardic arts. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Bard spells, which appear in the Bard spell list later in the class’s description.\nCantrips. You know two cantrips of your choice from the Bard spell list. Dancing Lights and Vicious Mockery are recommended. Whenever you gain a Bard level, you can replace one of your cantrips with another cantrip of your choice from the Bard spell list. When you reach Bard levels 4 and 10, you learn another cantrip of your choice from the Bard spell list, as shown in the Cantrips column of the Bard Features table.\nSpell Slots. The Bard Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose four level 1 spells from the Bard spell list. Charm Person, Color Spray, Dissonant Whispers, and Healing Word are recommended. The number of spells on your list increases as you gain Bard levels, as shown in the Prepared Spells column of the Bard Features table. Whenever that number increases, choose additional spells from the Bard spell list until the number of spells on your list matches the number on the table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 3 Bard, your list of prepared spells can include six spells of levels 1 and 2 in any combination. If another Bard feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Bard spells for you.\nChanging Your Prepared Spells. Whenever you gain a Bard level, you can replace one spell on your list with another Bard spell for which you have spell slots.\nSpellcasting Ability. Charisma is your spellcasting ability for your Bard spells.\nSpellcasting Focus. You can use a Musical Instrument as a Spellcasting Focus for your Bard spells.",
       "page": 32,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 37
     },
     {
@@ -710,12 +685,7 @@
       "description": "Spell Slots. The Bard Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.",
       "page": 32,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:bardo:spellcasting",
       "source_order": 39
     },
@@ -999,12 +969,7 @@
       "description": "You have learned to cast spells through prayer and meditation. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Cleric spells, which appear on the Cleric spell list later in the class’s description.\nCantrips. You know three cantrips of your choice from the Cleric spell list. Guidance, Sacred Flame, and Thaumaturgy are recommended. Whenever you gain a Cleric level, you can replace one of your cantrips with another cantrip of your choice from the Cleric spell list. When you reach Cleric levels 4 and 10, you learn another cantrip of your choice from the Cleric spell list, as shown in the Cantrips column of the Cleric Features table.\nSpell Slots. The Cleric Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose four level 1 spells from the Cleric spell list. Bless, Cure Wounds, Guiding Bolt, and Shield of Faith are recommended. The number of spells on your list increases as you gain Cleric levels, as shown in the Prepared Spells column of the Cleric Features table. Whenever that number increases, choose additional spells from the Cleric spell list until the number of spells on your list matches the number on the table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 3 Cleric, your list of prepared spells can include six spells of levels 1 and 2 in any combination. If another Cleric feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Cleric spells for you.\nChanging Your Prepared Spells. Whenever you finish a Long Rest, you can change your list of prepared spells, replacing any of the spells there with other Cleric spells for which you have spell slots.\nSpellcasting Ability. Wisdom is your spellcasting ability for your Cleric spells.\nSpellcasting Focus. You can use a Holy Symbol as a Spellcasting Focus for your Cleric spells.",
       "page": 36,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 58
     },
     {
@@ -1033,12 +998,7 @@
       "description": "Spell Slots. The Cleric Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.",
       "page": 37,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:chierico:spellcasting",
       "source_order": 60
     },
@@ -1068,12 +1028,7 @@
       "description": "Changing Your Prepared Spells. Whenever you finish a Long Rest, you can change your list of prepared spells, replacing any of the spells there with other Cleric spells for which you have spell slots.",
       "page": 37,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:chierico:spellcasting",
       "source_order": 62
     },
@@ -1443,9 +1398,7 @@
       "description": "When you would normally roll one or more dice to restore Hit Points to a creature with a spell or Channel Divinity, don’t roll those dice for the healing; instead use the highest number possible for each die. For example, instead of restoring 2d6 Hit Points to a creature with a spell, you restore 12.",
       "page": 40,
       "activation": null,
-      "resource": {
-        "name": "Channel Divinity"
-      },
+      "resource": null,
       "source_order": 87
     },
     {
@@ -1459,12 +1412,7 @@
       "description": "You have learned to cast spells through studying the mystical forces of nature. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Druid spells, which appear on the Druid spell list later in the class’s description.\nCantrips. You know two cantrips of your choice from the Druid spell list. Druidcraft and Produce Flame are recommended. Whenever you gain a Druid level, you can replace one of your cantrips with another cantrip of your choice from the Druid spell list. When you reach Druid levels 4 and 10, you learn another cantrip of your choice from the Druid spell list, as shown in the Cantrips column of the Druid Features table.\nSpell Slots. The Druid Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose four level 1 spells from the Druid spell list. Animal Friendship, Cure Wounds, Faerie Fire, and Thunderwave are recommended. The number of spells on your list increases as you gain Druid levels, as shown in the Prepared Spells column of the Druid Features table. Whenever that number increases, choose additional spells from the Druid spell list until the number of spells on your list matches the number on the table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 3 Druid, your list of prepared spells can include six spells of levels 1 and 2 in any combination. If another Druid feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Druid spells for you.\nChanging Your Prepared Spells. Whenever you finish a Long Rest, you can change your list of prepared spells, replacing any of the spells with other Druid spells for which you have spell slots.\nSpellcasting Ability. Wisdom is your spellcasting ability for your Druid spells.\nSpellcasting Focus. You can use a Druidic Focus as a Spellcasting Focus for your Druid spells.",
       "page": 41,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 88
     },
     {
@@ -1493,12 +1441,7 @@
       "description": "Spell Slots. The Druid Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.",
       "page": 42,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:druido:spellcasting",
       "source_order": 90
     },
@@ -1528,12 +1471,7 @@
       "description": "Changing Your Prepared Spells. Whenever you finish a Long Rest, you can change your list of prepared spells, replacing any of the spells with other Druid spells for which you have spell slots.",
       "page": 42,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:druido:spellcasting",
       "source_order": 92
     },
@@ -1956,12 +1894,7 @@
       "description": "The vitality of nature constantly blooms within you, granting you the following benefits.\nEvergreen Wild Shape. Whenever you roll Initiative and have no uses of Wild Shape left, you regain one expended use of it.\nNature Magician. You can convert uses of Wild Shape into a spell slot (no action required). Choose a number of your unexpended uses of Wild Shape and convert them into a single spell slot, with each use contributing 2 spell levels. For example, if you convert two uses of Wild Shape, you produce a level 4 spell slot. Once you use this benefit, you can’t do so again until you finish a Long Rest.\nLongevity. The primal magic that you wield causes you to age more slowly. For every ten years that pass, your body ages only one year.",
       "page": 43,
       "activation": null,
-      "resource": {
-        "name": "Wild Shape",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 119
     },
     {
@@ -1975,9 +1908,7 @@
       "description": "Evergreen Wild Shape. Whenever you roll Initiative and have no uses of Wild Shape left, you regain one expended use of it.",
       "page": 43,
       "activation": null,
-      "resource": {
-        "name": "Wild Shape"
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:druido:archdruid",
       "source_order": 120
     },
@@ -2500,12 +2431,7 @@
       "description": "Your focus and martial training allow you to harness a well of extraordinary energy within yourself. This energy is represented by Focus Points. Your Monk level determines the number of points you have, as shown in the Focus Points column of the Monk Features table. You can expend these points to enhance or fuel certain Monk features. You start knowing three such features: Flurry of Blows, Patient Defense, and Step of the Wind, each of which is detailed below. When you expend a Focus Point, it is unavailable until you finish a Short or Long Rest, at the end of which you regain all your expended points. Some features that use Focus Points require your target to make a saving throw. The save DC equals 8 plus your Wisdom modifier and Proficiency Bonus.\nFlurry of Blows. You can expend 1 Focus Point to make two Unarmed Strikes as a Bonus Action.\nPatient Defense. You can take the Disengage action as a Bonus Action. Alternatively, you can expend 1 Focus Point to take both the Disengage and the Dodge actions as a Bonus Action.\nStep of the Wind. You can take the Dash action as a Bonus Action. Alternatively, you can expend 1 Focus Point to take both the Disengage and Dash actions as a Bonus Action, and your jump distance is doubled for the turn.",
       "page": 50,
       "activation": "Bonus Action",
-      "resource": {
-        "name": "Focus Points",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 156
     },
     {
@@ -2587,12 +2513,7 @@
       "description": "When you roll Initiative, you can regain all expended Focus Points. When you do so, roll your Martial Arts die, and regain a number of Hit Points equal to your Monk level plus the number rolled. Once you use this feature, you can’t use it again until you finish a Long Rest.",
       "page": 51,
       "activation": null,
-      "resource": {
-        "name": "Focus Points",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 161
     },
     {
@@ -3033,12 +2954,7 @@
       "description": "You have learned to cast spells through prayer and meditation. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Paladin spells, which appear in the Paladin spell list later in the class’s description.\nSpell Slots. The Paladin Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose two level 1 Paladin spells. Heroism and Searing Smite are recommended. The number of spells on your list increases as you gain Paladin levels, as shown in the Prepared Spells column of the Paladin Features table. Whenever that number increases, choose additional Paladin spells until the number of spells on your list matches the number in the Paladin Features table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 5 Paladin, your list of prepared spells can include six Paladin spells of level 1 or 2 in any combination. If another Paladin feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Paladin spells for you.\nChanging Your Prepared Spells. Whenever you finish a Long Rest, you can replace one spell on your list with another Paladin spell for which you have spell slots.\nSpellcasting Ability. Charisma is your spellcasting ability for your Paladin spells.\nSpellcasting Focus. You can use a Holy Symbol as a Spellcasting Focus for your Paladin spells.",
       "page": 54,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 190
     },
     {
@@ -3052,12 +2968,7 @@
       "description": "Spell Slots. The Paladin Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose two level 1 Paladin spells. Heroism and Searing Smite are recommended. The number of spells on your list increases as you gain Paladin levels, as shown in the Prepared Spells column of the Paladin Features table. Whenever that number increases, choose additional Paladin spells until the number of spells on your list matches the number in the Paladin Features table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 5 Paladin, your list of prepared spells can include six Paladin spells of level 1 or 2 in any combination. If another Paladin feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Paladin spells for you.",
       "page": 54,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:paladino:spellcasting",
       "source_order": 191
     },
@@ -3072,12 +2983,7 @@
       "description": "Changing Your Prepared Spells. Whenever you finish a Long Rest, you can replace one spell on your list with another Paladin spell for which you have spell slots.",
       "page": 54,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:paladino:spellcasting",
       "source_order": 192
     },
@@ -3179,13 +3085,7 @@
       "description": "You can channel divine energy directly from the Outer Planes, using it to fuel magical effects. You start with one such effect: Divine Sense, which is described below. Other Paladin features give additional Channel Divinity effect options. Each time you use this class’s Channel Divinity, you choose which effect from this class to create. You can use this class’s Channel Divinity twice. You regain one of its expended uses when you finish a Short Rest, and you regain all expended uses when you finish a Long Rest. You gain an additional use when you reach Paladin level 11.\nB y o\nrEakinG our atH\nA Paladin tries to hold to the highest standards of\nconduct, but even the most dedicated are fallible.\nSometimes a Paladin transgresses their oath.\nA Paladin who has broken a vow typically seeks\nabsolution, spending an all-night vigil as a sign of penitence or undertaking a fast. After a rite of forgiveness, the Paladin starts fresh.\nIf your Paladin unrepentantly violates their oath,\ntalk to your GM. Your Paladin should probably take a\nmore appropriate subclass or even abandon the class\nand adopt another one. If a Channel Divinity effect requires a saving throw, the DC equals the spell save DC from this class’s Spellcasting feature.\nDivine Sense. As a Bonus Action, you can open your awareness to detect Celestials, Fiends, and Undead. For the next 10 minutes or until you have the Incapacitated condition, you know the location of any creature of those types within 60 feet of yourself, and you know its creature type. Within the same radius, you also detect the presence of any place or object that has been consecrated or desecrated, as with the Hallow spell.",
       "page": 54,
       "activation": "Bonus Action",
-      "resource": {
-        "name": "Channel Divinity",
-        "recovery": [
-          "short rest",
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 199
     },
     {
@@ -3497,12 +3397,7 @@
       "description": "You have learned to channel the magical essence of nature to cast spells. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Ranger spells, which appear in the Ranger spell list later in the class’s description.\nSpell Slots. The Ranger Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest. Ranger Features\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose two level 1 Ranger spells. Cure Wounds and Ensnaring Strike are recommended. The number of spells on your list increases as you gain Ranger levels, as shown in the Prepared Spells column of the Ranger Features table. Whenever that number increases, choose additional Ranger spells until the number of spells on your list matches the number in the Ranger Features table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 5 Ranger, your list of prepared spells can include six Ranger spells of level 1 or 2 in any combination. If another Ranger feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Ranger spells for you. Changing Your Prepared Spells. Whenever you finish a Long Rest, you can replace one spell on your list with another Ranger spell for which you have spell slots.\nSpellcasting Ability. Wisdom is your spellcasting ability for your Ranger spells.\nSpellcasting Focus. You can use a Druidic Focus as a Spellcasting Focus for your Ranger spells.",
       "page": 57,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 220
     },
     {
@@ -3516,12 +3411,7 @@
       "description": "Spell Slots. The Ranger Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest. Ranger Features\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose two level 1 Ranger spells. Cure Wounds and Ensnaring Strike are recommended. The number of spells on your list increases as you gain Ranger levels, as shown in the Prepared Spells column of the Ranger Features table. Whenever that number increases, choose additional Ranger spells until the number of spells on your list matches the number in the Ranger Features table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 5 Ranger, your list of prepared spells can include six Ranger spells of level 1 or 2 in any combination. If another Ranger feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Ranger spells for you.",
       "page": 57,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:ranger:spellcasting",
       "source_order": 221
     },
@@ -3536,12 +3426,7 @@
       "description": "Changing Your Prepared Spells. Whenever you finish a Long Rest, you can replace one spell on your list with another Ranger spell for which you have spell slots.",
       "page": 58,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:ranger:spellcasting",
       "source_order": 222
     },
@@ -4547,12 +4432,7 @@
       "description": "Drawing from your innate magic, you can cast spells. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Sorcerer spells, which appear in the Sorcerer spell list later in the class’s description.\nCantrips. You know four Sorcerer cantrips of your choice. Light, Prestidigitation, Shocking Grasp, and Sorcerous Burst are recommended. Whenever you gain a Sorcerer level, you can replace one of your cantrips from this feature with another Sorcerer cantrip of your choice. When you reach Sorcerer levels 4 and 10, you learn another Sorcerer cantrip of your choice, as shown in the Cantrips column of the Sorcerer Features table.\nSpell Slots. The Sorcerer Features table shows how many spell slots you have to cast your level 1+ Sorcerer Features spells. You regain all expended slots when you finish a Long Rest.\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose two level 1 Sorcerer spells. Burning Hands and Detect Magic are recommended. The number of spells on your list increases as you gain Sorcerer levels, as shown in the Prepared Spells column of the Sorcerer Features table. Whenever that number increases, choose additional Sorcerer spells until the number of spells on your list matches the number in the Sorcerer Features table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 3 Sorcerer, your list of prepared spells can include six Sorcerer spells of level 1 or 2 in any combination. If another Sorcerer feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Sorcerer spells for you.\nChanging Your Prepared Spells. Whenever you gain a Sorcerer level, you can replace one spell on your list with another Sorcerer spell for which you have spell slots.\nSpellcasting Ability. Charisma is your spellcasting ability for your Sorcerer spells.\nSpellcasting Focus. You can use an Arcane Focus as a Spellcasting Focus for your Sorcerer spells.",
       "page": 64,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 292
     },
     {
@@ -4581,12 +4461,7 @@
       "description": "Spell Slots. The Sorcerer Features table shows how many spell slots you have to cast your level 1+ Sorcerer Features spells. You regain all expended slots when you finish a Long Rest.",
       "page": 64,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:stregone:spellcasting",
       "source_order": 294
     },
@@ -4675,12 +4550,7 @@
       "description": "You can tap into the wellspring of magic within yourself. This wellspring is represented by Sorcery Points, which allow you to create a variety of magical effects. You have 2 Sorcery Points, and you gain more as you reach higher levels, as shown in the Sorcery Points column of the Sorcerer Features table. You can’t have more Sorcery Points than the number shown in the table for your level. You regain all expended Sorcery Points when you finish a Long Rest. You can use your Sorcery Points to fuel the options below, along with other features, such as Metamagic, that use those points.\nConverting Spell Slots to Sorcery Points. You can expend a spell slot to gain a number of Sorcery Points equal to the slot’s level (no action required).\nCreating Spell Slots. As a Bonus Action, you can transform unexpended Sorcery Points into one spell slot. The Creating Spell Slots table shows the cost of creating a spell slot of a given level, and it lists the minimum Sorcerer level you must be to create a slot. You can create a spell slot no higher than level 5. Any spell slot you create with this feature vanishes when you finish a Long Rest.\nCreating Spell Slots\nSpell Slot Sorcery Point Min. Sorcerer\nLevel Cost Level\n1 2 2\n2 3 3\n3 5 5\n4 6 7\n5 7 9",
       "page": 66,
       "activation": "Bonus Action",
-      "resource": {
-        "name": "Sorcery Points",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 300
     },
     {
@@ -4711,12 +4581,7 @@
       "description": "Creating Spell Slots. As a Bonus Action, you can transform unexpended Sorcery Points into one spell slot. The Creating Spell Slots table shows the cost of creating a spell slot of a given level, and it lists the minimum Sorcerer level you must be to create a slot. You can create a spell slot no higher than level 5. Any spell slot you create with this feature vanishes when you finish a Long Rest.\nCreating Spell Slots\nSpell Slot Sorcery Point Min. Sorcerer\nLevel Cost Level\n1 2 2\n2 3 3\n3 5 5\n4 6 7\n5 7 9",
       "page": 66,
       "activation": "Bonus Action",
-      "resource": {
-        "name": "Sorcery Points",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:stregone:font-of-magic",
       "source_order": 302
     },
@@ -4775,13 +4640,7 @@
       "description": "When you finish a Short Rest, you can regain expended Sorcery Points, but no more than a number equal to half your Sorcerer level (round down). Once you use this feature, you can’t do so again until you finish a Long Rest.",
       "page": 66,
       "activation": null,
-      "resource": {
-        "name": "Sorcery Points",
-        "recovery": [
-          "short rest",
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 306
     },
     {
@@ -5062,12 +4921,7 @@
       "description": "You can cast Summon Dragon without a Material component. You can also cast it once without a spell slot, and you regain the ability to cast it in this way when you finish a Long Rest. Whenever you start casting the spell, you can modify it so that it doesn’t require Concentration. If you do so, the spell’s duration becomes 1 minute for that casting.",
       "page": 70,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 324
     },
     {
@@ -5125,12 +4979,7 @@
       "description": "Through occult ceremony, you have formed a pact with a mysterious entity to gain magical powers. The entity is a voice in the shadows—its identity unclear—but its boon to you is concrete: the ability to cast spells. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Warlock spells, which appear in the Warlock spell list later in the class’s description.\nCantrips. You know two Warlock cantrips of your choice. Eldritch Blast and Prestidigitation are recommended. Whenever you gain a Warlock level, you can replace one of your cantrips from this feature with another Warlock cantrip of your choice. When you reach Warlock levels 4 and 10, you learn another Warlock cantrip of your choice, as shown in the Cantrips column of the Warlock Features table. Spell Slots. The Warlock Features table shows how many spell slots you have to cast your Warlock spells of levels 1–5. The table also shows the level of those slots, all of which are the same level. You regain all expended Pact Magic spell slots when you finish a Short or Long Rest. For example, when you’re a level 5 Warlock, you have two level 3 spell slots. To cast the level 1 spell Charm Person, you must spend one of those slots, and you cast it as a level 3 spell.\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose two level 1 Warlock spells. Charm Person and Hex are recommended. The number of spells on your list increases as you gain Warlock levels, as shown in the Prepared Spells column of the Warlock Features table. Whenever that number increases, choose additional Warlock spells until the number of spells on your list matches the number in the table. The chosen spells must be of a level no higher than what’s shown in the table’s Slot Level column for your level. When you reach level 6, for example, you learn a new Warlock spell, which can be of levels 1–3. If another Warlock feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Warlock spells for you.\nChanging Your Prepared Spells. Whenever you gain a Warlock level, you can replace one spell on your list with another Warlock spell of an eligible level.\nSpellcasting Ability. Charisma is the spellcasting ability for your Warlock spells.\nSpellcasting Focus. You can use an Arcane Focus as a Spellcasting Focus for your Warlock spells.",
       "page": 71,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 328
     },
     {
@@ -5159,12 +5008,7 @@
       "description": "Spell Slots. The Warlock Features table shows how many spell slots you have to cast your Warlock spells of levels 1–5. The table also shows the level of those slots, all of which are the same level. You regain all expended Pact Magic spell slots when you finish a Short or Long Rest. For example, when you’re a level 5 Warlock, you have two level 3 spell slots. To cast the level 1 spell Charm Person, you must spend one of those slots, and you cast it as a level 3 spell.",
       "page": 71,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:warlock:pact-magic",
       "source_order": 330
     },
@@ -5239,12 +5083,7 @@
       "description": "You can perform an esoteric rite for 1 minute. At the end of it, you regain expended Pact Magic spell slots but no more than a number equal to half your maximum (round up). Once you use this feature, you can’t do so again until you finish a Long Rest.",
       "page": 72,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 335
     },
     {
@@ -5554,7 +5393,7 @@
       "subclass": null,
       "description": "Prerequisite: Level 5+ Warlock, Pact of the Chain Invocation When you cast Find Familiar, you infuse the summoned familiar with a measure of your eldritch power, granting the creature the following benefits.\nAerial or Aquatic. The familiar gains either a Fly Speed or a Swim Speed (your choice) of 40 feet.\nQuick Attack. As a Bonus Action, you can command the familiar to take the Attack action.\nNecrotic or Radiant Damage. Whenever the familiar deals Bludgeoning, Piercing, or Slashing damage, you can make it deal Necrotic or Radiant damage instead.\nYour Save DC. If the familiar forces a creature to make a saving throw, it uses your spell save DC.\nResistance. When the familiar takes damage, you can take a Reaction to grant it Resistance against that damage.",
       "page": 73,
-      "activation": "Reaction",
+      "activation": null,
       "resource": null,
       "source_order": 356,
       "prerequisite": "Level 5+ Warlock, Pact of the Chain Invocation"
@@ -6003,12 +5842,7 @@
       "description": "As a student of arcane magic, you have learned to cast spells. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Wizard spells, which appear in the Wizard spell list later in the class’s description.\nCantrips. You know three Wizard cantrips of your choice. Light, Mage Hand, and Ray of Frost are recommended. Whenever you finish a Long Rest, you can replace one of your cantrips from this feature with another Wizard cantrip of your choice. When you reach Wizard levels 4 and 10, you learn another Wizard cantrip of your choice, as shown in the Cantrips column of the Wizard Features table.\nSpellbook. Your wizardly apprenticeship culminated in the creation of a unique book: your spellbook. It is a Tiny object that weighs 3 pounds, contains 100 pages, and can be read only by you or someone casting Identify. You determine the book’s appearance and materials, such as a gilt-edged tome or a collection of vellum bound with twine. The book contains the level 1+ spells you know. It starts with six level 1 Wizard spells of your choice. Detect Magic, Feather Fall, Mage Armor, Magic Missile, Sleep, and Thunderwave are recommended. Whenever you gain a Wizard level after 1, add two Wizard spells of your choice to your spellbook. Each of these spells must be of a level for which you have spell slots, as shown in the Wizard Features table. The spells are the culmination of arcane research you do regularly.\nSpell Slots. The Wizard Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To do so, choose four spells from your spellbook. The chosen spells must be of a level for which you have spell slots. The number of spells on your list increases as you gain Wizard levels, as shown in the Prepared Spells column of the Wizard Features table. Whenever that number increases, choose additional Wizard spells until the number of spells on your list matches the number in the table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 3 Wizard, your list of prepared spells can include six spells of levels 1 and 2 in any combination, chosen from your spellbook. If another Wizard feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Wizard spells for you.\nChanging Your Prepared Spells. Whenever you finish a Long Rest, you can change your list of prepared spells, replacing any of the spells there with spells from your spellbook.\nSpellcasting Ability. Intelligence is your spellcasting ability for your Wizard spells.\nSpellcasting Focus. You can use an Arcane Focus or your spellbook as a Spellcasting Focus for your Wizard spells.",
       "page": 77,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 386
     },
     {
@@ -6052,12 +5886,7 @@
       "description": "Spell Slots. The Wizard Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.",
       "page": 78,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-en:feature:mago:spellcasting",
       "source_order": 389
     },
@@ -6146,13 +5975,7 @@
       "description": "You can regain some of your magical energy by studying your spellbook. When you finish a Short Rest, you can choose expended spell slots to recover. The spell slots can have a combined level equal to no more than half your Wizard level (round up), and none of the slots can be level 6 or higher. For example, if you’re a level 4 Wizard, you can recover up to two levels’ worth of spell slots, regaining either one level 2 spell slot or two level 1 spell slots. Once you use this feature, you can’t do so again until you finish a Long Rest.",
       "page": 78,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "short rest",
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 395
     },
     {
@@ -6320,12 +6143,7 @@
       "description": "You can increase the power of your spells. When you cast a Wizard spell with a spell slot of levels 1–5 that deals damage, you can deal maximum damage with that spell on the turn you cast it. The first time you do so, you suffer no adverse effect. If you use this feature again before you finish a Long Rest, you take 2d12 Necrotic damage for each level of the spell slot immediately after you cast it. This damage ignores Resistance and Immunity. Each time you use this feature again before finishing a Long Rest, the Necrotic damage per spell level increases by 1d12.",
       "page": 82,
       "activation": null,
-      "resource": {
-        "name": "spell slot",
-        "recovery": [
-          "long rest"
-        ]
-      },
+      "resource": null,
       "source_order": 407
     }
   ]

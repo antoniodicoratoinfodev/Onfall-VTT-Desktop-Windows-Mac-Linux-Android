@@ -106,13 +106,7 @@
       "description": "Può infondere in se stesso un potere primordiale chiamato \"ira\", una forza che conferisce una potenza e una resistenza straordinarie. Può entrare in ira come azione bonus se non sta indossando un'armatura pesante.\nIl barbaro può entrare in ira il numero di volte indicato per il proprio livello da barbaro nella colonna Ire della tabella Privilegi del barbaro. Per quanto riguarda gli utilizzi consumati, ne recupera uno dopo aver completato un riposo breve e li recupera tutti dopo un riposo lungo.\nQuando è in atto, l'ira segue le regole indicate di seguito.\nResistenza ai danni. Un barbaro dispone di resistenza ai danni contundenti, perforanti e taglienti.\nDanni dell'ira. Quando effettua un attacco con un'arma o con un colpo senz'armi usando Forza, e infligge danni al bersaglio, il barbaro ottiene un bonus ai danni che aumenta man mano che sale di livello, come indicato nella colonna Danni dell'ira della tabella Privilegi del barbaro.\nVantaggio nella Forza. Il barbaro dispone di vantaggio alle prove di Forza e ai tiri salvezza su Forza.\nNiente concentrazione o incantesimi. Il barbaro non può mantenere la concentrazione e non può lanciare incantesimi.\nDurata. L'ira dura fino al termine del turno successivo del barbaro e termina anticipatamente se il barbaro indossa un'armatura pesante o è incapacitato. Se l'ira è ancora in atto nel suo turno successivo, è possibile prolungarla per un altro turno eseguendo una delle seguenti azioni:\n• Effettuando un tiro per colpire contro un nemico.\n• Costringendo un nemico a effettuare un tiro\nsalvezza.\n• Effettuando un'azione bonus per prolungare l'ira. Ogni volta che l'ira viene prolungata, dura fino alla fine del turno successivo del barbaro. Si può mantenere un'ira per un massimo di 10 minuti.",
       "page": 32,
       "activation": "azione bonus",
-      "resource": {
-        "name": "Ira",
-        "recovery": [
-          "riposo breve",
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 0
     },
     {
@@ -215,12 +209,7 @@
       "description": "Il barbaro è addestrato nell'uso delle armi, e per questo può avvalersi della proprietà di padronanza per due tipi di armi da mischia semplici o da guerra a sua scelta, come le asce bipenne e le asce. Ogni volta che termina un riposo lungo, può esercitarsi con le armi e cambiare una delle armi scelte.\nQuando si raggiungono determinati livelli da barbaro, si ottiene la capacità di utilizzare le proprietà di padronanza di più tipi di armi, come indicato nella colonna Padronanza d'armi della tabella Privilegi del barbaro.",
       "page": 33,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 7
     },
     {
@@ -404,12 +393,7 @@
       "description": "Grazie alla sua ira, il barbaro può continuare a combattere nonostante le ferite più gravi. Se scende a 0 punti ferita mentre è in preda all'ira e non è ucciso sul colpo, può effettuare un tiro salvezza su Costituzione con CD 10. Se lo supera, i punti ferita cambiano invece in un numero pari al doppio del livello da barbaro.\nOgni volta che utilizza questo privilegio dopo la prima, la CD aumenta di 5. Quando completa un riposo breve o lungo, la CD è ripristinata a 10.",
       "page": 34,
       "activation": null,
-      "resource": {
-        "name": "Ira",
-        "recovery": [
-          "riposo breve"
-        ]
-      },
+      "resource": null,
       "source_order": 20
     },
     {
@@ -675,12 +659,7 @@
       "description": "Il bardo impara a lanciare incantesimi attraverso le arti bardiche. Consulta il capitolo \"Incantesimi\" per le regole relative al lancio degli incantesimi. Le informazioni sottostanti spiegano come applicare tali regole agli incantesimi da bardo, elencati nella relativa lista degli incantesimi più avanti nella descrizione della classe.\nTrucchetti. Un bardo conosce due trucchetti a scelta tratti dalla lista degli incantesimi da bardo. Sono consigliati beffa crudele e luci danzanti.\nOgni volta che il personaggio ottiene un livello da bardo, può sostituire uno dei suoi trucchetti con un altro trucchetto a scelta dalla lista degli incantesimi da bardo.\nQuando il personaggio raggiunge il 4º e il 10º livello da bardo, impara un altro trucchetto a scelta dalla lista degli incantesimi da bardo, come indicato nella colonna Trucchetti della tabella Privilegi del bardo.\nSlot incantesimo. La tabella Privilegi del bardo mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.\nIncantesimi preparati di 1º livello o superiore. Con questo privilegio, il personaggio prepara una lista di incantesimi di 1º livello o superiore che può lanciare. Per iniziare, sceglie quattro incantesimi di 1º livello dalla lista degli incantesimi da bardo. Sono consigliati charme su persone, spruzzo colorato, sussurri dissonanti e parola guaritrice.\nIl numero di incantesimi nella lista aumenta man mano che si ottengono livelli da bardo, come mostrato nella colonna Incantesimi preparati della tabella Privilegi del bardo. Ogni volta che il numero cresce, il bardo deve scegliere altri incantesimi dalla lista degli incantesimi da bardo finché il numero di incantesimi sulla sua lista non combacia con quello mostrato nella tabella. Gli incantesimi scelti devono essere di un livello di cui possiede degli slot incantesimo. Per esempio, nel caso di un bardo di 3º livello, la sua lista di incantesimi preparati può includere sei incantesimi di 1º e 2º livello in qualsiasi combinazione.\nSe un altro privilegio del bardo gli fornisce incantesimi che sono sempre preparati, questi non contano ai fini del numero di incantesimi preparabili con questo privilegio. Tuttavia, valgono comunque come incantesimi da bardo.\nCambiare gli incantesimi preparati. Quando ottiene un livello da bardo, il personaggio può sostituire un incantesimo sulla propria lista con un altro incantesimo da bardo di cui possiede degli slot.\nCaratteristica da incantatore. Carisma è la caratteristica da incantatore per gli incantesimi da bardo.\nFocus da incantatore. Un bardo può usare uno strumento musicale come focus da incantatore per i suoi incantesimi da bardo.",
       "page": 36,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 37
     },
     {
@@ -709,12 +688,7 @@
       "description": "Slot incantesimo. La tabella Privilegi del bardo mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.",
       "page": 37,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:bardo:incantesimi",
       "source_order": 39
     },
@@ -998,12 +972,7 @@
       "description": "Il chierico impara a lanciare incantesimi attraverso la preghiera e la meditazione. Consulta il capitolo \"Incantesimi\" per le regole relative al lancio degli incantesimi. Le informazioni sottostanti spiegano come applicarle agli incantesimi del chierico, elencati nella relativa lista degli incantesimi più avanti nella descrizione della classe.\nTrucchetti. Il chierico conosce tre trucchetti a scelta tratti dalla lista degli incantesimi da chierico. Sono consigliati guida, fiamma sacra e taumaturgia.\nOgni volta che il personaggio ottiene un livello da chierico, può sostituire uno dei suoi trucchetti con un altro trucchetto a scelta dalla lista degli incantesimi da chierico.\nQuando il personaggio raggiunge il 4º e il 10º livello da chierico, impara un altro trucchetto a scelta dalla lista degli incantesimi da chierico, come indicato nella colonna Trucchetti della tabella Privilegi del chierico.\nSlot incantesimo. La tabella Privilegi del chierico mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.\nIncantesimi preparati di 1º livello o superiore. Con questo privilegio, il personaggio prepara una lista di incantesimi di 1º livello o superiore che può lanciare. Per iniziare, sceglie quattro incantesimi di 1º livello dalla lista degli incantesimi da chierico. Sono consigliati benedizione, cura ferite, dardo tracciante e scudo della fede.\nIl numero di incantesimi nella lista aumenta man mano che il personaggio ottiene livelli da chierico, come mostrato nella colonna Incantesimi preparati della tabella Privilegi del chierico. Ogni volta che il numero cresce, il chierico deve scegliere altri incantesimi dalla lista degli incantesimi da chierico finché il numero di incantesimi sulla sua lista non combacia con quello mostrato nella tabella. Gli incantesimi scelti devono essere di un livello di cui possiede degli slot incantesimo. Per esempio, nel caso di un chierico di 3º livello, la sua lista di incantesimi preparati può includere sei incantesimi di 1º e 2º livello in qualsiasi combinazione.\nSe un altro privilegio del chierico gli fornisce incantesimi che sono sempre preparati, questi non contano ai fini del numero di incantesimi preparabili con questo privilegio. Tuttavia, valgono comunque come incantesimi da chierico.\nCambiare gli incantesimi preparati. Quando il chierico completa un riposo lungo, può modificare la sua lista di incantesimi preparati, sostituendo quelli che preferisce con altri incantesimi da chierico di cui possiede degli slot incantesimo.\nCaratteristica da incantatore. Saggezza è la caratteristica da incantatore usata per gli incantesimi da chierico.\nFocus da incantatore. Il chierico può usare un simbolo sacro come focus da incantatore per i suoi incantesimi da chierico.",
       "page": 41,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 58
     },
     {
@@ -1032,12 +1001,7 @@
       "description": "Slot incantesimo. La tabella Privilegi del chierico mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.",
       "page": 41,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:chierico:incantesimi",
       "source_order": 60
     },
@@ -1067,12 +1031,7 @@
       "description": "Cambiare gli incantesimi preparati. Quando il chierico completa un riposo lungo, può modificare la sua lista di incantesimi preparati, sostituendo quelli che preferisce con altri incantesimi da chierico di cui possiede degli slot incantesimo.",
       "page": 41,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:chierico:incantesimi",
       "source_order": 62
     },
@@ -1161,13 +1120,7 @@
       "description": "Il chierico può incanalare l'energia divina direttamente dai Piani Esterni, usandola per alimentare gli effetti magici. Un chierico parte con due effetti: scintilla divina e scacciare non morti, ciascuno descritto di seguito. Ogni volta che il personaggio usa Incanalare divinità di questa classe, è possibile scegliere l'effetto desiderato della classe. Con livelli superiori da chierico si ottengono opzioni di effetto aggiuntive.\nIl chierico può usare Incanalare divinità due volte. Per quanto riguarda gli utilizzi consumati, ne recupera uno dopo aver completato un riposo breve e li recupera tutti dopo un riposo lungo. Quando il personaggio raggiunge determinati livelli da chierico, ottiene degli usi aggiuntivi, come mostrato nella colonna Incanalare divinità della tabella Privilegi del chierico.\nSe un effetto di Incanalare divinità richiede un tiro salvezza, la CD equivale alla CD del tiro salvezza sull'incantesimo del privilegio Incantesimi di questa classe.\nScintilla divina. Come azione di Magia, il chierico punta il simbolo sacro verso una creatura entro 9 metri e che si trova nel suo campo visivo e concentra l'energia divina su di essa. Poi, tira 1d8 e aggiunge il suo modificatore di Saggezza. Ripristina i punti ferita della creatura di un numero pari a quello del totale o costringe la creatura a effettuare un tiro salvezza su Costituzione. Se lo fallisce, la creatura subisce danni necrotici o radiosi (a scelta) pari al risultato del tiro. Se invece lo supera, subisce la metà di quei danni (arrotondati per difetto).\nIl personaggio tira un d8 aggiuntivo quando raggiunge il 7º (2d8), il 13º (3d8) e il 18º (4d8) livello da chierico.\nScacciare non morti. Come azione di Magia, il chierico brandisce il simbolo sacro e condanna le creature non morte. Ogni non morto a scelta entro 9 metri dal chierico deve effettuare un tiro salvezza su Saggezza. Se la creatura fallisce il tiro salvezza, è spaventata e incapacitata per 1 minuto. Per tutta la durata, la creatura cerca di allontanarsi il più possibile dal chierico durante i suoi turni. L'effetto termina anticipatamente se la creatura subisce danni, o se il chierico è incapacitato o morto.",
       "page": 42,
       "activation": "azione di Magia",
-      "resource": {
-        "name": "Incanalare divinità",
-        "recovery": [
-          "riposo breve",
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 68
     },
     {
@@ -1456,12 +1409,7 @@
       "description": "Il druido ha imparato a lanciare incantesimi attraverso lo studio delle forze mistiche della natura. Consulta il capitolo \"Incantesimi\" per le regole relative al lancio degli incantesimi. Le informazioni sottostanti spiegano come applicarle agli incantesimi del druido, elencati nella relativa lista degli incantesimi più avanti nella descrizione della classe.\nTrucchetti. Un druido conosce due trucchetti a scelta tratti dalla lista degli incantesimi da druido. Sono consigliati artificio druidico e produrre fiamma.\nOgni volta che il personaggio ottiene un livello da druido, può sostituire uno dei suoi trucchetti con un altro trucchetto a scelta dalla lista degli incantesimi da druido.\nQuando il personaggio raggiunge il 4º e il 10º livello da druido, impara un altro trucchetto a scelta dalla lista degli incantesimi da druido, come indicato nella colonna Trucchetti della tabella Privilegi del druido.\nSlot incantesimo. La tabella Privilegi del druido mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.\nIncantesimi preparati di 1º livello o superiore. Con questo privilegio, il personaggio prepara una lista di incantesimi di 1º livello o superiore che può lanciare. Per iniziare, il personaggio sceglie quattro incantesimi di 1º livello dalla lista degli incantesimi da druido. Sono consigliati amicizia con gli animali, cura ferite, luminescenza e onda tonante.\nIl numero di incantesimi nella lista aumenta man mano che il personaggio ottiene livelli da druido, come mostrato nella colonna Incantesimi preparati della tabella Privilegi del druido. Ogni volta che il numero cresce, il druido deve scegliere altri incantesimi dalla lista degli incantesimi da druido finché il numero di incantesimi sulla sua lista non combacia con quello mostrato nella tabella. Gli incantesimi scelti devono essere di un livello di cui possiede degli slot incantesimo. Per esempio, nel caso di un druido di 3º livello, la sua lista di incantesimi preparati può includere sei incantesimi di 1º e 2º livello in qualsiasi combinazione.\nSe un altro privilegio del druido gli fornisce incantesimi che sono sempre preparati, questi non contano ai fini del numero di incantesimi preparabili con questo privilegio. Tuttavia, valgono comunque come incantesimi da druido.\nCambiare gli incantesimi preparati. Quando il druido completa un riposo lungo, può modificare la sua lista di incantesimi preparati, sostituendo quelli che preferisce con altri incantesimi da druido cui possiede degli slot incantesimo.\nCaratteristica da incantatore. Saggezza è la caratteristica da incantatore usata per gli incantesimi da druido.\nFocus da incantatore. Il druido può usare un focus druidico come focus da incantatore per i suoi incantesimi da druido.",
       "page": 46,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 88
     },
     {
@@ -1490,12 +1438,7 @@
       "description": "Slot incantesimo. La tabella Privilegi del druido mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.",
       "page": 47,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:druido:incantesimi",
       "source_order": 90
     },
@@ -1525,12 +1468,7 @@
       "description": "Cambiare gli incantesimi preparati. Quando il druido completa un riposo lungo, può modificare la sua lista di incantesimi preparati, sostituendo quelli che preferisce con altri incantesimi da druido cui possiede degli slot incantesimo.",
       "page": 48,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:druido:incantesimi",
       "source_order": 92
     },
@@ -1949,12 +1887,7 @@
       "description": "La vitalità della natura fiorisce costantemente all'interno del druido, concedendogli i seguenti benefici.\nForma selvatica sempreverde. Ogni volta che il druido tira per l'iniziativa e non ha utilizzi disponibili di Forma Selvatica, ne recupera uno.\nMago della natura. Il druido può convertire gli utilizzi di Forma selvatica in slot incantesimo (nessuna azione richiesta). Sceglie un numero di utilizzi di Forma selvatica non spesi e li converte in un singolo slot incantesimo; ogni utilizzo contribuisce a 2 livelli di incantesimo. Per esempio, se converte due utilizzi di Forma selvatica, ottiene uno slot incantesimo di 4º livello. Dopo aver usato questo privilegio, il personaggio non può riutilizzarlo prima di aver completato un riposo lungo.\nCorpo senza tempo. La magia primordiale che fluisce nel druido rallenta il suo invecchiamento. Per ogni 10 anni trascorsi, il corpo del druido invecchia soltanto di 1 anno.",
       "page": 49,
       "activation": null,
-      "resource": {
-        "name": "Forma selvatica",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 119
     },
     {
@@ -1968,9 +1901,7 @@
       "description": "Forma selvatica sempreverde. Ogni volta che il druido tira per l'iniziativa e non ha utilizzi disponibili di Forma Selvatica, ne recupera uno.",
       "page": 49,
       "activation": null,
-      "resource": {
-        "name": "Forma selvatica"
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:druido:arcidruido",
       "source_order": 120
     },
@@ -2110,13 +2041,7 @@
       "description": "Un guerriero possiede una riserva limitata di resistenza fisica e mentale a cui può attingere. Come azione bonus, può usarla per recuperare punti ferita pari a 1d10 più il suo livello da guerriero.\nPuò utilizzare questo privilegio due volte. Per quanto riguarda gli utilizzi consumati, ne recupera uno dopo aver completato un riposo breve e li recupera tutti dopo un riposo lungo.\nQuando il personaggio raggiunge determinati livelli da guerriero, ottiene più utilizzi di questo privilegio, come indicato nella colonna Recuperare energie della tabella Privilegi del guerriero.",
       "page": 54,
       "activation": "azione bonus",
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo breve",
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 129
     },
     {
@@ -2130,12 +2055,7 @@
       "description": "Il guerriero è addestrato nell'uso delle armi, e per questo può avvalersi della proprietà di padronanza per tre tipi di armi semplici o da guerra a sua scelta. Ogni volta che termina un riposo lungo, può esercitarsi con le armi e cambiare una delle armi scelte.\nQuando si raggiungono determinati livelli da guerriero, si ottiene la capacità di utilizzare le proprietà di padronanza di più tipi di armi, come indicato nella colonna Padronanza d'armi della tabella Privilegi del guerriero.",
       "page": 54,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 130
     },
     {
@@ -2149,12 +2069,7 @@
       "description": "Il guerriero può spingersi oltre i suoi normali limiti per un istante. Nel suo turno, può effettuare un'azione aggiuntiva, fatta eccezione per l'azione di Magia.\nDopo aver usato questo privilegio, il personaggio non può riutilizzarlo prima di aver completato un riposo breve o lungo. A partire dal 17º livello, il guerriero può utilizzare questo privilegio due volte prima di un riposo, ma soltanto una volta nello stesso turno.",
       "page": 54,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo breve"
-        ]
-      },
+      "resource": null,
       "source_order": 131
     },
     {
@@ -2238,12 +2153,7 @@
       "description": "Se il personaggio fallisce un tiro salvezza, può ripetere il tiro con un bonus pari al suo livello da guerriero. Deve usare il nuovo risultato e non può riutilizzare questo privilegio prima di aver completato un riposo lungo.\nPrima di un riposo lungo, il personaggio può utilizzare questo privilegio due volte a partire dal 13º livello e tre volte a partire dal 17º livello.",
       "page": 54,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 137
     },
     {
@@ -2483,12 +2393,7 @@
       "description": "Il ladro è addestrato nell'uso delle armi, e per questo può avvalersi della proprietà di padronanza per due tipi di armi a sua scelta in cui ha competenza, come i pugnali e gli archi corti.\nOgni volta che completa un riposo lungo, può cambiare il tipo di arma utilizzato. Per esempio, è possibile passare alle proprietà di padronanza per scimitarre e spade corte.",
       "page": 56,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 154
     },
     {
@@ -2978,12 +2883,7 @@
       "description": "In quanto studioso della magia arcana, il mago ha imparato a lanciare incantesimi. Consulta il capitolo \"Incantesimi\" per le regole relative al lancio degli incantesimi. Le informazioni sottostanti spiegano come applicare tali regole agli incantesimi del mago, elencati nella relativa lista degli incantesimi più avanti nella descrizione della classe.\nTrucchetti. Il mago conosce tre trucchetti a scelta. Sono consigliati luce, mano magica e raggio di gelo. Ogni volta che il personaggio completa un riposo lungo, puoi sostituire uno dei suoi trucchetti di questo privilegio con un altro trucchetto a scelta.\nDopo aver raggiunto il 4º e il 10º livello da mago, il personaggio apprende un altro trucchetto a scelta, come mostrato nella colonna Trucchetti della tabella Privilegi del mago.\nLibro degli incantesimi. Lo studio delle arti arcane da parte del mago ha raggiunto il suo apice con la creazione di un particolare tomo: il suo libro degli incantesimi. Si tratta di un oggetto minuscolo che pesa 1,5 chilogrammi, conta 100 pagine e può essere letto solo dal personaggio o da qualcuno che lanci identificare. L'aspetto e i materiali che compongono il libro sono a tua discrezione: potrebbe essere un tomo dal dorso dorato o una raccolta di pergamene tenute insieme con della corda.\nIl libro contiene gli incantesimi di 1º livello o superiore noti al personaggio. Inizia con sei incantesimi da mago di 1º livello a scelta. Sono consigliati individuazione del magico, caduta morbida, armatura magica, dardo incantato, sonno e onda tonante.\nOgni volta che il personaggio acquisisce un livello da mago dopo il 1º, puoi aggiungere due incantesimi da mago a scelta al libro degli incantesimi. Ognuno di essi deve essere di un livello di cui il mago possiede degli slot incantesimo, come indicato nella tabella Privilegi del mago. Gli incantesimi rappresentano il culmine delle ricerche arcane svolte regolarmente dal personaggio.\nSlot incantesimo. La tabella Privilegi del mago mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.\nIncantesimi preparati di 1º livello o superiore. Con questo privilegio, il personaggio prepara una lista di incantesimi di 1º livello o superiore che può lanciare. Per farlo, devi scegliere quattro incantesimi dal suo libro degli incantesimi. Gli incantesimi scelti devono essere di un livello di cui possiede degli slot incantesimo.\nIl numero di incantesimi nella lista aumenta man mano che il personaggio ottiene livelli da mago, come mostrato nella colonna Incantesimi preparati della tabella Privilegi del mago. Ogni volta che il numero cresce, il mago deve scegliere altri incantesimi finché il numero sulla lista non combacia con quello mostrato nella tabella Privilegi del mago. Gli incantesimi scelti devono essere di un livello di cui possiede degli slot incantesimo. Per esempio, nel caso di un mago di 3º livello, la sua lista di incantesimi preparati può includere sei incantesimi di 1º e 2º livello in qualsiasi combinazione presi dal suo libro degli incantesimi.\nSe un altro privilegio del mago gli fornisce incantesimi che sono sempre preparati, questi non contano ai fini del numero di incantesimi preparabili con questo privilegio. Tuttavia, valgono comunque come incantesimi da mago.\nCambiare gli incantesimi preparati. Quando il mago completa un riposo lungo, può modificare la sua lista di incantesimi preparati, sostituendo quelli che preferisce con altri incantesimi inclusi nel suo libro.\nCaratteristica da incantatore. Intelligenza è la caratteristica da incantatore per gli incantesimi da mago.\nFocus da incantatore. Il mago può usare un focus arcano o il suo libro degli incantesimi come focus da incantatore per i propri incantesimi da mago.",
       "page": 60,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 188
     },
     {
@@ -3027,12 +2927,7 @@
       "description": "Slot incantesimo. La tabella Privilegi del mago mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.",
       "page": 60,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:mago:incantesimi",
       "source_order": 191
     },
@@ -3121,13 +3016,7 @@
       "description": "Il mago può recuperare parte della sua energia magica studiando il libro degli incantesimi. Quando completa un riposo breve, sceglie quali slot incantesimo spesi desidera recuperare. Gli slot incantesimo possono avere un livello totale pari o inferiore alla metà del livello da mago (arrotondato per eccesso) e nessuno slot può essere di livello pari o superiore al 6º. Per esempio, se il mago è di 4º livello, può recuperare un massimo di due livelli di slot incantesimo, ripristinando o uno slot incantesimo di 2º livello o due di 1º livello.\nDopo aver usato questo privilegio, il personaggio non può riutilizzarlo prima di aver completato un riposo lungo.",
       "page": 60,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo breve",
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 197
     },
     {
@@ -3183,12 +3072,7 @@
       "description": "Quando il mago completa un riposo breve, può studiare il proprio libro degli incantesimi e sostituire uno degli incantesimi da mago preparati di 1º livello o superiore con un altro di 1º livello o superiore dal libro.\na\nmpLiare e sostituire un Libro degLi\nincantesimi\nGli incantesimi che il mago aggiunge al proprio libro\nsono un riflesso degli studi magici che conduce.\nTuttavia, durante le sue avventure potrebbe trovarne\ndegli altri da aggiungere al suo repertorio. Per esempio, il personaggio potrebbe scoprirne uno su una\npergamena magica e copiarlo nel proprio libro.\nCopiare un incantesimo nel libro. Quando\nil personaggio trova un incantesimo da mago di\n1º livello o superiore, può aggiungerlo al proprio\nlibro degli incantesimi se è di un livello che ne consente la preparazione e se c'è abbastanza tempo per\ncopiarlo. Per ogni livello dell'incantesimo, la trascrizione richiede 2 ore e costa 50 mo. Dopodiché, il\nmago può preparare l'incantesimo come tutti gli altri\ngià presenti nel proprio libro.\nCopiare il libro. Il mago può copiare un incantesimo dal proprio libro in un altro. Questo procedimento è simile alla copia di un nuovo incantesimo\nnel suo libro, ma è più rapido, dal momento che sa\ngià come lanciarlo. Infatti, dovrà impiegare solo 1 ora\ne spendere 10 mo per ogni livello dell'incantesimo\ncopiato.\nSe il mago perde il suo libro degli incantesimi,\npuò usare la stessa procedura per trascrivere gli\nincantesimi che ha preparato in un nuovo libro degli\nincantesimi. Tuttavia, per completarlo dovrà trovarne di nuovi. Ecco perché molti maghi conservano\nsempre una copia di sicurezza del proprio libro degli\nincantesimi.",
       "page": 61,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo breve"
-        ]
-      },
+      "resource": null,
       "source_order": 201
     },
     {
@@ -3202,12 +3086,7 @@
       "description": "Il mago raggiunge una tale padronanza nell'uso di certi incantesimi da poterli lanciare a volontà. Dal suo libro degli incantesimi, sceglie un incantesimo di 1º livello e uno di 2º livello con il tempo di lancio di un'azione. Tali incantesimi sono sempre considerati come preparati. Inoltre, il mago può lanciarli al loro livello più basso senza spendere slot incantesimo. Per lanciarli a un livello superiore, deve invece spendere uno slot incantesimo.\nOgni volta che il mago completa un riposo lungo, può studiare il proprio libro e sostituire uno di quegli incantesimi con un altro pertinente dello stesso livello (preso dal libro).",
       "page": 61,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 202
     },
     {
@@ -3392,12 +3271,7 @@
       "description": "La concentrazione e l'addestramento marziale del monaco gli permettono di imbrigliare una fonte di energia straordinaria dentro di sé. Questa energia è rappresentata dai punti concentrazione. Il numero di punti posseduti è determinato dal livello da monaco, come indicato nella colonna Punti concentrazione nella tabella Privilegi del monaco.\nQuesti punti possono essere spesi per potenziare o alimentare alcuni privilegi del monaco. Inizialmente il monaco conosce tre di questi privilegi: Difesa paziente, Passo del vento e Raffica di colpi, descritti di seguito.\nQuando un monaco spende un punto concentrazione, quel punto non è più disponibile finché non completa un riposo breve o lungo, alla fine del quale il monaco recupera tutti i punti spesi.\nAlcune caratteristiche che utilizzano i punti concentrazione richiedono che il bersaglio effettui un tiro salvezza. La CD del tiro salvezza è pari a 8 più il modificatore di Saggezza e il bonus di competenza del monaco.\nRaffica di colpi. Il monaco può spendere 1 punto concentrazione per sferrare due colpi senz'armi come azione bonus.\nDifesa paziente. Il monaco può effettuare l'azione di Disimpegno come azione bonus. In alternativa, può spendere 1 punto concentrazione per effettuare le azioni di Disimpegno e Schivata come azione bonus.\nPasso del vento. Il monaco può utilizzare l'azione di Scatto come azione bonus. In alternativa, può spendere 1 punto concentrazione per effettuare le azioni di Disimpegno e Scatto come azione bonus; inoltre, la sua distanza di salto raddoppia per quel turno.",
       "page": 67,
       "activation": "azione bonus",
-      "resource": {
-        "name": "punti concentrazione",
-        "recovery": [
-          "riposo breve"
-        ]
-      },
+      "resource": null,
       "source_order": 215
     },
     {
@@ -3479,12 +3353,7 @@
       "description": "Quando effettua un tiro per l'iniziativa, il monaco può recuperare tutti i punti concentrazione spesi. Quando lo fa, tira un dado di Arti marziali e recupera un numero di punti ferita pari al suo livello da monaco più il risultato ottenuto.\nDopo aver utilizzato questo privilegio, il personaggio non può riutilizzarlo prima di aver completato un riposo lungo.",
       "page": 67,
       "activation": null,
-      "resource": {
-        "name": "punti concentrazione",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 220
     },
     {
@@ -3864,12 +3733,7 @@
       "description": "Il monaco ottiene la capacità di curarsi. Come azione bonus, può tirare il dado di Arti marziali. In questo modo, recupera un numero di punti ferita pari al risultato ottenuto più il suo modificatore di Saggezza (minimo di 1 punto ferita recuperato).\nIl personaggio può utilizzare questo privilegio un numero di volte pari al valore del suo modificatore di Saggezza (minimo una volta) e recupera tutti gli utilizzi consumati quando completa un riposo lungo.",
       "page": 69,
       "activation": "azione bonus",
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 245
     },
     {
@@ -3914,12 +3778,7 @@
       "description": "Il tocco benedetto di un paladino è in grado di guarire le ferite. Un paladino possiede una riserva di poteri curativi che si ricostituisce quando completa un riposo lungo. Questa gli consente di ripristinare un numero totale di punti ferita pari a cinque volte il proprio livello da paladino.\nCome azione bonus, il paladino può toccare una creatura (anche se stesso) e attingere al potere della sua riserva per ripristinare un certo numero di punti ferita in quella creatura, fino all'ammontare massimo in essa disponibile.\nInoltre, può consumare 5 punti ferita della riserva per curare l'avvelenamento. In questo caso, i punti ferita impiegati non vanno a ripristinare quelli della creatura interessata.",
       "page": 71,
       "activation": "azione bonus",
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 248
     },
     {
@@ -3933,12 +3792,7 @@
       "description": "Il paladino impara a lanciare incantesimi attraverso la preghiera e la meditazione. Consulta il capitolo \"Incantesimi\" per le regole relative al lancio degli incantesimi. Le informazioni sottostanti spiegano come applicare tali regole agli incantesimi da paladino, elencati nella relativa lista degli incantesimi più avanti nella descrizione della classe.\nSlot incantesimo. La tabella Privilegi del paladino mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.\nIncantesimi preparati di 1º livello o superiore. Con questo privilegio, il personaggio prepara una lista di incantesimi di 1º livello o superiore che può lanciare. Per iniziare, sceglie due incantesimi da paladino di 1º livello. Sono consigliati eroismo e punizione incandescente.\nIl numero di incantesimi nella lista aumenta man mano che il personaggio ottiene livelli da paladino, come mostrato nella colonna Incantesimi preparati della tabella Privilegi del paladino. Ogni volta che il numero cresce, il paladino deve scegliere altri incantesimi finché il numero sulla lista non combacia con quello mostrato nella tabella Privilegi del paladino. Gli incantesimi scelti devono essere di un livello di cui possiede degli slot incantesimo. Per esempio, nel caso di un paladino di 5º livello, la sua lista di incantesimi preparati può includere sei incantesimi da paladino di 1º e 2º livello in qualsiasi combinazione.\nSe un altro privilegio del paladino gli fornisce incantesimi che sono sempre preparati, questi non contano ai fini del numero di incantesimi preparabili con questo privilegio. Tuttavia, valgono comunque come incantesimi da paladino.\nCambiare gli incantesimi preparati. Quando completa un riposo lungo, il paladino può sostituire un incantesimo sulla propria lista con un altro incantesimo di cui possiede degli slot.\nCaratteristica da incantatore. Carisma è la caratteristica da incantatore per gli incantesimi da paladino.\nFocus da incantatore. Il paladino può usare un simbolo sacro come focus da incantatore per i suoi incantesimi da paladino.",
       "page": 71,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 249
     },
     {
@@ -3952,12 +3806,7 @@
       "description": "Slot incantesimo. La tabella Privilegi del paladino mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.\nIncantesimi preparati di 1º livello o superiore. Con questo privilegio, il personaggio prepara una lista di incantesimi di 1º livello o superiore che può lanciare. Per iniziare, sceglie due incantesimi da paladino di 1º livello. Sono consigliati eroismo e punizione incandescente.\nIl numero di incantesimi nella lista aumenta man mano che il personaggio ottiene livelli da paladino, come mostrato nella colonna Incantesimi preparati della tabella Privilegi del paladino. Ogni volta che il numero cresce, il paladino deve scegliere altri incantesimi finché il numero sulla lista non combacia con quello mostrato nella tabella Privilegi del paladino. Gli incantesimi scelti devono essere di un livello di cui possiede degli slot incantesimo. Per esempio, nel caso di un paladino di 5º livello, la sua lista di incantesimi preparati può includere sei incantesimi da paladino di 1º e 2º livello in qualsiasi combinazione.\nSe un altro privilegio del paladino gli fornisce incantesimi che sono sempre preparati, questi non contano ai fini del numero di incantesimi preparabili con questo privilegio. Tuttavia, valgono comunque come incantesimi da paladino.",
       "page": 71,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:paladino:incantesimi",
       "source_order": 250
     },
@@ -4017,12 +3866,7 @@
       "description": "Il paladino è addestrato nell'uso delle armi, e per questo può avvalersi della proprietà di padronanza per due tipi di armi a sua scelta in cui ha competenza, come le spade lunghe e i giavellotti.\nOgni volta che completa un riposo lungo, può cambiare il tipo di arma utilizzato. Per esempio, è possibile passare alle proprietà di padronanza per alabarde e mazzafrusti.",
       "page": 71,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 254
     },
     {
@@ -4079,13 +3923,7 @@
       "description": "Il paladino può incanalare l'energia divina direttamente dai Piani Esterni, usandola per alimentare effetti magici. Inizia con uno di questi effetti: Percezione del Divino, descritto di seguito. Gli altri privilegi del paladino gli conferiscono ulteriori effetti di Incanalare Divinità. Ogni volta che il personaggio usa Incanalare Divinità di questa classe, è possibile scegliere l'effetto desiderato della classe.\nIl paladino può usare Incanalare divinità due volte. Per quanto riguarda gli utilizzi consumati, ne recupera uno dopo aver completato un riposo breve e li recupera tutti dopo un riposo lungo. Ottiene un uso aggiuntivo una volta raggiunto il livello 11.\nSe un effetto di Incanalare divinità richiede un tiro salvezza, la CD equivale alla CD del tiro salvezza sull'incantesimo del privilegio Incantesimi di questa classe.\nPercezione del divino. Come azione bonus, il paladino può amplificare i propri sensi per individuare celestiali, immondi e non morti. Per i prossimi 10 minuti o finché non è incapacitato, conosce la posizione di ogni creatura summenzionata in un raggio di 18 metri da sé e può distinguerne la tipologia. Entro lo stesso raggio, il paladino individua anche la presenza di qualsiasi luogo o oggetto sacro o sacrilego, con gli stessi effetti dell'incantesimo santificare.",
       "page": 72,
       "activation": "azione bonus",
-      "resource": {
-        "name": "Incanalare divinità",
-        "recovery": [
-          "riposo breve",
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 258
     },
     {
@@ -4229,9 +4067,7 @@
       "description": "Quando il paladino usa Imposizione delle mani su una creatura, può anche liberarla da una delle seguenti condizioni: accecato, affascinato, assordato, paralizzato, spaventato o stordito. Per farlo, è necessario attingere a 5 punti ferita della riserva curativa di Imposizione delle mani per ognuna delle condizioni rimosse. Tuttavia, i punti consumati non ripristinano i punti ferita della creatura.",
       "page": 72,
       "activation": null,
-      "resource": {
-        "name": "Imposizione delle mani"
-      },
+      "resource": null,
       "source_order": 268
     },
     {
@@ -4397,12 +4233,7 @@
       "description": "Il ranger ha imparato a incanalare l'essenza della natura per usare la magia. Consulta il capitolo \"Incantesimi\" per le regole relative al lancio degli incantesimi. Le informazioni sottostanti spiegano come applicare tali regole agli incantesimi da ranger, elencati nella relativa lista degli incantesimi più avanti nella descrizione della classe.\nSlot incantesimo. La tabella Privilegi del ranger mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.\nIncantesimi preparati di 1º livello o superiore. Con questo privilegio, il personaggio prepara una lista di incantesimi di 1º livello o superiore che può lanciare. Per iniziare, sceglie due incantesimi da ranger di 1º livello. Sono consigliati cura ferite e colpo intrappolante.\nIl numero di incantesimi nella lista aumenta man mano che il personaggio ottiene livelli da ranger, come mostrato nella colonna Incantesimi preparati della tabella Privilegi del ranger. Ogni volta che il numero cresce, il ranger deve scegliere altri incantesimi finché il numero sulla lista non combacia con quello mostrato nella tabella Privilegi del ranger. Gli incantesimi scelti devono essere di un livello di cui possiede degli slot incantesimo. Per esempio, nel caso di un ranger di 5º livello, la sua lista di incantesimi preparati può includere sei incantesimi da ranger di 1º e 2º livello in qualsiasi combinazione.\nSe un altro privilegio del ranger gli fornisce incantesimi che sono sempre preparati, questi non contano ai fini del numero di incantesimi preparabili con questo privilegio. Tuttavia, valgono comunque come incantesimi da ranger.\nCambiare gli incantesimi preparati. Quando completa un riposo lungo, il ranger può sostituire un incantesimo sulla propria lista con un altro incantesimo di cui possiede degli slot.\nCaratteristica da incantatore. Saggezza è la caratteristica da incantatore usata per gli incantesimi da ranger.\nFocus da incantatore. Il ranger può usare un focus druidico per i suoi incantesimi da ranger.",
       "page": 76,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 279
     },
     {
@@ -4416,12 +4247,7 @@
       "description": "Slot incantesimo. La tabella Privilegi del ranger mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.\nIncantesimi preparati di 1º livello o superiore. Con questo privilegio, il personaggio prepara una lista di incantesimi di 1º livello o superiore che può lanciare. Per iniziare, sceglie due incantesimi da ranger di 1º livello. Sono consigliati cura ferite e colpo intrappolante.\nIl numero di incantesimi nella lista aumenta man mano che il personaggio ottiene livelli da ranger, come mostrato nella colonna Incantesimi preparati della tabella Privilegi del ranger. Ogni volta che il numero cresce, il ranger deve scegliere altri incantesimi finché il numero sulla lista non combacia con quello mostrato nella tabella Privilegi del ranger. Gli incantesimi scelti devono essere di un livello di cui possiede degli slot incantesimo. Per esempio, nel caso di un ranger di 5º livello, la sua lista di incantesimi preparati può includere sei incantesimi da ranger di 1º e 2º livello in qualsiasi combinazione.\nSe un altro privilegio del ranger gli fornisce incantesimi che sono sempre preparati, questi non contano ai fini del numero di incantesimi preparabili con questo privilegio. Tuttavia, valgono comunque come incantesimi da ranger.",
       "page": 76,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:ranger:incantesimi",
       "source_order": 280
     },
@@ -4481,12 +4307,7 @@
       "description": "L'incantesimo marchio del cacciatore del ranger è sempre considerato come preparato. È possibile lanciarlo due volte senza spendere alcuno slot incantesimo. I suoi utilizzi vengono ripristinati dopo aver completato un riposo lungo.\nIl numero di volte in cui è possibile lanciare tale incantesimo aumenta al raggiungimento di determinati livelli da ranger, come mostrato nella colonna Nemico prescelto della tabella Privilegi del ranger.",
       "page": 76,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 284
     },
     {
@@ -4500,12 +4321,7 @@
       "description": "Il ranger è addestrato nell'uso delle armi, e per questo può avvalersi della proprietà di padronanza per due tipi di armi a sua scelta in cui ha competenza, come gli archi lunghi e le spade corte.\nOgni volta che completa un riposo lungo, può cambiare il tipo di arma utilizzato. Per esempio, è possibile passare alle proprietà di padronanza per scimitarre e spade lunghe.",
       "page": 76,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 285
     },
     {
@@ -4662,13 +4478,7 @@
       "description": "Le forze primordiali ora alimentano i viaggi del ranger, fornendogli i seguenti benefici.\nPunti ferita temporanei. Come azione di Magia, il ranger può ottenere un numero di punti ferita temporanei pari a 1d8 + il suo modificatore di Saggezza (minimo di 1 punto ferita temporaneo). Il personaggio può utilizzare questa azione un numero di volte pari al valore del suo modificatore di Saggezza (minimo una volta) e recupera tutti gli utilizzi consumati quando completa un riposo lungo.\nDiminuisci indebolimento. Quando il ranger completa un riposo breve, il suo livello di indebolimento, se presente, diminuisce di 1.",
       "page": 77,
       "activation": "azione di Magia",
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo breve",
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 296
     },
     {
@@ -4682,12 +4492,7 @@
       "description": "Punti ferita temporanei. Come azione di Magia, il ranger può ottenere un numero di punti ferita temporanei pari a 1d8 + il suo modificatore di Saggezza (minimo di 1 punto ferita temporaneo). Il personaggio può utilizzare questa azione un numero di volte pari al valore del suo modificatore di Saggezza (minimo una volta) e recupera tutti gli utilizzi consumati quando completa un riposo lungo.",
       "page": 77,
       "activation": "azione di Magia",
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:ranger:instancabile",
       "source_order": 297
     },
@@ -4731,12 +4536,7 @@
       "description": "Il ranger invoca gli spiriti della natura per nascondersi magicamente. Come azione bonus, può conferirsi la condizione di invisibilità fino al termine del suo turno successivo.\nIl personaggio può utilizzare questo privilegio un numero di volte pari al valore del suo modificatore di Saggezza (minimo una volta) e recupera tutti gli utilizzi consumati quando completa un riposo lungo.",
       "page": 77,
       "activation": "azione bonus",
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 300
     },
     {
@@ -4936,12 +4736,7 @@
       "description": "Attingendo alla propria magia innata, lo stregone è in grado di lanciare incantesimi. Consulta il capitolo \"Incantesimi\" per le regole relative al lancio degli incantesimi. Le informazioni sottostanti spiegano come applicare tali regole agli incantesimi da stregone, elencati nella relativa lista degli incantesimi più avanti nella descrizione della classe.\nTrucchetti. Il personaggio conosce quattro trucchetti da stregone a scelta. Sono consigliati luce, prestidigitazione, stretta folgorante e stregoneria esplosiva. Ogni volta che il personaggio ottiene un livello da stregone, può sostituire uno dei trucchetti di questo privilegio con un altro trucchetto a scelta.\nDopo aver raggiunto il 4º e il 10º livello da stregone, il personaggio apprende un altro trucchetto a scelta, come mostrato nella colonna Trucchetti della tabella Privilegi dello stregone.\nSlot incantesimo. La tabella Privilegi dello stregone mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.\nIncantesimi preparati di 1º livello o superiore. Con questo privilegio, il personaggio prepara una lista di incantesimi di 1º livello o superiore che può lanciare. Per iniziare, sceglie due incantesimi da stregone di 1º livello. Sono consigliati mani brucianti e individuazione del magico.\nIl numero di incantesimi nella lista aumenta man mano che il personaggio ottiene livelli da stregone, come mostrato nella colonna Incantesimi preparati della tabella Privilegi dello stregone. Ogni volta che il numero cresce, lo stregone deve scegliere altri incantesimi finché il numero sulla lista non combacia con quello mostrato nella tabella Privilegi dello stregone. Gli incantesimi scelti devono essere di un livello di cui possiede degli slot incantesimo. Per esempio, nel caso di uno stregone di 3º livello, la sua lista di incantesimi preparati può includere sei incantesimi da stregone di 1º e 2º livello in qualsiasi combinazione.\nSe un altro privilegio dello stregone gli fornisce incantesimi che sono sempre preparati, questi non contano ai fini del numero di incantesimi preparabili con questo privilegio. Tuttavia, valgono comunque come incantesimi da stregone.\nCambiare gli incantesimi preparati. Quando completa un riposo lungo, lo stregone può sostituire un incantesimo sulla propria lista con un altro incantesimo da stregone di cui possiede degli slot.\nCaratteristica da incantatore. Carisma è la caratteristica da incantatore per gli incantesimi da stregone.\nFocus da incantatore. Uno stregone può usare un focus arcano come focus da incantatore per i suoi incantesimi da stregone.",
       "page": 79,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 314
     },
     {
@@ -4970,12 +4765,7 @@
       "description": "Slot incantesimo. La tabella Privilegi dello stregone mostra gli slot incantesimo disponibili per i propri incantesimi di 1º livello o superiore. Tutti gli slot incantesimo consumati vengono ripristinati una volta completato un riposo lungo.",
       "page": 79,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:stregone:incantesimi",
       "source_order": 316
     },
@@ -5050,12 +4840,7 @@
       "description": "Lo stregone è stato segnato in maniera indelebile da un evento del suo passato, che gli ha conferito un potere magico dormiente. Come azione bonus, può scatenarlo per 1 minuto e ottenere i seguenti benefici per la sua durata:\n• La CD del tiro salvezza sull'incantesimo degli\nincantesimi da stregone aumenta di 1.\n• Lo stregone ha vantaggio ai tiri per colpire degli\nincantesimi lanciati. Il personaggio può utilizzare questo privilegio per due volte e recuperare tutti gli utilizzi spesi quando completa un riposo lungo.",
       "page": 79,
       "activation": "azione bonus",
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 321
     },
     {
@@ -5069,12 +4854,7 @@
       "description": "Lo stregone può attingere alla fonte del potere magico dentro di sé. Essa è rappresentata dai punti stregoneria, che gli consentono di creare una vasta gamma di effetti magici.\nUno stregone parte con 2 punti stregoneria e ne ottiene altri ai livelli superiori, come indicato nella colonna Punti stregoneria nella tabella Privilegi dello stregone. Non può avere un numero di punti stregoneria superiore al numero indicato nella tabella per il suo livello. Il personaggio recupera tutti i punti stregoneria spesi quando completa un riposo lungo.\nÈ possibile sfruttare i punti stregoneria per alimentare le opzioni sottostanti, oltre che altri privilegi che ne fanno uso come Metamagia.\nConvertire gli slot incantesimo in punti stregoneria. Lo stregone può consumare uno slot incantesimo per ottenere un numero di punti stregoneria pari al livello dello slot (nessuna azione richiesta).\nCreare slot incantesimo. Come azione bonus, lo stregone può trasformare i punti stregoneria non spesi in uno slot incantesimo. La tabella Creazione degli slot incantesimo indica il costo di creazione di uno slot di un determinato livello, oltre che il livello da stregone minimo necessario per creare uno slot. Non è possibile creare slot incantesimo di livello superiore al 5º.\nOgni slot incantesimo creato tramite questo privilegio svanisce quando lo stregone completa un riposo lungo.\nCreazione degli slot incantesimo\nLivello slot Costo punti Liv. stregone\nincantesimo stregoneria minimo\n1 2 2\n2 3 3\n3 5 5\n4 6 7\n5 7 9",
       "page": 80,
       "activation": "azione bonus",
-      "resource": {
-        "name": "punti stregoneria",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 322
     },
     {
@@ -5105,12 +4885,7 @@
       "description": "Creare slot incantesimo. Come azione bonus, lo stregone può trasformare i punti stregoneria non spesi in uno slot incantesimo. La tabella Creazione degli slot incantesimo indica il costo di creazione di uno slot di un determinato livello, oltre che il livello da stregone minimo necessario per creare uno slot. Non è possibile creare slot incantesimo di livello superiore al 5º.\nOgni slot incantesimo creato tramite questo privilegio svanisce quando lo stregone completa un riposo lungo.\nCreazione degli slot incantesimo\nLivello slot Costo punti Liv. stregone\nincantesimo stregoneria minimo\n1 2 2\n2 3 3\n3 5 5\n4 6 7\n5 7 9",
       "page": 81,
       "activation": "azione bonus",
-      "resource": {
-        "name": "punti stregoneria",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:stregone:fonte-di-magia",
       "source_order": 324
     },
@@ -5169,13 +4944,7 @@
       "description": "Quando lo stregone completa un riposo breve, può recuperare i punti stregoneria consumati, ma non più di un numero pari a metà del proprio livello da stregone (arrotondato per difetto). Dopo aver usato questo privilegio, il personaggio non può riutilizzarlo prima di aver completato un riposo lungo.",
       "page": 81,
       "activation": null,
-      "resource": {
-        "name": "punti stregoneria",
-        "recovery": [
-          "riposo breve",
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 328
     },
     {
@@ -5458,12 +5227,7 @@
       "description": "Lo stregone può lanciare richiama drago senza usare una componente materiale. Inoltre, può anche lanciarlo una volta senza consumare uno slot incantesimo e recupera l'abilità di lanciarlo in questo modo dopo aver completato un riposo lungo.\nOgni volta che lo stregone lancia l'incantesimo, può modificarlo in modo che non richieda concentrazione. Così facendo, per quel lancio la durata dell'incantesimo diventa di 1 minuto.",
       "page": 85,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 346
     },
     {
@@ -5521,12 +5285,7 @@
       "description": "Attraverso una cerimonia occulta, il warlock ha stretto un patto con un'entità misteriosa al fine di ottenere dei poteri magici. Nonostante sia poco più di una voce nelle tenebre dall'identità sconosciuta, il suo dono è alquanto concreto: la capacità di lanciare incantesimi. Consulta il capitolo \"Incantesimi\" per le regole relative al lancio degli incantesimi. Le informazioni sottostanti spiegano come applicare tali regole agli incantesimi da warlock, elencati nella relativa lista degli incantesimi più avanti nella descrizione della classe.\nTrucchetti. Il warlock conosce due trucchetti a scelta. Sono consigliati deflagrazione occulta e prestidigitazione. Ogni volta che il personaggio ottiene un livello da warlock, può sostituire uno dei trucchetti di questo privilegio con un altro trucchetto a scelta.\nDopo aver raggiunto il 4º e il 10º livello da warlock, il personaggio apprende un altro trucchetto a scelta, come mostrato nella colonna Trucchetti della tabella Privilegi del warlock.\nSlot incantesimo. La tabella Privilegi del warlock mostra quanti slot incantesimo sono a disposizione del personaggio per lanciare incantesimi da warlock dal 1º al 5º livello. La tabella mostra anche il livello di tali slot (tutti dello stesso livello). Il warlock recupera tutti gli slot incantesimo della Magia del patto spesi quando completa un riposo breve o lungo.\nPer esempio, se il warlock è di 5º livello, possiede due slot incantesimo di 3º livello. Per lanciare l'incantesimo di 1º livello charme su persone, deve consumare uno di questi slot e lanciarlo come un incantesimo di 3º livello.\nIncantesimi preparati di 1º livello o superiore. Con questo privilegio, il personaggio prepara una lista di incantesimi di 1º livello o superiore che può lanciare. Per iniziare, sceglie due incantesimi da warlock di 1º livello. Sono consigliati charme su persone e sortilegio.\nIl numero di incantesimi nella lista aumenta man mano che il personaggio ottiene livelli da warlock, come mostrato nella colonna Incantesimi preparati della tabella Privilegi del warlock. Ogni volta che il numero cresce, il warlock deve scegliere altri incantesimi finché il numero sulla lista non combacia con quello mostrato nella tabella Privilegi del warlock. Ognuno di questi incantesimi deve appartenere a un livello pari o inferiore al livello dello slot relativo al livello attuale del personaggio e indicato nella sua tabella. Per esempio, quando il warlock raggiunge il 6º livello, ottiene un nuovo incantesimo di un livello dal 1º al 3º.\nSe un altro privilegio del warlock gli fornisce incantesimi che sono sempre preparati, questi non contano ai fini del numero di incantesimi preparabili con questo privilegio. Tuttavia, valgono comunque come incantesimi da warlock.\nCambiare gli incantesimi preparati. Ogni volta che il personaggio ottiene un livello da warlock, può sostituire un incantesimo della lista con un altro incantesimo da warlock di livello adeguato.\nCaratteristica da incantatore. La caratteristica da incantatore per gli incantesimi da warlock è il Carisma.\nFocus da incantatore. Un warlock può usare un focus arcano come focus da incantatore per i suoi incantesimi da warlock.",
       "page": 86,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo breve"
-        ]
-      },
+      "resource": null,
       "source_order": 350
     },
     {
@@ -5555,12 +5314,7 @@
       "description": "Slot incantesimo. La tabella Privilegi del warlock mostra quanti slot incantesimo sono a disposizione del personaggio per lanciare incantesimi da warlock dal 1º al 5º livello. La tabella mostra anche il livello di tali slot (tutti dello stesso livello). Il warlock recupera tutti gli slot incantesimo della Magia del patto spesi quando completa un riposo breve o lungo.\nPer esempio, se il warlock è di 5º livello, possiede due slot incantesimo di 3º livello. Per lanciare l'incantesimo di 1º livello charme su persone, deve consumare uno di questi slot e lanciarlo come un incantesimo di 3º livello.",
       "page": 87,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo breve"
-        ]
-      },
+      "resource": null,
       "parent_feature_id": "srd521-it:feature:warlock:magia-del-patto",
       "source_order": 352
     },
@@ -5635,12 +5389,7 @@
       "description": "Il warlock può eseguire un rito esoterico per 1 minuto. Dopo che lo ha portato a termine, recupera gli slot incantesimo spesi di Magia del patto, ma non più di un numero pari a metà del loro massimo (arrotondando per eccesso). Dopo aver usato questo privilegio, il personaggio non può riutilizzarlo prima di aver completato un riposo lungo.",
       "page": 87,
       "activation": null,
-      "resource": {
-        "name": "slot incantesimo",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 357
     },
     {
@@ -5872,12 +5621,7 @@
       "description": "Prerequisito: warlock di 9º livello o superiore, supplica del Patto del tomo Quando il warlock evoca il Libro delle Ombre, al suo interno appare una nuova pagina. Con il suo permesso, una creatura può usare un'azione per scrivere il proprio nome su tale pagina, che può contenere tanti nomi quanto il modificatore di Carisma del warlock (minimo un nome).\nQuando una qualsiasi creatura il cui nome è sulla pagina si ritrova con 0 punti ferita, ma ancora in vita, questa passa magicamente a 1 punto ferita invece di 0. Una volta innescata la magia, nessun'altra creatura può trarne beneficio finché il warlock non completa un riposo lungo.\nCome azione di Magia, il warlock può cancellare magicamente un nome dalla pagina toccandolo.",
       "page": 88,
       "activation": "azione di Magia",
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 373,
       "prerequisite": "warlock di 9º livello o superiore, supplica del Patto del tomo"
     },
@@ -5891,7 +5635,7 @@
       "subclass": null,
       "description": "Prerequisito: Warlock di 5º livello o superiore, supplica del Patto della catena Quando il warlock lancia trova famiglio, infonde il famiglio evocato con parte del proprio potere occulto, conferendo alla creatura i seguenti benefici.\nVolo o nuoto. Il famiglio ottiene una velocità di volo o una velocità di nuoto (a scelta del warlock) di 12 metri.\nAttacco rapido. Come azione bonus, il warlock può ordinare al famiglio di effettuare l'azione di Attacco.\nDanni necrotici o radiosi. Quando il famiglio infligge danni contundenti, perforanti o taglienti, è possibile trasformarli in danni necrotici o radiosi.\nCD tiro salvezza dell'incantesimo del warlock. Se il famiglio costringe una creatura a effettuare un tiro salvezza, questo usa la CD del tiro salvezza dell'incantesimo del warlock.\nResistenza. Quando il famiglio subisce danni, il warlock può usare la sua reazione per conferirgli resistenza contro quel danno.",
       "page": 88,
-      "activation": "reazione",
+      "activation": null,
       "resource": null,
       "source_order": 374,
       "prerequisite": "Warlock di 5º livello o superiore, supplica del Patto della catena"
@@ -6129,12 +5873,7 @@
       "description": "Mettendo insieme dei brandelli di tenebra, il warlock è in grado di evocare un libro nelle proprie mani dopo aver completato un riposo breve o lungo. Questo Libro delle Ombre (di cui puoi scegliere l'aspetto) contiene magia occulta accessibile solo al warlock e conferisce i benefici sottostanti. Se questo privilegio viene usato per evocare un altro libro o se il warlock muore, il libro sparisce.\nTrucchetti e rituali. Quando il libro appare, il warlock sceglie tre trucchetti e due incantesimi di 1º livello con il descrittore rituale. Gli incantesimi possono provenire dalla relativa lista di qualunque classe e devono essere incantesimi che il personaggio non ha già preparato. Finché il libro rimarrà con il warlock, gli incantesimi scelti sono considerati come preparati e valgono come incantesimi da warlock.\nFocus da incantatore. Il warlock può usare il libro come focus da incantatore.",
       "page": 89,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo breve"
-        ]
-      },
+      "resource": null,
       "source_order": 390
     },
     {
@@ -6359,12 +6098,7 @@
       "description": "Il warlock può appellarsi al proprio patrono immondo per alterare il fato in suo favore. Quando effettua una prova di caratteristica o un tiro salvezza, può utilizzare questo privilegio per aggiungere 1d10 al suo tiro. Può farlo dopo avere visto il tiro, ma prima che qualsiasi effetto del tiro sia applicato.\nQuesto privilegio è utilizzabile un numero di volte pari al modificatore di Carisma del personaggio (minimo una volta), ma non più di una volta per ogni tiro. Tutti gli utilizzi spesi vengono recuperati quando il personaggio completa un riposo lungo.",
       "page": 92,
       "activation": null,
-      "resource": {
-        "name": "utilizzo del privilegio",
-        "recovery": [
-          "riposo lungo"
-        ]
-      },
+      "resource": null,
       "source_order": 405
     },
     {

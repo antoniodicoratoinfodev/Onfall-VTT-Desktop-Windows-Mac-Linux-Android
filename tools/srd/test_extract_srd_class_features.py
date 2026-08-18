@@ -48,6 +48,189 @@ class ActivationExtractionTest(unittest.TestCase):
         description = "On your turn, you can take one additional action, except the Magic action."
         self.assertIsNone(MODULE.activation_from(description))
 
+    def test_a_granted_action_is_not_a_cost(self) -> None:
+        # Il privilegio che *regala* un'azione non se ne paga una: senza questo
+        # taglio Azione impetuosa risultava costare un'azione per concederne una.
+        self.assertIsNone(MODULE.activation_from("Nel suo turno può effettuare un'azione aggiuntiva."))
+        self.assertIsNone(MODULE.activation_from("On your turn, you can take one additional action."))
+        self.assertIsNone(MODULE.activation_from("On your turn, you can take an extra action."))
+
+    def test_take_a_reaction_is_the_english_ordinary_formula(self) -> None:
+        # «take a Reaction», non «use your reaction»: e' la formula con cui l'SRD
+        # inglese scrive otto privilegi difensivi, e senza di essa risultavano
+        # tutti passivi mentre gli omologhi italiani costavano una reazione.
+        self.assertEqual(
+            "Reaction",
+            MODULE.activation_from(
+                "When an attacker that you can see hits you with an attack roll, you can "
+                "take a Reaction to halve the attack’s damage against you."
+            ),
+        )
+        self.assertEqual("Reaction", MODULE.activation_from("It takes a Reaction to deflect the blow."))
+        self.assertEqual("Reaction", MODULE.activation_from("As a Reaction, you interpose your shield."))
+
+    def test_italian_alternates_the_verb_before_reazione(self) -> None:
+        # L'SRD italiano non ne usa uno solo, e prevederne uno solo lasciava
+        # senza costo privilegi che una reazione la spendono davvero.
+        for description in (
+            "Il ladro può usare la sua reazione per dimezzare i danni.",
+            "Il bardo può utilizzare una reazione per sottrarre il dado.",
+            "Il monaco effettua una reazione per deviare l'attacco.",
+            "Come reazione, il paladino impone le mani.",
+        ):
+            self.assertEqual("reazione", MODULE.activation_from(description), description)
+
+    def test_the_action_an_object_demands_is_not_the_feature_cost(self) -> None:
+        # «Utilizzare un oggetto» descrive cosa chiede l'oggetto magico, non cosa
+        # costa il privilegio. Le due edizioni lo nominano con parole diverse, e
+        # senza il taglio leggevano cose diverse dalla stessa frase.
+        self.assertIsNone(
+            MODULE.activation_from(
+                "Use an Object. Take the Utilize action, or take the Magic action to use "
+                "a magic item that requires that action."
+            )
+        )
+        self.assertIsNone(
+            MODULE.activation_from(
+                "Usare un oggetto. Puoi effettuare l'azione di Utilizzo o di Magia per "
+                "utilizzare un oggetto magico che richiede una di quelle azioni."
+            )
+        )
+
+
+class ContainerActivationTest(unittest.TestCase):
+    """Un privilegio che elenca opzioni annidate non paga il costo delle opzioni.
+
+    Il difetto: l'attivazione si leggeva sull'intera descrizione, figli compresi.
+    «Investitura del Signore delle Catene» contiene un'azione bonus (Attacco
+    rapido) e una reazione (Resistenza), e ne usciva dichiarato reazione — non
+    perche' lo sia, ma perche' quel ramo del riconoscimento viene provato prima.
+    """
+
+    def test_own_text_wins_over_the_options(self) -> None:
+        self.assertEqual(
+            "azione bonus",
+            MODULE.container_activation(
+                "Come azione bonus, il druido assume le sembianze di una bestia.",
+                [{"activation": "reazione"}, {"activation": None}],
+            ),
+        )
+
+    def test_a_single_option_cost_becomes_the_container_cost(self) -> None:
+        # «Ispirazione bardica» e' un'azione bonus perche' l'unica delle sue voci
+        # a costare qualcosa lo e'.
+        self.assertEqual(
+            "azione bonus",
+            MODULE.container_activation(
+                "Questa ispirazione è rappresentata dal dado di Ispirazione bardica, un d6.",
+                [{"activation": "azione bonus"}, {"activation": None}, {"activation": None}],
+            ),
+        )
+
+    def test_options_that_disagree_leave_the_container_passive(self) -> None:
+        self.assertIsNone(
+            MODULE.container_activation(
+                "Il famiglio riceve i seguenti benefici.",
+                [
+                    {"activation": None},
+                    {"activation": "azione bonus"},
+                    {"activation": "reazione"},
+                ],
+            )
+        )
+
+    def test_a_container_without_costly_options_is_passive(self) -> None:
+        self.assertIsNone(
+            MODULE.container_activation(
+                "La natura fiorisce nel druido, concedendogli i seguenti benefici.",
+                [{"activation": None}, {"activation": None}],
+            )
+        )
+
+
+class ResourceSpendTest(unittest.TestCase):
+    """Nominare una risorsa non e' spenderla.
+
+    Il verbo di consumo si cercava nell'intero testo: bastava che il privilegio
+    spendesse qualcosa da qualche parte perche' la prima risorsa nominata
+    risultasse la spesa.
+    """
+
+    ITALIAN = MODULE.PROFILES["it"]
+    ENGLISH = MODULE.PROFILES["en"]
+
+    def test_a_slot_named_as_a_trigger_is_not_spent(self) -> None:
+        # Supercanalizzazione: lo slot lo spende l'incantesimo, che lanci
+        # comunque; il privilegio ci si limita sopra. L'italiano ne usciva pulito
+        # per caso — scrive «uno slot di livello», e il nome non combaciava.
+        overchannel = (
+            "When you cast a Wizard spell with a spell slot of levels 1–5 that deals damage, "
+            "you can deal maximum damage with that spell on the turn you cast it. If you use "
+            "this feature again before you finish a Long Rest, you take 2d12 Necrotic damage."
+        )
+        self.assertIsNone(MODULE.resource_from(overchannel, self.ENGLISH))
+
+    def test_a_stated_cost_line_is_a_spend(self) -> None:
+        # Le opzioni di metamagia non hanno verbo: dichiarano il costo e basta.
+        # Il numero non lo legge l'estrattore ma `SrdWords.statedCost` dal lato
+        # Kotlin, che deve saperlo fare comunque per «Costo:» contro «Cost:».
+        # Qui conta che la riga basti a riconoscere la spesa: senza, la richiesta
+        # di un verbo vicino avrebbe lasciato tutta la metamagia senza risorsa.
+        self.assertEqual(
+            {"name": "punti stregoneria"},
+            MODULE.resource_from(
+                "Incantesimo rapido\nCosto: 2 punti stregoneria\nQuando lancia un incantesimo…",
+                self.ITALIAN,
+            ),
+        )
+        self.assertEqual(
+            {"name": "Sorcery Points"},
+            MODULE.resource_from(
+                "Quickened Spell\nCost: 2 Sorcery Points\nWhen you cast a spell…",
+                self.ENGLISH,
+            ),
+        )
+
+    def test_the_gerund_counts_as_a_spend(self) -> None:
+        # Ali di drago: «ignorare questo limite spendendo 3 punti stregoneria».
+        self.assertEqual(
+            {"name": "punti stregoneria", "cost": 3, "recovery": ["riposo lungo"]},
+            MODULE.resource_from(
+                "Dopo aver usato questo privilegio non può riutilizzarlo prima di aver "
+                "completato un riposo lungo; può ignorare questo limite spendendo 3 punti "
+                "stregoneria.",
+                self.ITALIAN,
+            ),
+        )
+
+    def test_what_costs_nothing_declares_nothing(self) -> None:
+        self.assertIsNone(
+            MODULE.resource_from(
+                "Il druido può lanciare questo incantesimo senza spendere uno slot incantesimo.",
+                self.ITALIAN,
+            )
+        )
+        self.assertIsNone(
+            MODULE.resource_from("You can cast it without expending a spell slot.", self.ENGLISH)
+        )
+
+    def test_a_record_declares_at_most_the_resource_it_names_first(self) -> None:
+        # Arcidruido converte utilizzi di Forma selvatica in slot incantesimo:
+        # non spende ne' l'una ne' gli altri. Scartata la prima, si prendeva i
+        # secondi — una risorsa sbagliata al posto di nessuna.
+        self.assertIsNone(
+            MODULE.resource_from(
+                "La vitalità della natura fiorisce costantemente all'interno del druido, "
+                "concedendogli i seguenti benefici.\n"
+                "Forma selvatica sempreverde. Ogni volta che il druido tira per "
+                "l'iniziativa e non ha utilizzi disponibili di Forma Selvatica, ne "
+                "recupera uno.\n"
+                "Mago della natura. Il druido può convertire gli utilizzi di Forma "
+                "selvatica in slot incantesimo (nessuna azione richiesta).",
+                self.ITALIAN,
+            )
+        )
+
 
 @unittest.skipUnless(shutil.which("pdftohtml"), "Poppler non disponibile")
 class ClassFeatureExtractorTest(unittest.TestCase):

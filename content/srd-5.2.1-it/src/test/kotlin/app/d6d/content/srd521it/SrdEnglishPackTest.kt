@@ -15,6 +15,7 @@ import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.GuidedCharacterService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -440,7 +441,14 @@ class SrdEnglishPackTest {
         )
         assertEquals("Druidico", italianLevelOne.languages)
 
+        // Il passaggio all'inglese, come lo fa l'applicazione: la scheda si
+        // ritraduce e cambia marcatore *prima* di ricevere un altro livello. Qui
+        // pero' «Druidico» resta com'e', ed e' il caso che conta: la ritraduzione
+        // sostituisce solo cio' che combacia con una voce canonica, quindi una
+        // riga che chi gioca ha scritto o corretto a mano attraversa il cambio
+        // di lingua intatta. Il servizio inglese deve riconoscerla lo stesso.
         val readyForLevelTwo = italianLevelOne.copy(
+            contentLanguage = AppLanguage.ENGLISH,
             experiencePoints = ExperienceProgression.thresholdForLevel(2),
         )
         val switched = englishService.advance(
@@ -459,6 +467,63 @@ class SrdEnglishPackTest {
         // Il testo libero gia' salvato non viene riscritto, ma neppure affiancato
         // dalla traduzione della stessa concessione al livello successivo.
         assertEquals("Druidico", switched.languages)
+        assertEquals(AppLanguage.ENGLISH, switched.contentLanguage)
+    }
+
+    @Test
+    fun `una scheda gia' scritta non si avanza col pacchetto dell'altra lingua`() {
+        // Il difetto: il servizio marchiava comunque la scheda con la lingua del
+        // proprio pacchetto. Una scheda italiana avanzata in inglese ne usciva
+        // marcata inglese pur restando in gran parte italiana, e da li' la
+        // ritraduzione non la recuperava piu' — credeva di partire dall'inglese.
+        val draft = CharacterSheet()
+        val italianLevelOne = italianService.advance(
+            draft,
+            LevelUpRequest(
+                classId = CharacterClassId.DRUID,
+                hitPointIncrease = italianService.fixedHitPointIncrease(draft, CharacterClassId.DRUID),
+                usedFixedHitPoints = true,
+                selections = selectionsFor(
+                    sheet = draft,
+                    classId = CharacterClassId.DRUID,
+                    service = italianService,
+                    language = AppLanguage.ITALIAN,
+                ),
+            ),
+        )
+        val readyForLevelTwo = italianLevelOne.copy(
+            experiencePoints = ExperienceProgression.thresholdForLevel(2),
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            englishService.advance(
+                readyForLevelTwo,
+                LevelUpRequest(
+                    classId = CharacterClassId.DRUID,
+                    hitPointIncrease = englishService.fixedHitPointIncrease(
+                        readyForLevelTwo,
+                        CharacterClassId.DRUID,
+                    ),
+                    usedFixedHitPoints = true,
+                    selections = englishSelectionsFor(readyForLevelTwo, CharacterClassId.DRUID),
+                ),
+            )
+        }
+
+        // Una scheda ancora vuota invece nasce nella lingua di chi la crea: il
+        // marcatore predefinito del modello — italiano, giusto per i salvataggi
+        // vecchi — non le si mette di traverso.
+        val createdInEnglish = englishService.advance(
+            draft,
+            LevelUpRequest(
+                classId = CharacterClassId.DRUID,
+                hitPointIncrease = englishService.fixedHitPointIncrease(draft, CharacterClassId.DRUID),
+                usedFixedHitPoints = true,
+                selections = englishSelectionsFor(draft, CharacterClassId.DRUID),
+            ),
+        )
+        assertEquals(AppLanguage.ENGLISH, createdInEnglish.contentLanguage)
+        assertEquals("Druidic", createdInEnglish.languages)
     }
 
     @Test

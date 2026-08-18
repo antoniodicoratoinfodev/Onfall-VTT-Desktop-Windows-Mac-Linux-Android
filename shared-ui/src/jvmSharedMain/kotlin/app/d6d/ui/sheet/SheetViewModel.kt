@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import app.d6d.ui.content.guidedCharacterService
 import app.d6d.ui.content.guidedCharacterServiceFor
 import app.d6d.ui.content.srdCatalog
+import app.d6d.ui.content.srdCatalogFor
 import app.d6d.ui.content.regeneratedIn
 import app.d6d.ui.content.retranslatedTo
 import app.d6d.ui.content.srdPack
@@ -14,6 +15,7 @@ import app.d6d.content.srd521it.SrdBeasts
 import app.d6d.content.srd521it.SrdChoiceOption
 import app.d6d.content.srd521it.SrdChoiceResolver
 import app.d6d.domain.combat.AbilityEffect
+import app.d6d.i18n.AppLanguage
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.BackgroundDefinition
 import app.d6d.rules.character.CharacterClassId
@@ -294,7 +296,6 @@ class SheetViewModel(
         if (initialized && isDirty && !discardUnsavedChanges) return unsavedResult()
         val loaded = try {
             val fromDisk = if (store.exists()) store.load() else seeded().also { store.save(it) }
-            val refreshCatalog = (fromDisk.abilities + bundledSrdAbilities).distinctBy { it.id }
             // Gli effetti dei privilegi sono derivati dal pacchetto: una scheda
             // salvata prima che esistessero, o con un pacchetto piu' vecchio, li
             // ha vuoti. Si ricalcolano leggendo, e si riscrivono solo se davvero
@@ -306,11 +307,23 @@ class SheetViewModel(
             // di cio' che trova — quindi non ricalcolerebbe, riscriverebbe. Per
             // giunta prima dell'allineamento linguistico, e con la possibilita'
             // di finire su disco poche righe piu' sotto.
+            //
+            // Il catalogo segue il servizio, per la stessa ragione e con un danno
+            // peggiore: gli effetti si fondono per uguaglianza, e uno derivato dal
+            // pacchetto della scheda accanto al suo gemello preso dal catalogo
+            // dell'altra lingua non e' un doppione — differisce nel nome della
+            // sorgente. Restavano entrambi; l'allineamento poi traduceva il primo
+            // nel secondo e li rendeva identici, ma ormai erano due. Da li' ogni
+            // riapertura riscriveva l'archivio, e un privilegio contava due volte.
+            val refreshCatalogs = HashMap<AppLanguage, List<CatalogAbility>>()
+            fun refreshCatalogFor(language: AppLanguage) = refreshCatalogs.getOrPut(language) {
+                (fromDisk.abilities + srdCatalogFor(language)).distinctBy { it.id }
+            }
             val refreshed = fromDisk.copy(
                 characters = fromDisk.characters.map { sheet ->
                     val service = guidedCharacterServiceFor(sheet.contentLanguage)
                     service.withoutGeneratedFeatureText(
-                        service.withRefreshedEffects(sheet, refreshCatalog),
+                        service.withRefreshedEffects(sheet, refreshCatalogFor(sheet.contentLanguage)),
                     )
                 },
             )
@@ -636,6 +649,14 @@ class SheetViewModel(
         guidedCharacters.fixedHitPointIncrease(character, classId)
 
     fun advanceCharacter(request: LevelUpRequest): Boolean {
+        // Il livello si applica sempre col pacchetto della lingua a schermo, ed e'
+        // in quella lingua che il servizio scrive. La scheda va portata li' prima,
+        // altrimenti ne esce una meta' italiana e meta' inglese: il servizio lo
+        // pretende, e qui e' un accostamento a vuoto ogni volta che la scheda e'
+        // gia' allineata — cioe' sempre, fuori dalle rotte impreviste.
+        if (character.contentLanguage != AppLocale.language) {
+            character = character.retranslatedTo(AppLocale.language)
+        }
         val validation = guidedCharacters.validate(character, request)
         if (!validation.valid) {
             say(literalText(validation.issues.joinToString("\n") { it.message }))
