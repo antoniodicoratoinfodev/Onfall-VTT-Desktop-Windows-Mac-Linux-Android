@@ -24,18 +24,19 @@ Five parts living on the same engine:
    of ruthlessness or not at all;
 5. a **game interface** that presents the fight as a turn based battle.
 
-Four destinations hold them together, and the navigation rail on the left collapses to icons, or
-disappears entirely, when the table needs the room. The screenshots below use the Italian labels
-**Battaglia** (battle), **Partita** (session), **Compendio**
-(Compendium) and **Impostazioni** (Settings). The language can be switched to English at runtime.
+Four destinations hold them together — **Battle**, **Game**, **Compendium** and **Settings** — and
+the navigation rail on the left collapses to icons, or disappears entirely, when the table needs the
+room. The screenshots below are taken in English; the whole interface, units included, switches to
+Italian at runtime and back.
 
 ## Starting a session
 
 A session begins from one of four places: a **bundled encounter**, the **templates** already in the
 Compendium, **from scratch** — which opens the Compendium to write the cast first — or a **saved
 session**. The three bundled encounters are written to be played as they are and to show the engine
-at different points of a campaign: *Le rovine di Vallecupa* (level 1), *Il guado di ferro* (level 4),
-*La corona spezzata* (level 20).
+at different points of a campaign: *The Ruins of Deepvale* (level 1), *The Iron Ford* (level 4),
+*The Broken Crown* (level 20). Their names follow the interface language, like everything else the
+SRD pack carries.
 
 The builder then walks through five steps: where to start from, who takes part, the grid, how to
 begin, and who commands the opposition. In the participants step each template gets a **faction**
@@ -426,5 +427,5 @@ reached by `check`, not by `test`.
 
 **All rights reserved.** The application may be downloaded, compiled, installed, and used to play
 games for personal, non-commercial purposes. Modification, redistribution, forks, and reuse in other
-projects are not permitted. The Italian and English SRD content pack remains separately available under CC BY
-4.0. The full terms are in [`LICENSE.md`](LICENSE.md).
+projects are not permitted. The Italian and English SRD content pack remains separately available
+under CC BY 4.0. The full terms are in [`LICENSE.md`](LICENSE.md).
