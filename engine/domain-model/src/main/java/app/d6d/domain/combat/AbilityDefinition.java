@@ -183,6 +183,30 @@ public record AbilityDefinition(
         return saveAbility != null;
     }
 
+    /**
+     * The same ability under the wording of another language.
+     *
+     * <p>Only what the table reads moves: the name and the rules text. Cost,
+     * range, damage, resource and every number that decides how the ability
+     * behaves are left exactly as they were, so relabelling can never change
+     * the way a turn resolves.</p>
+     *
+     * <p>A blank replacement is a gap in the translation, not an instruction to
+     * erase: that field keeps what it had rather than going empty on a line the
+     * table can see.</p>
+     */
+    public AbilityDefinition withLabels(String newName, String newRulesText) {
+        String label = newName == null || newName.isBlank() ? name : newName;
+        String text = newRulesText == null || newRulesText.isBlank() ? rulesText : newRulesText;
+        if (label.equals(name) && Objects.equals(text, rulesText)) {
+            return this;
+        }
+        return new AbilityDefinition(id, version, source, rulesetVersion, label, activationCost,
+                resolutionMethod, attackBonus, rangeFeet, maxTargets, damage, automationStatus, text,
+                areaRadiusFeet, saveAbility, halfOnSave, passive, attackAbility, spellOrCantrip,
+                effect, resourceId, resourceCost, healing);
+    }
+
     public static Builder builder(String id, String name) {
         return new Builder(id, name);
     }

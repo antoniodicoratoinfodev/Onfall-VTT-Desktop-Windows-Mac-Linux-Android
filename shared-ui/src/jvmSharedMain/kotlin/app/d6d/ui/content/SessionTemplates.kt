@@ -55,6 +55,14 @@ internal data class SessionTemplate(
     val partyCount: Int get() = partyPlans.size
 
     /**
+     * Identificativo e nome di ogni personaggio della squadra, senza costruirne
+     * la scheda. Serve a chi deve solo *riconoscere* un nome — per esempio per
+     * ridirlo in un'altra lingua — e non ha motivo di pagare ottanta
+     * avanzamenti per leggere una stringa.
+     */
+    val partyNames: Map<String, String> get() = partyPlans.associate { it.id to it.name }
+
+    /**
      * Costruisce soltanto le schede che non sono gia' installate nel Compendio.
      * In particolare evita di far avanzare di nuovo i personaggi di livello 20 a
      * ogni avvio, quando i loro documenti sono gia' presenti su disco.

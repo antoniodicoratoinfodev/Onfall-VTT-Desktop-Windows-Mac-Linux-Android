@@ -193,6 +193,60 @@ public record CombatantSnapshot(
                 druid.resources());
     }
 
+    /**
+     * The same combatant under the labels of another language.
+     *
+     * <p>Names only. Statistics, resources, resistances and the whole shape of
+     * the fight are untouched, and so is {@code definitionVersion}: this is not
+     * a table correction and must not be mistaken for one when the sheet and
+     * the encounter are compared.</p>
+     *
+     * <p>{@code abilityNames} and {@code abilityRulesTexts} are read by ability
+     * id and may cover any subset: an ability the caller has no translation for
+     * keeps the wording it already had, which is what should happen to anything
+     * the table wrote itself.</p>
+     */
+    public CombatantSnapshot relabelled(
+            String newName,
+            Map<String, String> abilityNames,
+            Map<String, String> abilityRulesTexts) {
+        Objects.requireNonNull(abilityNames, "abilityNames");
+        Objects.requireNonNull(abilityRulesTexts, "abilityRulesTexts");
+        String label = newName == null || newName.isBlank() ? name : newName;
+        List<AbilityDefinition> renamed = abilities.stream()
+                .map(ability -> ability.withLabels(
+                        abilityNames.get(ability.id()),
+                        abilityRulesTexts.get(ability.id())))
+                .toList();
+        if (label.equals(name) && renamed.equals(abilities)) {
+            return this;
+        }
+        return new CombatantSnapshot(
+                instanceId,
+                definitionId,
+                definitionVersion,
+                rulesetVersion,
+                label,
+                armorClass,
+                maxHitPoints,
+                initialHitPoints,
+                initialTemporaryHitPoints,
+                speedFeet,
+                initiativeModifier,
+                initiativeScore,
+                constitutionSaveBonus,
+                resistances,
+                vulnerabilities,
+                damageImmunities,
+                conditionImmunities,
+                renamed,
+                savingThrowBonuses,
+                spellSaveDc,
+                attacksPerAction,
+                strengthDexterityD20Disadvantage,
+                resources);
+    }
+
     private static String substringAfterLast(String value, char separator) {
         int index = value.lastIndexOf(separator);
         return index < 0 ? value : value.substring(index + 1);

@@ -38,6 +38,7 @@ import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumber
 import app.d6d.i18n.label
+import app.d6d.ui.content.SessionNaming
 import app.d6d.ui.encounter.EncounterMode
 import app.d6d.ui.maps.PendingToken
 import app.d6d.ui.maps.arrangeTokens
@@ -1785,6 +1786,12 @@ class BattleViewModel(
             }
             ?.toMap()
             .orEmpty()
+        // Una partita salvata porta i nomi della lingua in cui e' nata, e
+        // riaprirla non e' un cambio di lingua: senza questo, chi gioca in
+        // inglese riaprirebbe una partita italiana e si troverebbe davanti un
+        // «Cane di palude». Vale la stessa regola di [onLanguageChanged], e
+        // costa un giro sui combattenti una volta sola, all'apertura.
+        relabelCombatants()
         sync()
         val currentCpuTurn = enemyCpuTurnSignature
         suppressedEnemyCpuTurnSignature = presentation["enemyCpuSuppressedTurn"]
@@ -1825,6 +1832,51 @@ class BattleViewModel(
         // col nome del bersaglio dentro, e cambiare lingua a meta' del turno la
         // lasciava in quella di prima finche' la CPU non ne scriveva un'altra.
         enemyCpuActionLabel = null
+        relabelCombatants()
+    }
+
+    /**
+     * Rimette combattenti e capacita' nella lingua corrente.
+     *
+     * Le copie dentro la partita portano il nome con cui sono entrate, e finora
+     * ci restavano: si finiva per giocare in inglese contro un «Cane di palude»
+     * che sferrava un'«Ascia bipenne». Qui si riscrivono le sole etichette,
+     * fuori dai comandi e fuori dall'annullamento — cambiare lingua non e' una
+     * mossa del tavolo — e solo dove il nome memorizzato e' ancora quello
+     * canonico di un'edizione: quello che il tavolo si e' scritto da se' resta
+     * suo.
+     *
+     * Il registro non va toccato: i suoi eventi portano identificativi, non
+     * frasi, quindi le righe gia' scritte si rileggono tradotte da sole.
+     */
+    private fun relabelCombatants() {
+        val language = AppLocale.language
+        var changed = false
+        session.currentState().combatants().values.forEach { combatant ->
+            val snapshot = combatant.snapshot()
+            val name = SessionNaming.combatantName(
+                definitionId = snapshot.definitionId(),
+                storedName = snapshot.name(),
+                language = language,
+            )
+            val abilityNames = snapshot.abilities().associate { ability ->
+                ability.id() to SessionNaming.abilityName(ability.id(), ability.name(), language)
+            }
+            val abilityRules = snapshot.abilities().associate { ability ->
+                ability.id() to SessionNaming.abilityRulesText(
+                    ability.id(),
+                    ability.rulesText().orEmpty(),
+                    language,
+                )
+            }
+            if (session.relabelCombatant(snapshot.instanceId(), name, abilityNames, abilityRules)) {
+                changed = true
+            }
+        }
+        // Il ridisegno segue lo stato osservabile, e una rietichettatura
+        // deliberatamente non muove la revisione: senza questo i nomi nuovi
+        // resterebbero invisibili fino al primo comando vero.
+        if (changed) sync()
     }
 
     /** Mostra o ritira l'anteprima della portata quando il mouse attraversa una capacita'. */

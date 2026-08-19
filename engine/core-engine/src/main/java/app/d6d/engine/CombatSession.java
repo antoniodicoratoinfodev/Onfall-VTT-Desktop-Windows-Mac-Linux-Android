@@ -1130,6 +1130,37 @@ public final class CombatSession {
     }
 
     /**
+     * Riscrive le sole etichette di un combattente e delle sue capacita'.
+     *
+     * <p><b>Non e' un comando.</b> Non apre una revisione, non scrive nell'audit
+     * e non entra nell'annullamento, e la scelta e' deliberata: cambiare lingua
+     * non e' una mossa del tavolo. Registrarla come tale riempirebbe il registro
+     * di {@code COMBATANT_EDITED} che nessuno ha compiuto e, peggio, metterebbe
+     * fra le cose annullabili un atto che non appartiene alla partita.</p>
+     *
+     * <p>Restano fuori portata statistiche, risorse, posizione, iniziativa e
+     * {@code definitionVersion}: passano solo i nomi. Gli eventi gia' scritti
+     * puntano agli identificativi e non alle etichette, quindi il registro si
+     * rilegge nella lingua nuova senza che una riga di storia cambi significato
+     * e senza che una revisione debba essere inventata per giustificarlo.</p>
+     *
+     * @return vero se qualcosa e' davvero cambiato, cosi' chi chiama sa se vale
+     *         la pena riscrivere il salvataggio.
+     */
+    public synchronized boolean relabelCombatant(
+            String combatantId,
+            String name,
+            Map<String, String> abilityNames,
+            Map<String, String> abilityRulesTexts) {
+        MutableCombatant existing = combatant(combatantId);
+        CombatantSnapshot relabelled =
+                existing.snapshot.relabelled(name, abilityNames, abilityRulesTexts);
+        if (relabelled == existing.snapshot) return false;
+        existing.snapshot = relabelled;
+        return true;
+    }
+
+    /**
      * Attiva una forma alternativa consumando azione e risorsa nello stesso
      * comando annullabile. La definizione di catalogo del personaggio non cambia:
      * la nuova fotografia vale soltanto per questo incontro.
