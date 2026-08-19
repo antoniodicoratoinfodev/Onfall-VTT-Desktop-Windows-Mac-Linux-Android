@@ -216,19 +216,43 @@ private data class DesktopCursorBackend(
 )
 
 /**
- * Sceglie il fallback in base a cio' che il toolkit sa davvero rappresentare.
- * Se il controllo o il cursore trasparente falliscono si conserva la strada
- * nativa: un guanto imperfetto e' comunque preferibile a nessun puntatore.
+ * Vero dove il cursore nativo si puo' usare cosi' com'e'.
+ *
+ * Il disegno in scena esiste per una ragione sola — su X11/Xwayland il cursore
+ * nativo ad alta risoluzione non arriva a destinazione — e dove non serve e'
+ * sempre la scelta peggiore: il nativo segue il puntatore anche fuori dalla
+ * scena, non costa un frame e soprattutto non si puo' sdoppiare.
+ *
+ * Il criterio e' il sistema operativo e **non** il numero di colori del
+ * toolkit. Su macOS `maximumCursorColors` vale 0, che non significa «non so
+ * disegnare un cursore» ma «non lo dichiaro»: fidarsene mandava il Mac sul ramo
+ * del ripiego, dove il cursore nativo viene reso trasparente soltanto mentre il
+ * puntatore e' dentro. Bastava uscire dalla finestra e rientrare perche' il
+ * sistema ripristinasse la freccia prima che l'applicazione riapplicasse quella
+ * invisibile, e per un istante se ne vedessero due.
+ *
+ * Prende il nome del sistema invece di leggerlo da se' perche' e' l'unica parte
+ * di questa decisione che si possa verificare senza la macchina giusta sotto.
+ */
+internal fun nativeCursorIsTrustworthy(osName: String): Boolean =
+    osName.startsWith("Mac", ignoreCase = true) ||
+        osName.startsWith("Windows", ignoreCase = true)
+
+/**
+ * Sceglie chi disegna il puntatore.
+ *
+ * Dove il nativo e' affidabile si usa quello. Altrove serve un cursore
+ * trasparente da mettere al suo posto: se il toolkit non sa nemmeno crearlo si
+ * torna al nativo, perche' un guanto imperfetto e' comunque preferibile a
+ * nessun puntatore.
  */
 private fun desktopCursorBackend(): DesktopCursorBackend {
     val defaultCursor = Cursor.getDefaultCursor()
-    val toolkit = runCatching { Toolkit.getDefaultToolkit() }.getOrNull()
-        ?: return DesktopCursorBackend(drawInScene = false, hiddenNativeCursor = defaultCursor)
-    val maximumColors = runCatching { toolkit.maximumCursorColors }.getOrNull()
-        ?: return DesktopCursorBackend(drawInScene = false, hiddenNativeCursor = defaultCursor)
-    if (maximumColors >= 256) {
+    if (nativeCursorIsTrustworthy(operatingSystem)) {
         return DesktopCursorBackend(drawInScene = false, hiddenNativeCursor = defaultCursor)
     }
+    val toolkit = runCatching { Toolkit.getDefaultToolkit() }.getOrNull()
+        ?: return DesktopCursorBackend(drawInScene = false, hiddenNativeCursor = defaultCursor)
 
     val hiddenCursor = runCatching {
         toolkit.createCustomCursor(
@@ -422,9 +446,6 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
         val backgroundFrameInterval = atmosphericFrameIntervalMillis(renderApi, windows)
         val cursorBackend = remember { desktopCursorBackend() }
         val pointerTrail = remember { PointerTrail() }
-        val pointerInside by remember(pointerTrail) {
-            derivedStateOf { pointerTrail.position != null }
-        }
         val cursorPairs = remember(selectedCursorSize) {
             mapOf(
                 CursorPair.COLD to desktopCursorPair(
@@ -483,10 +504,15 @@ private fun ApplicationScope.OnfallApplication(iconBytes: ByteArray?) {
             { grabbing: Boolean -> grabbingMap = grabbing }
         }
         val activeCursor = if (grabbingMap) activeCursors.grab else activeCursors.pointer
-        val hideNativeCursor = cursorBackend.drawInScene && pointerInside
+        // Sul ripiego il cursore della scena resta trasparente **sempre**, anche
+        // a puntatore uscito. Scambiarlo all'ingresso e all'uscita sembrava piu'
+        // pulito e non lo era: il cambio di un cursore AWT arriva a destinazione
+        // un frame o due dopo, mentre l'overlay disegna nello stesso frame in cui
+        // il puntatore rientra, e in quel margine si vedevano due cursori. Fuori
+        // dalla finestra il puntatore lo decide comunque un'altra finestra,
+        // quindi non c'e' nulla da restituire.
         val nativeCursor = when {
-            hideNativeCursor -> cursorBackend.hiddenNativeCursor
-            cursorBackend.drawInScene -> Cursor.getDefaultCursor()
+            cursorBackend.drawInScene -> cursorBackend.hiddenNativeCursor
             else -> activeCursor.native
         }
 
