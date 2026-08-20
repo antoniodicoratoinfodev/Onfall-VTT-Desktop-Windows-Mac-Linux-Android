@@ -1563,6 +1563,24 @@ class BattleViewModel(
     }
 
     /** Sincronizza nel motore i muri persistenti posseduti dalla Board. */
+    /**
+     * Caselle su cui il combattente puo' davvero terminare lo spostamento.
+     *
+     * Delega al motore invece di rifare il conto: muri, angoli e ingombro sono
+     * regole del movimento, e una seconda implementazione qui finirebbe per
+     * illuminare sulla mappa caselle che il comando poi rifiuta.
+     */
+    fun reachableOrigins(combatantId: String): Set<GridPosition> =
+        session.reachableOrigins(combatantId)
+
+    /**
+     * Vero quando la Board impone dei muri.
+     *
+     * Senza muri il raggio residuo resta il quadrato di Chebyshev di sempre, che
+     * si disegna con quattro rettangoli invece che casella per casella.
+     */
+    val hasBlockedCells: Boolean get() = session.blockedCells().isNotEmpty()
+
     fun setBlockedCells(walls: WallMask) {
         val blocked = buildSet {
             for (row in 0 until walls.rows()) {

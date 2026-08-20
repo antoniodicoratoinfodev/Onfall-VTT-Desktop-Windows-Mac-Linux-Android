@@ -343,35 +343,35 @@ private fun BoardLayersPanel(state: BoardToolState, board: BoardController, comp
     }
 }
 
-private fun BoardLayers.withBackgroundVisible(value: Boolean) = BoardLayers(
+internal fun BoardLayers.withBackgroundVisible(value: Boolean) = BoardLayers(
     value, floorsVisible(), annotationsVisible(), stampsVisible(), sceneTokensVisible(), wallsVisible(), fogVisible(), locked(),
 )
 
-private fun BoardLayers.withFloorsVisible(value: Boolean) = BoardLayers(
+internal fun BoardLayers.withFloorsVisible(value: Boolean) = BoardLayers(
     backgroundVisible(), value, annotationsVisible(), stampsVisible(), sceneTokensVisible(), wallsVisible(), fogVisible(), locked(),
 )
 
-private fun BoardLayers.withAnnotationsVisible(value: Boolean) = BoardLayers(
+internal fun BoardLayers.withAnnotationsVisible(value: Boolean) = BoardLayers(
     backgroundVisible(), floorsVisible(), value, stampsVisible(), sceneTokensVisible(), wallsVisible(), fogVisible(), locked(),
 )
 
-private fun BoardLayers.withStampsVisible(value: Boolean) = BoardLayers(
+internal fun BoardLayers.withStampsVisible(value: Boolean) = BoardLayers(
     backgroundVisible(), floorsVisible(), annotationsVisible(), value, sceneTokensVisible(), wallsVisible(), fogVisible(), locked(),
 )
 
-private fun BoardLayers.withSceneTokensVisible(value: Boolean) = BoardLayers(
+internal fun BoardLayers.withSceneTokensVisible(value: Boolean) = BoardLayers(
     backgroundVisible(), floorsVisible(), annotationsVisible(), stampsVisible(), value, wallsVisible(), fogVisible(), locked(),
 )
 
-private fun BoardLayers.withWallsVisible(value: Boolean) = BoardLayers(
+internal fun BoardLayers.withWallsVisible(value: Boolean) = BoardLayers(
     backgroundVisible(), floorsVisible(), annotationsVisible(), stampsVisible(), sceneTokensVisible(), value, fogVisible(), locked(),
 )
 
-private fun BoardLayers.withFogVisible(value: Boolean) = BoardLayers(
+internal fun BoardLayers.withFogVisible(value: Boolean) = BoardLayers(
     backgroundVisible(), floorsVisible(), annotationsVisible(), stampsVisible(), sceneTokensVisible(), wallsVisible(), value, locked(),
 )
 
-private fun BoardLayers.withLocked(value: Boolean) = BoardLayers(
+internal fun BoardLayers.withLocked(value: Boolean) = BoardLayers(
     backgroundVisible(), floorsVisible(), annotationsVisible(), stampsVisible(), sceneTokensVisible(), wallsVisible(), fogVisible(), value,
 )
 

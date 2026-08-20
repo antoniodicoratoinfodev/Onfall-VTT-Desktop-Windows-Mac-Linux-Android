@@ -1,6 +1,7 @@
 package app.d6d.ui.board
 
 import app.d6d.board.GridPoint
+import app.d6d.board.BoardLayers
 import app.d6d.board.FloorMask
 import app.d6d.board.Label
 import app.d6d.board.SceneToken
@@ -71,6 +72,38 @@ class BoardControllerTest {
         assertTrue(controller.document.objects().isEmpty())
         assertTrue(controller.redo())
         assertEquals(listOf(label), controller.document.objects())
+    }
+
+    @Test
+    fun `accendere il livello di uno strumento non e' una modifica d'autore`() {
+        val seen = mutableListOf<BoardLayers>()
+        val controller = BoardController(onDocumentChanged = { seen += it.layers() })
+        val hidden = BoardLayers(true, true, true, true, true, true, false, false)
+        assertTrue(controller.setLayers(hidden), "spegnere la nebbia resta una modifica vera")
+        val revisionAfterEdit = controller.revision
+
+        controller.revealLayers(BoardLayers(true, true, true, true, true, true, true, false))
+
+        assertTrue(controller.document.layers().fogVisible(), "il livello si accende comunque")
+        assertTrue(controller.document.layers().fogVisible() == seen.last().fogVisible(), "il motore ne viene informato")
+        assertEquals(revisionAfterEdit, controller.revision, "scegliere uno strumento non fa risultare la partita da salvare")
+
+        // L'Undo torna a prima della modifica vera, non alla sola accensione:
+        // «annulla» dopo aver scelto un pennello deve annullare l'ultimo disegno.
+        assertTrue(controller.undo())
+        assertTrue(controller.document.layers().fogVisible(), "la fotografia annullata e' quella di partenza")
+        assertFalse(controller.canUndo)
+    }
+
+    @Test
+    fun `accendere un livello gia' acceso non tocca nulla`() {
+        val controller = BoardController()
+        val before = controller.revision
+
+        controller.revealLayers(controller.document.layers())
+
+        assertEquals(before, controller.revision)
+        assertFalse(controller.canUndo)
     }
 
     @Test

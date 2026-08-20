@@ -59,6 +59,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
@@ -557,6 +558,7 @@ fun BattleMapView(
                         mapOffset = mapOffset,
                         contentSize = camera.contentSize,
                         veiled = activeId == viewModel.activeCombatantId,
+                        boardRevision = board.revision,
                     )
                 }
             }
@@ -987,6 +989,7 @@ private fun MovementReach(
     mapOffset: Offset,
     contentSize: Size,
     veiled: Boolean,
+    boardRevision: Long,
 ) {
     val squares = viewModel.movementSquaresRemaining(placement.combatantId())
     if (squares <= 0) return
@@ -999,6 +1002,43 @@ private fun MovementReach(
     val endRow = (origin.row() + placement.squaresPerSide() + squares).coerceAtMost(grid.rows())
     if (endColumn <= startColumn || endRow <= startRow) return
     val cellPx = with(LocalDensity.current) { cellSize.toPx() }
+
+    // Con dei muri sulla Board il raggio non e' piu' un quadrato: il motore cerca
+    // un percorso, e attorno a un ostacolo puo' costare piu' della distanza in
+    // linea d'aria. Il riquadro di Chebyshev illuminerebbe caselle che
+    // `moveCombatant` poi rifiuta, quindi in quel caso si chiede al motore quali
+    // siano davvero e si disegna casella per casella. Senza muri resta tutto com'era:
+    // stessi quattro rettangoli, stesso costo di disegno.
+    val width = endColumn - startColumn
+    val height = endRow - startRow
+    val reachMask: BooleanArray? = if (!viewModel.hasBlockedCells) {
+        null
+    } else {
+        // `placement` per intero, non il solo identificatore: su una griglia stretta
+        // due origini diverse possono dare lo stesso riquadro ritagliato, e la
+        // maschera precedente resterebbe in cache pur non valendo piu'.
+        remember(placement, squares, startColumn, startRow, width, height, boardRevision) {
+            val side = placement.squaresPerSide()
+            val mask = BooleanArray(width * height)
+            fun mark(column: Int, row: Int) {
+                val c = column - startColumn
+                val r = row - startRow
+                if (c in 0 until width && r in 0 until height) mask[r * width + c] = true
+            }
+            // Restare fermi e' sempre lecito: le caselle occupate ora non si oscurano.
+            placement.occupiedSquares().forEach { mark(it.column(), it.row()) }
+            // Il motore ragiona per origine del segnaposto; sulla mappa conta
+            // l'ingombro che occuperebbe una volta arrivato.
+            viewModel.reachableOrigins(placement.combatantId()).forEach { cell ->
+                for (rowOffset in 0 until side) {
+                    for (columnOffset in 0 until side) {
+                        mark(cell.column() + columnOffset, cell.row() + rowOffset)
+                    }
+                }
+            }
+            mask
+        }
+    }
 
     if (veiled) {
         Canvas(Modifier.fillMaxSize()) {
@@ -1026,12 +1066,34 @@ private fun MovementReach(
                 drawRect(scrim, Offset(reachRight, reachTop), Size(mapRight - reachRight, reachBottom - reachTop))
             }
 
-            drawRect(
-                color = Palette.Party.copy(alpha = 0.5f),
-                topLeft = Offset(reachLeft, reachTop),
-                size = Size(reachRight - reachLeft, reachBottom - reachTop),
-                style = Stroke(width = 1.5.dp.toPx()),
+            if (reachMask == null) {
+                drawRect(
+                    color = Palette.Party.copy(alpha = 0.5f),
+                    topLeft = Offset(reachLeft, reachTop),
+                    size = Size(reachRight - reachLeft, reachBottom - reachTop),
+                    style = Stroke(width = 1.5.dp.toPx()),
+                )
+            } else {
+                // Un muro puo' rendere irraggiungibile anche una casella dentro il
+                // riquadro. L'ombra copre allora anche quelle: cio' che resta in
+                // luce e' esattamente cio' che il motore accetta. Niente cornice —
+                // il perimetro del quadrato non descrive piu' il percorribile.
+                drawPath(
+                    reachRunsPath(reachMask, false, width, height, startColumn, startRow, mapOffset, cellPx),
+                    scrim,
+                )
+            }
+        }
+        return
+    }
+
+    if (reachMask != null) {
+        Canvas(Modifier.fillMaxSize()) {
+            val reachable = reachRunsPath(
+                reachMask, true, width, height, startColumn, startRow, mapOffset, cellPx,
             )
+            drawPath(reachable, Palette.Party.copy(alpha = 0.07f))
+            drawPath(reachable, Palette.Party.copy(alpha = 0.30f), style = Stroke(width = 1.dp.toPx()))
         }
         return
     }
@@ -1050,6 +1112,47 @@ private fun MovementReach(
             .background(Palette.Party.copy(alpha = 0.07f), RoundedCornerShape(4.dp))
             .border(1.dp, Palette.Party.copy(alpha = 0.30f), RoundedCornerShape(4.dp)),
     )
+}
+
+/**
+ * Le caselle della maschera raccolte in un solo tracciato.
+ *
+ * Le fasce orizzontali contigue diventano un rettangolo unico e tutto si disegna in
+ * una passata: con l'alpha, rettangoli adiacenti disegnati uno per uno lascerebbero
+ * cuciture visibili sui bordi condivisi.
+ */
+private fun reachRunsPath(
+    mask: BooleanArray,
+    want: Boolean,
+    width: Int,
+    height: Int,
+    startColumn: Int,
+    startRow: Int,
+    mapOffset: Offset,
+    cellPx: Float,
+): Path {
+    val path = Path()
+    for (row in 0 until height) {
+        var column = 0
+        while (column < width) {
+            if (mask[row * width + column] != want) {
+                column++
+                continue
+            }
+            var end = column
+            while (end < width && mask[row * width + end] == want) end++
+            path.addRect(
+                Rect(
+                    left = mapOffset.x + (startColumn + column) * cellPx,
+                    top = mapOffset.y + (startRow + row) * cellPx,
+                    right = mapOffset.x + (startColumn + end) * cellPx,
+                    bottom = mapOffset.y + (startRow + row + 1) * cellPx,
+                ),
+            )
+            column = end
+        }
+    }
+    return path
 }
 
 /**

@@ -60,7 +60,6 @@ import app.d6d.ui.components.HealthBar
 import app.d6d.ui.components.color
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.board.BoardController
-import app.d6d.board.BoardLayers
 import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.layout.LocalUiLayout
@@ -110,22 +109,16 @@ fun BattleStage(
             viewModel.cancelAreaTargeting()
             viewModel.mapEditMode = false
         }
+        // Accendere il livello che si sta per disegnare e' una conseguenza della
+        // scelta, non una modifica d'autore: passa da `revealLayers`, che non
+        // aggiunge un passo di Undo e non fa risultare la partita da salvare.
         val layers = board.document.layers()
         if (tool == BoardTool.FOG && !layers.fogVisible()) {
-            board.setLayers(BoardLayers(
-                layers.backgroundVisible(), layers.floorsVisible(), layers.annotationsVisible(), layers.stampsVisible(),
-                layers.sceneTokensVisible(), layers.wallsVisible(), true, layers.locked(),
-            ))
+            board.revealLayers(layers.withFogVisible(true))
         } else if (tool == BoardTool.FLOOR && !layers.floorsVisible()) {
-            board.setLayers(BoardLayers(
-                layers.backgroundVisible(), true, layers.annotationsVisible(), layers.stampsVisible(),
-                layers.sceneTokensVisible(), layers.wallsVisible(), layers.fogVisible(), layers.locked(),
-            ))
+            board.revealLayers(layers.withFloorsVisible(true))
         } else if (tool == BoardTool.WALL && !layers.wallsVisible()) {
-            board.setLayers(BoardLayers(
-                layers.backgroundVisible(), layers.floorsVisible(), layers.annotationsVisible(), layers.stampsVisible(),
-                layers.sceneTokensVisible(), true, layers.fogVisible(), layers.locked(),
-            ))
+            board.revealLayers(layers.withWallsVisible(true))
         }
         boardTools.select(tool)
         if (compact || !layout.toolboxPinned) boardTools.toolboxOpen = false

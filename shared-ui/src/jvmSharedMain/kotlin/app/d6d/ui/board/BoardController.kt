@@ -106,6 +106,22 @@ class BoardController(
 
     fun setLayers(value: BoardLayers): Boolean = commit(document.withLayers(value))
 
+    /**
+     * Accende il livello che lo strumento appena scelto disegna.
+     *
+     * Non passa da [commit] di proposito. Scegliere un pennello non e' un tratto:
+     * non deve occupare un passo di Undo — «annulla» subito dopo deve annullare
+     * l'ultimo disegno, non la scelta dello strumento — e non deve incrementare
+     * [revision], che e' cio' da cui la sessione capisce di avere modifiche da
+     * salvare. Il documento cambia comunque, quindi la mappa si ridisegna subito;
+     * se poi arriva una modifica vera, il livello acceso viaggia con quella.
+     */
+    fun revealLayers(value: BoardLayers) {
+        if (value == document.layers()) return
+        document = document.withLayers(value)
+        onDocumentChanged(document)
+    }
+
     fun setFog(value: FogMask): Boolean = commit(document.withFog(value))
 
     fun setWalls(value: WallMask): Boolean = commit(document.withWalls(value))

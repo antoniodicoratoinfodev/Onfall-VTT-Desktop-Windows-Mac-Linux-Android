@@ -1408,12 +1408,7 @@ public final class CombatSession {
                 if (column < 0 || row < 0 || column >= columns || row >= rows) continue;
                 GridPosition next = new GridPosition(column, row);
                 int index = row * columns + column;
-                if (visited[index] || !walkableOrigin(current, next)) continue;
-                if (columnDelta != 0 && rowDelta != 0) {
-                    GridPosition horizontal = new GridPosition(point.column() + columnDelta, point.row());
-                    GridPosition vertical = new GridPosition(point.column(), point.row() + rowDelta);
-                    if (!walkableOrigin(current, horizontal) || !walkableOrigin(current, vertical)) continue;
-                }
+                if (visited[index] || !walkableStep(current, point, next)) continue;
                 visited[index] = true;
                 distance[index] = currentDistance + 1;
                 queue.addLast(next);
@@ -1425,6 +1420,81 @@ public final class CombatSession {
     private boolean walkableOrigin(TokenPlacement source, GridPosition origin) {
         TokenPlacement candidate = source.movedTo(origin);
         return state.battleMap.fitsInsideGrid(candidate) && !touchesWall(candidate);
+    }
+
+    /**
+     * Un singolo passo fra otto direzioni.
+     *
+     * <p>La destinazione deve essere percorribile, e in diagonale devono esserlo
+     * anche le due caselle ortogonali: non si taglia l'angolo di un muro. E' la
+     * regola sottile del movimento, quindi vive in un solo posto — la usano sia il
+     * comando che spende il budget sia la query che disegna il raggio.</p>
+     */
+    private boolean walkableStep(TokenPlacement mover, GridPosition from, GridPosition to) {
+        if (!walkableOrigin(mover, to)) return false;
+        int columnDelta = to.column() - from.column();
+        int rowDelta = to.row() - from.row();
+        if (columnDelta == 0 || rowDelta == 0) return true;
+        GridPosition horizontal = new GridPosition(to.column(), from.row());
+        GridPosition vertical = new GridPosition(from.column(), to.row());
+        return walkableOrigin(mover, horizontal) && walkableOrigin(mover, vertical);
+    }
+
+    /**
+     * Caselle d'origine che il combattente puo' davvero raggiungere col movimento residuo.
+     *
+     * <p>Non e' un comando: non tocca lo stato, non genera eventi e non produce un
+     * passo di Undo. Esiste perche' chi disegna il raggio sulla mappa non deve
+     * reimplementare le regole del movimento — muri, angoli e ingombro — e finire
+     * per illuminare caselle che {@link #moveCombatant} poi rifiuta.</p>
+     *
+     * <p>L'occupazione altrui non entra nel conto, esattamente come nel percorso di
+     * {@link #moveCombatant}: attraversare qualcuno e' lecito, e la casella
+     * d'arrivo resta verificata dal comando vero.</p>
+     */
+    public synchronized Set<GridPosition> reachableOrigins(String combatantId) {
+        Objects.requireNonNull(combatantId, "combatantId");
+        TokenPlacement current = state.battleMap.placementOf(combatantId).orElse(null);
+        if (current == null) return Set.of();
+        MapGrid grid = state.battleMap.grid();
+        if (!grid.configured() || grid.feetPerSquare() <= 0) return Set.of();
+        TurnBudget budget = state.turnBudgets.get(combatantId);
+        if (budget == null) return Set.of();
+        int maxSquares = budget.movementRemainingFeet() / grid.feetPerSquare();
+        if (maxSquares <= 0) return Set.of();
+
+        int columns = grid.columns();
+        int rows = grid.rows();
+        boolean[] visited = new boolean[Math.multiplyExact(columns, rows)];
+        int[] distance = new int[visited.length];
+        Set<GridPosition> reached = new LinkedHashSet<>();
+        ArrayDeque<GridPosition> queue = new ArrayDeque<>();
+        GridPosition start = current.origin();
+        visited[start.row() * columns + start.column()] = true;
+        queue.add(start);
+        int[] deltas = {-1, 0, 1};
+        while (!queue.isEmpty()) {
+            GridPosition point = queue.removeFirst();
+            int currentDistance = distance[point.row() * columns + point.column()];
+            // Oltre il budget non si prosegue: la visita resta grande quanto il
+            // raggio, non quanto la mappa.
+            if (currentDistance >= maxSquares) continue;
+            for (int rowDelta : deltas) for (int columnDelta : deltas) {
+                if (columnDelta == 0 && rowDelta == 0) continue;
+                int column = point.column() + columnDelta;
+                int row = point.row() + rowDelta;
+                if (column < 0 || row < 0 || column >= columns || row >= rows) continue;
+                int index = row * columns + column;
+                if (visited[index]) continue;
+                GridPosition next = new GridPosition(column, row);
+                if (!walkableStep(current, point, next)) continue;
+                visited[index] = true;
+                distance[index] = currentDistance + 1;
+                reached.add(next);
+                queue.addLast(next);
+            }
+        }
+        return Set.copyOf(reached);
     }
 
     private boolean hasLineOfEffect(TokenPlacement source, TokenPlacement target) {

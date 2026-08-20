@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -262,6 +263,60 @@ class BattleMapCommandsTest {
                 () -> session.moveCombatant("hero", new GridPosition(4, 2)));
 
         assertEquals("A wall blocks every path to the destination", failure.getMessage());
+    }
+
+    @Test
+    void ilRaggioDichiaratoNonSuperaMaiLaBarriera() {
+        CombatSession session = mapped();
+        List<GridPosition> barrier = new ArrayList<>();
+        for (int row = 0; row < 15; row++) barrier.add(new GridPosition(3, row));
+        session.setBlockedCells(barrier);
+
+        Set<GridPosition> reachable = session.reachableOrigins("hero");
+
+        assertFalse(reachable.isEmpty(), "di qua dalla barriera ci si muove ancora");
+        assertTrue(
+                reachable.stream().allMatch(cell -> cell.column() < 3),
+                "nessuna casella oltre la barriera puo' dirsi raggiungibile");
+        assertTrue(
+                barrier.stream().noneMatch(reachable::contains),
+                "un muro non e' una destinazione");
+    }
+
+    @Test
+    void senzaMuriIlRaggioResta_ilQuadratoDiChebyshev() {
+        CombatSession session = mapped();
+
+        Set<GridPosition> reachable = session.reachableOrigins("hero");
+
+        // Sei caselle di raggio: 30 piedi di velocita' a 5 piedi per casella.
+        assertTrue(reachable.contains(new GridPosition(8, 2)), "sei caselle in linea");
+        assertTrue(reachable.contains(new GridPosition(8, 8)), "sei caselle in diagonale costano uguale");
+        assertFalse(reachable.contains(new GridPosition(9, 2)), "la settima e' fuori budget");
+    }
+
+    /**
+     * La garanzia che conta: cio' che il raggio illumina, il comando lo accetta.
+     *
+     * <p>E' l'invariante che tiene onesta la mappa — senza, l'interfaccia puo'
+     * promettere una casella che {@link CombatSession#moveCombatant} rifiuta.</p>
+     */
+    @Test
+    void ogniCasellaDichiarataRaggiungibileVieneDavveroAccettata() {
+        List<GridPosition> barrier = new ArrayList<>();
+        for (int row = 0; row < 15; row++) barrier.add(new GridPosition(3, row));
+        CombatSession reference = mapped();
+        reference.setBlockedCells(barrier);
+
+        for (GridPosition cell : reference.reachableOrigins("hero")) {
+            CombatSession attempt = mapped();
+            attempt.setBlockedCells(barrier);
+            attempt.moveCombatant("hero", cell);
+            assertEquals(
+                    cell,
+                    state(attempt).battleMap().placementOf("hero").orElseThrow().origin(),
+                    "dichiarata raggiungibile ma il comando non l'ha accettata: " + cell);
+        }
     }
 
     @Test
