@@ -4,6 +4,7 @@ import app.d6d.board.AreaTemplate;
 import app.d6d.board.BoardDocument;
 import app.d6d.board.BoardLayers;
 import app.d6d.board.FogMask;
+import app.d6d.board.FloorMask;
 import app.d6d.board.GridPoint;
 import app.d6d.board.InkStroke;
 import app.d6d.board.Label;
@@ -14,6 +15,7 @@ import app.d6d.board.StaticStamp;
 import app.d6d.board.TemplateShape;
 import app.d6d.board.TokenCategory;
 import app.d6d.board.TokenLootCategory;
+import app.d6d.board.WallMask;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -43,8 +45,10 @@ class BoardDocumentJsonCodecTest {
                                 true, TokenLootCategory.MISC, 2, "Denti di mimic", "Non rivelare"),
                         new SceneToken("token-fallback", "Carro", TokenCategory.VEHICLE, new GridPoint(3.5, 9.5),
                                 3, 0, 7, "", false, true, "")),
-                new BoardLayers(true, false, false, true, true),
-                fog);
+                new BoardLayers(false, false, true, false, false, false, true, true),
+                fog,
+                WallMask.empty(20, 15).withCell(4, 6, true).withCell(5, 6, true),
+                FloorMask.empty(20, 15).withCell(8, 7, true).withCell(9, 7, true));
 
         assertEquals(source, codec.decode(codec.encode(source)));
     }
@@ -55,8 +59,19 @@ class BoardDocumentJsonCodecTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> layers = (Map<String, Object>) encoded.get("layers");
         layers.remove("sceneTokensVisible");
+        layers.remove("backgroundVisible");
+        layers.remove("floorsVisible");
+        layers.remove("wallsVisible");
+        encoded.remove("walls");
+        encoded.remove("floors");
 
-        assertEquals(true, codec.decode(encoded).layers().sceneTokensVisible());
+        BoardDocument decoded = codec.decode(encoded);
+        assertEquals(true, decoded.layers().sceneTokensVisible());
+        assertEquals(true, decoded.layers().backgroundVisible());
+        assertEquals(true, decoded.layers().floorsVisible());
+        assertEquals(true, decoded.layers().wallsVisible());
+        assertEquals(WallMask.empty(0, 0), decoded.walls());
+        assertEquals(FloorMask.empty(0, 0), decoded.floors());
     }
 
     @Test

@@ -28,6 +28,7 @@ import app.d6d.domain.space.BattleMap
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.domain.space.TokenPlacement
+import app.d6d.board.WallMask
 import app.d6d.engine.CombatRuleException
 import app.d6d.engine.CombatSession
 import app.d6d.engine.ai.EnemyCpuActionReport
@@ -1559,6 +1560,18 @@ class BattleViewModel(
     fun setMapBackground(imageName: String) {
         if (imageName.isBlank()) mapEditMode = false
         command { session.setMapBackground(imageName) }
+    }
+
+    /** Sincronizza nel motore i muri persistenti posseduti dalla Board. */
+    fun setBlockedCells(walls: WallMask) {
+        val blocked = buildSet {
+            for (row in 0 until walls.rows()) {
+                for (column in 0 until walls.columns()) {
+                    if (walls.blocked(column, row)) add(GridPosition(column, row))
+                }
+            }
+        }
+        session.setBlockedCells(blocked)
     }
 
     /** Colloca lo sfondo sulla griglia (misure in caselle). Un passo annullabile. */

@@ -9,8 +9,10 @@ import app.d6d.board.BoardLayers
 import app.d6d.board.BoardLimits
 import app.d6d.board.BoardObject
 import app.d6d.board.FogMask
+import app.d6d.board.FloorMask
 import app.d6d.board.InkStroke
 import app.d6d.board.Measurement
+import app.d6d.board.WallMask
 
 /**
  * Proprietario del Lucido di una singola sessione.
@@ -21,6 +23,7 @@ import app.d6d.board.Measurement
 class BoardController(
     initial: BoardDocument = BoardDocument.empty(),
     private val historyLimit: Int = 30,
+    private val onDocumentChanged: (BoardDocument) -> Unit = {},
 ) {
     var document by mutableStateOf(initial)
         private set
@@ -30,6 +33,10 @@ class BoardController(
 
     private val undo = ArrayDeque<BoardDocument>()
     private val redo = ArrayDeque<BoardDocument>()
+
+    init {
+        onDocumentChanged(document)
+    }
 
     val canUndo: Boolean get() = undo.isNotEmpty()
     val canRedo: Boolean get() = redo.isNotEmpty()
@@ -41,6 +48,7 @@ class BoardController(
         redo.clear()
         document = next
         revision++
+        onDocumentChanged(document)
         return true
     }
 
@@ -92,6 +100,7 @@ class BoardController(
         undo.addAll(safeUndo)
         redo.clear()
         revision++
+        onDocumentChanged(document)
         return true
     }
 
@@ -99,11 +108,18 @@ class BoardController(
 
     fun setFog(value: FogMask): Boolean = commit(document.withFog(value))
 
+    fun setWalls(value: WallMask): Boolean = commit(document.withWalls(value))
+
+    /** Un gesto Floor può anche riaprire le stesse caselle nei Walls, restando un singolo Undo. */
+    fun setFloors(value: FloorMask, openedWalls: WallMask? = null): Boolean =
+        commit(document.withFloors(value).let { next -> openedWalls?.let(next::withWalls) ?: next })
+
     fun undo(): Boolean {
         if (undo.isEmpty()) return false
         redo.addLast(document)
         document = undo.removeLast()
         revision++
+        onDocumentChanged(document)
         return true
     }
 
@@ -112,6 +128,7 @@ class BoardController(
         undo.addLast(document)
         document = redo.removeLast()
         revision++
+        onDocumentChanged(document)
         return true
     }
 
@@ -121,6 +138,7 @@ class BoardController(
         undo.clear()
         redo.clear()
         revision++
+        onDocumentChanged(document)
     }
 }
 

@@ -148,6 +148,7 @@ fun BattleMapView(
 
     val map = viewModel.battleMap
     val grid = map.grid()
+    val boardLayers = board.document.layers()
     val placements = remember(map) { map.orderedPlacements() }
     val density = LocalDensity.current
     val background = portraits.rememberBitmap(map.backgroundImage())
@@ -471,7 +472,7 @@ fun BattleMapView(
             // Il fondale resta piatto: l'effetto lume lo da' la sola vignettatura
             // (con la sua grana anti-banding). Un secondo gradiente radiale qui
             // sotto raddoppierebbe gli anelli di quantizzazione sui neri.
-            if (background != null && shownBackground != null) {
+            if (boardLayers.backgroundVisible() && background != null && shownBackground != null) {
                 // La collocazione e' in caselle: moltiplicata per il lato-casella in
                 // pixel segue zoom e pan senza schiacciare l'immagine, che mantiene le
                 // proporzioni decise (o quelle scelte stirandola in modifica).
@@ -606,7 +607,7 @@ fun BattleMapView(
         // In modifica mappa, un velo sopra i segnaposti cattura il trascinamento per
         // spostare o stirare lo sfondo. Sta davanti a tutto (tranne la vignettatura),
         // cosi' i gesti non vengono rubati dai token e la camera non scorre.
-        if (editingBackground && background != null && shownBackground != null) {
+        if (editingBackground && boardLayers.backgroundVisible() && background != null && shownBackground != null) {
             BackgroundEditOverlay(
                 shown = shownBackground,
                 cellPx = cellPx,

@@ -192,4 +192,30 @@ class AreaSpellTest {
         assertThrows(RuntimeException.class,
                 () -> session.castArea("wizard", new GridPosition(39, 39), "fireball"));
     }
+
+    @Test
+    void a_wall_blocks_the_area_centre_before_spending_the_action() {
+        CombatSession session = scene(1L);
+        session.setBlockedCells(List.of(new GridPosition(2, 1)));
+
+        CombatRuleException failure = assertThrows(
+                CombatRuleException.class,
+                () -> session.castArea("wizard", new GridPosition(10, 10), "fireball"));
+
+        assertEquals("A wall blocks line of effect to the area centre", failure.getMessage());
+        assertTrue(session.currentState().turnBudgets().get("wizard").actionAvailable());
+    }
+
+    @Test
+    void a_wall_shields_only_creatures_without_line_of_effect_from_the_area_centre() {
+        CombatSession session = scene(1L);
+        session.setBlockedCells(List.of(new GridPosition(11, 10)));
+
+        AreaSpellResult result = session.castArea("wizard", new GridPosition(10, 10), "fireball");
+        Map<String, AreaTargetResult> byId = byTarget(result);
+
+        assertTrue(byId.containsKey("centre"));
+        assertTrue(byId.containsKey("ally"));
+        assertFalse(byId.containsKey("nimble"));
+    }
 }

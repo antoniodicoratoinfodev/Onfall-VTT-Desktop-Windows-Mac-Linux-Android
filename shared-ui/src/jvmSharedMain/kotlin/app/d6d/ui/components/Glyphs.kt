@@ -28,7 +28,7 @@ import kotlin.math.sin
  */
 enum class AppGlyph {
     SWORDS, D20, TOME, GEAR,
-    TABLE, EDIT_BOARD, HAND, MEASURE, INK, TEMPLATE, LABEL, PING, FOG, LAYERS, ERASER, TOKEN,
+    TABLE, EDIT_BOARD, HAND, MEASURE, INK, TEMPLATE, LABEL, PING, FOG, FLOOR, WALL, LAYERS, ERASER, TOKEN,
 }
 
 @Composable
@@ -126,6 +126,25 @@ private fun DrawScope.drawBoardGlyph(glyph: AppGlyph, tint: Color, stroke: Strok
         AppGlyph.FOG -> {
             line(.12f, .40f, .52f, .40f); line(.32f, .58f, .86f, .58f); line(.16f, .74f, .68f, .74f)
             drawCircle(tint.copy(alpha = .45f), w * .18f, Offset(w * .56f, h * .34f))
+        }
+        AppGlyph.FLOOR -> {
+            drawRect(
+                tint.copy(alpha = .16f), Offset(w * .14f, h * .14f),
+                androidx.compose.ui.geometry.Size(w * .72f, h * .72f),
+            )
+            line(.14f, .14f, .86f, .14f); line(.86f, .14f, .86f, .86f)
+            line(.86f, .86f, .14f, .86f); line(.14f, .86f, .14f, .14f)
+            line(.50f, .14f, .50f, .86f); line(.14f, .50f, .86f, .50f)
+            drawCircle(tint.copy(alpha = .55f), stroke.width * .55f, Offset(w * .32f, h * .32f))
+            drawCircle(tint.copy(alpha = .55f), stroke.width * .55f, Offset(w * .68f, h * .68f))
+        }
+        AppGlyph.WALL -> {
+            drawRect(tint.copy(alpha = .18f), Offset(w * .12f, h * .20f),
+                androidx.compose.ui.geometry.Size(w * .76f, h * .62f))
+            line(.12f, .20f, .88f, .20f); line(.88f, .20f, .88f, .82f)
+            line(.88f, .82f, .12f, .82f); line(.12f, .82f, .12f, .20f)
+            line(.12f, .50f, .88f, .50f); line(.38f, .20f, .38f, .50f)
+            line(.66f, .50f, .66f, .82f)
         }
         AppGlyph.LAYERS -> {
             fun diamond(cy: Float) {

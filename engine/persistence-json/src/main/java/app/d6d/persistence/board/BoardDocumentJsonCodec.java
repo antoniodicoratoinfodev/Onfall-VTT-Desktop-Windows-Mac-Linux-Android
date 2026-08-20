@@ -6,6 +6,7 @@ import app.d6d.board.BoardLayers;
 import app.d6d.board.BoardLimits;
 import app.d6d.board.BoardObject;
 import app.d6d.board.FogMask;
+import app.d6d.board.FloorMask;
 import app.d6d.board.GridPoint;
 import app.d6d.board.InkStroke;
 import app.d6d.board.Label;
@@ -16,6 +17,7 @@ import app.d6d.board.StaticStamp;
 import app.d6d.board.TemplateShape;
 import app.d6d.board.TokenCategory;
 import app.d6d.board.TokenLootCategory;
+import app.d6d.board.WallMask;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,6 +33,8 @@ public final class BoardDocumentJsonCodec {
         value.put("layers", encodeLayers(board.layers()));
         value.put("objects", board.objects().stream().map(this::encodeObject).toList());
         value.put("fog", encodeFog(board.fog()));
+        value.put("walls", encodeWalls(board.walls()));
+        value.put("floors", encodeFloors(board.floors()));
         return value;
     }
 
@@ -53,14 +57,23 @@ public final class BoardDocumentJsonCodec {
         FogMask fog = value.get("fog") == null
                 ? FogMask.empty(0, 0)
                 : decodeFog(object(value.get("fog"), "$.board.fog"));
-        return new BoardDocument(version, objects, layers, fog);
+        WallMask walls = value.get("walls") == null
+                ? WallMask.empty(fog.columns(), fog.rows())
+                : decodeWalls(object(value.get("walls"), "$.board.walls"));
+        FloorMask floors = value.get("floors") == null
+                ? FloorMask.empty(walls.columns(), walls.rows())
+                : decodeFloors(object(value.get("floors"), "$.board.floors"));
+        return new BoardDocument(version, objects, layers, fog, walls, floors);
     }
 
     private Map<String, Object> encodeLayers(BoardLayers layers) {
         Map<String, Object> value = new LinkedHashMap<>();
+        value.put("backgroundVisible", layers.backgroundVisible());
+        value.put("floorsVisible", layers.floorsVisible());
         value.put("annotationsVisible", layers.annotationsVisible());
         value.put("stampsVisible", layers.stampsVisible());
         value.put("sceneTokensVisible", layers.sceneTokensVisible());
+        value.put("wallsVisible", layers.wallsVisible());
         value.put("fogVisible", layers.fogVisible());
         value.put("locked", layers.locked());
         return value;
@@ -68,9 +81,12 @@ public final class BoardDocumentJsonCodec {
 
     private BoardLayers decodeLayers(Map<String, ?> value) {
         return new BoardLayers(
+                bool(value.get("backgroundVisible"), "$.board.layers.backgroundVisible", true),
+                bool(value.get("floorsVisible"), "$.board.layers.floorsVisible", true),
                 bool(value.get("annotationsVisible"), "$.board.layers.annotationsVisible", true),
                 bool(value.get("stampsVisible"), "$.board.layers.stampsVisible", true),
                 bool(value.get("sceneTokensVisible"), "$.board.layers.sceneTokensVisible", true),
+                bool(value.get("wallsVisible"), "$.board.layers.wallsVisible", true),
                 bool(value.get("fogVisible"), "$.board.layers.fogVisible", true),
                 bool(value.get("locked"), "$.board.layers.locked", false));
     }
@@ -280,6 +296,146 @@ public final class BoardDocumentJsonCodec {
             }
             int start = index++;
             while (index < cells && fog.covered(index % fog.columns(), index / fog.columns())) index++;
+            result.add(List.of(start, index - start));
+        }
+        return result;
+    }
+
+    private Map<String, Object> encodeWalls(WallMask walls) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("columns", walls.columns());
+        value.put("rows", walls.rows());
+        List<List<Integer>> runs = wallRuns(walls);
+        if (runs.size() * 2 < walls.words().size()) {
+            value.put("encoding", "runs");
+            value.put("data", runs);
+        } else {
+            value.put("encoding", "bitset");
+            value.put("data", walls.words());
+        }
+        return value;
+    }
+
+    private WallMask decodeWalls(Map<String, ?> value) {
+        int columns = integer(value.get("columns"), "$.board.walls.columns");
+        int rows = integer(value.get("rows"), "$.board.walls.rows");
+        if (columns < 0 || rows < 0
+                || columns > BoardLimits.MAX_FOG_DIMENSION || rows > BoardLimits.MAX_FOG_DIMENSION) {
+            throw invalid("$.board.walls", "dimensions are outside the supported map limits");
+        }
+        String encoding = string(value.get("encoding"), "$.board.walls.encoding");
+        if (encoding.equals("bitset")) {
+            List<?> raw = list(value.get("data"), "$.board.walls.data");
+            List<Long> words = new ArrayList<>(raw.size());
+            for (int index = 0; index < raw.size(); index++) {
+                words.add(longInteger(raw.get(index), "$.board.walls.data[" + index + "]"));
+            }
+            return new WallMask(columns, rows, words);
+        }
+        if (!encoding.equals("runs")) throw invalid("$.board.walls.encoding", "unknown encoding");
+        int cells = Math.multiplyExact(columns, rows);
+        List<Long> words = new ArrayList<>(java.util.Collections.nCopies((cells + 63) >>> 6, 0L));
+        int previousEnd = 0;
+        List<?> rawRuns = list(value.get("data"), "$.board.walls.data");
+        if (rawRuns.size() > cells) throw invalid("$.board.walls.data", "too many runs");
+        for (int index = 0; index < rawRuns.size(); index++) {
+            List<?> pair = list(rawRuns.get(index), "$.board.walls.data[" + index + "]");
+            if (pair.size() != 2) throw invalid("$.board.walls.data[" + index + "]", "run must have start and length");
+            int start = integer(pair.get(0), "$.board.walls.data[" + index + "][0]");
+            int length = integer(pair.get(1), "$.board.walls.data[" + index + "][1]");
+            if (start < previousEnd || length <= 0 || start > cells - length) {
+                throw invalid("$.board.walls.data[" + index + "]", "invalid or overlapping run");
+            }
+            for (int cell = start; cell < start + length; cell++) {
+                int word = cell >>> 6;
+                words.set(word, words.get(word) | (1L << (cell & 63)));
+            }
+            previousEnd = start + length;
+        }
+        return new WallMask(columns, rows, words);
+    }
+
+    private List<List<Integer>> wallRuns(WallMask walls) {
+        List<List<Integer>> result = new ArrayList<>();
+        int cells = walls.columns() * walls.rows();
+        int index = 0;
+        while (index < cells) {
+            if (!walls.blocked(index % walls.columns(), index / walls.columns())) {
+                index++;
+                continue;
+            }
+            int start = index++;
+            while (index < cells && walls.blocked(index % walls.columns(), index / walls.columns())) index++;
+            result.add(List.of(start, index - start));
+        }
+        return result;
+    }
+
+    private Map<String, Object> encodeFloors(FloorMask floors) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("columns", floors.columns());
+        value.put("rows", floors.rows());
+        List<List<Integer>> runs = floorRuns(floors);
+        if (runs.size() * 2 < floors.words().size()) {
+            value.put("encoding", "runs");
+            value.put("data", runs);
+        } else {
+            value.put("encoding", "bitset");
+            value.put("data", floors.words());
+        }
+        return value;
+    }
+
+    private FloorMask decodeFloors(Map<String, ?> value) {
+        int columns = integer(value.get("columns"), "$.board.floors.columns");
+        int rows = integer(value.get("rows"), "$.board.floors.rows");
+        if (columns < 0 || rows < 0
+                || columns > BoardLimits.MAX_FOG_DIMENSION || rows > BoardLimits.MAX_FOG_DIMENSION) {
+            throw invalid("$.board.floors", "dimensions are outside the supported map limits");
+        }
+        String encoding = string(value.get("encoding"), "$.board.floors.encoding");
+        if (encoding.equals("bitset")) {
+            List<?> raw = list(value.get("data"), "$.board.floors.data");
+            List<Long> words = new ArrayList<>(raw.size());
+            for (int index = 0; index < raw.size(); index++) {
+                words.add(longInteger(raw.get(index), "$.board.floors.data[" + index + "]"));
+            }
+            return new FloorMask(columns, rows, words);
+        }
+        if (!encoding.equals("runs")) throw invalid("$.board.floors.encoding", "unknown encoding");
+        int cells = Math.multiplyExact(columns, rows);
+        List<Long> words = new ArrayList<>(java.util.Collections.nCopies((cells + 63) >>> 6, 0L));
+        int previousEnd = 0;
+        List<?> rawRuns = list(value.get("data"), "$.board.floors.data");
+        if (rawRuns.size() > cells) throw invalid("$.board.floors.data", "too many runs");
+        for (int index = 0; index < rawRuns.size(); index++) {
+            List<?> pair = list(rawRuns.get(index), "$.board.floors.data[" + index + "]");
+            if (pair.size() != 2) throw invalid("$.board.floors.data[" + index + "]", "run must have start and length");
+            int start = integer(pair.get(0), "$.board.floors.data[" + index + "][0]");
+            int length = integer(pair.get(1), "$.board.floors.data[" + index + "][1]");
+            if (start < previousEnd || length <= 0 || start > cells - length) {
+                throw invalid("$.board.floors.data[" + index + "]", "invalid or overlapping run");
+            }
+            for (int cell = start; cell < start + length; cell++) {
+                int word = cell >>> 6;
+                words.set(word, words.get(word) | (1L << (cell & 63)));
+            }
+            previousEnd = start + length;
+        }
+        return new FloorMask(columns, rows, words);
+    }
+
+    private List<List<Integer>> floorRuns(FloorMask floors) {
+        List<List<Integer>> result = new ArrayList<>();
+        int cells = floors.columns() * floors.rows();
+        int index = 0;
+        while (index < cells) {
+            if (!floors.painted(index % floors.columns(), index / floors.columns())) {
+                index++;
+                continue;
+            }
+            int start = index++;
+            while (index < cells && floors.painted(index % floors.columns(), index / floors.columns())) index++;
             result.add(List.of(start, index - start));
         }
         return result;

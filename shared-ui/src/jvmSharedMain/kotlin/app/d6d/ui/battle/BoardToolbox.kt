@@ -35,12 +35,16 @@ import androidx.compose.ui.unit.dp
 import app.d6d.board.BoardLayers
 import app.d6d.board.BoardObject
 import app.d6d.board.AreaTemplate
+import app.d6d.board.FogMask
+import app.d6d.board.FloorMask
 import app.d6d.board.Label
 import app.d6d.board.StaticStamp
 import app.d6d.board.Measurement
 import app.d6d.board.SceneToken
 import app.d6d.board.StampKind
 import app.d6d.board.TemplateShape
+import app.d6d.board.WallMask
+import app.d6d.domain.space.MapGrid
 import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
@@ -65,6 +69,8 @@ internal val BOARD_TOOLS = listOf(
     ToolEntry(BoardTool.LABEL, AppGlyph.LABEL) { it.label },
     ToolEntry(BoardTool.PING, AppGlyph.PING) { it.ping },
     ToolEntry(BoardTool.FOG, AppGlyph.FOG) { it.fog },
+    ToolEntry(BoardTool.FLOOR, AppGlyph.FLOOR) { it.floor },
+    ToolEntry(BoardTool.WALL, AppGlyph.WALL) { it.wall },
     ToolEntry(BoardTool.TOKEN, AppGlyph.TOKEN) { it.token },
     ToolEntry(BoardTool.ERASER, AppGlyph.ERASER) { it.eraser },
 )
@@ -89,52 +95,58 @@ internal fun BoardToolboxPanel(
             .padding(7.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            BOARD_TOOLS.forEach { entry ->
-                val persistent = entry.tool in setOf(
-                    BoardTool.EDIT, BoardTool.INK, BoardTool.TEMPLATE,
-                    BoardTool.LABEL, BoardTool.FOG, BoardTool.TOKEN, BoardTool.ERASER,
-                )
-                val previewAllowed = !state.playerPreview || entry.tool in setOf(
-                    BoardTool.TABLE, BoardTool.HAND, BoardTool.MEASURE, BoardTool.PING, BoardTool.FOG,
-                )
-                val enabled = (!locked || !persistent) && previewAllowed &&
-                    (entry.tool != BoardTool.FOG || state.playerPreview)
-                BoardToolButton(
-                    entry = entry,
-                    selected = state.active == entry.tool,
-                    enabled = enabled,
-                    showLabel = true,
-                    touchTarget = compact,
-                    onClick = { onSelect(entry.tool) },
-                )
+        if (state.layersOpen) {
+            Text(words.layers, color = Palette.Gold, style = MaterialTheme.typography.titleSmall)
+            BoardOptionButton(words.tools, compact, onClick = { state.layersOpen = false })
+            BoardLayersPanel(state, board, compact)
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                BOARD_TOOLS.forEach { entry ->
+                    val persistent = entry.tool in setOf(
+                        BoardTool.EDIT, BoardTool.INK, BoardTool.TEMPLATE,
+                        BoardTool.LABEL, BoardTool.FOG, BoardTool.FLOOR, BoardTool.WALL,
+                        BoardTool.TOKEN, BoardTool.ERASER,
+                    )
+                    val previewAllowed = !state.playerPreview || entry.tool in setOf(
+                        BoardTool.TABLE, BoardTool.HAND, BoardTool.MEASURE, BoardTool.PING,
+                    )
+                    val enabled = (!locked || !persistent) && previewAllowed
+                    BoardToolButton(
+                        entry = entry,
+                        selected = state.active == entry.tool,
+                        enabled = enabled,
+                        showLabel = true,
+                        touchTarget = compact,
+                        onClick = { onSelect(entry.tool) },
+                    )
+                }
+                BoardCommandButton(
+                    AppGlyph.LAYERS, words.layers, selected = false,
+                    showLabel = true, touchTarget = compact,
+                ) {
+                    state.layersOpen = true
+                }
             }
-            BoardCommandButton(AppGlyph.LAYERS, words.layers, state.layersOpen, touchTarget = compact) {
-                state.layersOpen = !state.layersOpen
-            }
-        }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            BoardOptionButton(words.undo, compact, enabled = board.canUndo, onClick = board::undo)
-            BoardOptionButton(words.redo, compact, enabled = board.canRedo, onClick = board::redo)
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                BoardOptionButton(words.undo, compact, enabled = board.canUndo, onClick = board::undo)
+                BoardOptionButton(words.redo, compact, enabled = board.canRedo, onClick = board::redo)
+            }
+            if (!compact) {
+                BoardOptionButton(
+                    label = if (layout.toolboxPinned) words.unpin else words.pin,
+                    compact = false,
+                    selected = layout.toolboxPinned,
+                    onClick = { layout.toolboxPinned = !layout.toolboxPinned },
+                )
+            }
+            if (locked) {
+                Text(words.boardLockedHint, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+            }
         }
-        if (!compact) {
-            BoardOptionButton(
-                label = if (layout.toolboxPinned) words.unpin else words.pin,
-                compact = false,
-                selected = layout.toolboxPinned,
-                onClick = { layout.toolboxPinned = !layout.toolboxPinned },
-            )
-        }
-        if (locked) {
-            Text(words.boardLockedHint, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
-        } else if (!state.playerPreview) {
-            Text(words.fogNeedsPlayerView, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
-        }
-        if (state.layersOpen) BoardLayersPanel(state, board, compact)
     }
 }
 
@@ -157,16 +169,16 @@ internal fun BoardToolRail(
         BOARD_TOOLS.forEach { entry ->
             val persistent = entry.tool in setOf(
                 BoardTool.EDIT, BoardTool.INK, BoardTool.TEMPLATE,
-                BoardTool.LABEL, BoardTool.FOG, BoardTool.TOKEN, BoardTool.ERASER,
+                BoardTool.LABEL, BoardTool.FOG, BoardTool.FLOOR, BoardTool.WALL,
+                BoardTool.TOKEN, BoardTool.ERASER,
             )
             BoardToolButton(
                 entry,
                 selected = state.active == entry.tool,
                 enabled = (!locked || !persistent) &&
                     (!state.playerPreview || entry.tool in setOf(
-                        BoardTool.TABLE, BoardTool.HAND, BoardTool.MEASURE, BoardTool.PING, BoardTool.FOG,
-                    )) &&
-                    (entry.tool != BoardTool.FOG || state.playerPreview),
+                        BoardTool.TABLE, BoardTool.HAND, BoardTool.MEASURE, BoardTool.PING,
+                    )),
                 showLabel = false,
                 onClick = { onSelect(entry.tool) },
             )
@@ -226,23 +238,37 @@ private fun BoardCommandButton(
     glyph: AppGlyph,
     label: String,
     selected: Boolean,
+    showLabel: Boolean = false,
     touchTarget: Boolean = false,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(6.dp)
-    Box(
+    Row(
         Modifier
             .sizeIn(
-                minWidth = if (touchTarget) 48.dp else 40.dp,
+                minWidth = when {
+                    showLabel -> 82.dp
+                    touchTarget -> 48.dp
+                    else -> 40.dp
+                },
                 minHeight = if (touchTarget) 48.dp else 40.dp,
             )
             .background(if (selected) Palette.Gold else Palette.SurfaceHigh, shape)
             .border(1.dp, if (selected) Palette.GoldBright else Palette.Line, shape)
             .semantics { role = Role.Button; contentDescription = label; this.selected = selected }
-            .clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 7.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         GlyphIcon(glyph, if (selected) Palette.Abyss else Palette.Gold, size = 18.dp)
+        if (showLabel) {
+            Text(
+                label,
+                color = if (selected) Palette.Abyss else Palette.Gold,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
     }
 }
 
@@ -274,36 +300,34 @@ private fun BoardLayersPanel(state: BoardToolState, board: BoardController, comp
         if (selected != null && hidden(selected)) state.selectedId = null
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        LayerToggle(words.background, true, compact, enabled = false) { }
+        LayerToggle(words.background, layers.backgroundVisible(), compact) {
+            board.setLayers(layers.withBackgroundVisible(it))
+        }
+        LayerToggle(words.floor, layers.floorsVisible(), compact) {
+            board.setLayers(layers.withFloorsVisible(it))
+        }
         LayerToggle(words.grid, layout.mapShowGrid, compact) { layout.mapShowGrid = it }
         LayerToggle("${words.combatants} · ${words.protectedLayer}", true, compact, enabled = false) { }
         LayerToggle(words.sceneTokens, layers.sceneTokensVisible(), compact) {
-            board.setLayers(BoardLayers(
-                layers.annotationsVisible(), layers.stampsVisible(), it, layers.fogVisible(), layers.locked(),
-            ))
+            board.setLayers(layers.withSceneTokensVisible(it))
             if (!it) clearSelectionIfHidden { item -> item is SceneToken }
         }
         LayerToggle(words.annotations, layers.annotationsVisible(), compact) {
-            board.setLayers(BoardLayers(
-                it, layers.stampsVisible(), layers.sceneTokensVisible(), layers.fogVisible(), layers.locked(),
-            ))
+            board.setLayers(layers.withAnnotationsVisible(it))
             if (!it) clearSelectionIfHidden { item -> item !is StaticStamp && item !is SceneToken }
         }
         LayerToggle(words.stamps, layers.stampsVisible(), compact) {
-            board.setLayers(BoardLayers(
-                layers.annotationsVisible(), it, layers.sceneTokensVisible(), layers.fogVisible(), layers.locked(),
-            ))
+            board.setLayers(layers.withStampsVisible(it))
             if (!it) clearSelectionIfHidden { item -> item is StaticStamp }
         }
+        LayerToggle(words.wall, layers.wallsVisible(), compact) {
+            board.setLayers(layers.withWallsVisible(it))
+        }
         LayerToggle(words.fog, layers.fogVisible(), compact) {
-            board.setLayers(BoardLayers(
-                layers.annotationsVisible(), layers.stampsVisible(), layers.sceneTokensVisible(), it, layers.locked(),
-            ))
+            board.setLayers(layers.withFogVisible(it))
         }
         LayerToggle(if (layers.locked()) words.unlock else words.lock, layers.locked(), compact) {
-            board.setLayers(BoardLayers(
-                layers.annotationsVisible(), layers.stampsVisible(), layers.sceneTokensVisible(), layers.fogVisible(), it,
-            ))
+            board.setLayers(layers.withLocked(it))
             if (it && state.active !in setOf(BoardTool.TABLE, BoardTool.HAND, BoardTool.MEASURE, BoardTool.PING)) {
                 state.table()
             }
@@ -312,12 +336,44 @@ private fun BoardLayersPanel(state: BoardToolState, board: BoardController, comp
             state.playerPreview = it
             if (
                 (it && state.active !in setOf(
-                    BoardTool.TABLE, BoardTool.HAND, BoardTool.MEASURE, BoardTool.PING, BoardTool.FOG,
-                )) || (!it && state.active == BoardTool.FOG)
+                    BoardTool.TABLE, BoardTool.HAND, BoardTool.MEASURE, BoardTool.PING,
+                ))
             ) state.table()
         }
     }
 }
+
+private fun BoardLayers.withBackgroundVisible(value: Boolean) = BoardLayers(
+    value, floorsVisible(), annotationsVisible(), stampsVisible(), sceneTokensVisible(), wallsVisible(), fogVisible(), locked(),
+)
+
+private fun BoardLayers.withFloorsVisible(value: Boolean) = BoardLayers(
+    backgroundVisible(), value, annotationsVisible(), stampsVisible(), sceneTokensVisible(), wallsVisible(), fogVisible(), locked(),
+)
+
+private fun BoardLayers.withAnnotationsVisible(value: Boolean) = BoardLayers(
+    backgroundVisible(), floorsVisible(), value, stampsVisible(), sceneTokensVisible(), wallsVisible(), fogVisible(), locked(),
+)
+
+private fun BoardLayers.withStampsVisible(value: Boolean) = BoardLayers(
+    backgroundVisible(), floorsVisible(), annotationsVisible(), value, sceneTokensVisible(), wallsVisible(), fogVisible(), locked(),
+)
+
+private fun BoardLayers.withSceneTokensVisible(value: Boolean) = BoardLayers(
+    backgroundVisible(), floorsVisible(), annotationsVisible(), stampsVisible(), value, wallsVisible(), fogVisible(), locked(),
+)
+
+private fun BoardLayers.withWallsVisible(value: Boolean) = BoardLayers(
+    backgroundVisible(), floorsVisible(), annotationsVisible(), stampsVisible(), sceneTokensVisible(), value, fogVisible(), locked(),
+)
+
+private fun BoardLayers.withFogVisible(value: Boolean) = BoardLayers(
+    backgroundVisible(), floorsVisible(), annotationsVisible(), stampsVisible(), sceneTokensVisible(), wallsVisible(), value, locked(),
+)
+
+private fun BoardLayers.withLocked(value: Boolean) = BoardLayers(
+    backgroundVisible(), floorsVisible(), annotationsVisible(), stampsVisible(), sceneTokensVisible(), wallsVisible(), fogVisible(), value,
+)
 
 @Composable
 private fun LayerToggle(
@@ -335,6 +391,7 @@ private fun LayerToggle(
 internal fun BoardToolOptions(
     state: BoardToolState,
     board: BoardController,
+    grid: MapGrid,
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -421,6 +478,59 @@ internal fun BoardToolOptions(
             BoardTool.FOG -> {
                 BoardOptionButton(words.revealFog, compact, selected = !state.fogCovering, onClick = { state.fogCovering = false })
                 BoardOptionButton(words.coverFog, compact, selected = state.fogCovering, onClick = { state.fogCovering = true })
+                Text(words.brushSize, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                listOf(1, 3, 5).forEach { size ->
+                    BoardOptionButton(
+                        "${size}×$size", compact, selected = state.fogBrushSize == size,
+                        onClick = { state.fogBrushSize = size },
+                    )
+                }
+                BoardOptionButton(words.coverAllFog, compact, onClick = {
+                    board.setFog(FogMask.fullyCovered(grid.columns(), grid.rows()))
+                })
+                BoardOptionButton(words.revealAllFog, compact, onClick = {
+                    board.setFog(FogMask.empty(grid.columns(), grid.rows()))
+                })
+                Text(words.fogPaintHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+            }
+            BoardTool.FLOOR -> {
+                BoardOptionButton(
+                    words.paintFloors, compact, selected = state.floorAdding,
+                    onClick = { state.floorAdding = true },
+                )
+                BoardOptionButton(
+                    words.eraseFloors, compact, selected = !state.floorAdding,
+                    onClick = { state.floorAdding = false },
+                )
+                Text(words.brushSize, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                listOf(1, 3, 5).forEach { size ->
+                    BoardOptionButton(
+                        "${size}×$size", compact, selected = state.floorBrushSize == size,
+                        onClick = { state.floorBrushSize = size },
+                    )
+                }
+                BoardOptionButton(words.fillFloors, compact, onClick = {
+                    board.setFloors(FloorMask.filled(grid.columns(), grid.rows()))
+                })
+                BoardOptionButton(words.clearFloors, compact, onClick = {
+                    board.setFloors(FloorMask.empty(grid.columns(), grid.rows()))
+                })
+                Text(words.floorHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+            }
+            BoardTool.WALL -> {
+                BoardOptionButton(words.addWalls, compact, selected = state.wallAdding, onClick = { state.wallAdding = true })
+                BoardOptionButton(words.eraseWalls, compact, selected = !state.wallAdding, onClick = { state.wallAdding = false })
+                Text(words.brushSize, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                listOf(1, 3, 5).forEach { size ->
+                    BoardOptionButton(
+                        "${size}×$size", compact, selected = state.wallBrushSize == size,
+                        onClick = { state.wallBrushSize = size },
+                    )
+                }
+                BoardOptionButton(words.clearWalls, compact, onClick = {
+                    board.setWalls(WallMask.empty(grid.columns(), grid.rows()))
+                })
+                Text(words.wallHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
             }
             BoardTool.TOKEN -> {
                 if (state.pendingToken == null) {

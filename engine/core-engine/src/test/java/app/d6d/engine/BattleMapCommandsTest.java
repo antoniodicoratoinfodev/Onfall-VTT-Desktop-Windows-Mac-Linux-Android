@@ -1,12 +1,20 @@
 package app.d6d.engine;
 
 import app.d6d.domain.combat.AttackRequest;
+import app.d6d.domain.combat.AbilityDefinition;
+import app.d6d.domain.combat.ActivationCost;
+import app.d6d.domain.combat.ActorDefinition;
 import app.d6d.domain.combat.CombatState;
+import app.d6d.domain.combat.DamageFormula;
+import app.d6d.domain.combat.DamageType;
+import app.d6d.domain.combat.ResolutionMethod;
+import app.d6d.domain.combat.SaveAbility;
 import app.d6d.domain.space.GridPosition;
 import app.d6d.domain.space.MapGrid;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -217,5 +225,77 @@ class BattleMapCommandsTest {
         session.placeCombatant("hero", new GridPosition(9, 9), 1);
 
         assertEquals(before, state(session).turnBudgets().get("hero").movementRemainingFeet());
+    }
+
+    @Test
+    void nonSiPuoTerminareIlMovimentoSuUnMuro() {
+        CombatSession session = mapped();
+        session.setBlockedCells(List.of(new GridPosition(4, 2)));
+
+        CombatRuleException failure = assertThrows(
+                CombatRuleException.class,
+                () -> session.moveCombatant("hero", new GridPosition(4, 2)));
+
+        assertEquals("The destination is blocked by a wall", failure.getMessage());
+        assertEquals(new GridPosition(2, 2), state(session).battleMap().placementOf("hero").orElseThrow().origin());
+    }
+
+    @Test
+    void aggirareUnMuroConsumaIlPercorsoReale() {
+        CombatSession session = mapped();
+        session.setBlockedCells(List.of(new GridPosition(3, 2)));
+
+        int spent = session.moveCombatant("hero", new GridPosition(4, 2));
+
+        assertEquals(20, spent, "il muro impedisce sia il passaggio diretto sia il taglio diagonale dell'angolo");
+    }
+
+    @Test
+    void unaBarrieraDaBordoABordoRendeLaDestinazioneIrraggiungibile() {
+        CombatSession session = mapped();
+        List<GridPosition> barrier = new ArrayList<>();
+        for (int row = 0; row < 15; row++) barrier.add(new GridPosition(3, row));
+        session.setBlockedCells(barrier);
+
+        CombatRuleException failure = assertThrows(
+                CombatRuleException.class,
+                () -> session.moveCombatant("hero", new GridPosition(4, 2)));
+
+        assertEquals("A wall blocks every path to the destination", failure.getMessage());
+    }
+
+    @Test
+    void unMuroBloccaUnAttaccoSenzaConsumareLAzione() {
+        AbilityDefinition bow = AbilityDefinition.builder("bow", "Bow")
+                .activationCost(ActivationCost.ACTION)
+                .resolutionMethod(ResolutionMethod.ATTACK_ROLL)
+                .attackAbility(SaveAbility.DEXTERITY)
+                .attackBonus(100)
+                .rangeFeet(60)
+                .damage(List.of(DamageFormula.fixed(DamageType.PIERCING, 5)))
+                .build();
+        ActorDefinition archer = ActorDefinition.builder("archer", "Archer")
+                .maxHitPoints(30)
+                .speedFeet(30)
+                .abilities(List.of(bow))
+                .build();
+        CombatSession session = CombatSession.create("walls", 77L);
+        session.addCombatant("hero", archer);
+        session.addCombatant("goblin", CombatFixtures.goblin());
+        session.setInitiative("hero", 20);
+        session.setInitiative("goblin", 10);
+        session.markReady();
+        session.start();
+        session.configureMap(MapGrid.standard(10, 10));
+        session.placeCombatant("hero", new GridPosition(1, 2), 1);
+        session.placeCombatant("goblin", new GridPosition(5, 2), 1);
+        session.setBlockedCells(List.of(new GridPosition(3, 2)));
+
+        CombatRuleException failure = assertThrows(
+                CombatRuleException.class,
+                () -> session.attack(AttackRequest.manual("hero", "goblin", "bow", 18, List.of(5))));
+
+        assertEquals("A wall blocks line of effect to the target", failure.getMessage());
+        assertTrue(state(session).turnBudgets().get("hero").actionAvailable());
     }
 }

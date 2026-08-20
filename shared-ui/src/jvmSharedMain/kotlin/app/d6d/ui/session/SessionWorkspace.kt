@@ -170,8 +170,8 @@ class SessionWorkspace(
     ): OpenGameSession {
         val id = newId()
         val battle = battleFactory(session)
-        val board = BoardController(boardDocument)
         if (presentation.isNotEmpty()) battle.adopt(session, presentation)
+        val board = boardFor(battle, boardDocument)
         freezeUnplacedFootprints(battle)
         val manager = managerFor(id, battle, board).also {
             it.beginUnsavedSession(displayName)
@@ -196,7 +196,7 @@ class SessionWorkspace(
             val archive = store.load(summary.slug)
             val id = newId()
             val battle = battleFactory(archive.session)
-            val board = BoardController(archive.board)
+            val board = boardFor(battle, archive.board)
             val manager = managerFor(id, battle, board)
             manager.attachLoaded(archive)
             // Migrazione trasparente dei salvataggi più vecchi, nei quali la taglia
@@ -352,8 +352,8 @@ class SessionWorkspace(
         val restored = recovery.sessions.map { recovered ->
             val id = newId()
             val battle = battleFactory(recovered.session)
-            val board = BoardController(recovered.board)
             battle.adopt(recovered.session, recovered.presentation)
+            val board = boardFor(battle, recovered.board)
             freezeUnplacedFootprints(battle)
             val manager = managerFor(id, battle, board).also {
                 it.attachRecovered(recovered.currentSlug, recovered.displayName)
@@ -443,6 +443,9 @@ class SessionWorkspace(
             },
             refreshOnCreate = refreshManagersOnCreate,
         )
+
+    private fun boardFor(battle: BattleViewModel, document: BoardDocument): BoardController =
+        BoardController(document, onDocumentChanged = { changed -> battle.setBlockedCells(changed.walls()) })
 
     private fun freezeUnplacedFootprints(battle: BattleViewModel) {
         battle.state.combatants().keys.forEach { combatantId ->

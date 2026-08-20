@@ -11,6 +11,8 @@ interface BoardStrings {
     val label: String
     val ping: String
     val fog: String
+    val floor: String
+    val wall: String
     val layers: String
     val eraser: String
     val token: String
@@ -25,6 +27,19 @@ interface BoardStrings {
     val playerPreview: String
     val coverFog: String
     val revealFog: String
+    val coverAllFog: String
+    val revealAllFog: String
+    val fogPaintHint: String
+    val brushSize: String
+    val paintFloors: String
+    val eraseFloors: String
+    val fillFloors: String
+    val clearFloors: String
+    val floorHint: String
+    val addWalls: String
+    val eraseWalls: String
+    val clearWalls: String
+    val wallHint: String
     val pinMeasurement: String
     val clearMeasurement: String
     val strokeWidth: String
@@ -120,6 +135,8 @@ object BoardStringsIt : BoardStrings {
     override val label = "Cartiglio"
     override val ping = "Richiamo"
     override val fog = "Nebbia"
+    override val floor = "Pavimento"
+    override val wall = "Muri"
     override val layers = "Strati"
     override val eraser = "Gomma"
     override val token = "Pedina"
@@ -134,6 +151,19 @@ object BoardStringsIt : BoardStrings {
     override val playerPreview = "Anteprima giocatori"
     override val coverFog = "Copri"
     override val revealFog = "Scopri"
+    override val coverAllFog = "Copri tutto"
+    override val revealAllFog = "Scopri tutto"
+    override val fogPaintHint = "Trascina sulla mappa per coprire o scoprire le caselle. L’anteprima giocatori mostra il risultato finale."
+    override val brushSize = "Pennello"
+    override val paintFloors = "Disegna pavimento"
+    override val eraseFloors = "Cancella pavimento"
+    override val fillFloors = "Riempi mappa"
+    override val clearFloors = "Rimuovi pavimento"
+    override val floorHint = "Ogni casella è calpestabile di base. Il Pavimento evidenzia le aree percorribili e, quando lo disegni, rimuove i muri sotto il pennello; Riempi mappa conserva i muri."
+    override val addWalls = "Aggiungi muri"
+    override val eraseWalls = "Cancella muri"
+    override val clearWalls = "Rimuovi tutti i muri"
+    override val wallHint = "Trascina sulle caselle: i muri bloccano movimento, attacchi e linea d’effetto anche quando lo strato è nascosto."
     override val pinMeasurement = "Appunta"
     override val clearMeasurement = "Pulisci misura"
     override val strokeWidth = "Spessore"
@@ -155,7 +185,7 @@ object BoardStringsIt : BoardStrings {
     override val door = "Porta"
     override val treasure = "Tesoro"
     override val boardLockedHint = "Il Lucido è bloccato: sbloccalo da Strati per modificarlo."
-    override val fogNeedsPlayerView = "La Nebbia si usa insieme all’anteprima giocatori."
+    override val fogNeedsPlayerView = "Modifica la Nebbia qui; usa l’anteprima giocatori solo per controllare il risultato."
     override val illustrativeTemplate = "Sagoma illustrativa: non applica automaticamente le regole."
     override val deleteObject = "Elimina"
     override val smaller = "Riduci"
@@ -232,6 +262,8 @@ object BoardStringsEn : BoardStrings {
     override val label = "Label"
     override val ping = "Ping"
     override val fog = "Fog"
+    override val floor = "Floor"
+    override val wall = "Walls"
     override val layers = "Layers"
     override val eraser = "Eraser"
     override val token = "Token"
@@ -246,6 +278,19 @@ object BoardStringsEn : BoardStrings {
     override val playerPreview = "Player preview"
     override val coverFog = "Cover"
     override val revealFog = "Reveal"
+    override val coverAllFog = "Cover all"
+    override val revealAllFog = "Reveal all"
+    override val fogPaintHint = "Drag across the map to cover or reveal cells. Player preview shows the final result."
+    override val brushSize = "Brush"
+    override val paintFloors = "Paint floor"
+    override val eraseFloors = "Erase floor"
+    override val fillFloors = "Fill map"
+    override val clearFloors = "Remove floor"
+    override val floorHint = "Every cell is walkable by default. Floor highlights walkable areas and clears walls beneath the brush; Fill map preserves walls."
+    override val addWalls = "Add walls"
+    override val eraseWalls = "Erase walls"
+    override val clearWalls = "Remove all walls"
+    override val wallHint = "Drag across cells: walls block movement, attacks, and line of effect even when their layer is hidden."
     override val pinMeasurement = "Pin"
     override val clearMeasurement = "Clear measure"
     override val strokeWidth = "Width"
@@ -267,7 +312,7 @@ object BoardStringsEn : BoardStrings {
     override val door = "Door"
     override val treasure = "Treasure"
     override val boardLockedHint = "The Board is locked. Unlock it in Layers to edit it."
-    override val fogNeedsPlayerView = "Fog is available together with the player preview."
+    override val fogNeedsPlayerView = "Edit Fog here; use player preview only to check the final result."
     override val illustrativeTemplate = "Illustrative template: it does not apply rules automatically."
     override val deleteObject = "Delete"
     override val smaller = "Smaller"

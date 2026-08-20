@@ -69,6 +69,8 @@ public final class CombatSession {
     private final DeterministicDice dice;
     private final List<CombatEvent> audit;
     private final Deque<Checkpoint> undoStack = new ArrayDeque<>();
+    /** Regole spaziali della Board: persistono nel documento Board, non nell'Undo del combattimento. */
+    private Set<GridPosition> blockedCells = Set.of();
     private long nextEventSequence;
     private long revisionCounter;
 
@@ -546,6 +548,9 @@ public final class CombatSession {
         if (!state.battleMap.grid().contains(center)) {
             throw rule("The area centre is outside the map");
         }
+        if (blockedCells.contains(center)) {
+            throw rule("The area centre is blocked by a wall");
+        }
         validateAreaRange(casterId, center, ability);
         validateActivationCost(casterId, ability.activationCost(), ability.spellOrCantrip());
         validateAbilityResource(casterId, caster, ability);
@@ -653,6 +658,8 @@ public final class CombatSession {
             throw rule("The area centre is " + distance + " feet away, beyond the range of "
                     + ability.rangeFeet() + " feet");
         }
+        boolean clear = caster.occupiedSquares().stream().anyMatch(square -> clearLine(square, center));
+        if (!clear) throw rule("A wall blocks line of effect to the area centre");
     }
 
     /** Combattenti la cui sagoma tocca la sfera di raggio [radiusFeet] centrata su [center]. */
@@ -671,7 +678,7 @@ public final class CombatSession {
                 double dy = (square.row() + 0.5) - centerY;
                 return Math.sqrt(dx * dx + dy * dy) <= radiusSquares + 1e-9;
             });
-            if (within) caught.add(placement.combatantId());
+            if (within && hasLineOfEffect(center, placement)) caught.add(placement.combatantId());
         }
         return caught;
     }
@@ -1223,6 +1230,22 @@ public final class CombatSession {
                 "droppedPlacements", placedBefore - state.battleMap.placements().size()));
     }
 
+    /**
+     * Sincronizza i muri posseduti dal documento Board.
+     *
+     * <p>Non e' un comando di combattimento e non crea eventi o passi Undo: il
+     * relativo storico appartiene alla Board. Tutte le successive verifiche del
+     * motore, compresi i turni CPU, usano immediatamente questa fotografia.</p>
+     */
+    public synchronized void setBlockedCells(Collection<GridPosition> cells) {
+        Objects.requireNonNull(cells, "cells");
+        blockedCells = Set.copyOf(cells);
+    }
+
+    public synchronized Set<GridPosition> blockedCells() {
+        return blockedCells;
+    }
+
     /** Immagine di sfondo, indicata per nome nell'archivio locale delle immagini. */
     public synchronized void setMapBackground(String imageName) {
         beginCommand();
@@ -1267,6 +1290,9 @@ public final class CombatSession {
         if (!state.battleMap.isFree(placement)) {
             throw rule("That space is already occupied");
         }
+        if (touchesWall(placement)) {
+            throw rule("That space is blocked by a wall");
+        }
         beginCommand();
         state.battleMap = state.battleMap.withPlacement(placement);
         append(EventType.COMBATANT_PLACED, combatantId, "", details(
@@ -1296,8 +1322,14 @@ public final class CombatSession {
         if (!state.battleMap.isFree(moved)) {
             throw rule("The destination is already occupied");
         }
+        if (touchesWall(moved)) {
+            throw rule("The destination is blocked by a wall");
+        }
 
-        int squares = current.origin().squaresTo(destination);
+        int squares = shortestWalkableDistance(current, destination);
+        if (squares < 0) {
+            throw rule("A wall blocks every path to the destination");
+        }
         int feet = state.battleMap.grid().feetFor(squares);
         TurnBudget budget = budget(combatantId);
         if (feet > budget.movementRemainingFeet()) {
@@ -1341,6 +1373,101 @@ public final class CombatSession {
                         + ability.rangeFeet() + " feet");
             }
         });
+        TokenPlacement attacker = state.battleMap.placementOf(attackerId).orElse(null);
+        TokenPlacement target = state.battleMap.placementOf(targetId).orElse(null);
+        if (attacker != null && target != null && !hasLineOfEffect(attacker, target)) {
+            throw rule("A wall blocks line of effect to the target");
+        }
+    }
+
+    private boolean touchesWall(TokenPlacement placement) {
+        return placement.occupiedSquares().stream().anyMatch(blockedCells::contains);
+    }
+
+    /** Percorso minimo a otto direzioni, senza attraversare muri ne' tagliarne gli angoli. */
+    private int shortestWalkableDistance(TokenPlacement current, GridPosition destination) {
+        if (blockedCells.isEmpty()) return current.origin().squaresTo(destination);
+        MapGrid grid = state.battleMap.grid();
+        int columns = grid.columns();
+        int rows = grid.rows();
+        boolean[] visited = new boolean[Math.multiplyExact(columns, rows)];
+        int[] distance = new int[visited.length];
+        ArrayDeque<GridPosition> queue = new ArrayDeque<>();
+        GridPosition start = current.origin();
+        visited[start.row() * columns + start.column()] = true;
+        queue.add(start);
+        int[] deltas = {-1, 0, 1};
+        while (!queue.isEmpty()) {
+            GridPosition point = queue.removeFirst();
+            int currentDistance = distance[point.row() * columns + point.column()];
+            if (point.equals(destination)) return currentDistance;
+            for (int rowDelta : deltas) for (int columnDelta : deltas) {
+                if (columnDelta == 0 && rowDelta == 0) continue;
+                int column = point.column() + columnDelta;
+                int row = point.row() + rowDelta;
+                if (column < 0 || row < 0 || column >= columns || row >= rows) continue;
+                GridPosition next = new GridPosition(column, row);
+                int index = row * columns + column;
+                if (visited[index] || !walkableOrigin(current, next)) continue;
+                if (columnDelta != 0 && rowDelta != 0) {
+                    GridPosition horizontal = new GridPosition(point.column() + columnDelta, point.row());
+                    GridPosition vertical = new GridPosition(point.column(), point.row() + rowDelta);
+                    if (!walkableOrigin(current, horizontal) || !walkableOrigin(current, vertical)) continue;
+                }
+                visited[index] = true;
+                distance[index] = currentDistance + 1;
+                queue.addLast(next);
+            }
+        }
+        return -1;
+    }
+
+    private boolean walkableOrigin(TokenPlacement source, GridPosition origin) {
+        TokenPlacement candidate = source.movedTo(origin);
+        return state.battleMap.fitsInsideGrid(candidate) && !touchesWall(candidate);
+    }
+
+    private boolean hasLineOfEffect(TokenPlacement source, TokenPlacement target) {
+        if (blockedCells.isEmpty()) return true;
+        for (GridPosition from : source.occupiedSquares()) {
+            for (GridPosition to : target.occupiedSquares()) {
+                if (clearLine(from, to)) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasLineOfEffect(GridPosition source, TokenPlacement target) {
+        if (blockedCells.isEmpty()) return true;
+        for (GridPosition to : target.occupiedSquares()) {
+            if (clearLine(source, to)) return true;
+        }
+        return false;
+    }
+
+    /** Bresenham conservativo: anche un angolo chiuso da un muro interrompe la linea. */
+    private boolean clearLine(GridPosition source, GridPosition target) {
+        int x = source.column();
+        int y = source.row();
+        int dx = Math.abs(target.column() - x);
+        int dy = Math.abs(target.row() - y);
+        int sx = Integer.compare(target.column(), x);
+        int sy = Integer.compare(target.row(), y);
+        int error = dx - dy;
+        while (x != target.column() || y != target.row()) {
+            int twice = error * 2;
+            boolean moveX = twice > -dy;
+            boolean moveY = twice < dx;
+            if (moveX && moveY) {
+                if (blockedCells.contains(new GridPosition(x + sx, y))
+                        || blockedCells.contains(new GridPosition(x, y + sy))) return false;
+            }
+            if (moveX) { error -= dy; x += sx; }
+            if (moveY) { error += dx; y += sy; }
+            if (x == target.column() && y == target.row()) return true;
+            if (blockedCells.contains(new GridPosition(x, y))) return false;
+        }
+        return true;
     }
 
     private void requireConfiguredMap() {

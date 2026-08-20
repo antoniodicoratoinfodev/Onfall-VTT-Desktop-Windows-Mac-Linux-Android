@@ -122,7 +122,7 @@ fun MapControls(
             )
         }
 
-        BoardToolOptions(boardTools, board, compact)
+        BoardToolOptions(boardTools, board, grid, compact)
 
         if (viewModel.mapEditMode) {
             Text(

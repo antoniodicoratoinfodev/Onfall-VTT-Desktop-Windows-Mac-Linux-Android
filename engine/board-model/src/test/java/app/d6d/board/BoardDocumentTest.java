@@ -93,6 +93,38 @@ class BoardDocumentTest {
     }
 
     @Test
+    void iMuriCompattiConservanoLeCaselleDopoUnResize() {
+        WallMask walls = WallMask.empty(5, 4)
+                .withCell(2, 1, true)
+                .withCell(4, 3, true);
+
+        WallMask smaller = walls.resized(4, 3);
+        WallMask restored = smaller.resized(5, 4);
+
+        assertTrue(smaller.blocked(2, 1));
+        assertFalse(smaller.blocked(4, 3));
+        assertTrue(restored.blocked(2, 1));
+        assertFalse(restored.blocked(4, 3));
+        assertTrue(walls.blocked(4, 3));
+    }
+
+    @Test
+    void ilPavimentoCompattoConservaLeCaselleDopoUnResizeERiempieLaMappa() {
+        FloorMask floors = FloorMask.empty(5, 4)
+                .withCell(2, 1, true)
+                .withCell(4, 3, true);
+
+        FloorMask smaller = floors.resized(4, 3);
+        FloorMask filled = FloorMask.filled(5, 4);
+
+        assertTrue(smaller.painted(2, 1));
+        assertFalse(smaller.painted(4, 3));
+        assertTrue(filled.painted(0, 0));
+        assertTrue(filled.painted(4, 3));
+        assertFalse(BoardDocument.empty().floors().painted(0, 0));
+    }
+
+    @Test
     void gliOggettiFuoriDallaGrigliaRestanoNelDocumento() {
         InkStroke stroke = new InkStroke(
                 "fuori", List.of(new GridPoint(20.5, 4.5), new GridPoint(25.5, 4.5)), 0xffffffff, 0.1);

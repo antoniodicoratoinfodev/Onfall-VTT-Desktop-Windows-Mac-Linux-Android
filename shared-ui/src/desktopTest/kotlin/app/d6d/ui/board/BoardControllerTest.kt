@@ -1,16 +1,60 @@
 package app.d6d.ui.board
 
 import app.d6d.board.GridPoint
+import app.d6d.board.FloorMask
 import app.d6d.board.Label
 import app.d6d.board.SceneToken
 import app.d6d.board.TokenCategory
 import app.d6d.board.TokenLootCategory
+import app.d6d.board.WallMask
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class BoardControllerTest {
+
+    @Test
+    fun `muri commit undo e redo aggiornano anche il consumatore delle regole`() {
+        val synchronized = mutableListOf<WallMask>()
+        val controller = BoardController(onDocumentChanged = { synchronized += it.walls() })
+        val walls = WallMask.empty(8, 6).withCell(3, 2, true)
+
+        assertTrue(controller.setWalls(walls))
+        assertEquals(walls, synchronized.last())
+        assertTrue(controller.undo())
+        assertEquals(WallMask.empty(0, 0), synchronized.last())
+        assertTrue(controller.redo())
+        assertEquals(walls, synchronized.last())
+    }
+
+    @Test
+    fun `disegnare il pavimento non aggiunge celle bloccate al motore`() {
+        val synchronizedWalls = mutableListOf<WallMask>()
+        val controller = BoardController(onDocumentChanged = { synchronizedWalls += it.walls() })
+        val floors = FloorMask.empty(8, 6).withCell(3, 2, true)
+
+        assertTrue(controller.setFloors(floors))
+        assertEquals(floors, controller.document.floors())
+        assertEquals(WallMask.empty(0, 0), synchronizedWalls.last())
+    }
+
+    @Test
+    fun `disegnare pavimento sopra un muro lo riapre in un solo passo undo`() {
+        val controller = BoardController()
+        val walls = WallMask.empty(8, 6).withCell(3, 2, true)
+        controller.setWalls(walls)
+        val floors = FloorMask.empty(8, 6).withCell(3, 2, true)
+        val openedWalls = walls.withCell(3, 2, false)
+
+        assertTrue(controller.setFloors(floors, openedWalls))
+        assertTrue(controller.document.floors().painted(3, 2))
+        assertFalse(controller.document.walls().blocked(3, 2))
+
+        assertTrue(controller.undo())
+        assertEquals(walls, controller.document.walls())
+        assertFalse(controller.document.floors().painted(3, 2))
+    }
 
     @Test
     fun `un gesto logico produce una revisione e un passo undo`() {

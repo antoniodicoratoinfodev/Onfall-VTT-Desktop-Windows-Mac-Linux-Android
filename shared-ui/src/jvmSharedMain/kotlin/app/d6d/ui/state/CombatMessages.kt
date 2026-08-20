@@ -505,6 +505,28 @@ private val exactMessages: Map<String, RuleMessage> = mapOf(
     "That space is already occupied" to (
         "Quello spazio è già occupato." to "That space is already taken."
         ),
+    "That space is blocked by a wall" to (
+        "Quello spazio è occupato da un muro." to "That space is blocked by a wall."
+        ),
+    "The destination is blocked by a wall" to (
+        "La destinazione è occupata da un muro." to "The destination is blocked by a wall."
+        ),
+    "A wall blocks every path to the destination" to (
+        "Nessun percorso verso la destinazione evita i muri." to
+            "Every path to the destination is blocked by a wall."
+        ),
+    "A wall blocks line of effect to the target" to (
+        "Un muro blocca la linea d’effetto verso il bersaglio." to
+            "A wall blocks line of effect to the target."
+        ),
+    "A wall blocks line of effect to the area centre" to (
+        "Un muro blocca la linea d’effetto verso il centro dell’area." to
+            "A wall blocks line of effect to the area centre."
+        ),
+    "The area centre is blocked by a wall" to (
+        "Il centro dell’area è occupato da un muro." to
+            "The centre of the area is blocked by a wall."
+        ),
     "The token does not fit inside the grid" to (
         "Il segnaposto non entra nella griglia." to "The token does not fit inside the grid."
         ),

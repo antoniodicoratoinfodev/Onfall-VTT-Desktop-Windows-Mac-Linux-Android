@@ -107,6 +107,77 @@ The tactical map is a grid. You **zoom with the mouse wheel**, drag the tokens t
 change the scale and the size on screen. Map options set columns and rows, grid visibility and
 opacity, the background image taken from the archive, and an automatic arrangement of every token.
 
+### Board tools, scene tokens and loot
+
+The map also owns a persistent **Board layer**, independent from combat rules and their Undo
+history. Its toolbox provides a hand, measurement, freehand ink, area templates, labels, pings,
+fog brushes, walkable floor tiles, solid walls, an eraser, layers, and scene tokens. Fog can be
+painted directly from the GM view with three brush sizes or changed all at once; player preview is
+only needed to check the final view. The Board can be locked against accidental
+changes or shown through the player preview; its own Undo and Redo never rewind attacks, turns, or
+other engine commands. Board contents travel with the session and its recovery draft.
+
+The **Walls layer** paints blocked grid cells with add and erase brushes. A combatant cannot be
+placed on a wall; movement follows the shortest legal route around it and spends that real distance,
+while a closed barrier makes the destination unreachable. Walls also block attacks and area line of
+effect. Hiding their layer changes only presentation—the rule remains active until the wall is erased.
+
+The **Floor layer** paints visible map blocks with the same 1×1, 3×3, and 5×5 brush workflow.
+Floor is deliberately presentation-only: every map cell is walkable by default, whether or not it
+has a floor tile. Painting floor over a wall clears that wall, while only cells currently marked as
+Walls block movement and line of effect. Floor can also fill the whole map or be removed at once;
+filling the map preserves every existing Wall.
+
+**Scene tokens** are narrative map objects rather than combatants: they have no HP, initiative, turn,
+or rules. A token can use an imported image (including PNG) or Onfall's fallback medallion, and has
+its own name, colour, footprint, label and player visibility. Stable categories distinguish
+characters, allies, NPCs, monsters, objects, traps, hazards, terrain, loot, vehicles, markers, and
+anything else. They remain on a separate layer and can be selected, moved, resized, rotated, edited,
+or removed without changing the encounter roster.
+
+The bundled SRD content pack supplies structured rules data, but no creature or item artwork. The
+examples below therefore use the SRD Wolf, Longbow, and Ranger equipment with Onfall's fallback
+medallions; no external illustration was added.
+
+Any scene token can be marked **Collectible**, independently from its visual category. The GM assigns
+an inventory category (potions, weapons, armor, scrolls, or miscellaneous), quantity, a description
+that follows the item into the character sheet, and separate private GM notes. Collecting it from the
+token editor targets a real party character: Onfall persists the item before removing the map token,
+and a retry cannot duplicate the same source token. Consumed loot is deliberately excluded from Board
+Undo, so it cannot be collected twice.
+
+The command bar's **Items** panel and the character sheet read the same structured, persistent
+inventory, with category filters and an item detail pane. All controls, validation messages, errors,
+and accessibility labels in this workflow switch between Italian and English at runtime; names and
+descriptions written by the user are kept as entered.
+
+<table>
+<tr>
+<td align="center">
+<img src="sample/battle-board-tools.png" width="720"/><br/>
+<sub>Board tools — named Fog, Walls, and Layers controls, map brushes, scene tokens, and a separate Undo history</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/scene-token-editor.png" width="720"/><br/>
+<sub>Scene token editor — the SRD Wolf as a Monster, using Onfall's fallback medallion because the pack contains no artwork</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/scene-token-loot.png" width="720"/><br/>
+<sub>Collectible token — the SRD Longbow as weapon loot, with quantity and rules data from the content pack</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/character-inventory.png" width="720"/><br/>
+<sub>Items — Aelis's SRD Ranger equipment, with Longbow details and category filters</sub>
+</td>
+</tr>
+</table>
+
 **Table tools** cover the same state changes when they have to be entered by hand: an ability check
 with its modifier, damage of a chosen type, healing, temporary hit points, conditions and
 exhaustion, on any combatant and not only the one holding the turn.

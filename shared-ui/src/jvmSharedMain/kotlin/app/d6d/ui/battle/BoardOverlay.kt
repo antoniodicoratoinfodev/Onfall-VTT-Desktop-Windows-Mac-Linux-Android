@@ -61,6 +61,7 @@ import app.d6d.board.BoardDocument
 import app.d6d.board.BoardObject
 import app.d6d.board.BoardLimits
 import app.d6d.board.FogMask
+import app.d6d.board.FloorMask
 import app.d6d.board.GridPoint
 import app.d6d.board.InkStroke
 import app.d6d.board.Label
@@ -69,6 +70,7 @@ import app.d6d.board.SceneToken
 import app.d6d.board.StaticStamp
 import app.d6d.board.StampKind
 import app.d6d.board.TemplateShape
+import app.d6d.board.WallMask
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.domain.space.TokenPlacement
@@ -113,6 +115,9 @@ internal fun BoardContentLayer(
     val layers = document.layers()
     Box(modifier) {
         Canvas(Modifier.fillMaxSize()) {
+            if (layers.floorsVisible()) {
+                drawFloors(document.floors(), camera, mapOffset, cellPx)
+            }
             document.objects().forEach { item ->
                 if (!item.bounds(grid.feetPerSquare()).intersects(visible)) return@forEach
                 when (item) {
@@ -120,6 +125,9 @@ internal fun BoardContentLayer(
                     is Label, is SceneToken -> Unit
                     else -> if (layers.annotationsVisible()) drawBoardObject(item, grid.feetPerSquare(), mapOffset, cellPx)
                 }
+            }
+            if (layers.wallsVisible()) {
+                drawWalls(document.walls(), camera, mapOffset, cellPx)
             }
             if (showMasterFog && layers.fogVisible()) {
                 drawFog(document.fog(), camera, mapOffset, cellPx, Palette.Abyss.copy(alpha = 0.32f))
@@ -328,6 +336,8 @@ internal fun BoardInteractionOverlay(
     var draftInk by remember { mutableStateOf<List<GridPoint>>(emptyList()) }
     var draftTemplate by remember { mutableStateOf<Pair<GridPoint, GridPoint>?>(null) }
     var draftFog by remember { mutableStateOf<FogMask?>(null) }
+    var draftFloors by remember { mutableStateOf<FloorMask?>(null) }
+    var draftWalls by remember { mutableStateOf<WallMask?>(null) }
     var draftMoved by remember { mutableStateOf<BoardObject?>(null) }
     var labelPoint by remember { mutableStateOf<GridPoint?>(null) }
     var labelText by remember { mutableStateOf("") }
@@ -337,6 +347,8 @@ internal fun BoardInteractionOverlay(
         draftInk = emptyList()
         draftTemplate = null
         draftFog = null
+        draftFloors = null
+        draftWalls = null
         draftMoved = null
         draftTokenPoint = null
         if (tools.active != BoardTool.EDIT) tools.selectedId = null
@@ -352,6 +364,11 @@ internal fun BoardInteractionOverlay(
                     tools.stampMode,
                     tools.stampKind,
                     tools.fogCovering,
+                    tools.fogBrushSize,
+                    tools.floorAdding,
+                    tools.floorBrushSize,
+                    tools.wallAdding,
+                    tools.wallBrushSize,
                     tools.pendingToken,
                     board.document.layers().locked(),
                 ) {
@@ -386,7 +403,25 @@ internal fun BoardInteractionOverlay(
                             }
                             BoardTool.FOG -> {
                                 val initial = boardState.value.fog().resized(grid.columns(), grid.rows())
-                                draftFog = paintFog(initial, startRaw, tools.fogCovering)
+                                draftFog = paintFog(initial, startRaw, tools.fogCovering, tools.fogBrushSize)
+                            }
+                            BoardTool.FLOOR -> {
+                                val initial = boardState.value.floors().resized(grid.columns(), grid.rows())
+                                draftFloors = paintFloors(
+                                    initial, startRaw, tools.floorAdding, tools.floorBrushSize,
+                                )
+                                if (tools.floorAdding) {
+                                    val walls = boardState.value.walls().resized(grid.columns(), grid.rows())
+                                    draftWalls = paintWalls(
+                                        walls, startRaw, blocked = false, brushSize = tools.floorBrushSize,
+                                    ) { _, _ -> true }
+                                }
+                            }
+                            BoardTool.WALL -> {
+                                val initial = boardState.value.walls().resized(grid.columns(), grid.rows())
+                                draftWalls = paintWalls(
+                                    initial, startRaw, tools.wallAdding, tools.wallBrushSize,
+                                ) { column, row -> !tools.wallAdding || viewModel.occupantAt(column, row) == null }
                             }
                             BoardTool.ERASER -> hitTest(boardState.value, startRaw, grid.feetPerSquare(), cellPx)
                                 ?.let { erased += it.id() }
@@ -419,7 +454,33 @@ internal fun BoardInteractionOverlay(
                                     }
                                     BoardTool.FOG -> {
                                         val current = draftFog ?: boardState.value.fog().resized(grid.columns(), grid.rows())
-                                        draftFog = paintFogLine(current, lastRaw, raw, tools.fogCovering)
+                                        draftFog = paintFogLine(
+                                            current, lastRaw, raw, tools.fogCovering, tools.fogBrushSize,
+                                        )
+                                    }
+                                    BoardTool.FLOOR -> {
+                                        val current = draftFloors
+                                            ?: boardState.value.floors().resized(grid.columns(), grid.rows())
+                                        draftFloors = paintFloorLine(
+                                            current, lastRaw, raw, tools.floorAdding, tools.floorBrushSize,
+                                        )
+                                        if (tools.floorAdding) {
+                                            val walls = draftWalls
+                                                ?: boardState.value.walls().resized(grid.columns(), grid.rows())
+                                            draftWalls = paintWallLine(
+                                                walls, lastRaw, raw, blocked = false,
+                                                brushSize = tools.floorBrushSize,
+                                            ) { _, _ -> true }
+                                        }
+                                    }
+                                    BoardTool.WALL -> {
+                                        val current = draftWalls
+                                            ?: boardState.value.walls().resized(grid.columns(), grid.rows())
+                                        draftWalls = paintWallLine(
+                                            current, lastRaw, raw, tools.wallAdding, tools.wallBrushSize,
+                                        ) { column, row ->
+                                            !tools.wallAdding || viewModel.occupantAt(column, row) == null
+                                        }
                                     }
                                     BoardTool.ERASER -> hitTest(boardState.value, raw, grid.feetPerSquare(), cellPx)
                                         ?.let { erased += it.id() }
@@ -488,6 +549,17 @@ internal fun BoardInteractionOverlay(
                                 draftFog?.let(board::setFog)
                                 draftFog = null
                             }
+                            BoardTool.FLOOR -> {
+                                draftFloors?.let { floors ->
+                                    board.setFloors(floors, draftWalls)
+                                }
+                                draftFloors = null
+                                draftWalls = null
+                            }
+                            BoardTool.WALL -> {
+                                draftWalls?.let(board::setWalls)
+                                draftWalls = null
+                            }
                             BoardTool.ERASER -> if (erased.isNotEmpty()) {
                                 board.commit(board.document.withObjects(board.document.objects().filterNot { it.id() in erased }))
                             }
@@ -523,6 +595,12 @@ internal fun BoardInteractionOverlay(
             }
             draftFog?.let {
                 drawFog(it, camera, mapOffset, cellPx, Palette.Abyss.copy(alpha = 0.52f))
+            }
+            draftFloors?.let {
+                drawFloors(it, camera, mapOffset, cellPx)
+            }
+            draftWalls?.let {
+                drawWalls(it, camera, mapOffset, cellPx)
             }
             val selected = draftMoved ?: tools.selectedId?.let { id -> board.document.objects().firstOrNull { it.id() == id } }
             selected?.let {
@@ -746,6 +824,52 @@ private fun DrawScope.drawFog(
     }
 }
 
+private fun DrawScope.drawWalls(
+    walls: WallMask,
+    camera: MapViewportGeometry,
+    mapOffset: Offset,
+    cellPx: Float,
+) {
+    if (walls.columns() <= 0 || walls.rows() <= 0) return
+    val fill = Palette.Abyss.copy(alpha = 0.90f)
+    val edge = Palette.Bronze.copy(alpha = 0.96f)
+    val joint = Palette.TextFaint.copy(alpha = 0.42f)
+    for (row in camera.visibleRows(mapOffset)) for (column in camera.visibleColumns(mapOffset)) {
+        if (column >= walls.columns() || row >= walls.rows() || !walls.blocked(column, row)) continue
+        val topLeft = Offset(mapOffset.x + column * cellPx, mapOffset.y + row * cellPx)
+        val size = Size(cellPx + 0.5f, cellPx + 0.5f)
+        drawRect(fill, topLeft, size)
+        drawRect(edge, topLeft, size, style = Stroke(width = 2f.coerceAtMost(cellPx * 0.12f)))
+        if (cellPx >= 12f) {
+            drawLine(joint, topLeft, topLeft + Offset(cellPx, cellPx), strokeWidth = 1f)
+            drawLine(joint, topLeft + Offset(cellPx, 0f), topLeft + Offset(0f, cellPx), strokeWidth = 1f)
+        }
+    }
+}
+
+private fun DrawScope.drawFloors(
+    floors: FloorMask,
+    camera: MapViewportGeometry,
+    mapOffset: Offset,
+    cellPx: Float,
+) {
+    if (floors.columns() <= 0 || floors.rows() <= 0) return
+    val fill = Palette.SurfaceHigh.copy(alpha = 0.46f)
+    val edge = Palette.Gold.copy(alpha = 0.34f)
+    val grain = Palette.Text.copy(alpha = 0.16f)
+    for (row in camera.visibleRows(mapOffset)) for (column in camera.visibleColumns(mapOffset)) {
+        if (column >= floors.columns() || row >= floors.rows() || !floors.painted(column, row)) continue
+        val topLeft = Offset(mapOffset.x + column * cellPx, mapOffset.y + row * cellPx)
+        val size = Size(cellPx + 0.5f, cellPx + 0.5f)
+        drawRect(fill, topLeft, size)
+        drawRect(edge, topLeft, size, style = Stroke(width = 1.4f.coerceAtMost(cellPx * 0.09f)))
+        if (cellPx >= 14f) {
+            drawCircle(grain, cellPx * 0.045f, topLeft + Offset(cellPx * 0.30f, cellPx * 0.34f))
+            drawCircle(grain, cellPx * 0.035f, topLeft + Offset(cellPx * 0.72f, cellPx * 0.68f))
+        }
+    }
+}
+
 private fun DrawScope.drawBoardBounds(bounds: BoardBounds, mapOffset: Offset, cellPx: Float, color: Color) {
     drawRect(
         color,
@@ -852,18 +976,24 @@ private fun labelVisualBounds(label: Label, cellPx: Float): BoardBounds {
     )
 }
 
-private fun paintFog(fog: FogMask, point: GridPoint, covered: Boolean): FogMask =
-    fog.withCell(floor(point.x()).toInt(), floor(point.y()).toInt(), covered)
+private fun paintFog(
+    fog: FogMask,
+    point: GridPoint,
+    covered: Boolean,
+    brushSize: Int,
+): FogMask = paintFogLine(fog, point, point, covered, brushSize)
 
-private fun paintFogLine(fog: FogMask, start: GridPoint, end: GridPoint, covered: Boolean): FogMask {
-    val steps = ceil(max(abs(end.x() - start.x()), abs(end.y() - start.y())) * 3.0).toInt().coerceAtLeast(1)
+private fun paintFogLine(
+    fog: FogMask,
+    start: GridPoint,
+    end: GridPoint,
+    covered: Boolean,
+    brushSize: Int,
+): FogMask {
     val words = fog.words().toMutableList()
     var changed = false
-    repeat(steps + 1) { index ->
-        val t = index.toDouble() / steps
-        val column = floor(start.x() + (end.x() - start.x()) * t).toInt()
-        val row = floor(start.y() + (end.y() - start.y()) * t).toInt()
-        if (column !in 0 until fog.columns() || row !in 0 until fog.rows()) return@repeat
+    rasterBrushLine(start, end, brushSize) { column, row ->
+        if (column !in 0 until fog.columns() || row !in 0 until fog.rows()) return@rasterBrushLine
         val cell = row * fog.columns() + column
         val wordIndex = cell ushr 6
         val bit = 1L shl (cell and 63)
@@ -875,6 +1005,90 @@ private fun paintFogLine(fog: FogMask, start: GridPoint, end: GridPoint, covered
         }
     }
     return if (changed) FogMask(fog.columns(), fog.rows(), words) else fog
+}
+
+private fun paintWalls(
+    walls: WallMask,
+    point: GridPoint,
+    blocked: Boolean,
+    brushSize: Int,
+    allowed: (Int, Int) -> Boolean,
+): WallMask = paintWallLine(walls, point, point, blocked, brushSize, allowed)
+
+private fun paintWallLine(
+    walls: WallMask,
+    start: GridPoint,
+    end: GridPoint,
+    blocked: Boolean,
+    brushSize: Int,
+    allowed: (Int, Int) -> Boolean,
+): WallMask {
+    val words = walls.words().toMutableList()
+    var changed = false
+    rasterBrushLine(start, end, brushSize) { column, row ->
+        if (column !in 0 until walls.columns() || row !in 0 until walls.rows() || !allowed(column, row)) {
+            return@rasterBrushLine
+        }
+        val cell = row * walls.columns() + column
+        val wordIndex = cell ushr 6
+        val bit = 1L shl (cell and 63)
+        val previous = words[wordIndex]
+        val next = if (blocked) previous or bit else previous and bit.inv()
+        if (next != previous) {
+            words[wordIndex] = next
+            changed = true
+        }
+    }
+    return if (changed) WallMask(walls.columns(), walls.rows(), words) else walls
+}
+
+private fun paintFloors(
+    floors: FloorMask,
+    point: GridPoint,
+    painted: Boolean,
+    brushSize: Int,
+): FloorMask = paintFloorLine(floors, point, point, painted, brushSize)
+
+private fun paintFloorLine(
+    floors: FloorMask,
+    start: GridPoint,
+    end: GridPoint,
+    painted: Boolean,
+    brushSize: Int,
+): FloorMask {
+    val words = floors.words().toMutableList()
+    var changed = false
+    rasterBrushLine(start, end, brushSize) { column, row ->
+        if (column !in 0 until floors.columns() || row !in 0 until floors.rows()) return@rasterBrushLine
+        val cell = row * floors.columns() + column
+        val wordIndex = cell ushr 6
+        val bit = 1L shl (cell and 63)
+        val previous = words[wordIndex]
+        val next = if (painted) previous or bit else previous and bit.inv()
+        if (next != previous) {
+            words[wordIndex] = next
+            changed = true
+        }
+    }
+    return if (changed) FloorMask(floors.columns(), floors.rows(), words) else floors
+}
+
+private inline fun rasterBrushLine(
+    start: GridPoint,
+    end: GridPoint,
+    brushSize: Int,
+    visit: (Int, Int) -> Unit,
+) {
+    val steps = ceil(max(abs(end.x() - start.x()), abs(end.y() - start.y())) * 3.0).toInt().coerceAtLeast(1)
+    val radius = (brushSize.coerceIn(1, 5) - 1) / 2
+    repeat(steps + 1) { index ->
+        val t = index.toDouble() / steps
+        val centreColumn = floor(start.x() + (end.x() - start.x()) * t).toInt()
+        val centreRow = floor(start.y() + (end.y() - start.y()) * t).toInt()
+        for (row in centreRow - radius..centreRow + radius) {
+            for (column in centreColumn - radius..centreColumn + radius) visit(column, row)
+        }
+    }
 }
 
 /** Ramer–Douglas–Peucker: riduce punti senza cambiare gli estremi del tratto. */

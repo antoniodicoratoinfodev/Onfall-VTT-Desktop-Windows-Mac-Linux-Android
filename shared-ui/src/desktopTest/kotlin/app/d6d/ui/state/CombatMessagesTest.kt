@@ -145,6 +145,12 @@ class CombatMessagesTest {
             "Bonus action already spent",
             "A dead combatant cannot be healed",
             "That space is already occupied",
+            "That space is blocked by a wall",
+            "The destination is blocked by a wall",
+            "A wall blocks every path to the destination",
+            "A wall blocks line of effect to the target",
+            "A wall blocks line of effect to the area centre",
+            "The area centre is blocked by a wall",
             "Movement exceeds the remaining budget",
             "A spell slot was already spent this turn",
         )

@@ -20,6 +20,8 @@ enum class BoardTool {
     LABEL,
     PING,
     FOG,
+    FLOOR,
+    WALL,
     ERASER,
     TOKEN,
 }
@@ -83,7 +85,12 @@ class BoardToolState(
     var templateShape by mutableStateOf(TemplateShape.SPHERE)
     var stampMode by mutableStateOf(false)
     var stampKind by mutableStateOf(StampKind.FLAME)
-    var fogCovering by mutableStateOf(false)
+    var fogCovering by mutableStateOf(true)
+    var fogBrushSize by mutableStateOf(1)
+    var floorAdding by mutableStateOf(true)
+    var floorBrushSize by mutableStateOf(1)
+    var wallAdding by mutableStateOf(true)
+    var wallBrushSize by mutableStateOf(1)
     var playerPreview by mutableStateOf(false)
     var tokenDialogId by mutableStateOf<String?>(null)
         private set
