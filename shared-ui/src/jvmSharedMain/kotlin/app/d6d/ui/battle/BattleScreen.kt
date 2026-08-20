@@ -57,6 +57,7 @@ import app.d6d.ui.components.VerticalResizeHandle
 import kotlin.math.roundToInt
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.layout.LocalUiLayout
+import app.d6d.ui.board.BoardController
 import app.d6d.ui.layout.TurnOrderDisplayMode
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.session.SessionManager
@@ -120,6 +121,10 @@ fun BattleScreen(
     modifier: Modifier = Modifier,
 ) {
     val layout = LocalUiLayout.current
+    val fallbackBoard = remember { BoardController() }
+    val opened = workspace.activeSession?.takeIf { it.battle === viewModel }
+    val board = opened?.board ?: fallbackBoard
+    val activeSessionId = opened?.id ?: "preview"
     val density = LocalDensity.current
     val cpuTurnKey = viewModel.enemyCpuTurnKey
     LaunchedEffect(
@@ -195,6 +200,8 @@ fun BattleScreen(
             CompactBattleBody(
                 viewModel,
                 portraits,
+                board,
+                activeSessionId,
                 roster,
                 onOpenCombatantSheet,
                 onCreateRosterCharacter,
@@ -205,6 +212,8 @@ fun BattleScreen(
             WideBattleBody(
                 viewModel,
                 portraits,
+                board,
+                activeSessionId,
                 roster,
                 onOpenCombatantSheet,
                 onCreateRosterCharacter,
@@ -220,6 +229,8 @@ fun BattleScreen(
 private fun WideBattleBody(
     viewModel: BattleViewModel,
     portraits: PortraitRepository,
+    board: BoardController,
+    activeSessionId: String,
     roster: RosterViewModel,
     onOpenCombatantSheet: (String) -> Unit,
     onCreateRosterCharacter: () -> Unit,
@@ -264,6 +275,9 @@ private fun WideBattleBody(
                     Modifier.weight(1f),
                     dropTarget = dropTarget,
                     floatingPlates = false,
+                    board = board,
+                    activeSessionId = activeSessionId,
+                    compact = false,
                 )
                 // Il bordo superiore della fascia comandi: trascinandolo verso l'alto
                 // la fascia cresce a scapito della mappa. Sparisce quando i comandi
@@ -436,6 +450,8 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
 private fun CompactBattleBody(
     viewModel: BattleViewModel,
     portraits: PortraitRepository,
+    board: BoardController,
+    activeSessionId: String,
     roster: RosterViewModel,
     onOpenCombatantSheet: (String) -> Unit,
     onCreateRosterCharacter: () -> Unit,
@@ -462,7 +478,13 @@ private fun CompactBattleBody(
 
         Box(Modifier.weight(1f)) {
             when (tab) {
-                CompactTab.PALCO -> BattleStage(viewModel, portraits)
+                CompactTab.PALCO -> BattleStage(
+                    viewModel,
+                    portraits,
+                    board = board,
+                    activeSessionId = activeSessionId,
+                    compact = true,
+                )
                 CompactTab.SQUADRA -> Rail(
                     viewModel = viewModel,
                     title = strings.battle.squad,

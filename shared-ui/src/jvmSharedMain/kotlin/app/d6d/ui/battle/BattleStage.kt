@@ -4,15 +4,17 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -56,7 +59,11 @@ import app.d6d.ui.components.Faction
 import app.d6d.ui.components.HealthBar
 import app.d6d.ui.components.color
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.board.BoardController
+import app.d6d.ui.board.BoardTool
+import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.layout.LocalUiLayout
+import app.d6d.ui.settings.LocalAppPreferences
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
@@ -78,13 +85,39 @@ fun BattleStage(
     // cosi' si possono spostare anche sopra le barre laterali; qui restano nel palco
     // solo nella shell compatta, dove il palco occupa da solo la superficie.
     floatingPlates: Boolean = true,
+    board: BoardController,
+    activeSessionId: String,
+    compact: Boolean = false,
 ) {
     val layout = LocalUiLayout.current
+    val preferences = LocalAppPreferences.current
+    val boardTools = remember(activeSessionId, portraits) {
+        BoardToolState(portraits::clearPortrait).apply {
+            templateShape = preferences.boardTemplateShape
+            stampKind = preferences.boardStampKind
+        }
+    }
+    DisposableEffect(boardTools) {
+        onDispose { boardTools.discardPendingToken() }
+    }
+
+    val selectBoardTool: (BoardTool) -> Unit = { tool ->
+        if (tool != BoardTool.TABLE) {
+            viewModel.cancelSingleTargeting()
+            viewModel.cancelAreaTargeting()
+            viewModel.mapEditMode = false
+        }
+        boardTools.select(tool)
+        if (compact || !layout.toolboxPinned) boardTools.toolboxOpen = false
+    }
 
     // La modifica dello sfondo e' una sotto-modalità della modifica: chi esce dalla
     // modifica se la porta dietro, cosi' non resta acceso un velo invisibile.
     LaunchedEffect(viewModel.editMode) {
         if (!viewModel.editMode) viewModel.mapEditMode = false
+    }
+    LaunchedEffect(viewModel.mapEditMode) {
+        if (viewModel.mapEditMode) boardTools.table()
     }
 
     // Confine visivo netto: il fuoco atmosferico anima la shell della Battaglia,
@@ -100,10 +133,14 @@ fun BattleStage(
                 onShowGridChange = { layout.mapShowGrid = it },
                 gridBrightness = layout.mapGridBrightness,
                 onGridBrightnessChange = { layout.mapGridBrightness = it },
+                board = board,
+                boardTools = boardTools,
+                compact = compact,
+                onBoardToolSelected = selectBoardTool,
             )
         }
 
-        Box(Modifier.weight(1f)) {
+        BoxWithConstraints(Modifier.weight(1f)) {
             BattleMapView(
                 viewModel = viewModel,
                 portraits = portraits,
@@ -114,7 +151,54 @@ fun BattleStage(
                 modifier = Modifier.fillMaxSize(),
                 dropTarget = dropTarget,
                 onCellSizeChange = { layout.mapCellSize = it },
+                board = board,
+                boardTools = boardTools,
             )
+
+            if (layout.toolboxPinned && !compact) {
+                val density = LocalDensity.current
+                var railHeightPx by remember { mutableStateOf(0) }
+                val railHeight = with(density) { railHeightPx.toDp() }
+                val travel = (maxHeight - railHeight).coerceAtLeast(0.dp)
+                Column(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .offset(y = travel * layout.toolboxVerticalFraction)
+                        .onGloballyPositioned { railHeightPx = it.size.height }
+                        .padding(start = 8.dp, top = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        "⋮⋮",
+                        color = Palette.TextMuted,
+                        modifier = Modifier
+                            .pointerInput(travel, density.density) {
+                                val travelPx = with(density) { travel.toPx() }
+                                detectVerticalDragGestures { change, amount ->
+                                    change.consume()
+                                    if (travelPx > 0f) {
+                                        layout.toolboxVerticalFraction =
+                                            (layout.toolboxVerticalFraction + amount / travelPx).coerceIn(0f, 1f)
+                                    }
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 5.dp),
+                    )
+                    BoardToolRail(boardTools, board, selectBoardTool)
+                }
+            }
+
+            if (boardTools.toolboxOpen && !compact) {
+                BoardToolboxPanel(
+                    state = boardTools,
+                    board = board,
+                    compact = false,
+                    onSelect = selectBoardTool,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = if (layout.toolboxPinned) 58.dp else 8.dp, top = 8.dp),
+                )
+            }
 
             if (floatingPlates) {
                 FloatingCombatantPlates(viewModel)
@@ -125,6 +209,8 @@ fun BattleStage(
             }
         }
     }
+
+    SceneTokenDialogHost(boardTools, board, portraits, compact)
 }
 
 /**

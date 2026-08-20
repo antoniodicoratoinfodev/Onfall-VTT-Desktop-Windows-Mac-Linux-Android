@@ -1,5 +1,7 @@
 package app.d6d.ui.battle
 
+import app.d6d.board.BoardBounds
+import app.d6d.board.GridPoint
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.IntOffset
@@ -74,6 +76,33 @@ internal data class MapViewportGeometry(
     /** Casella sotto un punto del viewport, oppure `null` fuori dalla mappa. */
     fun cellAt(point: Offset, mapOffset: Offset): IntOffset? =
         mapCellAt(point, mapOffset, cellPx, columns, rows)
+
+    /** Punto continuo del mondo sotto il viewport, oppure null fuori griglia. */
+    fun worldAt(point: Offset, mapOffset: Offset): GridPoint? {
+        if (cellPx <= 0f || !cellPx.isFinite()) return null
+        val x = (point.x - mapOffset.x) / cellPx
+        val y = (point.y - mapOffset.y) / cellPx
+        if (!x.isFinite() || !y.isFinite() || x < 0f || y < 0f || x >= columns || y >= rows) return null
+        return GridPoint(x.toDouble(), y.toDouble())
+    }
+
+    /** Conversione inversa condivisa da tutti gli oggetti del Lucido. */
+    fun screenAt(point: GridPoint, mapOffset: Offset): Offset = Offset(
+        mapOffset.x + point.x().toFloat() * cellPx,
+        mapOffset.y + point.y().toFloat() * cellPx,
+    )
+
+    /** Rettangolo mondo effettivamente visibile, limitato alla griglia corrente. */
+    fun visibleWorld(mapOffset: Offset): BoardBounds {
+        if (cellPx <= 0f || viewportSize.width <= 0 || viewportSize.height <= 0) {
+            return BoardBounds(0.0, 0.0, 0.0, 0.0)
+        }
+        val left = (-mapOffset.x / cellPx).coerceIn(0f, columns.toFloat()).toDouble()
+        val top = (-mapOffset.y / cellPx).coerceIn(0f, rows.toFloat()).toDouble()
+        val right = ((viewportSize.width - mapOffset.x) / cellPx).coerceIn(0f, columns.toFloat()).toDouble()
+        val bottom = ((viewportSize.height - mapOffset.y) / cellPx).coerceIn(0f, rows.toFloat()).toDouble()
+        return BoardBounds(minOf(left, right), minOf(top, bottom), maxOf(left, right), maxOf(top, bottom))
+    }
 
     fun visibleColumns(mapOffset: Offset): IntRange =
         visibleGridLines(mapOffset.x, cellPx, columns, viewportSize.width.toFloat())

@@ -3,6 +3,7 @@ package app.d6d.ui.battle
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import app.d6d.board.GridPoint
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -144,6 +145,18 @@ class MapViewportGeometryTest {
         assertEquals(150..155, visibleRows)
         assertEquals(7, visibleColumns.count())
         assertEquals(6, visibleRows.count())
+    }
+
+    @Test
+    fun `punti continui passano fra mondo e schermo senza geometrie duplicate`() {
+        val geometry = MapViewportGeometry(IntSize(800, 600), 20, 15, 50f)
+        val mapOffset = Offset(-100f, -50f)
+        val world = GridPoint(7.25, 4.5)
+
+        val screen = geometry.screenAt(world, mapOffset)
+
+        assertEquals(world, geometry.worldAt(screen, mapOffset))
+        assertNull(geometry.worldAt(Offset(mapOffset.x - 1f, mapOffset.y), mapOffset))
     }
 
     private fun worldPoint(screenPoint: Offset, mapOffset: Offset, cellPx: Float): Offset = Offset(

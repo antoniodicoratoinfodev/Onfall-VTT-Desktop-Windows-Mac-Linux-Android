@@ -1,6 +1,8 @@
 package app.d6d.ui.settings
 
 import app.d6d.i18n.AppLanguage
+import app.d6d.board.StampKind
+import app.d6d.board.TemplateShape
 import app.d6d.persistence.json.AtomicFiles
 import app.d6d.ui.state.EnemyCpuSpeed
 import kotlinx.serialization.Serializable
@@ -34,10 +36,17 @@ data class AppPreferences(
     // lingua del sistema. Scriverci dentro una lingua predefinita renderebbe una
     // scelta mai fatta indistinguibile da una fatta apposta.
     val language: String = "",
+    val boardColorArgb: Int = DEFAULT_BOARD_COLOR,
+    val boardStrokeWidth: Float = 0.12f,
+    val boardTemplateShape: String = TemplateShape.SPHERE.name,
+    val boardStampKind: String = StampKind.FLAME.name,
 ) {
     /** Riporta ogni campo a un valore che l'interfaccia sa rappresentare. */
     fun sanitized(): AppPreferences = copy(
         enemyCpuSpeed = speedOrDefault().name,
+        boardStrokeWidth = boardStrokeWidth.takeIf { it.isFinite() }?.coerceIn(0.03f, 2f) ?: 0.12f,
+        boardTemplateShape = templateShapeOrDefault().name,
+        boardStampKind = stampKindOrDefault().name,
     )
 
     /** Il ritmo salvato, o quello predefinito se il nome non esiste piu'. */
@@ -47,8 +56,15 @@ data class AppPreferences(
     /** La lingua salvata, o quella del sistema finche' nessuno ne ha scelta una. */
     fun languageOrSystemDefault(): AppLanguage = AppLanguage.parseOrSystemDefault(language)
 
+    fun templateShapeOrDefault(): TemplateShape =
+        runCatching { TemplateShape.valueOf(boardTemplateShape) }.getOrDefault(TemplateShape.SPHERE)
+
+    fun stampKindOrDefault(): StampKind =
+        runCatching { StampKind.valueOf(boardStampKind) }.getOrDefault(StampKind.FLAME)
+
     companion object {
         const val SCHEMA_VERSION = 1
+        const val DEFAULT_BOARD_COLOR: Int = 0xFFFFC857.toInt()
     }
 }
 

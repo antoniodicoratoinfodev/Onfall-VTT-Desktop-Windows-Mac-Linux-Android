@@ -1,5 +1,6 @@
 package app.d6d.persistence.session;
 
+import app.d6d.board.BoardDocument;
 import app.d6d.engine.CombatSession;
 
 import java.util.Map;
@@ -16,11 +17,18 @@ import java.util.Objects;
 public record SessionArchive(
         SessionSummary summary,
         CombatSession session,
-        Map<String, String> presentation) {
+        Map<String, String> presentation,
+        BoardDocument board) {
+
+    /** Compatibilità sorgente per chiamanti che non hanno ancora un Lucido. */
+    public SessionArchive(SessionSummary summary, CombatSession session, Map<String, String> presentation) {
+        this(summary, session, presentation, BoardDocument.empty());
+    }
 
     public SessionArchive {
         Objects.requireNonNull(summary, "summary");
         Objects.requireNonNull(session, "session");
         presentation = Map.copyOf(Objects.requireNonNull(presentation, "presentation"));
+        board = Objects.requireNonNull(board, "board");
     }
 }

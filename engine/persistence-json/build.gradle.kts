@@ -5,6 +5,7 @@ plugins {
 dependencies {
     api(project(":engine:domain-model"))
     api(project(":engine:core-engine"))
+    api(project(":engine:board-model"))
 
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

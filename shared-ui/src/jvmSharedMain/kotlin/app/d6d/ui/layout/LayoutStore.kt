@@ -55,6 +55,9 @@ data class UiLayout(
     // Luminosita' delle linee della griglia, scelta dall'utente: 0 quasi
     // invisibili, 1 ben marcate. Predefinito a meta' scala, come i vecchi grigi.
     val mapGridBrightness: Float = 0.5f,
+    // La Cassetta fissata resta sul bordo del palco e si muove soltanto in verticale.
+    val toolboxPinned: Boolean = false,
+    val toolboxVerticalFraction: Float = 0.5f,
     val targetPlate: PlateFraction? = null,
     val activePlate: PlateFraction? = null,
     // Scala delle due targhe flottanti: la maniglia d'angolo le ingrandisce o
@@ -80,6 +83,7 @@ data class UiLayout(
         // contrario uno zoom molto ampio verrebbe perso al riavvio dell'app.
         mapCellSizeDp = mapCellSizeDp.clampOr(MIN_CELL_DP, MAX_CELL_DP, 46f),
         mapGridBrightness = mapGridBrightness.clampOr(0.05f, 1f, 0.5f),
+        toolboxVerticalFraction = toolboxVerticalFraction.clampOr(0f, 1f, 0.5f),
         targetPlate = targetPlate?.sanitized(),
         activePlate = activePlate?.sanitized(),
         targetPlateScale = targetPlateScale.clampOr(0.6f, 2f, 1f),

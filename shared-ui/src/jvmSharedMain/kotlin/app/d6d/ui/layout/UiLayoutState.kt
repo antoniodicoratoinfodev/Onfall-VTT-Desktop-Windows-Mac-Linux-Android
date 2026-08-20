@@ -44,6 +44,8 @@ class UiLayoutState(
     var mapCellSize by mutableStateOf(initial.mapCellSizeDp.dp)
     var mapShowGrid by mutableStateOf(initial.mapShowGrid)
     var mapGridBrightness by mutableStateOf(initial.mapGridBrightness)
+    var toolboxPinned by mutableStateOf(initial.toolboxPinned)
+    var toolboxVerticalFraction by mutableStateOf(initial.toolboxVerticalFraction)
     var targetPlate by mutableStateOf(initial.targetPlate?.toOffset())
     var activePlate by mutableStateOf(initial.activePlate?.toOffset())
     var targetPlateScale by mutableStateOf(initial.targetPlateScale)
@@ -104,6 +106,8 @@ class UiLayoutState(
         mapCellSizeDp = mapCellSize.value,
         mapShowGrid = mapShowGrid,
         mapGridBrightness = mapGridBrightness,
+        toolboxPinned = toolboxPinned,
+        toolboxVerticalFraction = toolboxVerticalFraction,
         targetPlate = targetPlate?.toFraction(),
         activePlate = activePlate?.toFraction(),
         targetPlateScale = targetPlateScale,
@@ -142,6 +146,8 @@ class UiLayoutState(
         mapCellSize = defaults.mapCellSizeDp.dp
         mapShowGrid = defaults.mapShowGrid
         mapGridBrightness = defaults.mapGridBrightness
+        toolboxPinned = defaults.toolboxPinned
+        toolboxVerticalFraction = defaults.toolboxVerticalFraction
         targetPlate = defaults.targetPlate?.toOffset()
         activePlate = defaults.activePlate?.toOffset()
         targetPlateScale = defaults.targetPlateScale
@@ -165,6 +171,8 @@ class UiLayoutState(
         mapCellSize = value.mapCellSizeDp.dp
         mapShowGrid = value.mapShowGrid
         mapGridBrightness = value.mapGridBrightness
+        toolboxPinned = value.toolboxPinned
+        toolboxVerticalFraction = value.toolboxVerticalFraction
         targetPlate = value.targetPlate?.toOffset()
         activePlate = value.activePlate?.toOffset()
         targetPlateScale = value.targetPlateScale

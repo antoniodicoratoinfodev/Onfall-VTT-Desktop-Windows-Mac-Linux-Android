@@ -30,6 +30,7 @@ kotlin {
             dependencies {
                 api(project(":engine:domain-model"))
                 api(project(":engine:core-engine"))
+                api(project(":engine:board-model"))
                 api(project(":engine:persistence-json"))
                 api(project(":engine:sheet-model"))
                 implementation(project(":content:srd-5.2.1-it"))

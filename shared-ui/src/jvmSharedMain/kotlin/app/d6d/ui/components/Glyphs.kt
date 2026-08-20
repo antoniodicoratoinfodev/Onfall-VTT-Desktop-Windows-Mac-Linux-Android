@@ -26,7 +26,10 @@ import kotlin.math.sin
  * Compendio, un ingranaggio per le impostazioni — cosi' l'identita' visiva resta
  * originale e scala a ogni densita'.
  */
-enum class AppGlyph { SWORDS, D20, TOME, GEAR }
+enum class AppGlyph {
+    SWORDS, D20, TOME, GEAR,
+    TABLE, EDIT_BOARD, HAND, MEASURE, INK, TEMPLATE, LABEL, PING, FOG, LAYERS, ERASER, TOKEN,
+}
 
 @Composable
 fun GlyphIcon(
@@ -58,7 +61,105 @@ fun GlyphIcon(
             AppGlyph.D20 -> drawD20(tint, stroke)
             AppGlyph.TOME -> drawTome(tint, stroke)
             AppGlyph.GEAR -> drawGear(tint, stroke)
+            else -> drawBoardGlyph(glyph, tint, stroke)
         }
+    }
+}
+
+/** Famiglia dei glifi del Lucido, costruita con lo stesso tratto degli originali. */
+private fun DrawScope.drawBoardGlyph(glyph: AppGlyph, tint: Color, stroke: Stroke) {
+    val w = size.width
+    val h = size.height
+    fun line(x1: Float, y1: Float, x2: Float, y2: Float, scale: Float = 1f) =
+        drawLine(tint, Offset(w * x1, h * y1), Offset(w * x2, h * y2), stroke.width * scale, StrokeCap.Round)
+
+    when (glyph) {
+        AppGlyph.TABLE -> {
+            line(.16f, .24f, .84f, .24f); line(.22f, .24f, .28f, .82f)
+            line(.78f, .24f, .72f, .82f); line(.25f, .58f, .75f, .58f, .75f)
+        }
+        AppGlyph.EDIT_BOARD -> {
+            val cursor = Path().apply {
+                moveTo(w * .20f, h * .14f); lineTo(w * .72f, h * .57f)
+                lineTo(w * .49f, h * .62f); lineTo(w * .39f, h * .84f); close()
+            }
+            drawPath(cursor, tint, style = stroke)
+            drawCircle(tint, stroke.width * .8f, Offset(w * .78f, h * .78f), style = stroke)
+        }
+        AppGlyph.HAND -> {
+            line(.27f, .76f, .20f, .48f); line(.20f, .48f, .31f, .43f)
+            line(.31f, .43f, .35f, .18f); line(.35f, .18f, .45f, .20f)
+            line(.45f, .20f, .48f, .42f); line(.48f, .42f, .53f, .16f)
+            line(.53f, .16f, .63f, .20f); line(.63f, .20f, .64f, .44f)
+            line(.64f, .44f, .70f, .25f); line(.70f, .25f, .79f, .31f)
+            line(.79f, .31f, .73f, .72f); line(.73f, .72f, .57f, .86f); line(.57f, .86f, .27f, .76f)
+        }
+        AppGlyph.MEASURE -> {
+            line(.18f, .76f, .78f, .20f); drawCircle(tint, stroke.width, Offset(w * .18f, h * .76f))
+            drawCircle(tint, stroke.width, Offset(w * .78f, h * .20f)); line(.30f, .65f, .36f, .72f, .7f)
+            line(.46f, .50f, .52f, .57f, .7f); line(.62f, .35f, .68f, .42f, .7f)
+        }
+        AppGlyph.INK -> {
+            val nib = Path().apply {
+                moveTo(w * .20f, h * .77f); lineTo(w * .42f, h * .22f)
+                lineTo(w * .79f, h * .14f); lineTo(w * .69f, h * .52f); close()
+            }
+            drawPath(nib, tint, style = stroke); line(.20f, .77f, .54f, .43f)
+            drawCircle(tint, stroke.width * .65f, Offset(w * .54f, h * .43f))
+        }
+        AppGlyph.TEMPLATE -> {
+            line(.18f, .78f, .48f, .18f); line(.18f, .78f, .83f, .63f)
+            drawArc(tint, 300f, 82f, false, Offset(w * .23f, h * .27f), androidx.compose.ui.geometry.Size(w * .52f, h * .42f), style = stroke)
+        }
+        AppGlyph.LABEL -> {
+            val scroll = Path().apply {
+                moveTo(w * .25f, h * .18f); lineTo(w * .76f, h * .18f); lineTo(w * .72f, h * .75f)
+                lineTo(w * .31f, h * .75f); lineTo(w * .25f, h * .18f)
+            }
+            drawPath(scroll, tint, style = stroke); line(.36f, .38f, .65f, .38f, .75f); line(.36f, .53f, .61f, .53f, .75f)
+        }
+        AppGlyph.PING -> {
+            drawCircle(tint, w * .09f, center, style = stroke)
+            drawCircle(tint, w * .24f, center, style = stroke)
+            drawCircle(tint, w * .40f, center, style = stroke)
+        }
+        AppGlyph.FOG -> {
+            line(.12f, .40f, .52f, .40f); line(.32f, .58f, .86f, .58f); line(.16f, .74f, .68f, .74f)
+            drawCircle(tint.copy(alpha = .45f), w * .18f, Offset(w * .56f, h * .34f))
+        }
+        AppGlyph.LAYERS -> {
+            fun diamond(cy: Float) {
+                val p = Path().apply {
+                    moveTo(w * .50f, h * (cy - .18f)); lineTo(w * .84f, h * cy)
+                    lineTo(w * .50f, h * (cy + .18f)); lineTo(w * .16f, h * cy); close()
+                }
+                drawPath(p, tint, style = stroke)
+            }
+            diamond(.35f); diamond(.62f)
+        }
+        AppGlyph.ERASER -> {
+            val p = Path().apply {
+                moveTo(w * .23f, h * .68f); lineTo(w * .56f, h * .19f); lineTo(w * .82f, h * .40f)
+                lineTo(w * .50f, h * .81f); lineTo(w * .23f, h * .68f); close()
+            }
+            drawPath(p, tint, style = stroke); line(.38f, .57f, .62f, .76f, .75f)
+        }
+        AppGlyph.TOKEN -> {
+            drawCircle(tint, w * .31f, Offset(w * .43f, h * .49f), style = stroke)
+            drawCircle(tint, w * .12f, Offset(w * .43f, h * .40f), style = stroke)
+            drawArc(
+                tint,
+                startAngle = 205f,
+                sweepAngle = 130f,
+                useCenter = false,
+                topLeft = Offset(w * .27f, h * .45f),
+                size = androidx.compose.ui.geometry.Size(w * .32f, h * .25f),
+                style = stroke,
+            )
+            line(.70f, .55f, .70f, .82f)
+            line(.57f, .685f, .83f, .685f)
+        }
+        else -> Unit
     }
 }
 

@@ -4,6 +4,9 @@ import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.space.GridPosition
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.ui.content.SampleEncounter
+import app.d6d.ui.board.BoardController
+import app.d6d.board.GridPoint
+import app.d6d.board.Label
 import app.d6d.ui.state.BattleViewModel
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -188,6 +191,21 @@ class SessionManagerTest {
         assertEquals(SessionSaveResult.SAVED, manager.flushAutosave())
         assertFalse(manager.hasUnsavedChanges)
         assertEquals(SessionSaveResult.NOT_NEEDED, manager.flushAutosave())
+    }
+
+    @Test
+    fun `dirty autosave e archivio osservano la revisione del Lucido`() {
+        val battle = battle()
+        val board = BoardController()
+        val manager = SessionManager(SessionArchiveStore(directory.resolve("sessions")), battle, board)
+        assertEquals(SessionSaveResult.SAVED, manager.save("Lucido autosave"))
+
+        board.add(Label("nota", GridPoint(2.5, 2.5), "Porta", 0xffccaa44.toInt(), 14.0, 0.0))
+
+        assertTrue(manager.currentDirty)
+        assertEquals(SessionSaveResult.SAVED, manager.flushAutosave())
+        assertFalse(manager.hasUnsavedChanges)
+        assertEquals(board.document, SessionArchiveStore(directory.resolve("sessions")).load("lucido-autosave").board())
     }
 
     @Test

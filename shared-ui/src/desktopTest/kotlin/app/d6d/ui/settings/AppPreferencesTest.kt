@@ -9,6 +9,8 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import app.d6d.ui.state.EnemyCpuSpeed
+import app.d6d.board.StampKind
+import app.d6d.board.TemplateShape
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -93,6 +95,26 @@ class AppPreferencesTest {
         Files.writeString(file, """{"enemyCpuSpeed":"FAST","volumeDeiTuoni":0.4}""")
 
         assertEquals(EnemyCpuSpeed.FAST, store().load().speedOrDefault())
+    }
+
+    @Test
+    fun `le preferenze del Lucido vengono sanificate e persistono`() {
+        val store = store()
+        store.save(
+            AppPreferences(
+                boardColorArgb = 0xff44aacc.toInt(),
+                boardStrokeWidth = 99f,
+                boardTemplateShape = TemplateShape.CONE.name,
+                boardStampKind = StampKind.DOOR.name,
+            ),
+        )
+
+        val loaded = store.load()
+
+        assertEquals(0xff44aacc.toInt(), loaded.boardColorArgb)
+        assertEquals(2f, loaded.boardStrokeWidth)
+        assertEquals(TemplateShape.CONE, loaded.templateShapeOrDefault())
+        assertEquals(StampKind.DOOR, loaded.stampKindOrDefault())
     }
 
     @Test

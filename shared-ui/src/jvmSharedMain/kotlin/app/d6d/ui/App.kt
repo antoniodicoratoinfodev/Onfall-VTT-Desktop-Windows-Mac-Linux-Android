@@ -70,6 +70,7 @@ import app.d6d.ui.layout.LayoutStore
 import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.layout.UiLayoutState
 import app.d6d.ui.settings.AppPreferencesState
+import app.d6d.ui.settings.LocalAppPreferences
 import app.d6d.ui.settings.PreferencesStore
 import app.d6d.ui.settings.SettingsScreen
 import app.d6d.persistence.session.SessionArchiveStore
@@ -492,6 +493,7 @@ fun AppRoot(
 
         CompositionLocalProvider(
             LocalUiLayout provides layout,
+            LocalAppPreferences provides preferences,
             // Il vocabolario entra qui e scende fino all'ultima etichetta. Cambia
             // lingua e a essere ridisegnato e' solo chi legge davvero del testo.
             LocalStrings provides stringsFor(preferences.language),
@@ -648,6 +650,7 @@ private fun SessionAutosaveEffect(workspace: SessionWorkspace, opened: OpenGameS
     LaunchedEffect(
         opened.battle.state,
         opened.battle.presentationState(),
+        opened.board.revision,
         opened.manager.currentSlug,
     ) {
         if (opened.manager.currentSlug != null && opened.manager.hasUnsavedChanges) {

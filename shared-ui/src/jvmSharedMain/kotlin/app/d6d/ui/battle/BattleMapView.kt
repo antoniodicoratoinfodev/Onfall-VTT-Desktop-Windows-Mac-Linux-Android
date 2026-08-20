@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +66,13 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -84,6 +92,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.d6d.domain.space.MapBackground
 import app.d6d.domain.space.TokenPlacement
+import app.d6d.ui.board.BoardController
+import app.d6d.ui.board.BoardTool
+import app.d6d.ui.board.BoardToolState
+import app.d6d.ui.board.MapInteraction
+import app.d6d.ui.board.resolveMapInteraction
 import app.d6d.ui.components.Faction
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumberView
@@ -125,6 +138,8 @@ fun BattleMapView(
     editingBackground: Boolean = false,
     dropTarget: TokenPlacementDrag? = null,
     onCellSizeChange: (Dp) -> Unit = {},
+    board: BoardController,
+    boardTools: BoardToolState,
 ) {
     if (!viewModel.mapConfigured) {
         MapNotConfigured(viewModel, modifier)
@@ -162,6 +177,8 @@ fun BattleMapView(
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     var pan by remember { mutableStateOf<Offset?>(null) }
     var mapPanning by remember { mutableStateOf(false) }
+    var temporaryPan by remember { mutableStateOf(false) }
+    val mapFocusRequester = remember { FocusRequester() }
     val cellPx = with(density) { liveCell.toPx() }
 
     // Casella sotto il mouse: serve a far seguire al puntatore il cerchio dell'area
@@ -170,6 +187,19 @@ fun BattleMapView(
     val setMapDragCursor by rememberUpdatedState(LocalMapDragCursor.current)
     val areaTargeting = viewModel.areaTargeting
     val pendingArea = viewModel.pendingArea
+    val interaction = resolveMapInteraction(
+        selectedTool = boardTools.active,
+        ruleTargeting = areaTargeting != null || viewModel.singleTargeting != null || pendingArea != null,
+        backgroundEditing = editingBackground,
+        cpuPlayback = viewModel.enemyCpuBusy,
+        temporaryPan = temporaryPan,
+    )
+    val baseMapGestureEnabled = interaction is MapInteraction.Table ||
+        interaction is MapInteraction.RuleTargeting ||
+        interaction is MapInteraction.TemporaryPan ||
+        (interaction is MapInteraction.Board && interaction.tool == BoardTool.HAND)
+    val tableTapEnabled = interaction is MapInteraction.Table || interaction is MapInteraction.RuleTargeting
+    val tokenGestureEnabled = tableTapEnabled
     var manualCardBounds by remember { mutableStateOf<Rect?>(null) }
     var manualCardSize by remember { mutableStateOf(IntSize.Zero) }
     var manualCardOffset by remember(pendingArea?.spellName, pendingArea?.center) {
@@ -277,6 +307,32 @@ fun BattleMapView(
             .fillMaxSize()
             .background(Palette.Abyss)
             .clipToBounds()
+            .focusRequester(mapFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                when (event.key) {
+                    Key.Spacebar -> {
+                        temporaryPan = event.type == KeyEventType.KeyDown
+                        true
+                    }
+                    Key.Escape -> if (event.type == KeyEventType.KeyDown) {
+                        when {
+                            boardTools.measurePoints.isNotEmpty() -> boardTools.measurePoints = emptyList()
+                            boardTools.active != BoardTool.TABLE -> boardTools.table()
+                            else -> return@onPreviewKeyEvent false
+                        }
+                        true
+                    } else false
+                    Key.Delete, Key.Backspace -> if (
+                        event.type == KeyEventType.KeyDown && boardTools.active == BoardTool.EDIT
+                    ) {
+                        boardTools.selectedId?.let(board::remove)
+                        boardTools.selectedId = null
+                        true
+                    } else false
+                    else -> false
+                }
+            }
             .onGloballyPositioned {
                 val nextViewport = it.size
                 if (nextViewport != viewport) {
@@ -293,6 +349,14 @@ fun BattleMapView(
                     pan?.let { nextPan -> dropTarget?.gridOriginPx = nextPan }
                 }
                 dropTarget?.gridCoordinates = it
+            }
+            .pointerInput(mapFocusRequester) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Press) mapFocusRequester.requestFocus()
+                    }
+                }
             }
             // Lo scorrimento viene intercettato nella fase iniziale e consumato: la
             // casella sotto il puntatore resta ferma mentre la scala cambia, cosi' si
@@ -344,7 +408,8 @@ fun BattleMapView(
             // senza interrompere il gesto a meta'. I segnaposti consumano da soli la
             // pressione e hanno la precedenza, percio' trascinarli non viene mai
             // scambiato per uno spostamento della mappa.
-            .pointerInput(viewModel, density.density, dropTarget) {
+            .pointerInput(viewModel, density.density, dropTarget, baseMapGestureEnabled, tableTapEnabled) {
+                if (!baseMapGestureEnabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = true)
                     // I gesti iniziati sul pannello sovrapposto non devono mai
@@ -364,7 +429,7 @@ fun BattleMapView(
                                 // Rilascio senza trascinamento: comando sulla casella. Il
                                 // punto torna in coordinate della griglia togliendo la
                                 // traslazione, perche' la mappa puo' essere stata spostata.
-                                if (!panning) {
+                                if (!panning && tableTapEnabled) {
                                     val cell = with(density) { liveCell.toPx() }
                                     val currentCamera = geometry(cell)
                                     currentCamera.cellAt(down.position, effectiveOffset(currentCamera))?.let {
@@ -466,6 +531,18 @@ fun BattleMapView(
             }
         }
 
+        BoardContentLayer(
+            board = board,
+            grid = grid,
+            camera = camera,
+            mapOffset = mapOffset,
+            cellPx = cellPx,
+            showMasterFog = !boardTools.playerPreview,
+            playerPreview = boardTools.playerPreview,
+            portraits = portraits,
+            modifier = Modifier.fillMaxSize(),
+        )
+
         // Il raggio residuo è un'anteprima: si accende passando il mouse sul comando
         // dedicato e ci resta se lo si preme, senza mai partecipare ai limiti di
         // trascinamento.
@@ -501,8 +578,25 @@ fun BattleMapView(
 
         placements.forEach { placement ->
             key(placement.combatantId()) {
-                MapToken(viewModel, portraits, placement, liveCell, mapOffset)
+                MapToken(viewModel, portraits, placement, liveCell, mapOffset, tokenGestureEnabled)
             }
+        }
+
+        if (boardTools.playerPreview) {
+            BoardPlayerFogLayer(board, camera, mapOffset, cellPx, Modifier.fillMaxSize())
+        }
+
+        if (interaction is MapInteraction.Board && interaction.tool != BoardTool.HAND) {
+            BoardInteractionOverlay(
+                viewModel = viewModel,
+                board = board,
+                tools = boardTools,
+                grid = grid,
+                camera = camera,
+                mapOffset = mapOffset,
+                cellPx = cellPx,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
 
         if (dropTarget != null) {
@@ -971,6 +1065,7 @@ private fun MapToken(
     placement: TokenPlacement,
     cellSize: Dp,
     mapOffset: Offset,
+    interactive: Boolean,
 ) {
     val words = strings.battle
     val id = placement.combatantId()
@@ -1052,7 +1147,7 @@ private fun MapToken(
             .wrapContentSize(Alignment.TopStart, unbounded = true)
             .size(side)
             .semantics {
-                role = Role.Button
+                if (interactive) role = Role.Button
                 contentDescription = snapshot.name()
                 stateDescription = buildString {
                     append(
@@ -1067,6 +1162,9 @@ private fun MapToken(
                     if (defeated) append(words.outOfCombatSuffix)
                 }
             }
+            .then(
+                if (interactive) {
+                    Modifier
             // Modalità modifica: qualunque segnaposto si trascina liberamente per
             // comporre la scena. Modalità normale: solo il combattente di turno si
             // trascina, e lo spostamento vero passa dal motore, quindi consuma il
@@ -1144,6 +1242,10 @@ private fun MapToken(
                     viewModel.onCombatantClicked(id)
                 }
             }
+                } else {
+                    Modifier
+                },
+            )
             .alpha(if (defeated) 0.5f else 1f),
         contentAlignment = Alignment.Center,
     ) {

@@ -4,6 +4,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.d6d.i18n.AppLanguage
+import app.d6d.board.StampKind
+import app.d6d.board.TemplateShape
+import androidx.compose.runtime.staticCompositionLocalOf
 
 /**
  * Preferenze vive, condivise da tutta la shell.
@@ -18,6 +21,10 @@ class AppPreferencesState(
 ) {
     var enemyCpuSpeed by mutableStateOf(initial.speedOrDefault())
     var animatedBackdrop by mutableStateOf(initial.animatedBackdrop)
+    var boardColorArgb by mutableStateOf(initial.boardColorArgb)
+    var boardStrokeWidth by mutableStateOf(initial.boardStrokeWidth)
+    var boardTemplateShape by mutableStateOf(initial.templateShapeOrDefault())
+    var boardStampKind by mutableStateOf(initial.stampKindOrDefault())
 
     /**
      * La lingua dell'interfaccia.
@@ -56,6 +63,10 @@ class AppPreferencesState(
             enemyCpuSpeed = enemyCpuSpeed.name,
             animatedBackdrop = animatedBackdrop,
             language = if (languageIsSystemDefault) "" else chosen,
+            boardColorArgb = boardColorArgb,
+            boardStrokeWidth = boardStrokeWidth,
+            boardTemplateShape = boardTemplateShape.name,
+            boardStampKind = boardStampKind.name,
         ).sanitized()
     }
 
@@ -78,6 +89,10 @@ class AppPreferencesState(
         val value = loaded.sanitized()
         enemyCpuSpeed = value.speedOrDefault()
         animatedBackdrop = value.animatedBackdrop
+        boardColorArgb = value.boardColorArgb
+        boardStrokeWidth = value.boardStrokeWidth
+        boardTemplateShape = value.templateShapeOrDefault()
+        boardStampKind = value.stampKindOrDefault()
         language = value.languageOrSystemDefault()
         languageIsSystemDefault = value.language.isBlank()
         lastSaved = value
@@ -88,9 +103,15 @@ class AppPreferencesState(
         val defaults = AppPreferences()
         enemyCpuSpeed = defaults.speedOrDefault()
         animatedBackdrop = defaults.animatedBackdrop
+        boardColorArgb = defaults.boardColorArgb
+        boardStrokeWidth = defaults.boardStrokeWidth
+        boardTemplateShape = defaults.templateShapeOrDefault()
+        boardStampKind = defaults.stampKindOrDefault()
         // La lingua torna a quella del sistema, cioe' allo stato di chi non ha
         // ancora scelto: e' il valore di fabbrica anche per lei.
         language = defaults.languageOrSystemDefault()
         languageIsSystemDefault = true
     }
 }
+
+val LocalAppPreferences = staticCompositionLocalOf { AppPreferencesState() }

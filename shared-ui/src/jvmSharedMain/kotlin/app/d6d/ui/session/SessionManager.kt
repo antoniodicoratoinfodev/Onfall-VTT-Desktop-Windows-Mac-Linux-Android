@@ -3,6 +3,7 @@ package app.d6d.ui.session
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.d6d.board.BoardDocument
 import app.d6d.domain.combat.CombatState
 import app.d6d.engine.CombatSession
 import app.d6d.persistence.session.SessionArchive
@@ -10,6 +11,7 @@ import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.persistence.session.SessionSummary
 import app.d6d.ui.i18n.AppLocale
 import app.d6d.ui.i18n.localizedSessionError
+import app.d6d.ui.board.BoardController
 import app.d6d.ui.state.BattleViewModel
 import java.io.IOException
 
@@ -34,10 +36,13 @@ class PreparedSessionPersistence internal constructor(
     internal val session: CombatSession,
     internal val state: CombatState,
     internal val presentation: Map<String, String>,
+    internal val board: BoardDocument,
+    internal val boardRevision: Long,
     internal val generation: Long,
     internal val currentName: String,
     internal val currentSlug: String?,
     internal val savedGeneration: Long?,
+    internal val savedBoardRevision: Long?,
     internal val hasUnsavedChanges: Boolean,
 )
 
@@ -52,6 +57,7 @@ class PreparedSessionPersistence internal constructor(
 class SessionManager(
     private val store: SessionArchiveStore,
     private val battle: BattleViewModel,
+    private val board: BoardController = BoardController(),
     /**
      * Lease fornito dal workspace multi-sessione. Impedisce che due schede aperte
      * diventino proprietarie dello stesso file e si sovrascrivano via autosave.
@@ -88,11 +94,13 @@ class SessionManager(
     private var savedPresentation by mutableStateOf<Map<String, String>?>(null)
     private var savedDisplayName by mutableStateOf<String?>(null)
     private var savedGeneration by mutableStateOf<Long?>(null)
+    private var savedBoardRevision by mutableStateOf<Long?>(null)
 
     /** Include sia lo stato del motore sia le scelte di presentazione. */
     val hasUnsavedChanges: Boolean
         get() = savedState != battle.state ||
             savedPresentation != battle.presentationState() ||
+            savedBoardRevision != board.revision ||
             savedGeneration != battle.sessionGeneration ||
             (savedDisplayName != null && currentName != savedDisplayName)
 
@@ -268,6 +276,7 @@ class SessionManager(
      */
     internal fun attachLoaded(archive: SessionArchive, announce: Boolean = false) {
         battle.adopt(archive.session, archive.presentation)
+        board.adopt(archive.board)
         currentSlug = archive.summary().slug
         currentName = archive.summary().displayName
         markSaved()
@@ -291,6 +300,7 @@ class SessionManager(
         savedDisplayName = currentName
         // Mantiene attivo l'autosave per le sessioni che possedevano già un file.
         savedGeneration = battle.sessionGeneration
+        savedBoardRevision = null
         menuOpen = false
         status = null
     }
@@ -302,7 +312,7 @@ class SessionManager(
         showSuccess: Boolean,
     ): SessionSaveResult {
         return try {
-            val slug = store.save(displayName, prepared.session, prepared.presentation)
+            val slug = store.save(displayName, prepared.session, prepared.presentation, prepared.board)
             check(slug == expectedSlug) { "Il nome del file della sessione è cambiato durante il salvataggio" }
             val persistedName = displayName.trim().ifBlank { slug }
             // Un writer lento non deve ricollegare una nuova partita o annullare
@@ -311,6 +321,7 @@ class SessionManager(
             // successivo continua quindi a risultare dirty.
             val stillSameDocument =
                 battle.sessionGeneration == prepared.generation &&
+                    board.revision == prepared.boardRevision &&
                     currentSlug == prepared.currentSlug &&
                     currentName == prepared.currentName
             if (stillSameDocument) {
@@ -361,17 +372,22 @@ class SessionManager(
         val capturedName = currentName
         val capturedSlug = currentSlug
         val capturedSavedGeneration = savedGeneration
+        val capturedSavedBoardRevision = savedBoardRevision
         return PreparedSessionPersistence(
             owner = this,
             session = snapshot.session,
             state = snapshot.state,
             presentation = snapshot.presentation,
+            board = board.document,
+            boardRevision = board.revision,
             generation = snapshot.generation,
             currentName = capturedName,
             currentSlug = capturedSlug,
             savedGeneration = capturedSavedGeneration,
+            savedBoardRevision = capturedSavedBoardRevision,
             hasUnsavedChanges = savedState != snapshot.state ||
                 savedPresentation != snapshot.presentation ||
+                capturedSavedBoardRevision != board.revision ||
                 capturedSavedGeneration != snapshot.generation ||
                 (savedDisplayName != null && capturedName != savedDisplayName),
         )
@@ -388,6 +404,7 @@ class SessionManager(
         savedPresentation = prepared.presentation
         savedDisplayName = displayName
         savedGeneration = prepared.generation
+        savedBoardRevision = prepared.boardRevision
     }
 
     private fun markSaved() {
@@ -401,5 +418,6 @@ class SessionManager(
         savedPresentation = null
         savedDisplayName = null
         savedGeneration = null
+        savedBoardRevision = null
     }
 }

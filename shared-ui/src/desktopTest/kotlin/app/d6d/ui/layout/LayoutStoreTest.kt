@@ -44,6 +44,8 @@ class LayoutStoreTest {
             commandsCollapsed = true,
             mapCellSizeDp = 70f,
             mapShowGrid = false,
+            toolboxPinned = true,
+            toolboxVerticalFraction = 0.72f,
             targetPlate = PlateFraction(0.25f, 0.75f),
             activePlate = PlateFraction(0.5f, 0.5f),
         )
@@ -108,6 +110,7 @@ class LayoutStoreTest {
                 squadWidthDp = -40f,
                 mapCellSizeDp = Float.NaN,
                 targetPlate = PlateFraction(4f, -2f),
+                toolboxVerticalFraction = Float.POSITIVE_INFINITY,
             ),
         )
 
@@ -117,6 +120,7 @@ class LayoutStoreTest {
         assertTrue(loaded.squadWidthDp >= 100f, "la colonna non deve andare sotto il minimo")
         assertEquals(46f, loaded.mapCellSizeDp, "un NaN deve ricadere sul valore predefinito")
         assertEquals(PlateFraction(1f, 0f), loaded.targetPlate, "la frazione resta fra 0 e 1")
+        assertEquals(0.5f, loaded.toolboxVerticalFraction, "una posizione non finita torna al centro")
     }
 
     @Test

@@ -1,7 +1,9 @@
 package app.d6d.persistence.session;
 
+import app.d6d.board.BoardDocument;
 import app.d6d.domain.combat.CombatState;
 import app.d6d.engine.CombatSession;
+import app.d6d.persistence.board.BoardDocumentJsonCodec;
 import app.d6d.persistence.combat.CombatSessionJsonCodec;
 import app.d6d.persistence.json.AtomicJsonStore;
 
@@ -31,19 +33,28 @@ import java.util.Objects;
  */
 public final class SessionArchiveStore {
 
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
     private static final int MAX_BACKUPS = 5;
 
     private final Path directory;
     private final CombatSessionJsonCodec codec;
+    private final BoardDocumentJsonCodec boardCodec;
 
     public SessionArchiveStore(Path directory) {
-        this(directory, new CombatSessionJsonCodec());
+        this(directory, new CombatSessionJsonCodec(), new BoardDocumentJsonCodec());
     }
 
     public SessionArchiveStore(Path directory, CombatSessionJsonCodec codec) {
+        this(directory, codec, new BoardDocumentJsonCodec());
+    }
+
+    public SessionArchiveStore(
+            Path directory,
+            CombatSessionJsonCodec codec,
+            BoardDocumentJsonCodec boardCodec) {
         this.directory = Objects.requireNonNull(directory, "directory").toAbsolutePath().normalize();
         this.codec = Objects.requireNonNull(codec, "codec");
+        this.boardCodec = Objects.requireNonNull(boardCodec, "boardCodec");
     }
 
     /**
@@ -97,7 +108,16 @@ public final class SessionArchiveStore {
             String displayName,
             CombatSession session,
             Map<String, String> presentation) throws IOException {
+        return save(displayName, session, presentation, BoardDocument.empty());
+    }
+
+    public synchronized String save(
+            String displayName,
+            CombatSession session,
+            Map<String, String> presentation,
+            BoardDocument board) throws IOException {
         Objects.requireNonNull(session, "session");
+        Objects.requireNonNull(board, "board");
         String slug = slugify(displayName);
         String name = displayName == null || displayName.isBlank() ? slug : displayName.trim();
 
@@ -112,6 +132,7 @@ public final class SessionArchiveStore {
         document.put("status", state.status().name());
         document.put("presentation", new LinkedHashMap<String, Object>(
                 presentation == null ? Map.of() : presentation));
+        document.put("board", boardCodec.encode(board));
         document.put("combat", codec.encode(session));
 
         Files.createDirectories(directory);
@@ -123,7 +144,7 @@ public final class SessionArchiveStore {
     public synchronized SessionArchive load(String slug) throws IOException {
         Map<String, Object> document = store(slug).loadObject();
         int schemaVersion = intValue(document.get("schemaVersion"));
-        if (schemaVersion != SCHEMA_VERSION) {
+        if (schemaVersion != 1 && schemaVersion != SCHEMA_VERSION) {
             throw new IOException("Versione dell'archivio non supportata: " + schemaVersion);
         }
 
@@ -144,7 +165,18 @@ public final class SessionArchiveStore {
             });
         }
 
-        return new SessionArchive(summaryFrom(slug, document), session, presentation);
+        BoardDocument board;
+        if (document.get("board") instanceof Map<?, ?> rawBoard) {
+            @SuppressWarnings("unchecked")
+            Map<String, ?> boardMap = (Map<String, ?>) rawBoard;
+            board = boardCodec.decode(boardMap);
+        } else if (schemaVersion == 1) {
+            board = BoardDocument.empty();
+        } else {
+            throw new IOException("La sessione salvata non contiene il Lucido");
+        }
+
+        return new SessionArchive(summaryFrom(slug, document), session, presentation, board);
     }
 
     public synchronized void delete(String slug) throws IOException {

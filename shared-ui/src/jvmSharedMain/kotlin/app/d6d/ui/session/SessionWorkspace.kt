@@ -4,11 +4,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.d6d.board.BoardDocument
 import app.d6d.engine.CombatSession
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.persistence.session.SessionSummary
 import app.d6d.ui.i18n.AppLocale
 import app.d6d.ui.i18n.localizedSessionError
+import app.d6d.ui.board.BoardController
 import app.d6d.ui.state.BattleViewModel
 import java.io.IOException
 
@@ -38,6 +40,7 @@ internal data class WorkspaceSessionRecoveryKey(
     val stateRevision: Long,
     val eventCount: Int,
     val sessionGeneration: Long,
+    val boardRevision: Long,
     val presentation: Map<String, String>,
 )
 
@@ -51,6 +54,7 @@ internal data class WorkspaceSessionRecoveryKey(
 class OpenGameSession internal constructor(
     val id: String,
     val battle: BattleViewModel,
+    val board: BoardController,
     val manager: SessionManager,
 ) {
     val displayName: String get() = manager.currentDisplayName
@@ -162,15 +166,17 @@ class SessionWorkspace(
         session: CombatSession,
         displayName: String,
         presentation: Map<String, String> = emptyMap(),
+        boardDocument: BoardDocument = BoardDocument.empty(),
     ): OpenGameSession {
         val id = newId()
         val battle = battleFactory(session)
+        val board = BoardController(boardDocument)
         if (presentation.isNotEmpty()) battle.adopt(session, presentation)
         freezeUnplacedFootprints(battle)
-        val manager = managerFor(id, battle).also {
+        val manager = managerFor(id, battle, board).also {
             it.beginUnsavedSession(displayName)
         }
-        val opened = OpenGameSession(id, battle, manager)
+        val opened = OpenGameSession(id, battle, board, manager)
         entries += opened
         activeId = id
         status = words.gameOpenedInNewTab(opened.displayName)
@@ -190,12 +196,13 @@ class SessionWorkspace(
             val archive = store.load(summary.slug)
             val id = newId()
             val battle = battleFactory(archive.session)
-            val manager = managerFor(id, battle)
+            val board = BoardController(archive.board)
+            val manager = managerFor(id, battle, board)
             manager.attachLoaded(archive)
             // Migrazione trasparente dei salvataggi più vecchi, nei quali la taglia
             // dei token non posizionati dipendeva ancora dal Compendio corrente.
             freezeUnplacedFootprints(battle)
-            val opened = OpenGameSession(id, battle, manager)
+            val opened = OpenGameSession(id, battle, board, manager)
             entries += opened
             activeId = id
             status = words.sessionOpenedInNewTab(opened.displayName)
@@ -309,6 +316,7 @@ class SessionWorkspace(
                 stateRevision = opened.battle.state.revision(),
                 eventCount = opened.battle.events.size,
                 sessionGeneration = opened.battle.sessionGeneration,
+                boardRevision = opened.board.revision,
                 presentation = opened.battle.presentationState(),
             )
         },
@@ -329,6 +337,7 @@ class SessionWorkspace(
                     currentSlug = snapshot.currentSlug,
                     session = snapshot.session,
                     presentation = snapshot.presentation,
+                    board = snapshot.board,
                 )
             },
         )
@@ -343,12 +352,13 @@ class SessionWorkspace(
         val restored = recovery.sessions.map { recovered ->
             val id = newId()
             val battle = battleFactory(recovered.session)
+            val board = BoardController(recovered.board)
             battle.adopt(recovered.session, recovered.presentation)
             freezeUnplacedFootprints(battle)
-            val manager = managerFor(id, battle).also {
+            val manager = managerFor(id, battle, board).also {
                 it.attachRecovered(recovered.currentSlug, recovered.displayName)
             }
-            OpenGameSession(id, battle, manager)
+            OpenGameSession(id, battle, board, manager)
         }
         entries.clear()
         entries.addAll(restored)
@@ -423,10 +433,11 @@ class SessionWorkspace(
         }
     }
 
-    private fun managerFor(id: String, battle: BattleViewModel): SessionManager =
+    private fun managerFor(id: String, battle: BattleViewModel, board: BoardController): SessionManager =
         SessionManager(
             store = store,
             battle = battle,
+            board = board,
             slugOwnedByAnotherTab = { slug ->
                 entries.any { it.id != id && it.manager.currentSlug == slug }
             },

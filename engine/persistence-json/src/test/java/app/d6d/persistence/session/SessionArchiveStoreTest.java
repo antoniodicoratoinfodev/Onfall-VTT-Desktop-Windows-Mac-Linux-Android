@@ -1,10 +1,14 @@
 package app.d6d.persistence.session;
 
+import app.d6d.board.BoardDocument;
+import app.d6d.board.GridPoint;
+import app.d6d.board.Label;
 import app.d6d.domain.combat.ActorDefinition;
 import app.d6d.domain.combat.CombatState;
 import app.d6d.domain.space.GridPosition;
 import app.d6d.domain.space.MapGrid;
 import app.d6d.engine.CombatSession;
+import app.d6d.persistence.json.Json;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -88,6 +92,42 @@ class SessionArchiveStoreTest {
         String slug = store.save("con presentazione", session(7L), presentation);
 
         assertEquals(presentation, store.load(slug).presentation());
+    }
+
+    @Test
+    void ilLucidoStrutturatoSopravvive() throws IOException {
+        SessionArchiveStore store = store();
+        BoardDocument board = BoardDocument.empty().withObjects(List.of(
+                new Label("sala", new GridPoint(4.5, 3.5), "Sala del trono", 0xffccaa44, 16, 0)));
+
+        String slug = store.save("con lucido", session(7L), Map.of(), board);
+
+        assertEquals(board, store.load(slug).board());
+    }
+
+    @Test
+    void unArchivioSchemaUnoSenzaLucidoRestaLeggibile() throws IOException {
+        SessionArchiveStore store = store();
+        String slug = store.save("vecchia", session(7L), Map.of());
+        Path file = directory.resolve("sessions").resolve(slug + ".json");
+        Map<String, Object> document = new java.util.LinkedHashMap<>(Json.parseObject(Files.readString(file)));
+        document.put("schemaVersion", 1);
+        document.remove("board");
+        Files.writeString(file, Json.encode(document));
+
+        assertEquals(BoardDocument.empty(), store.load(slug).board());
+    }
+
+    @Test
+    void unArchivioSchemaDueSenzaLucidoNonPerdeDatiInSilenzio() throws IOException {
+        SessionArchiveStore store = store();
+        String slug = store.save("incompleta", session(7L), Map.of());
+        Path file = directory.resolve("sessions").resolve(slug + ".json");
+        Map<String, Object> document = new java.util.LinkedHashMap<>(Json.parseObject(Files.readString(file)));
+        document.remove("board");
+        Files.writeString(file, Json.encode(document));
+
+        assertThrows(IOException.class, () -> store.load(slug));
     }
 
     @Test

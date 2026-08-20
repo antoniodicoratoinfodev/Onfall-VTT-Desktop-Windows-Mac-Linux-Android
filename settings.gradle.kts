@@ -20,6 +20,8 @@ rootProject.name = "onfall"
 // sia dal desktop JVM sia da Android.
 include(":engine:domain-model")
 include(":engine:core-engine")
+// Annotazioni della mappa: modello puro, separato dalle regole di combattimento.
+include(":engine:board-model")
 include(":engine:persistence-json")
 // Schede di personaggio e stat block dei mostri: modello di redazione, piu'
 // ricco della proiezione da combattimento usata dal motore.

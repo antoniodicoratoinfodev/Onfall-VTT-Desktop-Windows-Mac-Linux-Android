@@ -2,6 +2,9 @@ package app.d6d.ui.session
 
 import app.d6d.persistence.session.SessionArchiveStore
 import app.d6d.engine.CombatSession
+import app.d6d.board.BoardDocument
+import app.d6d.board.GridPoint
+import app.d6d.board.Label
 import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.ui.content.SampleEncounter
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -69,6 +72,24 @@ class WorkspaceRecoveryStoreTest {
                 assertFalse(files.anyMatch { it.fileName.toString().startsWith("workspace-recovery-") })
             }
         }
+    }
+
+    @Test
+    fun `la bozza conserva il Lucido come documento strutturato`() {
+        val board = BoardDocument.empty().withObjects(
+            listOf(Label("nota", GridPoint(3.5, 4.5), "Trappola", 0xffccaa44.toInt(), 14.0, 0.0)),
+        )
+        val store = WorkspaceRecoveryStore(directory)
+        store.save(
+            WorkspaceRecovery(
+                activeIndex = 0,
+                sessions = listOf(
+                    RecoveredGameSession("Con Lucido", null, SampleEncounter.startedSession(seed = 300L), emptyMap(), board),
+                ),
+            ),
+        )
+
+        assertEquals(board, requireNotNull(store.load()).sessions.single().board)
     }
 
     @Test

@@ -40,6 +40,7 @@ interface Strings {
     val compendium: CompendiumStrings
     val cursors: CursorStrings
     val abilities: AbilityStrings
+    val board: BoardStrings
 }
 
 /** Il vocabolario italiano. */
@@ -59,6 +60,7 @@ object ItalianStrings : Strings {
     override val compendium: CompendiumStrings = CompendiumStringsIt
     override val cursors: CursorStrings = CursorStringsIt
     override val abilities: AbilityStrings = AbilityStringsIt
+    override val board: BoardStrings = BoardStringsIt
 }
 
 /** Il vocabolario inglese. */
@@ -78,6 +80,7 @@ object EnglishStrings : Strings {
     override val compendium: CompendiumStrings = CompendiumStringsEn
     override val cursors: CursorStrings = CursorStringsEn
     override val abilities: AbilityStrings = AbilityStringsEn
+    override val board: BoardStrings = BoardStringsEn
 }
 
 /** Il vocabolario di una lingua. L'unico posto che lega l'enum alle parole. */

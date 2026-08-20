@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Slider
@@ -24,6 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.space.MapGrid
+import app.d6d.ui.board.BoardController
+import app.d6d.ui.board.BoardTool
+import app.d6d.ui.board.BoardToolState
 import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.i18n.strings
@@ -42,7 +47,7 @@ import app.d6d.ui.theme.Palette
  * vista da due lati — una scaramuccia in una stanza e una battaglia campale non
  * si rappresentano bene con lo stesso passo.
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun MapControls(
     viewModel: BattleViewModel,
@@ -53,6 +58,10 @@ fun MapControls(
     onShowGridChange: (Boolean) -> Unit,
     gridBrightness: Float,
     onGridBrightnessChange: (Float) -> Unit,
+    board: BoardController,
+    boardTools: BoardToolState,
+    compact: Boolean,
+    onBoardToolSelected: (BoardTool) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val grid = viewModel.battleMap.grid()
@@ -104,7 +113,16 @@ fun MapControls(
                 dense = true,
                 onClick = { expanded = !expanded },
             )
+            GameButton(
+                label = strings.board.tools,
+                accent = if (boardTools.active == BoardTool.TABLE) Palette.TextMuted else Palette.Gold,
+                selected = boardTools.toolboxOpen,
+                dense = true,
+                onClick = { boardTools.toolboxOpen = !boardTools.toolboxOpen },
+            )
         }
+
+        BoardToolOptions(boardTools, board, compact)
 
         if (viewModel.mapEditMode) {
             Text(
@@ -218,7 +236,10 @@ fun MapControls(
                             // sicura della modifica generale, ma questo comando vi
                             // entra direttamente senza obbligare a cercare prima
                             // il pulsante nella barra superiore.
-                            if (activate) viewModel.editMode = true
+                            if (activate) {
+                                onBoardToolSelected(BoardTool.TABLE)
+                                viewModel.editMode = true
+                            }
                             viewModel.mapEditMode = activate
                         },
                     )
@@ -252,6 +273,18 @@ fun MapControls(
                     .fillMaxWidth()
                     .clickable { portraits.dismissMessage() }
                     .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
+
+    if (compact && boardTools.toolboxOpen) {
+        ModalBottomSheet(onDismissRequest = { boardTools.toolboxOpen = false }) {
+            BoardToolboxPanel(
+                state = boardTools,
+                board = board,
+                compact = true,
+                onSelect = onBoardToolSelected,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }
     }

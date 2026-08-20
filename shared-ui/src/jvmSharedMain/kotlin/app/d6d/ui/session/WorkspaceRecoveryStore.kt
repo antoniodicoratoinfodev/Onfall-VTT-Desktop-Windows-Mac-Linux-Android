@@ -1,6 +1,8 @@
 package app.d6d.ui.session
 
+import app.d6d.board.BoardDocument
 import app.d6d.engine.CombatSession
+import app.d6d.persistence.board.BoardDocumentJsonCodec
 import app.d6d.persistence.combat.CombatSessionJsonCodec
 import app.d6d.persistence.json.AtomicJsonStore
 import java.io.IOException
@@ -19,6 +21,7 @@ internal data class RecoveredGameSession(
     val currentSlug: String?,
     val session: CombatSession,
     val presentation: Map<String, String>,
+    val board: BoardDocument = BoardDocument.empty(),
 )
 
 /**
@@ -31,6 +34,7 @@ internal data class RecoveredGameSession(
 internal class WorkspaceRecoveryStore(
     directory: Path,
     private val codec: CombatSessionJsonCodec = CombatSessionJsonCodec(),
+    private val boardCodec: BoardDocumentJsonCodec = BoardDocumentJsonCodec(),
 ) {
     private val directory = directory.toAbsolutePath().normalize()
     private val file = this.directory.resolve(FILE_NAME)
@@ -50,6 +54,7 @@ internal class WorkspaceRecoveryStore(
                 put("presentation", LinkedHashMap<String, Any>().apply {
                     recovered.presentation.forEach { (key, value) -> put(key, value) }
                 })
+                put("board", boardCodec.encode(recovered.board))
                 put("combat", codec.encode(recovered.session))
             }
         }
@@ -66,7 +71,7 @@ internal class WorkspaceRecoveryStore(
         if (!store.exists()) return null
         val document = store.loadObject()
         val schemaVersion = integer(document["schemaVersion"], "$.schemaVersion")
-        if (schemaVersion != SCHEMA_VERSION) {
+        if (schemaVersion != 1 && schemaVersion != SCHEMA_VERSION) {
             throw IOException("Versione della bozza workspace non supportata: $schemaVersion")
         }
 
@@ -81,7 +86,14 @@ internal class WorkspaceRecoveryStore(
             val currentSlug = entry["currentSlug"]?.let { string(it, "$path.currentSlug") }
             val presentation = stringMap(entry["presentation"], "$path.presentation")
             val combat = codec.decode(objectValue(entry["combat"], "$path.combat"))
-            RecoveredGameSession(displayName, currentSlug, combat, presentation)
+            val board = entry["board"]?.let {
+                boardCodec.decode(objectValue(it, "$path.board"))
+            } ?: if (schemaVersion == 1) {
+                BoardDocument.empty()
+            } else {
+                throw IOException("Campo $path.board mancante o non valido")
+            }
+            RecoveredGameSession(displayName, currentSlug, combat, presentation, board)
         }
         val activeIndex = integer(document["activeIndex"], "$.activeIndex")
             .coerceIn(0, sessions.lastIndex)
@@ -129,7 +141,7 @@ internal class WorkspaceRecoveryStore(
     }
 
     private companion object {
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
         const val FILE_NAME = "workspace-recovery.json"
         const val FILE_STEM = "workspace-recovery"
         // Il file e' gia' sostituito atomicamente ed e' soltanto una bozza
