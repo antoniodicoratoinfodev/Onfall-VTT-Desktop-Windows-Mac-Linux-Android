@@ -5,6 +5,7 @@ import app.d6d.board.BoardDocument
 import app.d6d.board.BoardLayers
 import app.d6d.board.SceneToken
 import app.d6d.board.TokenCategory
+import app.d6d.board.TokenLootCategory
 import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
@@ -77,7 +78,13 @@ class BoardGeometryTest {
         tools.prepareToken(
             SceneTokenDraft(
                 "Mimic", TokenCategory.MONSTER, 2.0, 0xffcc8844.toInt(), "",
-                showLabel = true, visibleToPlayers = false, notes = "Finge di essere una cassa",
+                showLabel = true,
+                visibleToPlayers = false,
+                lootable = true,
+                lootCategory = TokenLootCategory.MISC,
+                lootQuantity = 2,
+                lootDescription = "Due denti",
+                notes = "Finge di essere una cassa",
             ),
         )
 
@@ -87,6 +94,10 @@ class BoardGeometryTest {
         assertEquals(BoardTool.EDIT, tools.active)
         assertEquals("mimic", tools.selectedId)
         assertEquals(null, tools.pendingToken)
+        val placed = controller.document.objects().single() as SceneToken
+        assertTrue(placed.lootable())
+        assertEquals(2, placed.lootQuantity())
+        assertEquals("Due denti", placed.lootDescription())
         assertTrue(controller.canUndo)
         assertTrue(controller.undo())
         assertFalse(controller.document.objects().isNotEmpty())

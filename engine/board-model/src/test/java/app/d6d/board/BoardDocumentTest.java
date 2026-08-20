@@ -49,7 +49,8 @@ class BoardDocumentTest {
     void laPedinaDiScenaSiSpostaSenzaPerdereMetadati() {
         SceneToken source = new SceneToken(
                 "token", "Carro", TokenCategory.VEHICLE, new GridPoint(2.5, 3.5),
-                2, 15, 0xffcc8844, "scene-image", true, true, "Copertura illustrativa");
+                2, 15, 0xffcc8844, "scene-image", true, true,
+                true, TokenLootCategory.MISC, 3, "Tre casse di provviste", "Copertura illustrativa");
 
         SceneToken moved = source.translated(3, -1);
 
@@ -57,7 +58,22 @@ class BoardDocumentTest {
         assertEquals(source.name(), moved.name());
         assertEquals(source.category(), moved.category());
         assertEquals(source.imageAssetId(), moved.imageAssetId());
+        assertEquals(source.lootable(), moved.lootable());
+        assertEquals(source.lootCategory(), moved.lootCategory());
+        assertEquals(source.lootQuantity(), moved.lootQuantity());
+        assertEquals(source.lootDescription(), moved.lootDescription());
         assertEquals(source.notes(), moved.notes());
+    }
+
+    @Test
+    void iMetadatiLootNonFidatiSonoLimitati() {
+        assertThrows(IllegalArgumentException.class, () -> new SceneToken(
+                "token", "Fiale", TokenCategory.LOOT, new GridPoint(0, 0), 1, 0, 0, "", true, true,
+                true, TokenLootCategory.POTION, 0, "", ""));
+        assertThrows(IllegalArgumentException.class, () -> new SceneToken(
+                "token", "Fiale", TokenCategory.LOOT, new GridPoint(0, 0), 1, 0, 0, "", true, true,
+                true, TokenLootCategory.POTION, 1,
+                "x".repeat(BoardLimits.MAX_TOKEN_LOOT_DESCRIPTION_LENGTH + 1), ""));
     }
 
     @Test

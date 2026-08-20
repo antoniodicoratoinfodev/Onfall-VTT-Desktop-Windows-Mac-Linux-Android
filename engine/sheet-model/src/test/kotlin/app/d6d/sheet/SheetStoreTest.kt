@@ -29,6 +29,36 @@ class SheetStoreTest {
         assertTrue(loaded.abilities.isNotEmpty())
     }
 
+    @Test
+    fun `inventario strutturato fa round trip e una scheda legacy parte vuota`() {
+        val file = directory.resolve("inventario.json")
+        val item = InventoryItem(
+            id = "loot-1",
+            name = "Pozione azzurra",
+            category = InventoryCategory.POTION,
+            quantity = 2,
+            description = "Brilla al buio.",
+            effects = listOf("Effetto ancora da identificare"),
+            sourceTokenId = "loot-1",
+        )
+        val store = SheetStore(file)
+        store.save(
+            SheetLibrary(
+                characters = listOf(CharacterSheet(id = "pg", characterName = "Iria", inventory = listOf(item))),
+            ),
+        )
+
+        assertEquals(listOf(item), store.load().characters.single().inventory)
+
+        Files.writeString(
+            file,
+            """{"schemaVersion":11,"characters":[{"id":"legacy"}],"monsters":[]}""",
+        )
+        val legacy = store.load()
+        assertEquals(SheetLibrary.SCHEMA_VERSION, legacy.schemaVersion)
+        assertTrue(legacy.characters.single().inventory.isEmpty())
+    }
+
     @TempDir
     lateinit var directory: Path
 

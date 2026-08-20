@@ -26,7 +26,7 @@ data class SheetLibrary(
     val passiveOverrides: Map<String, Boolean> = emptyMap(),
 ) {
     companion object {
-        const val SCHEMA_VERSION = 11
+        const val SCHEMA_VERSION = 12
     }
 }
 

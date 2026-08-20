@@ -377,10 +377,12 @@ internal object BattleStringsIt : BattleStrings {
 
     // --- Finestra degli oggetti --------------------------------------------------
 
-    override val itemsSubtitle = "Pozioni, armi ed equipaggiamento del gruppo."
+    override fun inventoryOf(character: String) = "Inventario di $character."
+    override val selectCharacterForItems = "Ispeziona un PG per aprire il suo inventario."
     override val noItemsYet = "Nessun oggetto qui ancora."
     override val hoverItemHint =
         "Passa il mouse su un oggetto — o cliccalo — per leggerne qui descrizione ed effetti."
+    override val noDescriptionListed = "Nessuna descrizione indicata."
     override val noEffectListed = "Nessun effetto indicato."
 
     // --- Turno della CPU ----------------------------------------------------------

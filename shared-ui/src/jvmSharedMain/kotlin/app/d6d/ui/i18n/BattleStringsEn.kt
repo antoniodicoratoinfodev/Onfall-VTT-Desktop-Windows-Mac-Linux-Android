@@ -371,10 +371,12 @@ internal object BattleStringsEn : BattleStrings {
 
     // --- Finestra degli oggetti --------------------------------------------------
 
-    override val itemsSubtitle = "The party's potions, weapons and gear."
+    override fun inventoryOf(character: String) = "$character’s inventory."
+    override val selectCharacterForItems = "Inspect a character to open their inventory."
     override val noItemsYet = "Nothing here yet."
     override val hoverItemHint =
         "Hover an item — or click it — to read its description and effects here."
+    override val noDescriptionListed = "No description provided."
     override val noEffectListed = "No effect listed."
 
     // --- Turno della CPU ----------------------------------------------------------

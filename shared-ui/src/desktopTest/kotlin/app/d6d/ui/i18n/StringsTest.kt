@@ -1,6 +1,8 @@
 package app.d6d.ui.i18n
 
+import app.d6d.board.TokenLootCategory
 import app.d6d.i18n.AppLanguage
+import app.d6d.sheet.InventoryCategory
 import app.d6d.sheet.CreatureSize
 import app.d6d.sheet.MonsterSpeeds
 import app.d6d.sheet.MonsterStatBlock
@@ -9,11 +11,15 @@ import app.d6d.sheet.i18n.feetFromDistance
 import app.d6d.sheet.i18n.label
 import app.d6d.sheet.i18n.subtitle
 import app.d6d.sheet.i18n.withLocalizedDistances
+import app.d6d.ui.battle.LootTransferResult
+import app.d6d.ui.battle.label
+import app.d6d.ui.battle.message
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.jvm.isAccessible
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -96,6 +102,54 @@ class StringsTest {
         AppLocale.use(AppLanguage.ITALIAN)
         assertSame(ItalianStrings, AppLocale.current)
         assertEquals("Impostazioni", AppLocale.current.nav.settings)
+    }
+
+    @Test
+    fun `pedine raccoglibili e inventario sono completi in entrambe le lingue`() {
+        assertEquals(
+            listOf("Pozioni", "Armi", "Armature", "Pergamene", "Varie"),
+            InventoryCategory.entries.map { it.label(ItalianStrings) },
+        )
+        assertEquals(
+            listOf("Potions", "Weapons", "Armor", "Scrolls", "Misc"),
+            InventoryCategory.entries.map { it.label(EnglishStrings) },
+        )
+        assertEquals(
+            InventoryCategory.entries.map { it.label(ItalianStrings) },
+            TokenLootCategory.entries.map { it.label(ItalianStrings) },
+        )
+        assertEquals(
+            InventoryCategory.entries.map { it.label(EnglishStrings) },
+            TokenLootCategory.entries.map { it.label(EnglishStrings) },
+        )
+
+        assertEquals("Raccoglibile", ItalianStrings.board.lootable)
+        assertEquals("Collectible", EnglishStrings.board.lootable)
+        assertEquals("Raccogli", ItalianStrings.board.collectLoot)
+        assertEquals("Collect", EnglishStrings.board.collectLoot)
+        assertEquals("Descrizione dell’oggetto", ItalianStrings.board.lootDescription)
+        assertEquals("Item description", EnglishStrings.board.lootDescription)
+        assertEquals("Inventario di Mira.", ItalianStrings.battle.inventoryOf("Mira"))
+        assertEquals("Mira’s inventory.", EnglishStrings.battle.inventoryOf("Mira"))
+
+        assertEquals(
+            "Gemma, Bottino, raccoglibile, quantità 3",
+            ItalianStrings.board.sceneTokenAccessibility("Gemma", "Bottino", true, 3),
+        )
+        assertEquals(
+            "Gem, Loot, collectible, quantity 3",
+            EnglishStrings.board.sceneTokenAccessibility("Gem", "Loot", true, 3),
+        )
+
+        assertNull(LootTransferResult.SUCCESS.message(ItalianStrings.board))
+        assertEquals(
+            "Impossibile salvare l’inventario: la pedina è rimasta sulla mappa.",
+            LootTransferResult.INVENTORY_WRITE_FAILED.message(ItalianStrings.board),
+        )
+        assertEquals(
+            "The inventory could not be saved; the token stayed on the map.",
+            LootTransferResult.INVENTORY_WRITE_FAILED.message(EnglishStrings.board),
+        )
     }
 
     @Test

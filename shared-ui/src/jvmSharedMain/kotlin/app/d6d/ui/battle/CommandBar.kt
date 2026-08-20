@@ -71,6 +71,7 @@ import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.rememberTooltipPosition
 import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.theme.Palette
 
 /**
@@ -471,6 +472,7 @@ private fun AbilityStat(label: String, value: String, enabled: Boolean) {
 @Composable
 fun CommandBar(
     viewModel: BattleViewModel,
+    roster: RosterViewModel,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
@@ -493,7 +495,17 @@ fun CommandBar(
     val displayedActorCanAct = inspectedId?.let(viewModel::canUseAbilitiesOf) == true
 
     BattleToolsDialog(viewModel, open = toolsOpen, onDismiss = { toolsOpen = false })
-    BattleItemsDialog(items = sampleBattleItems(strings), open = itemsOpen, onDismiss = { itemsOpen = false })
+    val inventoryOwner = (inspectedId ?: activeId)
+        ?.let(viewModel::combatant)
+        ?.snapshot()
+        ?.definitionId()
+        ?.let(roster::characterInventory)
+    BattleItemsDialog(
+        items = inventoryOwner?.items.orEmpty(),
+        ownerName = inventoryOwner?.characterName,
+        open = itemsOpen,
+        onDismiss = { itemsOpen = false },
+    )
 
     // Sul desktop la fascia ha l'altezza scelta dall'utente. Intestazione e riga dei
     // comandi restano di dimensione fissa e sempre visibili; sono solo le capacita'

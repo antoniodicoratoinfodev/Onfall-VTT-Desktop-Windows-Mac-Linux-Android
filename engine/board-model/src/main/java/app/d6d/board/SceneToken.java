@@ -19,6 +19,10 @@ public record SceneToken(
         String imageAssetId,
         boolean showLabel,
         boolean visibleToPlayers,
+        boolean lootable,
+        TokenLootCategory lootCategory,
+        int lootQuantity,
+        String lootDescription,
         String notes) implements BoardObject {
 
     public SceneToken {
@@ -35,10 +39,36 @@ public record SceneToken(
         if (!imageAssetId.isEmpty() && imageAssetId.length() > BoardLimits.MAX_ID_LENGTH) {
             throw new IllegalArgumentException("imageAssetId is too long");
         }
+        lootCategory = Objects.requireNonNull(lootCategory, "lootCategory");
+        if (lootQuantity < 1 || lootQuantity > BoardLimits.MAX_TOKEN_LOOT_QUANTITY) {
+            throw new IllegalArgumentException("lootQuantity is outside the supported range");
+        }
+        lootDescription = Objects.requireNonNull(lootDescription, "lootDescription").trim();
+        if (lootDescription.length() > BoardLimits.MAX_TOKEN_LOOT_DESCRIPTION_LENGTH) {
+            throw new IllegalArgumentException("Token loot description is too long");
+        }
         notes = Objects.requireNonNull(notes, "notes").trim();
         if (notes.length() > BoardLimits.MAX_TOKEN_NOTES_LENGTH) {
             throw new IllegalArgumentException("Token notes are too long");
         }
+    }
+
+    /** Costruttore compatibile con le pedine create prima del loot strutturato. */
+    public SceneToken(
+            String id,
+            String name,
+            TokenCategory category,
+            GridPoint position,
+            double sizeSquares,
+            double rotationDegrees,
+            int colorArgb,
+            String imageAssetId,
+            boolean showLabel,
+            boolean visibleToPlayers,
+            String notes) {
+        this(id, name, category, position, sizeSquares, rotationDegrees, colorArgb,
+                imageAssetId, showLabel, visibleToPlayers, false, TokenLootCategory.MISC,
+                1, "", notes);
     }
 
     @Override
@@ -49,7 +79,8 @@ public record SceneToken(
     @Override
     public SceneToken translated(double dx, double dy) {
         return new SceneToken(id, name, category, position.translated(dx, dy), sizeSquares,
-                rotationDegrees, colorArgb, imageAssetId, showLabel, visibleToPlayers, notes);
+                rotationDegrees, colorArgb, imageAssetId, showLabel, visibleToPlayers,
+                lootable, lootCategory, lootQuantity, lootDescription, notes);
     }
 
     private static String requireText(String value, int maximum, String field) {

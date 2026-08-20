@@ -327,9 +327,11 @@ interface BattleStrings {
 
     // --- Finestra degli oggetti --------------------------------------------------
 
-    val itemsSubtitle: String
+    fun inventoryOf(character: String): String
+    val selectCharacterForItems: String
     val noItemsYet: String
     val hoverItemHint: String
+    val noDescriptionListed: String
     val noEffectListed: String
 
     // --- Turno della CPU ----------------------------------------------------------
@@ -375,8 +377,7 @@ interface BattleStrings {
  *
  * Le voci d'esempio sono contenuto scritto da noi — nessuna proviene da un
  * manuale commerciale — quindi si traducono come il resto dell'interfaccia.
- * Vivono in un fascicolo a parte perche' spariranno tutte insieme quando
- * l'inventario vero prendera' il loro posto.
+ * Etichette dell'inventario reale conservato nelle schede dei personaggi.
  */
 interface ItemStrings {
     val title: String
@@ -389,37 +390,6 @@ interface ItemStrings {
     val categoryArmor: String
     val categoryScrolls: String
     val categoryMisc: String
-
-    val healingPotionName: String
-    val healingPotionDescription: String
-    val healingPotionEffect1: String
-    val healingPotionEffect2: String
-
-    val strengthPotionName: String
-    val strengthPotionDescription: String
-    val strengthPotionEffect1: String
-    val strengthPotionEffect2: String
-
-    val longswordName: String
-    val longswordDescription: String
-    val longswordEffect1: String
-    val longswordEffect2: String
-
-    val shortbowName: String
-    val shortbowDescription: String
-    val shortbowEffect1: String
-    /** La gittata cambia unita' con la lingua, quindi arriva gia' formattata. */
-    fun shortbowRange(normal: String, long: String): String
-
-    val shieldScrollName: String
-    val shieldScrollDescription: String
-    val shieldScrollEffect1: String
-    val shieldScrollEffect2: String
-
-    val studdedLeatherName: String
-    val studdedLeatherDescription: String
-    val studdedLeatherEffect1: String
-    val studdedLeatherEffect2: String
 }
 
 internal object ItemStringsIt : ItemStrings {
@@ -433,38 +403,6 @@ internal object ItemStringsIt : ItemStrings {
     override val categoryArmor = "Armature"
     override val categoryScrolls = "Pergamene"
     override val categoryMisc = "Varie"
-
-    override val healingPotionName = "Pozione di guarigione"
-    override val healingPotionDescription =
-        "Una fiala di liquido scarlatto che luccica quando la si agita."
-    override val healingPotionEffect1 = "Recupera 2d4 + 2 punti ferita"
-    override val healingPotionEffect2 = "Berla costa un'azione bonus"
-
-    override val strengthPotionName = "Pozione di forza smisurata"
-    override val strengthPotionDescription = "Denso intruglio che sa di ferro e tuono."
-    override val strengthPotionEffect1 = "Vantaggio alle prove di Forza per 10 minuti"
-    override val strengthPotionEffect2 = "Concentrazione non richiesta"
-
-    override val longswordName = "Spada lunga affilata"
-    override val longswordDescription =
-        "Lama a un taglio ben bilanciata, adatta a una o due mani."
-    override val longswordEffect1 = "1d8 danni taglienti (1d10 a due mani)"
-    override val longswordEffect2 = "Proprietà: versatile"
-
-    override val shortbowName = "Arco corto da caccia"
-    override val shortbowDescription = "Arco leggero in legno di tasso, buono per il tiro rapido."
-    override val shortbowEffect1 = "1d6 danni perforanti"
-    override fun shortbowRange(normal: String, long: String) = "Gittata $normal / $long"
-
-    override val shieldScrollName = "Pergamena dello scudo arcano"
-    override val shieldScrollDescription = "Sottile foglio runato che si sbriciola dopo l'uso."
-    override val shieldScrollEffect1 = "Reazione: +5 alla Classe Armatura"
-    override val shieldScrollEffect2 = "Dura fino all'inizio del tuo turno"
-
-    override val studdedLeatherName = "Cuoio borchiato"
-    override val studdedLeatherDescription = "Armatura leggera rinforzata da borchie metalliche."
-    override val studdedLeatherEffect1 = "CA 12 + modificatore di Destrezza"
-    override val studdedLeatherEffect2 = "Nessuna penalità alla furtività"
 }
 
 internal object ItemStringsEn : ItemStrings {
@@ -478,36 +416,4 @@ internal object ItemStringsEn : ItemStrings {
     override val categoryArmor = "Armor"
     override val categoryScrolls = "Scrolls"
     override val categoryMisc = "Misc"
-
-    override val healingPotionName = "Potion of Healing"
-    override val healingPotionDescription =
-        "A vial of scarlet liquid that glitters when you shake it."
-    override val healingPotionEffect1 = "Regain 2d4 + 2 hit points"
-    override val healingPotionEffect2 = "Drinking it costs a bonus action"
-
-    override val strengthPotionName = "Potion of Giant Strength"
-    override val strengthPotionDescription = "A thick brew that tastes of iron and thunder."
-    override val strengthPotionEffect1 = "Advantage on Strength checks for 10 minutes"
-    override val strengthPotionEffect2 = "No concentration required"
-
-    override val longswordName = "Keen longsword"
-    override val longswordDescription =
-        "A well-balanced single-edged blade, fit for one hand or two."
-    override val longswordEffect1 = "1d8 slashing damage (1d10 two-handed)"
-    override val longswordEffect2 = "Property: versatile"
-
-    override val shortbowName = "Hunting shortbow"
-    override val shortbowDescription = "A light yew bow, good for quick shots."
-    override val shortbowEffect1 = "1d6 piercing damage"
-    override fun shortbowRange(normal: String, long: String) = "Range $normal / $long"
-
-    override val shieldScrollName = "Scroll of Shield"
-    override val shieldScrollDescription = "A thin runed sheet that crumbles after one use."
-    override val shieldScrollEffect1 = "Reaction: +5 to Armor Class"
-    override val shieldScrollEffect2 = "Lasts until the start of your turn"
-
-    override val studdedLeatherName = "Studded leather"
-    override val studdedLeatherDescription = "Light armor reinforced with metal studs."
-    override val studdedLeatherEffect1 = "AC 12 + Dexterity modifier"
-    override val studdedLeatherEffect2 = "No penalty to Stealth"
 }

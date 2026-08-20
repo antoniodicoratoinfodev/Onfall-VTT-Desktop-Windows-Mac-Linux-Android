@@ -15,6 +15,7 @@ import app.d6d.board.StampKind;
 import app.d6d.board.StaticStamp;
 import app.d6d.board.TemplateShape;
 import app.d6d.board.TokenCategory;
+import app.d6d.board.TokenLootCategory;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -120,6 +121,10 @@ public final class BoardDocumentJsonCodec {
             value.put("imageAssetId", token.imageAssetId());
             value.put("showLabel", token.showLabel());
             value.put("visibleToPlayers", token.visibleToPlayers());
+            value.put("lootable", token.lootable());
+            value.put("lootCategory", token.lootCategory().name());
+            value.put("lootQuantity", token.lootQuantity());
+            value.put("lootDescription", token.lootDescription());
             value.put("notes", token.notes());
         } else {
             throw new IllegalArgumentException("Unsupported board object: " + object.getClass().getName());
@@ -175,6 +180,14 @@ public final class BoardDocumentJsonCodec {
                     string(value.get("imageAssetId"), path + ".imageAssetId"),
                     bool(value.get("showLabel"), path + ".showLabel", true),
                     bool(value.get("visibleToPlayers"), path + ".visibleToPlayers", true),
+                    bool(value.get("lootable"), path + ".lootable", false),
+                    enumValue(
+                            TokenLootCategory.class,
+                            value.get("lootCategory"),
+                            path + ".lootCategory",
+                            TokenLootCategory.MISC),
+                    integer(value.get("lootQuantity"), path + ".lootQuantity", 1),
+                    string(value.get("lootDescription"), path + ".lootDescription", ""),
                     string(value.get("notes"), path + ".notes"));
             default -> throw invalid(path + ".type", "unknown board object type");
         };
@@ -289,6 +302,10 @@ public final class BoardDocumentJsonCodec {
         return text;
     }
 
+    private String string(Object value, String path, String fallback) {
+        return value == null ? fallback : string(value, path);
+    }
+
     private boolean bool(Object value, String path, boolean fallback) {
         if (value == null) return fallback;
         if (!(value instanceof Boolean bool)) throw invalid(path, "expected a boolean");
@@ -299,6 +316,10 @@ public final class BoardDocumentJsonCodec {
         long number = longInteger(value, path);
         if (number < Integer.MIN_VALUE || number > Integer.MAX_VALUE) throw invalid(path, "integer is out of range");
         return (int) number;
+    }
+
+    private int integer(Object value, String path, int fallback) {
+        return value == null ? fallback : integer(value, path);
     }
 
     private long longInteger(Object value, String path) {
@@ -327,6 +348,10 @@ public final class BoardDocumentJsonCodec {
         } catch (IllegalArgumentException failure) {
             throw invalid(path, "unknown value");
         }
+    }
+
+    private <E extends Enum<E>> E enumValue(Class<E> type, Object value, String path, E fallback) {
+        return value == null ? fallback : enumValue(type, value, path);
     }
 
     private IllegalArgumentException invalid(String path, String message) {

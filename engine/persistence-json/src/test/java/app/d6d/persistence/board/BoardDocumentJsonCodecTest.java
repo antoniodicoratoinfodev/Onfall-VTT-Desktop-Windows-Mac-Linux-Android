@@ -13,6 +13,7 @@ import app.d6d.board.StampKind;
 import app.d6d.board.StaticStamp;
 import app.d6d.board.TemplateShape;
 import app.d6d.board.TokenCategory;
+import app.d6d.board.TokenLootCategory;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -38,7 +39,8 @@ class BoardDocumentJsonCodecTest {
                         new Label("label", new GridPoint(6, 3), "Ingresso", 4, 16, -5),
                         new StaticStamp("stamp", new GridPoint(7, 7), StampKind.TREASURE, 1.5, 30, 5),
                         new SceneToken("token", "Mimic", TokenCategory.TRAP, new GridPoint(9.5, 8.5),
-                                2, 45, 6, "scene-token-image-1", true, false, "Non rivelare"),
+                                2, 45, 6, "scene-token-image-1", true, false,
+                                true, TokenLootCategory.MISC, 2, "Denti di mimic", "Non rivelare"),
                         new SceneToken("token-fallback", "Carro", TokenCategory.VEHICLE, new GridPoint(3.5, 9.5),
                                 3, 0, 7, "", false, true, "")),
                 new BoardLayers(true, false, false, true, true),
@@ -55,6 +57,28 @@ class BoardDocumentJsonCodecTest {
         layers.remove("sceneTokensVisible");
 
         assertEquals(true, codec.decode(encoded).layers().sceneTokensVisible());
+    }
+
+    @Test
+    void unaPedinaPrecedenteSenzaLootRestaCompatibileENonRaccoglibile() {
+        SceneToken legacy = new SceneToken(
+                "legacy", "Cassa", TokenCategory.OBJECT, new GridPoint(1.5, 1.5),
+                1, 0, 7, "", true, true, "Nota privata");
+        Map<String, Object> encoded = codec.encode(BoardDocument.empty().withObjects(List.of(legacy)));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> token = (Map<String, Object>) ((List<?>) encoded.get("objects")).get(0);
+        token.remove("lootable");
+        token.remove("lootCategory");
+        token.remove("lootQuantity");
+        token.remove("lootDescription");
+
+        SceneToken decoded = (SceneToken) codec.decode(encoded).objects().get(0);
+
+        assertEquals(false, decoded.lootable());
+        assertEquals(TokenLootCategory.MISC, decoded.lootCategory());
+        assertEquals(1, decoded.lootQuantity());
+        assertEquals("", decoded.lootDescription());
+        assertEquals("Nota privata", decoded.notes());
     }
 
     @Test

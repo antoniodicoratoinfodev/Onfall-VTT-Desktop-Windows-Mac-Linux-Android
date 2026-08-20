@@ -333,6 +333,70 @@ data class Money(
     val platinum: Int = 0,
 )
 
+/** Categoria stabile e indipendente dalla lingua per l'inventario strutturato. */
+@Serializable
+enum class InventoryCategory {
+    POTION,
+    WEAPON,
+    ARMOR,
+    SCROLL,
+    MISC,
+}
+
+/**
+ * Oggetto posseduto da un personaggio.
+ *
+ * [sourceTokenId] collega il loot alla pedina di scena che lo ha prodotto. Non è
+ * un riferimento vivo alla mappa: serve a rendere idempotente il trasferimento e
+ * a impedire che la stessa pedina venga aggiunta due volte all'inventario.
+ */
+@Serializable
+data class InventoryItem(
+    val id: String,
+    val name: String,
+    val category: InventoryCategory = InventoryCategory.MISC,
+    val quantity: Int = 1,
+    val description: String = "",
+    val effects: List<String> = emptyList(),
+    val sourceTokenId: String? = null,
+) {
+    init {
+        require(id.isNotBlank() && id.length <= MAX_INVENTORY_ID_LENGTH) {
+            "Inventory item id is empty or too long"
+        }
+        require(name.isNotBlank() && name.length <= MAX_INVENTORY_NAME_LENGTH) {
+            "Inventory item name is empty or too long"
+        }
+        require(quantity in 1..MAX_INVENTORY_QUANTITY) {
+            "Inventory item quantity is outside the supported range"
+        }
+        require(description.length <= MAX_INVENTORY_DESCRIPTION_LENGTH) {
+            "Inventory item description is too long"
+        }
+        require(effects.size <= MAX_INVENTORY_EFFECTS) {
+            "Inventory item has too many effects"
+        }
+        require(effects.all { it.length <= MAX_INVENTORY_EFFECT_LENGTH }) {
+            "Inventory item effect is too long"
+        }
+        require(
+            sourceTokenId == null ||
+                (sourceTokenId.isNotBlank() && sourceTokenId.length <= MAX_INVENTORY_ID_LENGTH),
+        ) {
+            "Inventory item source token id is empty or too long"
+        }
+    }
+
+    companion object {
+        const val MAX_INVENTORY_ID_LENGTH = 120
+        const val MAX_INVENTORY_NAME_LENGTH = 80
+        const val MAX_INVENTORY_QUANTITY = 9_999
+        const val MAX_INVENTORY_DESCRIPTION_LENGTH = 500
+        const val MAX_INVENTORY_EFFECTS = 20
+        const val MAX_INVENTORY_EFFECT_LENGTH = 300
+    }
+}
+
 /**
  * Scheda del personaggio 2024.
  *
@@ -454,6 +518,8 @@ data class CharacterSheet(
     val alignment: String = "",
     val languages: String = "",
     val equipment: String = "",
+    /** Loot strutturato; [equipment] resta disponibile per le annotazioni libere legacy. */
+    val inventory: List<InventoryItem> = emptyList(),
     val attunements: List<String> = listOf("", "", ""),
     val money: Money = Money(),
 ) {

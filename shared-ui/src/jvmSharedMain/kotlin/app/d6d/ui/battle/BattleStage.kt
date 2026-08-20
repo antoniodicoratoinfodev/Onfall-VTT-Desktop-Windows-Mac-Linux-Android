@@ -64,6 +64,7 @@ import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.settings.LocalAppPreferences
+import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
@@ -86,6 +87,7 @@ fun BattleStage(
     // solo nella shell compatta, dove il palco occupa da solo la superficie.
     floatingPlates: Boolean = true,
     board: BoardController,
+    roster: RosterViewModel,
     activeSessionId: String,
     compact: Boolean = false,
 ) {
@@ -210,7 +212,7 @@ fun BattleStage(
         }
     }
 
-    SceneTokenDialogHost(boardTools, board, portraits, compact)
+    SceneTokenDialogHost(boardTools, board, portraits, viewModel, roster, compact)
 }
 
 /**

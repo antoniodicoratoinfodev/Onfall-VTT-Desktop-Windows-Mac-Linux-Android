@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import app.d6d.board.BoardLimits
 import app.d6d.board.SceneToken
 import app.d6d.board.TokenCategory
+import app.d6d.board.TokenLootCategory
 import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.board.SceneTokenDraft
@@ -56,6 +57,8 @@ import app.d6d.ui.i18n.BoardStrings
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.images.rememberPortrait
+import app.d6d.ui.roster.RosterViewModel
+import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.settings.LocalAppPreferences
 import app.d6d.ui.theme.Palette
 import java.util.UUID
@@ -67,6 +70,8 @@ internal fun SceneTokenDialogHost(
     state: BoardToolState,
     board: BoardController,
     portraits: PortraitRepository,
+    battle: BattleViewModel,
+    roster: RosterViewModel,
     compact: Boolean,
 ) {
     val request = state.tokenDialogId ?: return
@@ -87,7 +92,18 @@ internal fun SceneTokenDialogHost(
     var colorArgb by remember(request) { mutableStateOf(existing?.colorArgb() ?: preferences.boardColorArgb) }
     var showLabel by remember(request) { mutableStateOf(existing?.showLabel() ?: true) }
     var visibleToPlayers by remember(request) { mutableStateOf(existing?.visibleToPlayers() ?: true) }
+    var lootable by remember(request) { mutableStateOf(existing?.lootable() ?: false) }
+    var lootCategory by remember(request) {
+        mutableStateOf(existing?.lootCategory() ?: TokenLootCategory.MISC)
+    }
+    var lootQuantity by remember(request) { mutableStateOf(existing?.lootQuantity()?.toString() ?: "1") }
+    var lootDescription by remember(request) { mutableStateOf(existing?.lootDescription().orEmpty()) }
     var notes by remember(request) { mutableStateOf(existing?.notes().orEmpty()) }
+    val collectors = eligibleLootCollectors(battle, roster)
+    var collectorId by remember(request) { mutableStateOf(collectors.firstOrNull()?.characterId) }
+    // Conserva l'esito, non la frase già tradotta: cambiando lingua anche un
+    // errore rimasto aperto viene ridisegnato nel nuovo vocabolario.
+    var lootResult by remember(request) { mutableStateOf<LootTransferResult?>(null) }
     var removeOriginalImage by remember(request) { mutableStateOf(false) }
     val candidateAssetId = remember(request) { "scene-token-image-${UUID.randomUUID()}" }
     val retainCandidate = remember(request) { mutableStateOf(false) }
@@ -152,6 +168,7 @@ internal fun SceneTokenDialogHost(
                             onClick = {
                                 category = choice
                                 visibleToPlayers = choice !in setOf(TokenCategory.TRAP, TokenCategory.HAZARD)
+                                if (choice == TokenCategory.LOOT) lootable = true
                             },
                         )
                     }
@@ -217,6 +234,78 @@ internal fun SceneTokenDialogHost(
                     )
                 }
 
+                GameButton(
+                    words.lootable,
+                    selected = lootable,
+                    modifier = Modifier.sizeIn(minHeight = if (compact) 48.dp else 40.dp),
+                    dense = true,
+                    onClick = { lootable = !lootable },
+                )
+                if (lootable) {
+                    Text(
+                        words.lootSettingsHint,
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(words.lootInventoryCategory, color = Palette.Gold, fontWeight = FontWeight.Bold)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        TokenLootCategory.entries.forEach { choice ->
+                            GameButton(
+                                label = choice.label(strings),
+                                selected = lootCategory == choice,
+                                dense = true,
+                                modifier = Modifier.sizeIn(minHeight = if (compact) 48.dp else 40.dp),
+                                onClick = { lootCategory = choice },
+                            )
+                        }
+                    }
+                    TextField(
+                        value = lootQuantity,
+                        onValueChange = { value -> lootQuantity = value.filter(Char::isDigit).take(4) },
+                        label = { Text(words.lootQuantity) },
+                        singleLine = true,
+                    )
+                    TextField(
+                        value = lootDescription,
+                        onValueChange = {
+                            lootDescription = it.take(BoardLimits.MAX_TOKEN_LOOT_DESCRIPTION_LENGTH)
+                        },
+                        label = { Text(words.lootDescription) },
+                        placeholder = { Text(words.lootDescriptionHint) },
+                        minLines = 2,
+                        maxLines = 4,
+                    )
+
+                    if (!creating) {
+                        Text(words.collectLoot, color = Palette.Gold, fontWeight = FontWeight.Bold)
+                        Text(words.collectLootHint, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+                        if (collectors.isEmpty()) {
+                            Text(words.noLootCollectors, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                collectors.forEach { collector ->
+                                    GameButton(
+                                        label = collector.name,
+                                        selected = collectorId == collector.characterId,
+                                        dense = true,
+                                        modifier = Modifier.sizeIn(minHeight = if (compact) 48.dp else 40.dp),
+                                        onClick = { collectorId = collector.characterId },
+                                    )
+                                }
+                            }
+                        }
+                        lootResult?.message(words)?.let { message ->
+                            Text(message, color = Palette.Bloodied, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+
                 TextField(
                     value = notes,
                     onValueChange = { notes = it.take(BoardLimits.MAX_TOKEN_NOTES_LENGTH) },
@@ -230,7 +319,7 @@ internal fun SceneTokenDialogHost(
         confirmButton = {
             GameButton(
                 label = if (creating) words.createAndPlace else strings.common.apply,
-                enabled = name.isNotBlank(),
+                enabled = name.isNotBlank() && (!lootable || lootQuantity.toIntOrNull() in 1..BoardLimits.MAX_TOKEN_LOOT_QUANTITY),
                 onClick = {
                     val imageAssetId = when {
                         candidateStored && !removeOriginalImage -> candidateAssetId
@@ -248,6 +337,10 @@ internal fun SceneTokenDialogHost(
                         imageAssetId = imageAssetId,
                         showLabel = showLabel,
                         visibleToPlayers = visibleToPlayers,
+                        lootable = lootable,
+                        lootCategory = lootCategory,
+                        lootQuantity = lootQuantity.toIntOrNull() ?: 1,
+                        lootDescription = lootDescription.trim(),
                         notes = notes.trim(),
                     )
                     if (creating) {
@@ -259,7 +352,8 @@ internal fun SceneTokenDialogHost(
                             SceneToken(
                                 token.id(), draft.name, draft.category, token.position(), draft.sizeSquares,
                                 token.rotationDegrees(), draft.colorArgb, draft.imageAssetId, draft.showLabel,
-                                draft.visibleToPlayers, draft.notes,
+                                draft.visibleToPlayers, draft.lootable, draft.lootCategory, draft.lootQuantity,
+                                draft.lootDescription, draft.notes,
                             ),
                         )
                         if (replaced) {
@@ -270,8 +364,53 @@ internal fun SceneTokenDialogHost(
                 },
             )
         },
-        dismissButton = { GameButton(strings.common.cancel, onClick = ::dismiss) },
+        dismissButton = {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (!creating && lootable) {
+                    GameButton(
+                        words.collectLoot,
+                        accent = Palette.Heal,
+                        enabled = collectorId != null && name.isNotBlank() &&
+                            lootQuantity.toIntOrNull() in 1..BoardLimits.MAX_TOKEN_LOOT_QUANTITY,
+                        onClick = {
+                            val token = requireNotNull(existing)
+                            val visibleDraft = SceneToken(
+                                token.id(), name.trim(), category, token.position(), sizeSquares,
+                                token.rotationDegrees(), colorArgb, token.imageAssetId(), showLabel,
+                                visibleToPlayers, lootable, lootCategory, lootQuantity.toIntOrNull() ?: 1,
+                                lootDescription.trim(), notes.trim(),
+                            )
+                            val result = transferSceneLoot(
+                                visibleDraft,
+                                collectorId.orEmpty(),
+                                board,
+                                roster,
+                            )
+                            if (result == LootTransferResult.SUCCESS) {
+                                state.selectedId = null
+                                state.closeTokenDialog()
+                            } else {
+                                lootResult = result
+                            }
+                        },
+                    )
+                }
+                GameButton(strings.common.cancel, onClick = ::dismiss)
+            }
+        },
     )
+}
+
+internal fun LootTransferResult.message(words: BoardStrings): String? = when (this) {
+    LootTransferResult.SUCCESS -> null
+    LootTransferResult.TOKEN_NOT_FOUND -> words.lootTransferTokenMissing
+    LootTransferResult.TOKEN_NOT_LOOTABLE -> words.lootTransferNotLootable
+    LootTransferResult.COLLECTOR_NOT_AVAILABLE -> words.lootTransferCollectorMissing
+    LootTransferResult.INVENTORY_WRITE_FAILED -> words.lootTransferSaveFailed
+    LootTransferResult.BOARD_CHANGED -> words.lootTransferBoardChanged
 }
 
 @Composable

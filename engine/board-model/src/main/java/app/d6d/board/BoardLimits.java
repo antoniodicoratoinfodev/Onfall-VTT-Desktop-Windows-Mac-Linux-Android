@@ -9,6 +9,8 @@ public final class BoardLimits {
     public static final int MAX_LABEL_LENGTH = 500;
     public static final int MAX_TOKEN_NAME_LENGTH = 80;
     public static final int MAX_TOKEN_NOTES_LENGTH = 500;
+    public static final int MAX_TOKEN_LOOT_DESCRIPTION_LENGTH = 500;
+    public static final int MAX_TOKEN_LOOT_QUANTITY = 9_999;
     public static final int MAX_ID_LENGTH = 120;
     public static final int MAX_FOG_DIMENSION = 400;
     public static final double MAX_WORLD_COORDINATE = 4_096.0;

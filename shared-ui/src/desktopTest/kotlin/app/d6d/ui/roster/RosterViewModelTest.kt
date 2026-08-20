@@ -12,6 +12,8 @@ import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.MonsterStatBlock
+import app.d6d.sheet.InventoryCategory
+import app.d6d.sheet.InventoryItem
 import app.d6d.sheet.PACT_SLOT_RESOURCE_PREFIX
 import app.d6d.sheet.Proficiency
 import app.d6d.sheet.SPELL_SLOT_RESOURCE_PREFIX
@@ -148,6 +150,33 @@ class RosterViewModelTest {
         assertEquals(21, definition.armorClass())
         // Destrezza 20 → modificatore +5 → iniziativa +5.
         assertEquals(5, definition.initiativeModifier())
+    }
+
+    @Test
+    fun `il loot entra una volta e si fonde nella bozza aperta senza perdere modifiche`() {
+        val roster = roster()
+        roster.sheets.kind = SheetKind.PERSONAGGIO
+        roster.sheets.selectCharacter("pg-tarvos")
+        roster.sheets.character = roster.sheets.character.copy(backstory = "Bozza non ancora salvata")
+        val loot = InventoryItem(
+            id = "pedina-loot",
+            name = "Chiave d'ottone",
+            category = InventoryCategory.MISC,
+            description = "Apre la porta della torre.",
+            sourceTokenId = "pedina-loot",
+        )
+
+        assertTrue(roster.addInventoryItem("pg-tarvos", loot))
+        assertTrue(roster.addInventoryItem("pg-tarvos", loot))
+
+        assertEquals(listOf(loot), roster.characterInventory("pg-tarvos")?.items)
+        assertEquals("Bozza non ancora salvata", roster.sheets.character.backstory)
+        assertEquals(listOf(loot), roster.sheets.character.inventory)
+
+        assertTrue(roster.sheets.save())
+        val persisted = sheetStore().load().characters.first { it.id == "pg-tarvos" }
+        assertEquals("Bozza non ancora salvata", persisted.backstory)
+        assertEquals(listOf(loot), persisted.inventory)
     }
 
     @Test

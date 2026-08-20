@@ -175,14 +175,21 @@ private fun SceneTokenView(
     val sideDp = with(density) { sidePx.toDp() }
     val image = portraits.rememberPortrait(token.imageAssetId())
     val color = Color(token.colorArgb())
-    val category = token.category().label(strings.board)
+    val boardWords = strings.board
+    val category = token.category().label(boardWords)
+    val accessibilityDescription = boardWords.sceneTokenAccessibility(
+        name = token.name(),
+        category = category,
+        collectible = token.lootable() && !playerPreview,
+        quantity = token.lootQuantity(),
+    )
     Column(
         Modifier
             .absoluteOffset {
                 IntOffset((center.x - sidePx / 2f).roundToInt(), (center.y - sidePx / 2f).roundToInt())
             }
             .width(sideDp)
-            .semantics { contentDescription = "${token.name()}, $category" },
+            .semantics { contentDescription = accessibilityDescription },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
@@ -221,6 +228,17 @@ private fun SceneTokenView(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .background(Palette.Abyss.copy(alpha = 0.78f), RoundedCornerShape(3.dp))
+                        .padding(horizontal = 2.dp),
+                )
+            }
+            if (token.lootable() && !playerPreview) {
+                Text(
+                    if (token.lootQuantity() > 1) "◆×${token.lootQuantity()}" else "◆",
+                    color = Palette.GoldBright,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .background(Palette.Abyss.copy(alpha = 0.82f), RoundedCornerShape(3.dp))
                         .padding(horizontal = 2.dp),
                 )
             }
@@ -759,7 +777,8 @@ internal fun placePendingSceneToken(
     val draft = tools.pendingToken ?: return null
     val token = SceneToken(
         id, draft.name, draft.category, point, draft.sizeSquares, 0.0,
-        draft.colorArgb, draft.imageAssetId, draft.showLabel, draft.visibleToPlayers, draft.notes,
+        draft.colorArgb, draft.imageAssetId, draft.showLabel, draft.visibleToPlayers,
+        draft.lootable, draft.lootCategory, draft.lootQuantity, draft.lootDescription, draft.notes,
     )
     if (!board.add(token)) return null
     tools.consumePendingToken()

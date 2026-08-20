@@ -276,6 +276,7 @@ private fun WideBattleBody(
                     dropTarget = dropTarget,
                     floatingPlates = false,
                     board = board,
+                    roster = roster,
                     activeSessionId = activeSessionId,
                     compact = false,
                 )
@@ -290,7 +291,7 @@ private fun WideBattleBody(
                         },
                     )
                 }
-                CommandBar(viewModel, compact = false)
+                CommandBar(viewModel, roster, compact = false)
             }
 
             // Il bordo sinistro dei nemici: trascinandolo verso sinistra la colonna cresce.
@@ -482,6 +483,7 @@ private fun CompactBattleBody(
                     viewModel,
                     portraits,
                     board = board,
+                    roster = roster,
                     activeSessionId = activeSessionId,
                     compact = true,
                 )
@@ -513,7 +515,7 @@ private fun CompactBattleBody(
             }
         }
 
-        CommandBar(viewModel, compact = true)
+        CommandBar(viewModel, roster, compact = true)
     }
 }
 

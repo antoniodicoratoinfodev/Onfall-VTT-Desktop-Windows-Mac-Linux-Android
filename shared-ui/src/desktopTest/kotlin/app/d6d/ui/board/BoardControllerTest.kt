@@ -4,6 +4,7 @@ import app.d6d.board.GridPoint
 import app.d6d.board.Label
 import app.d6d.board.SceneToken
 import app.d6d.board.TokenCategory
+import app.d6d.board.TokenLootCategory
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -103,5 +104,56 @@ class BoardControllerTest {
         assertEquals(edited, controller.document.objects().single())
         assertTrue(controller.undo())
         assertEquals(original, controller.document.objects().single())
+    }
+
+    @Test
+    fun `consumare loot lo elimina anche dalle fotografie undo senza perdere gli altri comandi`() {
+        val controller = BoardController()
+        val first = Label("prima", GridPoint(1.5, 1.5), "Prima", 0, 14.0, 0.0)
+        val loot = SceneToken(
+            "loot", "Pozione", TokenCategory.LOOT, GridPoint(2.5, 2.5), 1.0, 0.0,
+            0xffcc8844.toInt(), "", true, true,
+            true, TokenLootCategory.POTION, 1, "Cura", "Segreta",
+        )
+        val second = Label("dopo", GridPoint(3.5, 3.5), "Dopo", 0, 14.0, 0.0)
+        controller.add(first)
+        controller.add(loot)
+        controller.add(second)
+
+        assertTrue(controller.consume(loot.id()))
+        assertEquals(listOf(first, second), controller.document.objects())
+
+        assertTrue(controller.undo())
+        assertEquals(listOf(first), controller.document.objects())
+        assertTrue(controller.document.objects().none { it.id() == loot.id() })
+
+        // La rimozione della pedina rendeva identiche due fotografie adiacenti:
+        // il secondo Undo deve togliere davvero la prima etichetta, senza un
+        // passaggio intermedio che non cambia nulla.
+        assertTrue(controller.undo())
+        assertTrue(controller.document.objects().isEmpty())
+        assertFalse(controller.undo())
+
+        assertTrue(controller.redo())
+        assertEquals(listOf(first), controller.document.objects())
+        assertTrue(controller.redo())
+        assertEquals(listOf(first, second), controller.document.objects())
+    }
+
+    @Test
+    fun `consumare l unico comando non lascia un undo senza effetto`() {
+        val controller = BoardController()
+        val loot = SceneToken(
+            "loot", "Chiave", TokenCategory.LOOT, GridPoint(2.5, 2.5), 1.0, 0.0,
+            0xffcc8844.toInt(), "", true, true,
+            true, TokenLootCategory.MISC, 1, "Chiave della torre", "Segreta",
+        )
+        assertTrue(controller.add(loot))
+
+        assertTrue(controller.consume(loot.id()))
+
+        assertTrue(controller.document.objects().isEmpty())
+        assertFalse(controller.canUndo)
+        assertFalse(controller.undo())
     }
 }

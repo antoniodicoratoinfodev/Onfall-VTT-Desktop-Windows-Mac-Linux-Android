@@ -75,6 +75,26 @@ interface BoardStrings {
     val tokenPlacementHint: String
     val tokenVisualOnlyHint: String
     val tokenImageHint: String
+    val lootable: String
+    val lootSettingsHint: String
+    val lootInventoryCategory: String
+    val lootQuantity: String
+    val lootDescription: String
+    val lootDescriptionHint: String
+    val collectLoot: String
+    val collectLootHint: String
+    val noLootCollectors: String
+    val lootTransferTokenMissing: String
+    val lootTransferNotLootable: String
+    val lootTransferCollectorMissing: String
+    val lootTransferSaveFailed: String
+    val lootTransferBoardChanged: String
+    fun sceneTokenAccessibility(
+        name: String,
+        category: String,
+        collectible: Boolean,
+        quantity: Int,
+    ): String
     val categoryCharacter: String
     val categoryAlly: String
     val categoryNpc: String
@@ -164,6 +184,29 @@ object BoardStringsIt : BoardStrings {
     override val tokenPlacementHint = "Tocca una casella della mappa per posizionare la pedina."
     override val tokenVisualOnlyHint = "Pedina di scena: non possiede PF, turno o regole. Per un vero combattente usa il roster."
     override val tokenImageHint = "L’immagine è facoltativa; senza file viene usato il medaglione Onfall."
+    override val lootable = "Raccoglibile"
+    override val lootSettingsHint = "Quando viene raccolta, la pedina entra nell’inventario del PG scelto e lascia la mappa."
+    override val lootInventoryCategory = "Categoria inventario"
+    override val lootQuantity = "Quantità"
+    override val lootDescription = "Descrizione dell’oggetto"
+    override val lootDescriptionHint = "Informazione visibile nell’inventario; le note master restano private"
+    override val collectLoot = "Raccogli"
+    override val collectLootHint = "Scegli il personaggio che riceve l’oggetto."
+    override val noLootCollectors = "Nessun PG della squadra possiede una scheda locale."
+    override val lootTransferTokenMissing = "La pedina non esiste più."
+    override val lootTransferNotLootable = "Questa pedina non è raccoglibile."
+    override val lootTransferCollectorMissing = "Il personaggio scelto non è più disponibile."
+    override val lootTransferSaveFailed = "Impossibile salvare l’inventario: la pedina è rimasta sulla mappa."
+    override val lootTransferBoardChanged = "Il tavolo è cambiato durante il trasferimento; riprova."
+    override fun sceneTokenAccessibility(
+        name: String,
+        category: String,
+        collectible: Boolean,
+        quantity: Int,
+    ) = buildString {
+        append(name).append(", ").append(category)
+        if (collectible) append(", raccoglibile, quantità ").append(quantity)
+    }
     override val categoryCharacter = "Personaggio"
     override val categoryAlly = "Alleato"
     override val categoryNpc = "PNG"
@@ -253,6 +296,29 @@ object BoardStringsEn : BoardStrings {
     override val tokenPlacementHint = "Tap a map square to place the token."
     override val tokenVisualOnlyHint = "Scene token: it has no HP, turn, or rules. Use the roster for a real combatant."
     override val tokenImageHint = "The image is optional; without a file Onfall uses its token medallion."
+    override val lootable = "Collectible"
+    override val lootSettingsHint = "When collected, the token enters the chosen character’s inventory and leaves the map."
+    override val lootInventoryCategory = "Inventory category"
+    override val lootQuantity = "Quantity"
+    override val lootDescription = "Item description"
+    override val lootDescriptionHint = "Shown in the inventory; GM notes always remain private"
+    override val collectLoot = "Collect"
+    override val collectLootHint = "Choose the character who receives the item."
+    override val noLootCollectors = "No party character has a local character sheet."
+    override val lootTransferTokenMissing = "The token no longer exists."
+    override val lootTransferNotLootable = "This token is not collectible."
+    override val lootTransferCollectorMissing = "The selected character is no longer available."
+    override val lootTransferSaveFailed = "The inventory could not be saved; the token stayed on the map."
+    override val lootTransferBoardChanged = "The table changed during the transfer; try again."
+    override fun sceneTokenAccessibility(
+        name: String,
+        category: String,
+        collectible: Boolean,
+        quantity: Int,
+    ) = buildString {
+        append(name).append(", ").append(category)
+        if (collectible) append(", collectible, quantity ").append(quantity)
+    }
     override val categoryCharacter = "Character"
     override val categoryAlly = "Ally"
     override val categoryNpc = "NPC"

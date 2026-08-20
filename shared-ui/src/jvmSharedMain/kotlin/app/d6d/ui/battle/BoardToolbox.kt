@@ -499,7 +499,8 @@ private fun BoardObject.resized(factor: Double): BoardObject? = when (this) {
     is Label -> Label(id(), position(), text(), colorArgb(), textSizeSp() * factor, rotationDegrees())
     is SceneToken -> SceneToken(
         id(), name(), category(), position(), (sizeSquares() * factor).coerceIn(0.25, 20.0),
-        rotationDegrees(), colorArgb(), imageAssetId(), showLabel(), visibleToPlayers(), notes(),
+        rotationDegrees(), colorArgb(), imageAssetId(), showLabel(), visibleToPlayers(),
+        lootable(), lootCategory(), lootQuantity(), lootDescription(), notes(),
     )
     else -> null
 }
@@ -510,7 +511,8 @@ private fun BoardObject.rotated(delta: Double): BoardObject? = when (this) {
     is Label -> Label(id(), position(), text(), colorArgb(), textSizeSp(), rotationDegrees() + delta)
     is SceneToken -> SceneToken(
         id(), name(), category(), position(), sizeSquares(), rotationDegrees() + delta,
-        colorArgb(), imageAssetId(), showLabel(), visibleToPlayers(), notes(),
+        colorArgb(), imageAssetId(), showLabel(), visibleToPlayers(),
+        lootable(), lootCategory(), lootQuantity(), lootDescription(), notes(),
     )
     else -> null
 }

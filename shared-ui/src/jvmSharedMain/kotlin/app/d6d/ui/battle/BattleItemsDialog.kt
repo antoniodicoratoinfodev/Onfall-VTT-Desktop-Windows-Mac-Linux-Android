@@ -37,117 +37,53 @@ import androidx.compose.ui.unit.dp
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.theme.OrnateDivider
-import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.i18n.Strings
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
+import app.d6d.board.TokenLootCategory
+import app.d6d.sheet.InventoryCategory
+import app.d6d.sheet.InventoryItem
 
 /** Categorie dell'inventario da combattimento. */
-enum class ItemCategory(val tint: androidx.compose.ui.graphics.Color) {
-    POZIONI(Palette.Heal),
-    ARMI(Palette.Enemy),
-    ARMATURE(Palette.Party),
-    PERGAMENE(Palette.Gold),
-    VARIE(Palette.TextMuted),
+private val InventoryCategory.tint: androidx.compose.ui.graphics.Color
+    get() = when (this) {
+        InventoryCategory.POTION -> Palette.Heal
+        InventoryCategory.WEAPON -> Palette.Enemy
+        InventoryCategory.ARMOR -> Palette.Party
+        InventoryCategory.SCROLL -> Palette.Gold
+        InventoryCategory.MISC -> Palette.TextMuted
+    }
+
+fun InventoryCategory.label(strings: Strings): String = when (this) {
+    InventoryCategory.POTION -> strings.items.categoryPotions
+    InventoryCategory.WEAPON -> strings.items.categoryWeapons
+    InventoryCategory.ARMOR -> strings.items.categoryArmor
+    InventoryCategory.SCROLL -> strings.items.categoryScrolls
+    InventoryCategory.MISC -> strings.items.categoryMisc
 }
 
-fun ItemCategory.label(strings: Strings): String = when (this) {
-    ItemCategory.POZIONI -> strings.items.categoryPotions
-    ItemCategory.ARMI -> strings.items.categoryWeapons
-    ItemCategory.ARMATURE -> strings.items.categoryArmor
-    ItemCategory.PERGAMENE -> strings.items.categoryScrolls
-    ItemCategory.VARIE -> strings.items.categoryMisc
-}
-
-/**
- * Oggetto usabile in scontro: pozione, arma, armatura e simili.
- *
- * Per ora e' solo un descrittore: l'interfaccia mostra nome, descrizione ed
- * effetti, ma nessun effetto viene ancora applicato al combattimento. Il modello
- * vive qui in attesa che il catalogo vero (e l'uso al tavolo) venga collegato.
- */
-data class BattleItem(
-    val id: String,
-    val name: String,
-    val category: ItemCategory,
-    val description: String,
-    val effects: List<String>,
-)
-
-/**
- * Catalogo di esempio.
- *
- * Sono voci illustrative, non contenuto definitivo: servono a mostrare come si
- * leggeranno descrizione ed effetti. Sostituiscile (o svuota la lista) quando
- * arrivera' l'inventario reale. Sono scritte da noi, quindi si traducono: il
- * testo vive in `strings.items` e la lista si ricostruisce a ogni cambio lingua.
- */
-fun sampleBattleItems(strings: Strings): List<BattleItem> {
-    val words = strings.items
-    val language = strings.language
-    return listOf(
-        BattleItem(
-            id = "pozione-guarigione",
-            name = words.healingPotionName,
-            category = ItemCategory.POZIONI,
-            description = words.healingPotionDescription,
-            effects = listOf(words.healingPotionEffect1, words.healingPotionEffect2),
-        ),
-        BattleItem(
-            id = "pozione-forza",
-            name = words.strengthPotionName,
-            category = ItemCategory.POZIONI,
-            description = words.strengthPotionDescription,
-            effects = listOf(words.strengthPotionEffect1, words.strengthPotionEffect2),
-        ),
-        BattleItem(
-            id = "spada-lunga",
-            name = words.longswordName,
-            category = ItemCategory.ARMI,
-            description = words.longswordDescription,
-            effects = listOf(words.longswordEffect1, words.longswordEffect2),
-        ),
-        BattleItem(
-            id = "arco-corto",
-            name = words.shortbowName,
-            category = ItemCategory.ARMI,
-            description = words.shortbowDescription,
-            effects = listOf(
-                words.shortbowEffect1,
-                // 80/320 piedi e' la gittata SRD: in italiano diventano metri.
-                words.shortbowRange(distanceLabel(80, language), distanceLabel(320, language)),
-            ),
-        ),
-        BattleItem(
-            id = "pergamena-scudo",
-            name = words.shieldScrollName,
-            category = ItemCategory.PERGAMENE,
-            description = words.shieldScrollDescription,
-            effects = listOf(words.shieldScrollEffect1, words.shieldScrollEffect2),
-        ),
-        BattleItem(
-            id = "cuoio-borchiato",
-            name = words.studdedLeatherName,
-            category = ItemCategory.ARMATURE,
-            description = words.studdedLeatherDescription,
-            effects = listOf(words.studdedLeatherEffect1, words.studdedLeatherEffect2),
-        ),
-    )
+/** La categoria salvata sulla pedina usa lo stesso vocabolario dell'inventario. */
+internal fun TokenLootCategory.label(strings: Strings): String = when (this) {
+    TokenLootCategory.POTION -> strings.items.categoryPotions
+    TokenLootCategory.WEAPON -> strings.items.categoryWeapons
+    TokenLootCategory.ARMOR -> strings.items.categoryArmor
+    TokenLootCategory.SCROLL -> strings.items.categoryScrolls
+    TokenLootCategory.MISC -> strings.items.categoryMisc
 }
 
 /**
  * Inventario da combattimento.
  *
- * L'interfaccia c'e' gia' — elenco a sinistra, lettura di descrizione ed effetti
- * a destra — mentre l'uso vero degli oggetti arrivera' in seguito. Il pannello di
- * dettaglio segue l'oggetto sotto il mouse; se non se ne sta sorvolando nessuno,
- * mostra l'ultimo selezionato con un clic.
+ * Legge le voci persistite nella scheda del personaggio ispezionato. Il pannello
+ * di dettaglio segue l'oggetto sotto il mouse; se non se ne sta sorvolando
+ * nessuno, mostra l'ultimo selezionato con un clic.
  */
 @Composable
 fun BattleItemsDialog(
-    items: List<BattleItem>,
+    items: List<InventoryItem>,
+    ownerName: String?,
     open: Boolean,
     onDismiss: () -> Unit,
 ) {
@@ -155,9 +91,9 @@ fun BattleItemsDialog(
 
     val strings = strings
     val words = strings.items
-    var category by remember { mutableStateOf<ItemCategory?>(null) }
-    var selected by remember { mutableStateOf<BattleItem?>(null) }
-    var hovered by remember { mutableStateOf<BattleItem?>(null) }
+    var category by remember(ownerName) { mutableStateOf<InventoryCategory?>(null) }
+    var selected by remember(ownerName) { mutableStateOf<InventoryItem?>(null) }
+    var hovered by remember(ownerName) { mutableStateOf<InventoryItem?>(null) }
 
     val visible = items.filter { category == null || it.category == category }
     val detail = hovered ?: selected
@@ -196,7 +132,8 @@ fun BattleItemsDialog(
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            strings.battle.itemsSubtitle,
+                            ownerName?.let(strings.battle::inventoryOf)
+                                ?: strings.battle.selectCharacterForItems,
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -216,7 +153,7 @@ fun BattleItemsDialog(
                         selected = category == null,
                         onClick = { category = null },
                     )
-                    ItemCategory.entries.forEach { entry ->
+                    InventoryCategory.entries.forEach { entry ->
                         GameButton(
                             label = entry.label(strings),
                             accent = if (category == entry) entry.tint else Palette.TextFaint,
@@ -260,10 +197,10 @@ fun BattleItemsDialog(
 
 @Composable
 private fun ItemList(
-    items: List<BattleItem>,
-    selected: BattleItem?,
-    onSelect: (BattleItem) -> Unit,
-    onHover: (BattleItem, Boolean) -> Unit,
+    items: List<InventoryItem>,
+    selected: InventoryItem?,
+    onSelect: (InventoryItem) -> Unit,
+    onHover: (InventoryItem, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -302,7 +239,7 @@ private fun ItemList(
 
 @Composable
 private fun ItemRow(
-    item: BattleItem,
+    item: InventoryItem,
     selected: Boolean,
     onSelect: () -> Unit,
     onHover: (Boolean) -> Unit,
@@ -345,11 +282,14 @@ private fun ItemRow(
                 style = MaterialTheme.typography.labelSmall,
             )
         }
+        if (item.quantity > 1) {
+            Chip("×${item.quantity}", item.category.tint)
+        }
     }
 }
 
 @Composable
-private fun ItemDetail(item: BattleItem?, modifier: Modifier = Modifier) {
+private fun ItemDetail(item: InventoryItem?, modifier: Modifier = Modifier) {
     val strings = strings
     Column(
         modifier
@@ -387,7 +327,7 @@ private fun ItemDetail(item: BattleItem?, modifier: Modifier = Modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Eyebrow(strings.items.descriptionCaps)
             Text(
-                item.description,
+                item.description.ifBlank { strings.battle.noDescriptionListed },
                 color = Palette.TextMuted,
                 style = MaterialTheme.typography.bodyMedium,
             )

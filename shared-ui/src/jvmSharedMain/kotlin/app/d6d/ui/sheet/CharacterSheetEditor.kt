@@ -54,6 +54,7 @@ import app.d6d.sheet.Spellcasting
 import app.d6d.sheet.WeaponEntry
 import app.d6d.sheet.abilityModifier
 import app.d6d.ui.battle.GameButton
+import app.d6d.ui.battle.label
 import app.d6d.ui.components.Chip
 import app.d6d.ui.images.PortraitPicker
 import app.d6d.ui.images.PortraitRepository
@@ -1800,6 +1801,48 @@ private fun CharacterNotesSection(
             adaptiveFormItem(1.2f) { itemModifier ->
                 SheetBox(strings.sheet.equipment, itemModifier) {
                     SheetTextArea(sheet.equipment, minLines = 4) { update(sheet.copy(equipment = it)) }
+                    Text(
+                        language.pick("Inventario strutturato", "Structured inventory"),
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    if (sheet.inventory.isEmpty()) {
+                        Text(
+                            language.pick("Nessun oggetto raccolto.", "No collected items."),
+                            color = Palette.TextFaint,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    } else {
+                        sheet.inventory.forEach { item ->
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        if (item.quantity > 1) "${item.quantity}× ${item.name}" else item.name,
+                                        color = Palette.Text,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        item.category.label(strings),
+                                        color = Palette.TextMuted,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                                GameButton(
+                                    strings.common.remove,
+                                    accent = Palette.Enemy,
+                                    dense = true,
+                                    onClick = {
+                                        update(sheet.copy(inventory = sheet.inventory.filterNot { it.id == item.id }))
+                                    },
+                                )
+                            }
+                        }
+                    }
                     Text(
                         words.magicItemAttunement,
                         color = Palette.TextMuted,

@@ -7,6 +7,7 @@ import app.d6d.board.GridPoint
 import app.d6d.board.StampKind
 import app.d6d.board.TemplateShape
 import app.d6d.board.TokenCategory
+import app.d6d.board.TokenLootCategory
 
 /** Modalità del puntatore del Lucido; Strati resta un pannello e non compare qui. */
 enum class BoardTool {
@@ -32,6 +33,10 @@ data class SceneTokenDraft(
     val imageAssetId: String,
     val showLabel: Boolean,
     val visibleToPlayers: Boolean,
+    val lootable: Boolean = false,
+    val lootCategory: TokenLootCategory = TokenLootCategory.MISC,
+    val lootQuantity: Int = 1,
+    val lootDescription: String = "",
     val notes: String,
 )
 

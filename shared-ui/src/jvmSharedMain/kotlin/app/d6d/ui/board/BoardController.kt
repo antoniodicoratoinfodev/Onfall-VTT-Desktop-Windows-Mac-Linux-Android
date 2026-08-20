@@ -63,6 +63,38 @@ class BoardController(
         return if (changed.size == document.objects().size) false else commit(document.withObjects(changed))
     }
 
+    /**
+     * Consuma definitivamente un oggetto trasferito fuori dal Lucido.
+     *
+     * Il loot entra in una scheda posseduta da un altro archivio. Una normale
+     * rimozione con Undo potrebbe quindi ricreare la pedina senza togliere
+     * l'oggetto dall'inventario. Riscriviamo le fotografie precedenti senza
+     * quell'ID e invalidiamo Redo: gli altri comandi restano annullabili, il loot
+     * già raccolto no.
+     */
+    fun consume(id: String): Boolean {
+        if (document.objects().none { it.id() == id }) return false
+        val consumed = document.without(id)
+        val safeUndo = undo
+            .map { it.without(id) }
+            .fold(mutableListOf<BoardDocument>()) { snapshots, candidate ->
+                if (snapshots.lastOrNull() != candidate) snapshots += candidate
+                snapshots
+            }
+            .apply {
+                // Se la pedina era l'unica modifica, la fotografia precedente
+                // coincide ora con lo stato corrente: non deve produrre un Undo
+                // che dichiara successo senza cambiare nulla.
+                while (lastOrNull() == consumed) removeLast()
+            }
+        document = consumed
+        undo.clear()
+        undo.addAll(safeUndo)
+        redo.clear()
+        revision++
+        return true
+    }
+
     fun setLayers(value: BoardLayers): Boolean = commit(document.withLayers(value))
 
     fun setFog(value: FogMask): Boolean = commit(document.withFog(value))
@@ -91,6 +123,9 @@ class BoardController(
         revision++
     }
 }
+
+private fun BoardDocument.without(id: String): BoardDocument =
+    withObjects(objects().filterNot { it.id() == id })
 
 private fun BoardObject.pathPointCount(): Int = when (this) {
     is InkStroke -> points().size

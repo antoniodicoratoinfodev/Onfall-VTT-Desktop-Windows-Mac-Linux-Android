@@ -481,6 +481,30 @@ class SheetViewModel(
         onSaved?.invoke(SheetKind.PERSONAGGIO)
     }
 
+    /**
+     * Aggiorna soltanto l'inventario persistito, fondendolo nell'eventuale bozza
+     * aperta della stessa scheda. Gli altri campi non salvati restano quindi
+     * intatti e un salvataggio successivo non può cancellare il loot appena preso.
+     */
+    fun updateCharacterInventorySilently(
+        characterId: String,
+        inventory: List<app.d6d.sheet.InventoryItem>,
+    ): Boolean = guard(LocalizedText { it.sheet.sheetUpdatedFromBattle }) {
+        val stored = requireNotNull(library.characters.firstOrNull { it.id == characterId }) {
+            "Character sheet not found"
+        }
+        val updated = stored.copy(inventory = inventory)
+        val updatedLibrary = library.copy(
+            characters = library.characters.filterNot { it.id == characterId } + updated,
+        )
+        store.save(updatedLibrary)
+        library = updatedLibrary
+        if (selectedId == characterId && kind == SheetKind.PERSONAGGIO) {
+            character = character.copy(inventory = inventory)
+        }
+        onSaved?.invoke(SheetKind.PERSONAGGIO)
+    }
+
     fun upsertMonsterSilently(block: MonsterStatBlock): Boolean = guard(LocalizedText { it.sheet.statBlockUpdatedFromBattle }) {
         val editingThisBlock = selectedId == block.id && kind == SheetKind.MOSTRO
         val preserveDraft = editingThisBlock && isDirty

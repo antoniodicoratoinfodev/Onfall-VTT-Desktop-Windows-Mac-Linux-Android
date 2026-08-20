@@ -9,6 +9,7 @@ import app.d6d.domain.combat.CombatantSnapshot
 import app.d6d.domain.combat.CombatResourceState
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.SheetStore
+import app.d6d.sheet.InventoryItem
 import app.d6d.sheet.isPactSpellSlot
 import app.d6d.sheet.i18n.localizedSheetError
 import app.d6d.sheet.spellSlotLevelOrNull
@@ -36,6 +37,13 @@ data class RosterItem(
     val name: String,
     val kind: RosterKind,
     val subtitle: String,
+)
+
+/** Inventario reale di un personaggio del roster, pronto per la UI di battaglia. */
+data class CharacterInventory(
+    val characterId: String,
+    val characterName: String,
+    val items: List<InventoryItem>,
 )
 
 /**
@@ -113,6 +121,44 @@ class RosterViewModel(
     }
 
     val selectedId: String? get() = sheets.selectedId
+
+    fun characterInventory(id: String): CharacterInventory? =
+        sheets.library.characters.firstOrNull { it.id == id }?.let { sheet ->
+            CharacterInventory(
+                characterId = sheet.id,
+                characterName = sheet.characterName.ifBlank { words.unnamed },
+                items = sheet.inventory,
+            )
+        }
+
+    /**
+     * Inserisce un loot una sola volta. L'ID di provenienza rende idempotente il
+     * recupero dopo un'interruzione fra salvataggio della scheda e consumo della
+     * pedina.
+     */
+    fun addInventoryItem(characterId: String, item: InventoryItem): Boolean {
+        val character = sheets.library.characters.firstOrNull { it.id == characterId }
+            ?: return false
+        if (
+            item.sourceTokenId != null &&
+            sheets.library.characters.any { owner ->
+                owner.inventory.any { it.sourceTokenId == item.sourceTokenId }
+            }
+        ) {
+            return true
+        }
+        if (character.inventory.any {
+                it.id == item.id ||
+                    (item.sourceTokenId != null && it.sourceTokenId == item.sourceTokenId)
+            }
+        ) {
+            return true
+        }
+        return sheets.updateCharacterInventorySilently(
+            characterId,
+            character.inventory + item,
+        )
+    }
 
     /**
      * Proiezione da combattimento aggiornata di una voce del Compendio.
