@@ -91,6 +91,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapBackground
 import app.d6d.domain.space.TokenPlacement
 import app.d6d.ui.board.BoardController
@@ -1018,25 +1019,14 @@ private fun MovementReach(
         // due origini diverse possono dare lo stesso riquadro ritagliato, e la
         // maschera precedente resterebbe in cache pur non valendo piu'.
         remember(placement, squares, startColumn, startRow, width, height, boardRevision) {
-            val side = placement.squaresPerSide()
-            val mask = BooleanArray(width * height)
-            fun mark(column: Int, row: Int) {
-                val c = column - startColumn
-                val r = row - startRow
-                if (c in 0 until width && r in 0 until height) mask[r * width + c] = true
-            }
-            // Restare fermi e' sempre lecito: le caselle occupate ora non si oscurano.
-            placement.occupiedSquares().forEach { mark(it.column(), it.row()) }
-            // Il motore ragiona per origine del segnaposto; sulla mappa conta
-            // l'ingombro che occuperebbe una volta arrivato.
-            viewModel.reachableOrigins(placement.combatantId()).forEach { cell ->
-                for (rowOffset in 0 until side) {
-                    for (columnOffset in 0 until side) {
-                        mark(cell.column() + columnOffset, cell.row() + rowOffset)
-                    }
-                }
-            }
-            mask
+            reachMaskFor(
+                placement = placement,
+                reachableOrigins = viewModel.reachableOrigins(placement.combatantId()),
+                startColumn = startColumn,
+                startRow = startRow,
+                width = width,
+                height = height,
+            )
         }
     }
 
@@ -1075,12 +1065,18 @@ private fun MovementReach(
                 )
             } else {
                 // Un muro puo' rendere irraggiungibile anche una casella dentro il
-                // riquadro. L'ombra copre allora anche quelle: cio' che resta in
-                // luce e' esattamente cio' che il motore accetta. Niente cornice —
-                // il perimetro del quadrato non descrive piu' il percorribile.
+                // riquadro: l'ombra copre allora anche quelle. Niente cornice — il
+                // perimetro del quadrato non descrive piu' il percorribile.
                 drawPath(
                     reachRunsPath(reachMask, false, width, height, startColumn, startRow, mapOffset, cellPx),
                     scrim,
+                )
+                // Senza cornice serve un segno positivo su cio' che resta: su una
+                // mappa senza sfondo il velo e' nero su nero, e il raggio
+                // sparirebbe del tutto invece di cambiare forma.
+                drawPath(
+                    reachRunsPath(reachMask, true, width, height, startColumn, startRow, mapOffset, cellPx),
+                    Palette.Party.copy(alpha = 0.12f),
                 )
             }
         }
@@ -1112,6 +1108,47 @@ private fun MovementReach(
             .background(Palette.Party.copy(alpha = 0.07f), RoundedCornerShape(4.dp))
             .border(1.dp, Palette.Party.copy(alpha = 0.30f), RoundedCornerShape(4.dp)),
     )
+}
+
+/**
+ * Quali caselle del riquadro restano illuminate.
+ *
+ * Il motore ragiona per **origine** del segnaposto; sulla mappa conta invece
+ * l'ingombro che la creatura occuperebbe una volta arrivata, altrimenti di una
+ * Grande si illuminerebbe solo l'angolo. Le caselle occupate adesso entrano
+ * sempre: restare fermi e' lecito, e oscurare il segnaposto stesso sarebbe una
+ * bugia al contrario.
+ *
+ * Pura di proposito: e' l'unica logica di questo disegno che valga la pena provare
+ * senza montare un'interfaccia.
+ */
+internal fun reachMaskFor(
+    placement: TokenPlacement,
+    reachableOrigins: Set<GridPosition>,
+    startColumn: Int,
+    startRow: Int,
+    width: Int,
+    height: Int,
+): BooleanArray {
+    val mask = BooleanArray(width * height)
+    if (width <= 0 || height <= 0) return mask
+
+    fun mark(column: Int, row: Int) {
+        val c = column - startColumn
+        val r = row - startRow
+        if (c in 0 until width && r in 0 until height) mask[r * width + c] = true
+    }
+
+    placement.occupiedSquares().forEach { mark(it.column(), it.row()) }
+    val side = placement.squaresPerSide()
+    reachableOrigins.forEach { cell ->
+        for (rowOffset in 0 until side) {
+            for (columnOffset in 0 until side) {
+                mark(cell.column() + columnOffset, cell.row() + rowOffset)
+            }
+        }
+    }
+    return mask
 }
 
 /**
