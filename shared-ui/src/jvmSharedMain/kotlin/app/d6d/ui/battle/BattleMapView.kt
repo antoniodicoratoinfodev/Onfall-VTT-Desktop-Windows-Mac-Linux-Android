@@ -93,8 +93,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapBackground
+import app.d6d.domain.space.MapGrid
 import app.d6d.domain.space.TokenPlacement
+import app.d6d.board.VisionField
 import app.d6d.ui.board.BoardController
+import app.d6d.ui.board.BoardVisionField
+import app.d6d.ui.board.VisionViewer
+import app.d6d.ui.board.rememberBoardVision
 import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.board.MapInteraction
@@ -151,6 +156,7 @@ fun BattleMapView(
     val map = viewModel.battleMap
     val grid = map.grid()
     val boardLayers = board.document.layers()
+    val boardVision = rememberDynamicVision(viewModel, board, grid)
     val placements = remember(map) { map.orderedPlacements() }
     val density = LocalDensity.current
     val background = portraits.rememberBitmap(map.backgroundImage())
@@ -542,6 +548,7 @@ fun BattleMapView(
             cellPx = cellPx,
             showMasterFog = !boardTools.playerPreview,
             playerPreview = boardTools.playerPreview,
+            vision = boardVision,
             portraits = portraits,
             modifier = Modifier.fillMaxSize(),
         )
@@ -581,13 +588,17 @@ fun BattleMapView(
         }
 
         placements.forEach { placement ->
+            // In anteprima giocatori una pedina fuori vista non si attenua: non si
+            // disegna. La nebbia sta sopra i segnaposti, e un velo trasparente
+            // lascerebbe indovinare chi c'e' dietro l'angolo.
+            if (boardTools.playerPreview && !boardVision.sees(placement)) return@forEach
             key(placement.combatantId()) {
                 MapToken(viewModel, portraits, placement, liveCell, mapOffset, tokenGestureEnabled)
             }
         }
 
         if (boardTools.playerPreview) {
-            BoardPlayerFogLayer(board, camera, mapOffset, cellPx, Modifier.fillMaxSize())
+            BoardPlayerFogLayer(board, camera, mapOffset, cellPx, boardVision, Modifier.fillMaxSize())
         }
 
         if (interaction is MapInteraction.Board && interaction.tool != BoardTool.HAND) {
@@ -1819,4 +1830,44 @@ private fun AreaManualCard(
             }
         }
     }
+}
+
+/**
+ * Chi guarda la mappa, e quanto lontano.
+ *
+ * Guarda chi ha il turno — tutti quelli del gruppo simultaneo, se l'iniziativa e'
+ * pari. Fuori dal combattimento nessuno ha il turno: allora guarda la squadra,
+ * altrimenti una sessione appena aperta nascerebbe nera prima ancora del primo
+ * tiro. Il raggio e' quello di mappa, salvo l'eccezione registrata sul singolo
+ * combattente.
+ */
+@Composable
+private fun rememberDynamicVision(
+    viewModel: BattleViewModel,
+    board: BoardController,
+    grid: MapGrid,
+): BoardVisionField {
+    val document = board.document
+    val vision = document.vision()
+    if (!vision.dynamic()) return BoardVisionField.inactive()
+
+    val viewerIds = viewModel.activeCombatantIds.ifEmpty { viewModel.partyIds }
+    val viewers = viewerIds.mapNotNull { id ->
+        val placement = viewModel.placementOf(id) ?: return@mapNotNull null
+        VisionViewer(
+            combatantId = id,
+            placement = placement,
+            radiusSquares = VisionField.radiusSquares(vision.radiusFeetFor(id), grid.feetPerSquare()),
+            party = viewModel.isParty(id),
+        )
+    }
+    return rememberBoardVision(
+        dynamic = true,
+        grid = grid,
+        walls = document.walls().resized(grid.columns(), grid.rows()),
+        explored = document.explored(),
+        viewers = viewers,
+        boardRevision = board.revision,
+        onExplored = board::markExplored,
+    )
 }

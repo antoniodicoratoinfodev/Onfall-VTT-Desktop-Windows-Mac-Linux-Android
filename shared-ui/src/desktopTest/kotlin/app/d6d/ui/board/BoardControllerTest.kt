@@ -2,11 +2,14 @@ package app.d6d.ui.board
 
 import app.d6d.board.GridPoint
 import app.d6d.board.BoardLayers
+import app.d6d.board.ExploredMask
 import app.d6d.board.FloorMask
 import app.d6d.board.Label
 import app.d6d.board.SceneToken
 import app.d6d.board.TokenCategory
 import app.d6d.board.TokenLootCategory
+import app.d6d.board.VisionField
+import app.d6d.board.VisionMode
 import app.d6d.board.WallMask
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -113,6 +116,86 @@ class BoardControllerTest {
         assertFalse(controller.commit(controller.document))
         assertEquals(0L, controller.revision)
         assertFalse(controller.canUndo)
+    }
+
+    @Test
+    fun `esplorare non entra nella cronologia ne dichiara modifiche da salvare`() {
+        val controller = BoardController()
+        // Una modifica vera per avere qualcosa da annullare dopo.
+        controller.setWalls(WallMask.empty(10, 10).withCell(4, 4, true))
+        val revisionAfterWalls = controller.revision
+
+        val field = VisionField.visibleFrom(controller.document.walls(), 10, 10, 1, 1, 3)
+        controller.markExplored(field, 10, 10)
+
+        assertTrue(controller.document.explored().seen(1, 1), "la memoria si aggiorna")
+        assertEquals(revisionAfterWalls, controller.revision, "avanzare il turno non e' una modifica d'autore")
+
+        // «Annulla» dopo un turno deve togliere il muro, non il passaggio.
+        assertTrue(controller.undo())
+        assertEquals(WallMask.empty(0, 0), controller.document.walls())
+        assertTrue(controller.document.explored().seen(1, 1), "l'esplorato non si riavvolge")
+    }
+
+    @Test
+    fun `esplorare due volte lo stesso campo non notifica nulla`() {
+        var notifications = 0
+        val controller = BoardController(onDocumentChanged = { notifications++ })
+        val field = VisionField.visibleFrom(WallMask.empty(10, 10), 10, 10, 5, 5, 2)
+
+        controller.markExplored(field, 10, 10)
+        val afterFirst = notifications
+        controller.markExplored(field, 10, 10)
+
+        assertEquals(afterFirst, notifications, "niente di nuovo, nessuna notifica")
+    }
+
+    @Test
+    fun `un campo che non combacia con la griglia viene ignorato invece di rompere`() {
+        val controller = BoardController()
+        controller.markExplored(BooleanArray(9), 10, 10)
+
+        assertEquals(ExploredMask.empty(0, 0), controller.document.explored())
+    }
+
+    @Test
+    fun `le regole della vista sono una scelta annullabile`() {
+        val controller = BoardController()
+        val before = controller.document.vision()
+
+        assertTrue(controller.setVision(before.withMode(VisionMode.DYNAMIC).withRadiusFeet(30)))
+        assertTrue(controller.document.vision().dynamic())
+        assertEquals(30, controller.document.vision().radiusFeet())
+
+        assertTrue(controller.undo())
+        assertEquals(before, controller.document.vision())
+    }
+
+    @Test
+    fun `dimenticare l esplorato e' una decisione da salvare fuori dalla cronologia`() {
+        val controller = BoardController()
+        controller.markExplored(VisionField.visibleFrom(WallMask.empty(10, 10), 10, 10, 2, 2, 2), 10, 10)
+        val revisionBefore = controller.revision
+        assertTrue(controller.document.explored().seen(2, 2))
+
+        assertTrue(controller.resetExplored(10, 10))
+        assertFalse(controller.document.explored().seen(2, 2))
+        assertTrue(controller.revision > revisionBefore, "cancellare i ricordi va salvato")
+        assertFalse(controller.canUndo, "ma non occupa un passo della cronologia dei disegni")
+
+        assertFalse(controller.resetExplored(10, 10), "gia' vuoto: niente da fare")
+    }
+
+    @Test
+    fun `annullare e rifare un disegno non tocca la memoria del gruppo`() {
+        val controller = BoardController()
+        controller.setWalls(WallMask.empty(10, 10).withCell(4, 4, true))
+        controller.markExplored(VisionField.visibleFrom(controller.document.walls(), 10, 10, 1, 1, 3), 10, 10)
+
+        assertTrue(controller.undo())
+        assertTrue(controller.document.explored().seen(1, 1), "annullare il muro non spegne la stanza")
+        assertTrue(controller.redo())
+        assertTrue(controller.document.explored().seen(1, 1), "e rifarlo nemmeno")
     }
 
     @Test

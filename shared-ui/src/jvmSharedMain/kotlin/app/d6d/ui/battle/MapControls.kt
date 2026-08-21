@@ -122,7 +122,11 @@ fun MapControls(
             )
         }
 
-        BoardToolOptions(boardTools, board, grid, compact)
+        BoardToolOptions(
+            boardTools, board, grid, compact,
+            inspectedCombatantId = viewModel.inspectedCombatantId,
+            inspectedCombatantName = viewModel.inspectedCombatantId?.let(viewModel::name).orEmpty(),
+        )
 
         if (viewModel.mapEditMode) {
             Text(

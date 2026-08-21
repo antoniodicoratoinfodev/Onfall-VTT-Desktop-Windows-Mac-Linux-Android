@@ -3,6 +3,8 @@ package app.d6d.ui.battle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,14 +45,18 @@ import app.d6d.board.Measurement
 import app.d6d.board.SceneToken
 import app.d6d.board.StampKind
 import app.d6d.board.TemplateShape
+import app.d6d.board.VisionMode
+import app.d6d.board.VisionSettings
 import app.d6d.board.WallMask
 import app.d6d.domain.space.MapGrid
+import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.components.AppGlyph
 import app.d6d.ui.components.GlyphIcon
 import app.d6d.ui.i18n.BoardStrings
+import app.d6d.ui.i18n.AppLocale
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.layout.LocalUiLayout
 import app.d6d.ui.settings.LocalAppPreferences
@@ -92,7 +98,12 @@ internal fun BoardToolboxPanel(
             .then(if (compact) Modifier.fillMaxWidth() else Modifier.width(190.dp))
             .background(Palette.Surface.copy(alpha = 0.97f), RoundedCornerShape(9.dp))
             .border(1.dp, Palette.Bronze.copy(alpha = 0.75f), RoundedCornerShape(9.dp))
-            .padding(7.dp),
+            .padding(7.dp)
+            // Il pannello e' ancorato in alto e cresce verso il basso: fra Strati e
+            // barre degli strumenti alte due righe puo' superare l'altezza della
+            // mappa, e l'ultimo comando finirebbe fuori schermo senza modo di
+            // raggiungerlo. Scorrendo, resta sempre tutto a portata.
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (state.layersOpen) {
@@ -394,6 +405,8 @@ internal fun BoardToolOptions(
     grid: MapGrid,
     compact: Boolean,
     modifier: Modifier = Modifier,
+    inspectedCombatantId: String? = null,
+    inspectedCombatantName: String = "",
 ) {
     if (state.active == BoardTool.TABLE || state.active == BoardTool.HAND || state.active == BoardTool.PING ||
         state.active == BoardTool.ERASER || state.active == BoardTool.LABEL
@@ -476,22 +489,42 @@ internal fun BoardToolOptions(
                 ColourChoices(preferences.boardColorArgb, compact) { preferences.boardColorArgb = it }
             }
             BoardTool.FOG -> {
-                BoardOptionButton(words.revealFog, compact, selected = !state.fogCovering, onClick = { state.fogCovering = false })
-                BoardOptionButton(words.coverFog, compact, selected = state.fogCovering, onClick = { state.fogCovering = true })
-                Text(words.brushSize, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
-                listOf(1, 3, 5).forEach { size ->
-                    BoardOptionButton(
-                        "${size}×$size", compact, selected = state.fogBrushSize == size,
-                        onClick = { state.fogBrushSize = size },
+                val vision = board.document.vision()
+                BoardOptionButton(
+                    words.visionPainted, compact, selected = !vision.dynamic(),
+                    onClick = { board.setVision(vision.withMode(VisionMode.MANUAL)) },
+                )
+                BoardOptionButton(
+                    words.visionDynamic, compact, selected = vision.dynamic(),
+                    onClick = { board.setVision(vision.withMode(VisionMode.DYNAMIC)) },
+                )
+                if (vision.dynamic()) {
+                    VisionOptions(
+                        vision = vision,
+                        board = board,
+                        grid = grid,
+                        compact = compact,
+                        inspectedCombatantId = inspectedCombatantId,
+                        inspectedCombatantName = inspectedCombatantName,
                     )
+                } else {
+                    BoardOptionButton(words.revealFog, compact, selected = !state.fogCovering, onClick = { state.fogCovering = false })
+                    BoardOptionButton(words.coverFog, compact, selected = state.fogCovering, onClick = { state.fogCovering = true })
+                    Text(words.brushSize, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                    listOf(1, 3, 5).forEach { size ->
+                        BoardOptionButton(
+                            "${size}×$size", compact, selected = state.fogBrushSize == size,
+                            onClick = { state.fogBrushSize = size },
+                        )
+                    }
+                    BoardOptionButton(words.coverAllFog, compact, onClick = {
+                        board.setFog(FogMask.fullyCovered(grid.columns(), grid.rows()))
+                    })
+                    BoardOptionButton(words.revealAllFog, compact, onClick = {
+                        board.setFog(FogMask.empty(grid.columns(), grid.rows()))
+                    })
+                    Text(words.fogPaintHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
                 }
-                BoardOptionButton(words.coverAllFog, compact, onClick = {
-                    board.setFog(FogMask.fullyCovered(grid.columns(), grid.rows()))
-                })
-                BoardOptionButton(words.revealAllFog, compact, onClick = {
-                    board.setFog(FogMask.empty(grid.columns(), grid.rows()))
-                })
-                Text(words.fogPaintHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
             }
             BoardTool.FLOOR -> {
                 BoardOptionButton(
@@ -625,4 +658,71 @@ private fun BoardObject.rotated(delta: Double): BoardObject? = when (this) {
         lootable(), lootCategory(), lootQuantity(), lootDescription(), notes(),
     )
     else -> null
+}
+
+/**
+ * Comandi della vista dinamica: il raggio di mappa, l'eccezione di chi è
+ * selezionato, e il pulsante che dimentica l'esplorato.
+ *
+ * Il passo è una casella, non un piede: la vista si misura sulla griglia, e un
+ * raggio che non è multiplo del passo verrebbe comunque arrotondato per difetto
+ * dal calcolo. Meglio non mostrare valori che poi non si vedono applicati.
+ */
+@Composable
+private fun VisionOptions(
+    vision: VisionSettings,
+    board: BoardController,
+    grid: MapGrid,
+    compact: Boolean,
+    inspectedCombatantId: String?,
+    inspectedCombatantName: String,
+) {
+    val words = strings.board
+    val language = AppLocale.language
+    val step = grid.feetPerSquare().coerceAtLeast(1)
+
+    fun label(feet: Int): String = if (feet <= 0) words.visionBlind else distanceLabel(feet, language)
+
+    Text(words.visionRadius, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+    BoardOptionButton("−", compact, enabled = vision.radiusFeet() > 0, onClick = {
+        board.setVision(vision.withRadiusFeet((vision.radiusFeet() - step).coerceAtLeast(0)))
+    })
+    Text(label(vision.radiusFeet()), color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+    BoardOptionButton("+", compact, onClick = {
+        board.setVision(vision.withRadiusFeet(vision.radiusFeet() + step))
+    })
+
+    if (inspectedCombatantId == null) {
+        Text(words.visionPickCombatantHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+    } else {
+        val personal = vision.radiusFeetFor(inspectedCombatantId)
+        val overridden = vision.hasOverride(inspectedCombatantId)
+        Text(
+            words.visionOf(inspectedCombatantName),
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        BoardOptionButton("−", compact, enabled = personal > 0, onClick = {
+            board.setVision(vision.withOverride(inspectedCombatantId, (personal - step).coerceAtLeast(0)))
+        })
+        Text(
+            label(personal),
+            color = if (overridden) Palette.Gold else Palette.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        BoardOptionButton("+", compact, onClick = {
+            board.setVision(vision.withOverride(inspectedCombatantId, personal + step))
+        })
+        BoardOptionButton(
+            words.visionUseMapRadius, compact,
+            enabled = overridden,
+            selected = !overridden,
+            onClick = { board.setVision(vision.withOverride(inspectedCombatantId, null)) },
+        )
+    }
+
+    BoardOptionButton(words.forgetExplored, compact, onClick = {
+        board.resetExplored(grid.columns(), grid.rows())
+    })
+    Text(words.visionDynamicHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
 }

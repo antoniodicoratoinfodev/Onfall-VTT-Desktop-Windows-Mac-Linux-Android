@@ -8,10 +8,12 @@ import app.d6d.board.BoardDocument
 import app.d6d.board.BoardLayers
 import app.d6d.board.BoardLimits
 import app.d6d.board.BoardObject
+import app.d6d.board.ExploredMask
 import app.d6d.board.FogMask
 import app.d6d.board.FloorMask
 import app.d6d.board.InkStroke
 import app.d6d.board.Measurement
+import app.d6d.board.VisionSettings
 import app.d6d.board.WallMask
 
 /**
@@ -124,16 +126,66 @@ class BoardController(
 
     fun setFog(value: FogMask): Boolean = commit(document.withFog(value))
 
+    /** Le regole della vista sono una scelta del master, quindi un passo annullabile. */
+    fun setVision(value: VisionSettings): Boolean = commit(document.withVision(value))
+
+    /**
+     * Dimentica la mappa esplorata.
+     *
+     * Non passa da [commit] perche' la memoria non appartiene alla cronologia (vedi
+     * [markExplored] e [undo]): un passo che la riavvolgesse non ci sarebbe modo di
+     * onorarlo. Muove pero' [revision], perche' cancellare i ricordi del gruppo e'
+     * una decisione del tavolo e va salvata.
+     */
+    fun resetExplored(columns: Int, rows: Int): Boolean {
+        val cleared = ExploredMask.empty(columns, rows)
+        if (cleared == document.explored()) return false
+        document = document.withExplored(cleared)
+        revision++
+        onDocumentChanged(document)
+        return true
+    }
+
+    /**
+     * Segna come viste le caselle di un campo visivo.
+     *
+     * Non passa da [commit] per la stessa ragione di [revealLayers], portata
+     * all'estremo: esplorare non e' un tratto. Se lo fosse, ogni cambio di turno
+     * infilerebbe un passo nella cronologia del Lucido — e «annulla» dopo aver
+     * disegnato annullerebbe il passaggio del ladro, non il disegno. Non tocca
+     * nemmeno [revision]: quella e' cio' da cui la sessione capisce di avere
+     * modifiche da salvare, e avanzare il turno non e' una modifica che il tavolo
+     * ha deciso. Il documento cambia lo stesso, quindi la memoria viaggia con il
+     * prossimo salvataggio e con la bozza di ripristino.
+     */
+    fun markExplored(visible: BooleanArray, columns: Int, rows: Int) {
+        val current = document.explored().resized(columns, rows)
+        if (current.columns() * current.rows() != visible.size) return
+        val next = current.withVisible(visible)
+        if (next == document.explored()) return
+        document = document.withExplored(next)
+        onDocumentChanged(document)
+    }
+
     fun setWalls(value: WallMask): Boolean = commit(document.withWalls(value))
 
     /** Un gesto Floor può anche riaprire le stesse caselle nei Walls, restando un singolo Undo. */
     fun setFloors(value: FloorMask, openedWalls: WallMask? = null): Boolean =
         commit(document.withFloors(value).let { next -> openedWalls?.let(next::withWalls) ?: next })
 
+    /**
+     * Annulla l'ultimo gesto, lasciando dov'e' la memoria dell'esplorato.
+     *
+     * Le fotografie sono state scattate prima che il gruppo vedesse quello che ha
+     * visto nel frattempo. Ripristinarle intere spegnerebbe le stanze gia'
+     * esplorate ogni volta che si annulla un tratto di inchiostro: due cose che al
+     * tavolo non hanno niente a che vedere l'una con l'altra. La memoria e' l'unico
+     * campo che attraversa la cronologia senza esserne toccato.
+     */
     fun undo(): Boolean {
         if (undo.isEmpty()) return false
         redo.addLast(document)
-        document = undo.removeLast()
+        document = undo.removeLast().withExplored(document.explored())
         revision++
         onDocumentChanged(document)
         return true
@@ -142,7 +194,7 @@ class BoardController(
     fun redo(): Boolean {
         if (redo.isEmpty()) return false
         undo.addLast(document)
-        document = redo.removeLast()
+        document = redo.removeLast().withExplored(document.explored())
         revision++
         onDocumentChanged(document)
         return true

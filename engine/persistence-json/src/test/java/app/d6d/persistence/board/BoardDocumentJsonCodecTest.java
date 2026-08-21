@@ -3,6 +3,7 @@ package app.d6d.persistence.board;
 import app.d6d.board.AreaTemplate;
 import app.d6d.board.BoardDocument;
 import app.d6d.board.BoardLayers;
+import app.d6d.board.ExploredMask;
 import app.d6d.board.FogMask;
 import app.d6d.board.FloorMask;
 import app.d6d.board.GridPoint;
@@ -15,6 +16,8 @@ import app.d6d.board.StaticStamp;
 import app.d6d.board.TemplateShape;
 import app.d6d.board.TokenCategory;
 import app.d6d.board.TokenLootCategory;
+import app.d6d.board.VisionMode;
+import app.d6d.board.VisionSettings;
 import app.d6d.board.WallMask;
 import org.junit.jupiter.api.Test;
 
@@ -94,6 +97,71 @@ class BoardDocumentJsonCodecTest {
         assertEquals(1, decoded.lootQuantity());
         assertEquals("", decoded.lootDescription());
         assertEquals("Nota privata", decoded.notes());
+    }
+
+    @Test
+    void vistaDinamicaEmemoriaDellEsploratoFannoRoundTrip() {
+        VisionSettings vision = new VisionSettings(
+                VisionMode.DYNAMIC, 60, Map.of("pg-nano", 120, "pg-elfo", 0));
+        ExploredMask explored = ExploredMask.empty(20, 15)
+                .withCell(0, 0, true)
+                .withCell(1, 0, true)
+                .withCell(9, 9, true);
+        BoardDocument source = new BoardDocument(
+                1, List.of(), BoardLayers.defaults(), FogMask.empty(20, 15),
+                WallMask.empty(20, 15), FloorMask.empty(20, 15), vision, explored);
+
+        BoardDocument restored = codec.decode(codec.encode(source));
+
+        assertEquals(VisionMode.DYNAMIC, restored.vision().mode());
+        assertEquals(60, restored.vision().radiusFeet());
+        assertEquals(120, restored.vision().radiusFeetFor("pg-nano"));
+        assertEquals(0, restored.vision().radiusFeetFor("pg-elfo"), "zero e' cieco, non assente");
+        assertEquals(60, restored.vision().radiusFeetFor("chiunque-altro"));
+        assertEquals(explored, restored.explored());
+        assertEquals(source, restored);
+    }
+
+    @Test
+    void unLucidoSalvatoPrimaDellaVistaDinamicaSiRiapreDipintoAmano() {
+        BoardDocument previous = new BoardDocument(
+                1, List.of(), BoardLayers.defaults(), FogMask.empty(12, 8).withCell(3, 3, true));
+        Map<String, Object> encoded = new LinkedHashMap<>(codec.encode(previous));
+        // Il file di allora non aveva queste due chiavi: si legge come se non le avesse.
+        encoded.remove("vision");
+        encoded.remove("explored");
+
+        BoardDocument restored = codec.decode(encoded);
+
+        assertEquals(VisionMode.MANUAL, restored.vision().mode(), "la nebbia resta quella dipinta");
+        assertEquals(60, restored.vision().radiusFeet());
+        assertEquals(ExploredMask.empty(12, 8), restored.explored());
+        assertEquals(previous.fog(), restored.fog(), "e la nebbia salvata non si perde");
+    }
+
+    @Test
+    void unaVistaFuoriScalaVieneRifiutata() {
+        BoardDocument source = new BoardDocument(
+                1, List.of(), BoardLayers.defaults(), FogMask.empty(8, 8));
+        Map<String, Object> encoded = new LinkedHashMap<>(codec.encode(source));
+
+        Map<String, Object> badMode = new LinkedHashMap<>();
+        badMode.put("mode", "TELEPATHY");
+        encoded.put("vision", badMode);
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
+
+        Map<String, Object> badRadius = new LinkedHashMap<>();
+        badRadius.put("mode", "DYNAMIC");
+        badRadius.put("radiusFeet", -10);
+        encoded.put("vision", badRadius);
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
+
+        Map<String, Object> badOverride = new LinkedHashMap<>();
+        badOverride.put("mode", "DYNAMIC");
+        badOverride.put("radiusFeet", 60);
+        badOverride.put("radiusOverridesFeet", Map.of("pg", 999_999));
+        encoded.put("vision", badOverride);
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
     }
 
     @Test

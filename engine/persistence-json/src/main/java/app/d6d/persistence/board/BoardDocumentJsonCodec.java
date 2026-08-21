@@ -5,6 +5,7 @@ import app.d6d.board.BoardDocument;
 import app.d6d.board.BoardLayers;
 import app.d6d.board.BoardLimits;
 import app.d6d.board.BoardObject;
+import app.d6d.board.ExploredMask;
 import app.d6d.board.FogMask;
 import app.d6d.board.FloorMask;
 import app.d6d.board.GridPoint;
@@ -17,6 +18,8 @@ import app.d6d.board.StaticStamp;
 import app.d6d.board.TemplateShape;
 import app.d6d.board.TokenCategory;
 import app.d6d.board.TokenLootCategory;
+import app.d6d.board.VisionMode;
+import app.d6d.board.VisionSettings;
 import app.d6d.board.WallMask;
 
 import java.util.ArrayList;
@@ -35,6 +38,8 @@ public final class BoardDocumentJsonCodec {
         value.put("fog", encodeFog(board.fog()));
         value.put("walls", encodeWalls(board.walls()));
         value.put("floors", encodeFloors(board.floors()));
+        value.put("vision", encodeVision(board.vision()));
+        value.put("explored", encodeExplored(board.explored()));
         return value;
     }
 
@@ -63,7 +68,15 @@ public final class BoardDocumentJsonCodec {
         FloorMask floors = value.get("floors") == null
                 ? FloorMask.empty(walls.columns(), walls.rows())
                 : decodeFloors(object(value.get("floors"), "$.board.floors"));
-        return new BoardDocument(version, objects, layers, fog, walls, floors);
+        // Vista e memoria dell'esplorato sono nate dopo: un Lucido salvato prima
+        // non le porta, e deve riaprirsi con la nebbia dipinta a mano di allora.
+        VisionSettings vision = value.get("vision") == null
+                ? VisionSettings.defaults()
+                : decodeVision(object(value.get("vision"), "$.board.vision"));
+        ExploredMask explored = value.get("explored") == null
+                ? ExploredMask.empty(fog.columns(), fog.rows())
+                : decodeExplored(object(value.get("explored"), "$.board.explored"));
+        return new BoardDocument(version, objects, layers, fog, walls, floors, vision, explored);
     }
 
     private Map<String, Object> encodeLayers(BoardLayers layers) {
@@ -296,6 +309,123 @@ public final class BoardDocumentJsonCodec {
             }
             int start = index++;
             while (index < cells && fog.covered(index % fog.columns(), index / fog.columns())) index++;
+            result.add(List.of(start, index - start));
+        }
+        return result;
+    }
+
+    private Map<String, Object> encodeVision(VisionSettings vision) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("mode", vision.mode().name());
+        value.put("radiusFeet", vision.radiusFeet());
+        // Le eccezioni arrivano gia' ordinate dal modello: due salvataggi identici
+        // devono produrre lo stesso file, altrimenti ogni autosave sembra un cambio.
+        value.put("radiusOverridesFeet", new LinkedHashMap<>(vision.radiusOverridesFeet()));
+        return value;
+    }
+
+    private VisionSettings decodeVision(Map<String, ?> value) {
+        String rawMode = string(value.get("mode"), "$.board.vision.mode", VisionMode.MANUAL.name());
+        VisionMode mode;
+        try {
+            mode = VisionMode.valueOf(rawMode);
+        } catch (IllegalArgumentException unknown) {
+            throw invalid("$.board.vision.mode", "unknown vision mode " + rawMode);
+        }
+        int radiusFeet = integer(
+                value.get("radiusFeet"), "$.board.vision.radiusFeet", BoardLimits.DEFAULT_VISION_RADIUS_FEET);
+        if (radiusFeet < 0 || radiusFeet > BoardLimits.MAX_VISION_RADIUS_FEET) {
+            throw invalid("$.board.vision.radiusFeet", "radius is outside the supported range");
+        }
+        Map<String, Integer> overrides = new LinkedHashMap<>();
+        Object rawOverrides = value.get("radiusOverridesFeet");
+        if (rawOverrides != null) {
+            Map<String, ?> entries = object(rawOverrides, "$.board.vision.radiusOverridesFeet");
+            if (entries.size() > BoardLimits.MAX_VISION_OVERRIDES) {
+                throw invalid("$.board.vision.radiusOverridesFeet", "too many overrides");
+            }
+            for (Map.Entry<String, ?> entry : entries.entrySet()) {
+                String path = "$.board.vision.radiusOverridesFeet[" + entry.getKey() + "]";
+                if (entry.getKey().isBlank() || entry.getKey().length() > BoardLimits.MAX_ID_LENGTH) {
+                    throw invalid(path, "invalid combatant id");
+                }
+                int feet = integer(entry.getValue(), path);
+                if (feet < 0 || feet > BoardLimits.MAX_VISION_RADIUS_FEET) {
+                    throw invalid(path, "radius is outside the supported range");
+                }
+                overrides.put(entry.getKey(), feet);
+            }
+        }
+        return new VisionSettings(mode, radiusFeet, overrides);
+    }
+
+    private Map<String, Object> encodeExplored(ExploredMask explored) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("columns", explored.columns());
+        value.put("rows", explored.rows());
+        List<List<Integer>> runs = exploredRuns(explored);
+        if (runs.size() * 2 < explored.words().size()) {
+            value.put("encoding", "runs");
+            value.put("data", runs);
+        } else {
+            value.put("encoding", "bitset");
+            value.put("data", explored.words());
+        }
+        return value;
+    }
+
+    private ExploredMask decodeExplored(Map<String, ?> value) {
+        int columns = integer(value.get("columns"), "$.board.explored.columns");
+        int rows = integer(value.get("rows"), "$.board.explored.rows");
+        if (columns < 0 || rows < 0
+                || columns > BoardLimits.MAX_FOG_DIMENSION || rows > BoardLimits.MAX_FOG_DIMENSION) {
+            throw invalid("$.board.explored", "dimensions are outside the supported map limits");
+        }
+        String encoding = string(value.get("encoding"), "$.board.explored.encoding");
+        if (encoding.equals("bitset")) {
+            List<?> raw = list(value.get("data"), "$.board.explored.data");
+            List<Long> words = new ArrayList<>(raw.size());
+            for (int index = 0; index < raw.size(); index++) {
+                words.add(longInteger(raw.get(index), "$.board.explored.data[" + index + "]"));
+            }
+            return new ExploredMask(columns, rows, words);
+        }
+        if (!encoding.equals("runs")) throw invalid("$.board.explored.encoding", "unknown encoding");
+        int cells = Math.multiplyExact(columns, rows);
+        List<Long> words = new ArrayList<>(java.util.Collections.nCopies((cells + 63) >>> 6, 0L));
+        int previousEnd = 0;
+        List<?> rawRuns = list(value.get("data"), "$.board.explored.data");
+        if (rawRuns.size() > cells) throw invalid("$.board.explored.data", "too many runs");
+        for (int index = 0; index < rawRuns.size(); index++) {
+            List<?> pair = list(rawRuns.get(index), "$.board.explored.data[" + index + "]");
+            if (pair.size() != 2) {
+                throw invalid("$.board.explored.data[" + index + "]", "run must have start and length");
+            }
+            int start = integer(pair.get(0), "$.board.explored.data[" + index + "][0]");
+            int length = integer(pair.get(1), "$.board.explored.data[" + index + "][1]");
+            if (start < previousEnd || length <= 0 || start > cells - length) {
+                throw invalid("$.board.explored.data[" + index + "]", "invalid or overlapping run");
+            }
+            for (int cell = start; cell < start + length; cell++) {
+                int word = cell >>> 6;
+                words.set(word, words.get(word) | (1L << (cell & 63)));
+            }
+            previousEnd = start + length;
+        }
+        return new ExploredMask(columns, rows, words);
+    }
+
+    private List<List<Integer>> exploredRuns(ExploredMask explored) {
+        List<List<Integer>> result = new ArrayList<>();
+        int cells = explored.columns() * explored.rows();
+        int index = 0;
+        while (index < cells) {
+            if (!explored.seen(index % explored.columns(), index / explored.columns())) {
+                index++;
+                continue;
+            }
+            int start = index++;
+            while (index < cells && explored.seen(index % explored.columns(), index / explored.columns())) index++;
             result.add(List.of(start, index - start));
         }
         return result;

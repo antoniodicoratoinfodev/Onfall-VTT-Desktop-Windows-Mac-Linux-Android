@@ -76,6 +76,8 @@ import app.d6d.domain.space.MapGrid
 import app.d6d.domain.space.TokenPlacement
 import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.board.BoardController
+import app.d6d.ui.board.BoardVisionField
+import app.d6d.ui.board.VisionTier
 import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.i18n.currentLanguage
@@ -107,6 +109,7 @@ internal fun BoardContentLayer(
     cellPx: Float,
     showMasterFog: Boolean,
     playerPreview: Boolean,
+    vision: BoardVisionField,
     portraits: PortraitRepository,
     modifier: Modifier = Modifier,
 ) {
@@ -130,7 +133,18 @@ internal fun BoardContentLayer(
                 drawWalls(document.walls(), camera, mapOffset, cellPx)
             }
             if (showMasterFog && layers.fogVisible()) {
-                drawFog(document.fog(), camera, mapOffset, cellPx, Palette.Abyss.copy(alpha = 0.32f))
+                if (vision.active) {
+                    // Vista del master: il confine si vede, ma la mappa resta
+                    // leggibile. Annerire anche qui vorrebbe dire condurre la scena
+                    // senza sapere dove sono i nemici che si stanno muovendo.
+                    drawVisionFog(
+                        vision, camera, mapOffset, cellPx,
+                        exploredColor = Palette.Abyss.copy(alpha = 0.32f),
+                        unseenColor = Palette.Abyss.copy(alpha = 0.62f),
+                    )
+                } else {
+                    drawFog(document.fog(), camera, mapOffset, cellPx, Palette.Abyss.copy(alpha = 0.32f))
+                }
             }
         }
 
@@ -158,7 +172,7 @@ internal fun BoardContentLayer(
         }
 
         if (layers.sceneTokensVisible()) {
-            visibleSceneTokens(document, playerPreview).forEach { token ->
+            visibleSceneTokens(document, playerPreview, vision).forEach { token ->
                 if (!token.bounds(grid.feetPerSquare()).intersects(visible)) return@forEach
                 key(token.id()) {
                     SceneTokenView(token, portraits, camera, mapOffset, cellPx, playerPreview)
@@ -272,11 +286,22 @@ internal fun BoardPlayerFogLayer(
     camera: MapViewportGeometry,
     mapOffset: Offset,
     cellPx: Float,
+    vision: BoardVisionField,
     modifier: Modifier = Modifier,
 ) {
     if (!board.document.layers().fogVisible()) return
     Canvas(modifier) {
-        drawFog(board.document.fog(), camera, mapOffset, cellPx, Palette.Abyss.copy(alpha = 0.97f))
+        if (vision.active) {
+            // Quello che il gruppo ricorda resta leggibile in penombra; quello che
+            // nessuno ha mai visto e' nero pieno, non scuro.
+            drawVisionFog(
+                vision, camera, mapOffset, cellPx,
+                exploredColor = Palette.Abyss.copy(alpha = 0.78f),
+                unseenColor = Palette.Abyss,
+            )
+        } else {
+            drawFog(board.document.fog(), camera, mapOffset, cellPx, Palette.Abyss.copy(alpha = 0.97f))
+        }
     }
 }
 
@@ -375,6 +400,11 @@ internal fun BoardInteractionOverlay(
                     val active = tools.active
                     if (active == BoardTool.TABLE || active == BoardTool.HAND) return@pointerInput
                     if (active == BoardTool.TOKEN && tools.pendingToken == null) return@pointerInput
+                    // Con la vista dinamica la maschera dipinta a mano non viene piu'
+                    // disegnata: lasciar pennellare vorrebbe dire far sparire il tratto
+                    // sotto le dita. Lo strumento resta selezionabile perche' e' da li'
+                    // che si regola il raggio.
+                    if (active == BoardTool.FOG && board.document.vision().dynamic()) return@pointerInput
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val startRaw = cameraState.value.worldAt(down.position, offsetState.value)
@@ -824,6 +854,31 @@ private fun DrawScope.drawFog(
     }
 }
 
+/** Le tre gradazioni della vista dinamica, disegnate casella per casella. */
+private fun DrawScope.drawVisionFog(
+    vision: BoardVisionField,
+    camera: MapViewportGeometry,
+    mapOffset: Offset,
+    cellPx: Float,
+    exploredColor: Color,
+    unseenColor: Color,
+) {
+    if (vision.columns <= 0 || vision.rows <= 0) return
+    for (row in camera.visibleRows(mapOffset)) for (column in camera.visibleColumns(mapOffset)) {
+        if (!vision.insideGrid(column, row)) continue
+        val color = when (vision.tier(column, row)) {
+            VisionTier.VISIBLE -> continue
+            VisionTier.EXPLORED -> exploredColor
+            VisionTier.UNSEEN -> unseenColor
+        }
+        drawRect(
+            color,
+            Offset(mapOffset.x + column * cellPx, mapOffset.y + row * cellPx),
+            Size(cellPx + 0.5f, cellPx + 0.5f),
+        )
+    }
+}
+
 private fun DrawScope.drawWalls(
     walls: WallMask,
     camera: MapViewportGeometry,
@@ -886,9 +941,21 @@ private fun GridPoint.screen(mapOffset: Offset, cellPx: Float): Offset =
 private fun snapCell(point: GridPoint): GridPoint =
     GridPoint(floor(point.x()) + 0.5, floor(point.y()) + 0.5)
 
-internal fun visibleSceneTokens(document: BoardDocument, playerPreview: Boolean): List<SceneToken> {
+internal fun visibleSceneTokens(
+    document: BoardDocument,
+    playerPreview: Boolean,
+    vision: BoardVisionField = BoardVisionField.inactive(),
+): List<SceneToken> {
     if (!document.layers().sceneTokensVisible()) return emptyList()
-    return document.objects().filterIsInstance<SceneToken>().filter { !playerPreview || it.visibleToPlayers() }
+    return document.objects().filterIsInstance<SceneToken>()
+        .filter { !playerPreview || it.visibleToPlayers() }
+        // Sotto la vista dinamica la nebbia dei giocatori copre le pedine invece
+        // di cancellarle, e una pedina coperta al 78% si intravede ancora. Le
+        // caselle in penombra sono ricordi del terreno, non di chi ci sta sopra.
+        .filter { token ->
+            if (!playerPreview || !vision.active) return@filter true
+            vision.sees(floor(token.position().x()).toInt(), floor(token.position().y()).toInt())
+        }
 }
 
 /** Posa atomica: un solo oggetto, una sola revisione e un solo passo Undo. */

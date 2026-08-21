@@ -30,6 +30,16 @@ interface BoardStrings {
     val coverAllFog: String
     val revealAllFog: String
     val fogPaintHint: String
+    val visionPainted: String
+    val visionDynamic: String
+    val visionDynamicHint: String
+    val visionRadius: String
+    val visionBlind: String
+    val forgetExplored: String
+    val forgetExploredHint: String
+    val visionUseMapRadius: String
+    val visionPickCombatantHint: String
+    fun visionOf(name: String): String
     val brushSize: String
     val paintFloors: String
     val eraseFloors: String
@@ -154,6 +164,17 @@ object BoardStringsIt : BoardStrings {
     override val coverAllFog = "Copri tutto"
     override val revealAllFog = "Scopri tutto"
     override val fogPaintHint = "Trascina sulla mappa per coprire o scoprire le caselle. L’anteprima giocatori mostra il risultato finale."
+    override val visionPainted = "A mano"
+    override val visionDynamic = "Vista dinamica"
+    override val visionDynamicHint =
+        "Vede chi ha il turno; i muri fermano lo sguardo, l'esplorato resta in penombra."
+    override val visionRadius = "Raggio"
+    override val visionBlind = "Cieco"
+    override val forgetExplored = "Dimentica esplorato"
+    override val forgetExploredHint = "Riporta al nero tutto cio' che il gruppo ricorda."
+    override val visionUseMapRadius = "Raggio di mappa"
+    override val visionPickCombatantHint = "Scegli un combattente sulla mappa per dargli un raggio suo."
+    override fun visionOf(name: String) = "Vista di $name"
     override val brushSize = "Pennello"
     override val paintFloors = "Disegna pavimento"
     override val eraseFloors = "Cancella pavimento"
@@ -281,6 +302,17 @@ object BoardStringsEn : BoardStrings {
     override val coverAllFog = "Cover all"
     override val revealAllFog = "Reveal all"
     override val fogPaintHint = "Drag across the map to cover or reveal cells. Player preview shows the final result."
+    override val visionPainted = "Painted"
+    override val visionDynamic = "Dynamic sight"
+    override val visionDynamicHint =
+        "Whoever holds the turn sees; walls stop sight, explored stays in half-light."
+    override val visionRadius = "Radius"
+    override val visionBlind = "Blind"
+    override val forgetExplored = "Forget explored"
+    override val forgetExploredHint = "Turns everything the party remembers back to black."
+    override val visionUseMapRadius = "Map radius"
+    override val visionPickCombatantHint = "Pick a combatant on the map to give them their own radius."
+    override fun visionOf(name: String) = "$name's sight"
     override val brushSize = "Brush"
     override val paintFloors = "Paint floor"
     override val eraseFloors = "Erase floor"
