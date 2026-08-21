@@ -106,27 +106,41 @@ lets you pick which of them is holding the ability bar. Once combat is active th
 The tactical map is a grid. You **zoom with the mouse wheel**, drag the tokens to move them, and
 change the scale and the size on screen. Map options set columns and rows, grid visibility and
 opacity, the background image taken from the archive, and an automatic arrangement of every token.
+The background is not stuck where it lands: **map editing** drags it over the grid and stretches it
+from the corners, keeping the proportions, or from the edges freely, and one button fits and centres
+it again. Hovering the **movement left** control lights the squares the combatant on turn can still
+reach and dims the rest of the map; a click keeps that halo on while the token is dragged.
 
 ### Board tools, scene tokens and loot
 
 The map also owns a persistent **Board layer**, independent from combat rules and their Undo
-history. Its toolbox provides a hand, measurement, freehand ink, area templates, labels, pings,
-fog brushes, walkable floor tiles, solid walls, an eraser, layers, and scene tokens. Fog can be
-painted directly from the GM view with three brush sizes or changed all at once; player preview is
-only needed to check the final view. The Board can be locked against accidental
-changes or shown through the player preview; its own Undo and Redo never rewind attacks, turns, or
-other engine commands. Board contents travel with the session and its recovery draft.
+history. Its toolbox holds thirteen tools: **Table**, which hands the pointer back to normal play,
+**Edit Board**, which picks a drawing up to move, resize, rotate, retype or delete it, and then hand,
+measurement, freehand ink, area templates, labels, pings, fog, floor tiles, walls, scene tokens and
+an eraser. Area templates have two modes — the rules shapes (cone, cube, cylinder, emanation, line,
+sphere), drawn for illustration only, and a set of **stamps**: flame, light, danger, door, treasure.
+A measurement stays live while it is being taken and can be **pinned** to the board to survive the
+next one. On the desktop the toolbox can be pinned open beside the map instead of reopened each time.
 
-The **Walls layer** paints blocked grid cells with add and erase brushes. A combatant cannot be
-placed on a wall; movement follows the shortest legal route around it and spends that real distance,
-while a closed barrier makes the destination unreachable. Walls also block attacks and area line of
-effect. Hiding their layer changes only presentation—the rule remains active until the wall is erased.
+The **Layers** panel shows and hides background, floor, grid, scene tokens, annotations, stamps,
+walls and fog one by one; combatants are a protected layer and cannot be hidden. Fog can be painted
+directly from the GM view with three brush sizes — 1×1, 3×3, 5×5 — or covered and revealed all at
+once; player preview is only needed to check the final view. The Board can be **locked** against
+accidental changes, or shown through that preview — both leave only Table, hand, measurement and
+ping in reach — and its own Undo and Redo never rewind attacks, turns, or other engine commands.
+Board contents travel with the session and its recovery draft.
 
-The **Floor layer** paints visible map blocks with the same 1×1, 3×3, and 5×5 brush workflow.
-Floor is deliberately presentation-only: every map cell is walkable by default, whether or not it
-has a floor tile. Painting floor over a wall clears that wall, while only cells currently marked as
-Walls block movement and line of effect. Floor can also fill the whole map or be removed at once;
-filling the map preserves every existing Wall.
+The **Walls layer** paints blocked grid cells with add and erase brushes, in those same three sizes.
+A combatant cannot be placed on a wall; movement follows the shortest legal route around it and
+spends that real distance, while a closed barrier makes the destination unreachable. Walls also
+block attacks and area line of effect. Hiding their layer changes only presentation—the rule remains
+active until the wall is erased.
+
+The **Floor layer** paints visible map blocks with the same brush workflow. Floor is deliberately
+presentation-only: every map cell is walkable by default, whether or not it has a floor tile.
+Painting floor over a wall clears that wall, while only cells currently marked as Walls block
+movement and line of effect. Floor can also fill the whole map or be removed at once; filling the
+map preserves every existing Wall.
 
 **Scene tokens** are narrative map objects rather than combatants: they have no HP, initiative, turn,
 or rules. A token can use an imported image (including PNG) or Onfall's fallback medallion, and has
@@ -429,6 +443,7 @@ without orphaning a single feature, spell or feat it had already chosen.
 |---|---|---|
 | `engine/domain-model` | Java 17 | actors, abilities, conditions, state, campaigns. Immutable, zero dependencies |
 | `engine/core-engine` | Java 17 | seeded dice, state machine, append only audit, XP budget, enemy CPU |
+| `engine/board-model` | Java 17 | board layer: ink, templates, stamps, labels, scene tokens, fog, floor and wall masks |
 | `engine/persistence-json` | Java 17 | atomic saves, backups, import and export |
 | `engine/character-rules` | Kotlin | versioned class choices, XP progression and class resources |
 | `engine/sheet-model` | Kotlin | 2024 character sheet and 2025 monster stat block |
