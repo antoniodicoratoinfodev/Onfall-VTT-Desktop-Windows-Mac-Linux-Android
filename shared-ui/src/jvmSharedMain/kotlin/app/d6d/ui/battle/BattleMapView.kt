@@ -100,6 +100,7 @@ import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardVisionField
 import app.d6d.ui.board.VisionViewer
 import app.d6d.ui.board.rememberBoardVision
+import app.d6d.ui.board.visionEyes
 import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.board.MapInteraction
@@ -156,7 +157,7 @@ fun BattleMapView(
     val map = viewModel.battleMap
     val grid = map.grid()
     val boardLayers = board.document.layers()
-    val boardVision = rememberDynamicVision(viewModel, board, grid)
+    val boardVision = rememberDynamicVision(viewModel, board, grid, boardTools.playerPreview)
     val placements = remember(map) { map.orderedPlacements() }
     val density = LocalDensity.current
     val background = portraits.rememberBitmap(map.backgroundImage())
@@ -553,12 +554,19 @@ fun BattleMapView(
             modifier = Modifier.fillMaxSize(),
         )
 
+        // Le sovrapposizioni di regola sono aloni centrati su un combattente, e in
+        // anteprima giocatori seguono la stessa sorte della sua pedina: disegnare
+        // il raggio di movimento di chi non si vede vorrebbe dire tracciarne la
+        // sagoma attorno a una casella vuota.
+        fun shownToPlayers(placement: TokenPlacement): Boolean =
+            !boardTools.playerPreview || boardVision.sees(placement)
+
         // Il raggio residuo è un'anteprima: si accende passando il mouse sul comando
         // dedicato e ci resta se lo si preme, senza mai partecipare ai limiti di
         // trascinamento.
         if (viewModel.movementReachShown) {
             viewModel.activeCombatantIds.forEach { activeId ->
-                viewModel.placementOf(activeId)?.let { placement ->
+                viewModel.placementOf(activeId)?.takeIf { shownToPlayers(it) }?.let { placement ->
                     MovementReach(
                         viewModel = viewModel,
                         placement = placement,
@@ -573,7 +581,7 @@ fun BattleMapView(
         }
 
         viewModel.abilityRangePreview?.let { preview ->
-            viewModel.placementOf(preview.combatantId)?.let { placement ->
+            viewModel.placementOf(preview.combatantId)?.takeIf { shownToPlayers(it) }?.let { placement ->
                 AbilityRangeOverlay(
                     placement = placement,
                     rangeFeet = preview.rangeFeet,
@@ -657,7 +665,10 @@ fun BattleMapView(
                 // In risoluzione manuale, un anello su ogni bersaglio: verde se
                 // superato, ambra se fallito (danno pieno).
                 pendingArea?.targets?.forEach { choice ->
-                    viewModel.placementOf(choice.combatantId)?.let { placement ->
+                    // L'anello dice «questo è stato preso»: su un bersaglio che il
+                    // gruppo non vede ne tradirebbe la posizione proprio mentre la
+                    // nebbia lo sta nascondendo.
+                    viewModel.placementOf(choice.combatantId)?.takeIf { shownToPlayers(it) }?.let { placement ->
                         val side = placement.squaresPerSide()
                         val cx = mapOffset.x + (placement.origin().column() + side / 2f) * cellPx
                         val cy = mapOffset.y + (placement.origin().row() + side / 2f) * cellPx
@@ -1835,39 +1846,60 @@ private fun AreaManualCard(
 /**
  * Chi guarda la mappa, e quanto lontano.
  *
- * Guarda chi ha il turno — tutti quelli del gruppo simultaneo, se l'iniziativa e'
- * pari. Fuori dal combattimento nessuno ha il turno: allora guarda la squadra,
- * altrimenti una sessione appena aperta nascerebbe nera prima ancora del primo
- * tiro. Il raggio e' quello di mappa, salvo l'eccezione registrata sul singolo
- * combattente.
+ * Gli occhi li sceglie [visionEyes], che distingue la vista del master
+ * dall'uscita destinata ai giocatori. Il raggio e' quello di mappa, salvo
+ * l'eccezione registrata sul singolo combattente.
  */
 @Composable
 private fun rememberDynamicVision(
     viewModel: BattleViewModel,
     board: BoardController,
     grid: MapGrid,
+    playerPreview: Boolean,
 ): BoardVisionField {
     val document = board.document
     val vision = document.vision()
-    if (!vision.dynamic()) return BoardVisionField.inactive()
+    // Lo strato Nebbia spento vuol dire "mostra tutto", e allora non c'e' vista da
+    // calcolare: senza questa uscita, in anteprima le pedine fuori vista
+    // resterebbero nascoste sopra una mappa completamente illuminata — al tavolo
+    // sembra un difetto, non una scelta. Ferma anche la memoria del gruppo, ed e'
+    // il verso giusto in cui sbagliare: spegnere un occhio dello strato non deve
+    // regalare esplorato che nessuno ha visto.
+    if (!vision.dynamic() || !document.layers().fogVisible()) return BoardVisionField.inactive()
 
-    val viewerIds = viewModel.activeCombatantIds.ifEmpty { viewModel.partyIds }
-    val viewers = viewerIds.mapNotNull { id ->
+    val eyes = visionEyes(
+        playerPreview = playerPreview,
+        activeIds = viewModel.activeCombatantIds,
+        partyIds = viewModel.partyIds,
+        onTheirFeet = viewModel::onTheirFeet,
+    )
+    fun viewersOf(ids: List<String>): List<VisionViewer> = ids.mapNotNull { id ->
         val placement = viewModel.placementOf(id) ?: return@mapNotNull null
         VisionViewer(
             combatantId = id,
             placement = placement,
             radiusSquares = VisionField.radiusSquares(vision.radiusFeetFor(id), grid.feetPerSquare()),
-            party = viewModel.isParty(id),
         )
     }
+    val viewers = viewersOf(eyes.display)
     return rememberBoardVision(
         dynamic = true,
         grid = grid,
         walls = document.walls().resized(grid.columns(), grid.rows()),
         explored = document.explored(),
         viewers = viewers,
+        memoryViewers = if (eyes.memory == eyes.display) viewers else viewersOf(eyes.memory),
         boardRevision = board.revision,
         onExplored = board::markExplored,
     )
 }
+
+/**
+ * Chi e' a terra non e' un occhio.
+ *
+ * Un personaggio privo di sensi conserva il proprio turno — sono i tiri salvezza
+ * contro morte — ma non illumina piu' niente, e la stanza in cui e' caduto non
+ * deve restare accesa perche' il suo corpo e' li'.
+ */
+private fun BattleViewModel.onTheirFeet(combatantId: String): Boolean =
+    combatant(combatantId)?.let { !it.defeated() && !it.dead() } == true

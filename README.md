@@ -123,8 +123,8 @@ A measurement stays live while it is being taken and can be **pinned** to the bo
 next one. On the desktop the toolbox can be pinned open beside the map instead of reopened each time.
 
 The **Layers** panel shows and hides background, floor, grid, scene tokens, annotations, stamps,
-walls and fog one by one; combatants are a protected layer and cannot be hidden. Fog can be painted
-directly from the GM view with three brush sizes — 1×1, 3×3, 5×5 — or covered and revealed all at
+walls and fog one by one; combatants are a protected layer and cannot be hidden. In its painted mode
+fog is laid down directly from the GM view with three brush sizes — 1×1, 3×3, 5×5 — or covered and revealed all at
 once; player preview is only needed to check the final view. The Board can be **locked** against
 accidental changes, or shown through that preview — both leave only Table, hand, measurement and
 ping in reach — and its own Undo and Redo never rewind attacks, turns, or other engine commands.
@@ -141,6 +141,31 @@ presentation-only: every map cell is walkable by default, whether or not it has 
 Painting floor over a wall clears that wall, while only cells currently marked as Walls block
 movement and line of effect. Floor can also fill the whole map or be removed at once; filling the
 map preserves every existing Wall.
+
+The Fog tool carries two modes. **Painted** is the one described above. **Dynamic sight** computes
+what can actually be seen instead: sight leaves whoever is looking, is stopped by Walls — the same
+conservative line the engine already walks for attacks and area line of effect, closed diagonal
+corners included, so the map never reveals a target the rules would refuse to hit — and reaches as
+far as the vision radius. That radius is a map-wide value in feet, in metres in Italian, and single
+combatants can be given their own, zero meaning blind. Like range, it is measured in Chebyshev
+squares: a diagonal costs one.
+
+Dynamic sight draws three tiers rather than two. Cells in sight stay clear, cells the party has
+already seen stay in half-light, and cells nobody has ever seen are black. That memory is saved with
+the session; the painted mask is left untouched in the file, so switching back to Painted restores
+the fog exactly as it was. **Forget explored** wipes the memory and deliberately sits outside Board
+Undo — no undo step could honour it — while the mode itself and every radius are ordinary undoable
+steps.
+
+The GM view and the player output do not look through the same eyes. The GM looks through whoever
+holds the turn, monsters included, over a translucent veil that keeps the scene readable while a
+creature moves. The player preview always looks through the standing party, all of them at once: a
+combatant or scene token the party cannot see is not dimmed but left undrawn — one visible square of
+it is enough to show it, so a Huge creature leaning out of a corner does not appear from nowhere —
+and the same goes for the movement, range and area-resolution overlays centred on it. Characters who
+are down keep their turn and their death saves but stop being eyes, and only the party ever writes to
+the explored memory: a monster crossing a corridor does not hand it to the players. Hiding the Fog
+layer turns sight off along with the veil — nothing is computed, and nothing is hidden.
 
 **Scene tokens** are narrative map objects rather than combatants: they have no HP, initiative, turn,
 or rules. A token can use an imported image (including PNG) or Onfall's fallback medallion, and has
@@ -170,6 +195,13 @@ descriptions written by the user are kept as entered.
 <td align="center">
 <img src="sample/battle-board-tools.png" width="720"/><br/>
 <sub>Board tools — named Fog, Walls, and Layers controls, map brushes, scene tokens, and a separate Undo history</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/battle-dynamic-sight.png" width="720"/><br/>
+<sub>Dynamic sight, player preview — the party's own eyes: what they see now is clear, what they have already
+seen stays in half-light, the rest is black, and the enemies behind the wall are not drawn at all</sub>
 </td>
 </tr>
 <tr>
@@ -443,7 +475,7 @@ without orphaning a single feature, spell or feat it had already chosen.
 |---|---|---|
 | `engine/domain-model` | Java 17 | actors, abilities, conditions, state, campaigns. Immutable, zero dependencies |
 | `engine/core-engine` | Java 17 | seeded dice, state machine, append only audit, XP budget, enemy CPU |
-| `engine/board-model` | Java 17 | board layer: ink, templates, stamps, labels, scene tokens, fog, floor and wall masks |
+| `engine/board-model` | Java 17 | board layer: ink, templates, stamps, labels, scene tokens, fog, floor, wall and explored masks, vision settings and the sight field |
 | `engine/persistence-json` | Java 17 | atomic saves, backups, import and export |
 | `engine/character-rules` | Kotlin | versioned class choices, XP progression and class resources |
 | `engine/sheet-model` | Kotlin | 2024 character sheet and 2025 monster stat block |

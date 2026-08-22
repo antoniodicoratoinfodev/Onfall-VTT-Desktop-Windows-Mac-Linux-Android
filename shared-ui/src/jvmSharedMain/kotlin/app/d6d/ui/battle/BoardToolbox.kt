@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.d6d.board.BoardLayers
+import app.d6d.board.BoardLimits
 import app.d6d.board.BoardObject
 import app.d6d.board.AreaTemplate
 import app.d6d.board.FogMask
@@ -688,8 +689,12 @@ private fun VisionOptions(
         board.setVision(vision.withRadiusFeet((vision.radiusFeet() - step).coerceAtLeast(0)))
     })
     Text(label(vision.radiusFeet()), color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
-    BoardOptionButton("+", compact, onClick = {
-        board.setVision(vision.withRadiusFeet(vision.radiusFeet() + step))
+    // Il modello rifiuta un raggio oltre il tetto, e un rifiuto qui sarebbe
+    // un'eccezione dentro un clic: il pulsante si spegne prima di arrivarci.
+    BoardOptionButton("+", compact, enabled = vision.radiusFeet() < BoardLimits.MAX_VISION_RADIUS_FEET, onClick = {
+        board.setVision(vision.withRadiusFeet(
+            (vision.radiusFeet() + step).coerceAtMost(BoardLimits.MAX_VISION_RADIUS_FEET),
+        ))
     })
 
     if (inspectedCombatantId == null) {
@@ -710,9 +715,15 @@ private fun VisionOptions(
             color = if (overridden) Palette.Gold else Palette.TextMuted,
             style = MaterialTheme.typography.labelSmall,
         )
-        BoardOptionButton("+", compact, onClick = {
-            board.setVision(vision.withOverride(inspectedCombatantId, personal + step))
-        })
+        BoardOptionButton(
+            "+", compact, enabled = personal < BoardLimits.MAX_VISION_RADIUS_FEET,
+            onClick = {
+                board.setVision(vision.withOverride(
+                    inspectedCombatantId,
+                    (personal + step).coerceAtMost(BoardLimits.MAX_VISION_RADIUS_FEET),
+                ))
+            },
+        )
         BoardOptionButton(
             words.visionUseMapRadius, compact,
             enabled = overridden,

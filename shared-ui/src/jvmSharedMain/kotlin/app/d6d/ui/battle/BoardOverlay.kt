@@ -172,8 +172,15 @@ internal fun BoardContentLayer(
         }
 
         if (layers.sceneTokensVisible()) {
-            visibleSceneTokens(document, playerPreview, vision).forEach { token ->
-                if (!token.bounds(grid.feetPerSquare()).intersects(visible)) return@forEach
+            visibleSceneTokens(document, playerPreview).forEach { token ->
+                val bounds = token.bounds(grid.feetPerSquare())
+                if (!bounds.intersects(visible)) return@forEach
+                // Sotto la vista dinamica la nebbia dei giocatori copre le pedine
+                // invece di cancellarle, e una pedina coperta al 78% si intravede
+                // ancora: quella che il gruppo non vede non si disegna, come per i
+                // combattenti. Le caselle in penombra sono ricordi del terreno, non
+                // di chi ci sta sopra.
+                if (playerPreview && !vision.sees(bounds)) return@forEach
                 key(token.id()) {
                     SceneTokenView(token, portraits, camera, mapOffset, cellPx, playerPreview)
                 }
@@ -941,21 +948,10 @@ private fun GridPoint.screen(mapOffset: Offset, cellPx: Float): Offset =
 private fun snapCell(point: GridPoint): GridPoint =
     GridPoint(floor(point.x()) + 0.5, floor(point.y()) + 0.5)
 
-internal fun visibleSceneTokens(
-    document: BoardDocument,
-    playerPreview: Boolean,
-    vision: BoardVisionField = BoardVisionField.inactive(),
-): List<SceneToken> {
+internal fun visibleSceneTokens(document: BoardDocument, playerPreview: Boolean): List<SceneToken> {
     if (!document.layers().sceneTokensVisible()) return emptyList()
     return document.objects().filterIsInstance<SceneToken>()
         .filter { !playerPreview || it.visibleToPlayers() }
-        // Sotto la vista dinamica la nebbia dei giocatori copre le pedine invece
-        // di cancellarle, e una pedina coperta al 78% si intravede ancora. Le
-        // caselle in penombra sono ricordi del terreno, non di chi ci sta sopra.
-        .filter { token ->
-            if (!playerPreview || !vision.active) return@filter true
-            vision.sees(floor(token.position().x()).toInt(), floor(token.position().y()).toInt())
-        }
 }
 
 /** Posa atomica: un solo oggetto, una sola revisione e un solo passo Undo. */
