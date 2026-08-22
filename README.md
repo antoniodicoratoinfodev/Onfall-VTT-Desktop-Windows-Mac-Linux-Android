@@ -150,16 +150,20 @@ far as the vision radius. That radius is a map-wide value in feet, in metres in 
 combatants can be given their own, zero meaning blind. Like range, it is measured in Chebyshev
 squares: a diagonal costs one.
 
-Dynamic sight draws three tiers rather than two: cells in sight stay clear, cells the party has
-already seen stay in half-light, and cells nobody has ever seen use the selected veil. Both the GM
-and player outputs have the same three rendering choices: **All** removes the veil, **Memory + black**
-turns never-seen cells solid black, and **Memory + half-light** leaves them readable but darker than
-the explored area. Creatures outside current sight are never left as silhouettes; switch to All when
-the GM needs to administer hidden pieces. That memory is saved with
-the session; the painted mask is left untouched in the file, so switching back to Painted restores
-the fog exactly as it was. **Forget explored** wipes the memory and deliberately sits outside Board
-Undo — no undo step could honour it — while the mode itself and every radius are ordinary undoable
-steps.
+Dynamic sight is not only on or off. Both the GM view and the player output can be switched between
+three visibility presentations:
+
+| Presentation | What it shows |
+|---|---|
+| **All** | The whole map is readable and no dynamic veil is drawn. |
+| **Memory + black** | Current sight is clear, explored memory stays dim, and never-seen cells are solid black. |
+| **Memory + half-light** | Current sight is clear, explored memory stays dim, and never-seen cells remain visible but darker than the explored area. |
+
+Creatures outside current sight are never left as silhouettes; switch to All when the GM needs to
+administer hidden pieces. Explored memory is saved with the session, while the painted mask is left
+untouched in the file, so switching back to Painted restores the fog exactly as it was. **Forget
+explored** wipes the memory and deliberately sits outside Board Undo — no undo step could honour it
+— while the mode itself and every radius are ordinary undoable steps.
 
 The GM view and the player output do not have to look through the same eyes. The GM eye switch on the
 Fog bar offers **Turn**, which looks through whoever holds the turn, monsters included, and **Party**,
@@ -202,14 +206,23 @@ descriptions written by the user are kept as entered.
 <tr>
 <td align="center">
 <img src="sample/battle-board-tools.png" width="720"/><br/>
-<sub>Board tools — named Fog, Walls, and Layers controls, map brushes, scene tokens, and a separate Undo history</sub>
+<sub>Board tools — Fog, Walls, Layers, map brushes, scene tokens, and a separate Undo history in the current battle UI</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/battle-dynamic-sight.png" width="720"/><br/>
-<sub>Dynamic sight, player preview — the party's own eyes: what they see now is clear, what they have already
-seen stays in half-light, the rest is black, and the enemies behind the wall are not drawn at all</sub>
+<sub>Dynamic sight on a dungeon map — Aelis's current sight is clear, the route already explored
+remains visible as dim memory, and never-seen rooms stay covered. The GM and player outputs can each
+use All, Memory + black, or Memory + half-light; the GM can also switch between Turn and Party eyes.</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/battle-dynamic-sight-layers.png" width="720"/><br/>
+<sub>Layers over the same explored dungeon — GM and player presentation selectors remain available
+beside the layer toggles, Board lock, and Player preview; half-light keeps unexplored rooms readable
+as darker context.</sub>
 </td>
 </tr>
 <tr>
