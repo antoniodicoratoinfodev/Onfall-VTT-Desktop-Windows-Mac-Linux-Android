@@ -92,6 +92,17 @@ class BoardToolState(
     var wallAdding by mutableStateOf(true)
     var wallBrushSize by mutableStateOf(1)
     var playerPreview by mutableStateOf(false)
+
+    /**
+     * Con quali occhi guarda il master e come sono resi i due schermi.
+     *
+     * Sono controlli di uscita volatili, come [playerPreview]: all'apertura il
+     * master parte con una penombra leggibile e i giocatori con il mai-visto nero.
+     * In particolare non si riapre mai una sessione per errore su «Tutto».
+     */
+    var masterLens by mutableStateOf(MasterLens.TURN)
+    var masterVisionPresentation by mutableStateOf(VisionPresentation.MEMORY_DIM)
+    var playerVisionPresentation by mutableStateOf(VisionPresentation.MEMORY_BLACK)
     var tokenDialogId by mutableStateOf<String?>(null)
         private set
     var pendingToken by mutableStateOf<SceneTokenDraft?>(null)

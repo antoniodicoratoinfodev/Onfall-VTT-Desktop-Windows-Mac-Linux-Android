@@ -47,10 +47,10 @@ class VisionFieldTest {
     }
 
     @Test
-    void raggioZeroLasciaVedereSoloDoveSiSta() {
+    void raggioZeroSignificaCiecoENonScriveNemmenoLaPropriaCasella() {
         boolean[] field = VisionField.visibleFrom(walls(), COLUMNS, ROWS, 4, 4, 0);
 
-        assertTrue(visible(field, 4, 4));
+        assertFalse(visible(field, 4, 4));
         assertFalse(visible(field, 5, 4));
         assertFalse(visible(field, 4, 5));
     }

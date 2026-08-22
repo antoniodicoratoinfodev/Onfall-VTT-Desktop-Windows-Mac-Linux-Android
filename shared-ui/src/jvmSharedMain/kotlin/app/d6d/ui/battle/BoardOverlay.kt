@@ -78,6 +78,7 @@ import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardVisionField
 import app.d6d.ui.board.VisionTier
+import app.d6d.ui.board.fogAlpha
 import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.i18n.currentLanguage
@@ -133,16 +134,10 @@ internal fun BoardContentLayer(
                 drawWalls(document.walls(), camera, mapOffset, cellPx)
             }
             if (showMasterFog && layers.fogVisible()) {
-                if (vision.active) {
-                    // Vista del master: il confine si vede, ma la mappa resta
-                    // leggibile. Annerire anche qui vorrebbe dire condurre la scena
-                    // senza sapere dove sono i nemici che si stanno muovendo.
-                    drawVisionFog(
-                        vision, camera, mapOffset, cellPx,
-                        exploredColor = Palette.Abyss.copy(alpha = 0.32f),
-                        unseenColor = Palette.Abyss.copy(alpha = 0.62f),
-                    )
-                } else {
+                if (!document.vision().dynamic()) {
+                    // La maschera dipinta del master resta sotto le pedine. La vista
+                    // dinamica viene invece stesa in cima alla scena, uguale per
+                    // master e giocatori, da BoardVisionFogLayer.
                     drawFog(document.fog(), camera, mapOffset, cellPx, Palette.Abyss.copy(alpha = 0.32f))
                 }
             }
@@ -175,12 +170,11 @@ internal fun BoardContentLayer(
             visibleSceneTokens(document, playerPreview).forEach { token ->
                 val bounds = token.bounds(grid.feetPerSquare())
                 if (!bounds.intersects(visible)) return@forEach
-                // Sotto la vista dinamica la nebbia dei giocatori copre le pedine
-                // invece di cancellarle, e una pedina coperta al 78% si intravede
-                // ancora: quella che il gruppo non vede non si disegna, come per i
-                // combattenti. Le caselle in penombra sono ricordi del terreno, non
-                // di chi ci sta sopra.
-                if (playerPreview && !vision.sees(bounds)) return@forEach
+                // Con una resa traslucida una pedina coperta si intravedrebbe: ciò
+                // che gli occhi correnti non vedono non si disegna, sia per il
+                // master sia per i giocatori. La memoria riguarda il terreno, non
+                // chi ci stava sopra.
+                if (vision.active && !vision.sees(bounds)) return@forEach
                 key(token.id()) {
                     SceneTokenView(token, portraits, camera, mapOffset, cellPx, playerPreview)
                 }
@@ -286,10 +280,17 @@ private fun SceneTokenView(
     }
 }
 
-/** Nebbia opaca della vista giocatori, volutamente sopra i token. */
+/**
+ * Velo finale sopra pedine e annotazioni.
+ *
+ * La vista dinamica usa lo stesso profilo per master e giocatori; cambiano solo
+ * gli occhi che hanno prodotto [vision]. In modalità dipinta questo livello serve
+ * invece soltanto all'anteprima giocatori, come prima.
+ */
 @Composable
-internal fun BoardPlayerFogLayer(
+internal fun BoardVisionFogLayer(
     board: BoardController,
+    playerPreview: Boolean,
     camera: MapViewportGeometry,
     mapOffset: Offset,
     cellPx: Float,
@@ -299,14 +300,13 @@ internal fun BoardPlayerFogLayer(
     if (!board.document.layers().fogVisible()) return
     Canvas(modifier) {
         if (vision.active) {
-            // Quello che il gruppo ricorda resta leggibile in penombra; quello che
-            // nessuno ha mai visto e' nero pieno, non scuro.
+            val alpha = vision.presentation.fogAlpha() ?: return@Canvas
             drawVisionFog(
                 vision, camera, mapOffset, cellPx,
-                exploredColor = Palette.Abyss.copy(alpha = 0.78f),
-                unseenColor = Palette.Abyss,
+                exploredColor = Palette.Abyss.copy(alpha = alpha.explored),
+                unseenColor = Palette.Abyss.copy(alpha = alpha.unseen),
             )
-        } else {
+        } else if (playerPreview && !board.document.vision().dynamic()) {
             drawFog(board.document.fog(), camera, mapOffset, cellPx, Palette.Abyss.copy(alpha = 0.97f))
         }
     }

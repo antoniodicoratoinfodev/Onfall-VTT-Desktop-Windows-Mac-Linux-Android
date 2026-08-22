@@ -98,6 +98,8 @@ import app.d6d.domain.space.TokenPlacement
 import app.d6d.board.VisionField
 import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardVisionField
+import app.d6d.ui.board.MasterLens
+import app.d6d.ui.board.VisionPresentation
 import app.d6d.ui.board.VisionViewer
 import app.d6d.ui.board.rememberBoardVision
 import app.d6d.ui.board.visionEyes
@@ -157,7 +159,15 @@ fun BattleMapView(
     val map = viewModel.battleMap
     val grid = map.grid()
     val boardLayers = board.document.layers()
-    val boardVision = rememberDynamicVision(viewModel, board, grid, boardTools.playerPreview)
+    val boardVision = rememberDynamicVision(
+        viewModel = viewModel,
+        board = board,
+        grid = grid,
+        playerPreview = boardTools.playerPreview,
+        lens = boardTools.masterLens,
+        masterPresentation = boardTools.masterVisionPresentation,
+        playerPresentation = boardTools.playerVisionPresentation,
+    )
     val placements = remember(map) { map.orderedPlacements() }
     val density = LocalDensity.current
     val background = portraits.rememberBitmap(map.backgroundImage())
@@ -554,19 +564,17 @@ fun BattleMapView(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Le sovrapposizioni di regola sono aloni centrati su un combattente, e in
-        // anteprima giocatori seguono la stessa sorte della sua pedina: disegnare
-        // il raggio di movimento di chi non si vede vorrebbe dire tracciarne la
-        // sagoma attorno a una casella vuota.
-        fun shownToPlayers(placement: TokenPlacement): Boolean =
-            !boardTools.playerPreview || boardVision.sees(placement)
+        // Le sovrapposizioni di regola sono aloni centrati su un combattente e in
+        // ogni vista dinamica seguono la stessa sorte della sua pedina: disegnare
+        // il raggio di chi non si vede ne tradirebbe la posizione.
+        fun shownToViewer(placement: TokenPlacement): Boolean = boardVision.sees(placement)
 
         // Il raggio residuo è un'anteprima: si accende passando il mouse sul comando
         // dedicato e ci resta se lo si preme, senza mai partecipare ai limiti di
         // trascinamento.
         if (viewModel.movementReachShown) {
             viewModel.activeCombatantIds.forEach { activeId ->
-                viewModel.placementOf(activeId)?.takeIf { shownToPlayers(it) }?.let { placement ->
+                viewModel.placementOf(activeId)?.takeIf { shownToViewer(it) }?.let { placement ->
                     MovementReach(
                         viewModel = viewModel,
                         placement = placement,
@@ -581,7 +589,7 @@ fun BattleMapView(
         }
 
         viewModel.abilityRangePreview?.let { preview ->
-            viewModel.placementOf(preview.combatantId)?.takeIf { shownToPlayers(it) }?.let { placement ->
+            viewModel.placementOf(preview.combatantId)?.takeIf { shownToViewer(it) }?.let { placement ->
                 AbilityRangeOverlay(
                     placement = placement,
                     rangeFeet = preview.rangeFeet,
@@ -596,17 +604,13 @@ fun BattleMapView(
         }
 
         placements.forEach { placement ->
-            // In anteprima giocatori una pedina fuori vista non si attenua: non si
-            // disegna. La nebbia sta sopra i segnaposti, e un velo trasparente
-            // lascerebbe indovinare chi c'e' dietro l'angolo.
-            if (boardTools.playerPreview && !boardVision.sees(placement)) return@forEach
+            // In ogni vista dinamica una pedina fuori vista non si attenua: non si
+            // disegna. Anche il master può ottenere la stessa resa dei giocatori e
+            // tornare a «Tutto» quando deve amministrare ciò che è nascosto.
+            if (!boardVision.sees(placement)) return@forEach
             key(placement.combatantId()) {
                 MapToken(viewModel, portraits, placement, liveCell, mapOffset, tokenGestureEnabled)
             }
-        }
-
-        if (boardTools.playerPreview) {
-            BoardPlayerFogLayer(board, camera, mapOffset, cellPx, boardVision, Modifier.fillMaxSize())
         }
 
         if (interaction is MapInteraction.Board && interaction.tool != BoardTool.HAND) {
@@ -668,7 +672,7 @@ fun BattleMapView(
                     // L'anello dice «questo è stato preso»: su un bersaglio che il
                     // gruppo non vede ne tradirebbe la posizione proprio mentre la
                     // nebbia lo sta nascondendo.
-                    viewModel.placementOf(choice.combatantId)?.takeIf { shownToPlayers(it) }?.let { placement ->
+                    viewModel.placementOf(choice.combatantId)?.takeIf { shownToViewer(it) }?.let { placement ->
                         val side = placement.squaresPerSide()
                         val cx = mapOffset.x + (placement.origin().column() + side / 2f) * cellPx
                         val cy = mapOffset.y + (placement.origin().row() + side / 2f) * cellPx
@@ -679,6 +683,14 @@ fun BattleMapView(
                 }
             }
         }
+
+        // Ultimo strato appartenente alla mappa: copre anche targeting, trascinamenti
+        // e strumenti, così nessun alone può tradire una casella oltre la vista.
+        // Restano sopra soltanto la vignettatura e i pannelli di interfaccia.
+        BoardVisionFogLayer(
+            board, boardTools.playerPreview, camera, mapOffset, cellPx,
+            boardVision, Modifier.fillMaxSize(),
+        )
 
         // Vignettatura sopra tutto: angoli in ombra, luce dove si combatte. Non
         // ha gestori di puntatore, quindi i tocchi la attraversano.
@@ -1846,7 +1858,7 @@ private fun AreaManualCard(
 /**
  * Chi guarda la mappa, e quanto lontano.
  *
- * Gli occhi li sceglie [visionEyes], che distingue la vista del master
+ * Gli occhi li sceglie [visionEyes], che distingue la lente del master
  * dall'uscita destinata ai giocatori. Il raggio e' quello di mappa, salvo
  * l'eccezione registrata sul singolo combattente.
  */
@@ -1856,6 +1868,9 @@ private fun rememberDynamicVision(
     board: BoardController,
     grid: MapGrid,
     playerPreview: Boolean,
+    lens: MasterLens,
+    masterPresentation: VisionPresentation,
+    playerPresentation: VisionPresentation,
 ): BoardVisionField {
     val document = board.document
     val vision = document.vision()
@@ -1869,6 +1884,9 @@ private fun rememberDynamicVision(
 
     val eyes = visionEyes(
         playerPreview = playerPreview,
+        lens = lens,
+        masterPresentation = masterPresentation,
+        playerPresentation = playerPresentation,
         activeIds = viewModel.activeCombatantIds,
         partyIds = viewModel.partyIds,
         onTheirFeet = viewModel::onTheirFeet,
@@ -1884,6 +1902,7 @@ private fun rememberDynamicVision(
     val viewers = viewersOf(eyes.display)
     return rememberBoardVision(
         dynamic = true,
+        presentation = eyes.presentation,
         grid = grid,
         walls = document.walls().resized(grid.columns(), grid.rows()),
         explored = document.explored(),

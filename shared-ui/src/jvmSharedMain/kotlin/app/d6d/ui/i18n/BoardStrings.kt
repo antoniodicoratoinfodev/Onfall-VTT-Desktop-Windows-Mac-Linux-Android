@@ -33,6 +33,14 @@ interface BoardStrings {
     val visionPainted: String
     val visionDynamic: String
     val visionDynamicHint: String
+    val visionLens: String
+    val visionLensTurn: String
+    val visionLensParty: String
+    val visionPlayerPresentation: String
+    val visionMasterPresentation: String
+    val visionPresentationAll: String
+    val visionPresentationBlack: String
+    val visionPresentationDim: String
     val visionRadius: String
     val visionBlind: String
     val forgetExplored: String
@@ -167,7 +175,16 @@ object BoardStringsIt : BoardStrings {
     override val visionPainted = "A mano"
     override val visionDynamic = "Vista dinamica"
     override val visionDynamicHint =
-        "Vede chi ha il turno; i muri fermano lo sguardo, l'esplorato resta in penombra."
+        "I muri fermano lo sguardo e l'esplorato resta in memoria. Scegli separatamente " +
+            "la resa di master e giocatori; i giocatori guardano sempre con gli occhi del gruppo."
+    override val visionLens = "Occhi master"
+    override val visionLensTurn = "Turno"
+    override val visionLensParty = "Gruppo"
+    override val visionPlayerPresentation = "Vista giocatori"
+    override val visionMasterPresentation = "Vista master"
+    override val visionPresentationAll = "Tutto"
+    override val visionPresentationBlack = "Memoria + nero"
+    override val visionPresentationDim = "Memoria + penombra"
     override val visionRadius = "Raggio"
     override val visionBlind = "Cieco"
     override val forgetExplored = "Dimentica esplorato"
@@ -305,7 +322,16 @@ object BoardStringsEn : BoardStrings {
     override val visionPainted = "Painted"
     override val visionDynamic = "Dynamic sight"
     override val visionDynamicHint =
-        "Whoever holds the turn sees; walls stop sight, explored stays in half-light."
+        "Walls stop sight and explored stays in memory. Pick the GM and player rendering " +
+            "separately; players always look through the party's eyes."
+    override val visionLens = "GM eyes"
+    override val visionLensTurn = "Turn"
+    override val visionLensParty = "Party"
+    override val visionPlayerPresentation = "Player view"
+    override val visionMasterPresentation = "GM view"
+    override val visionPresentationAll = "All"
+    override val visionPresentationBlack = "Memory + black"
+    override val visionPresentationDim = "Memory + half-light"
     override val visionRadius = "Radius"
     override val visionBlind = "Blind"
     override val forgetExplored = "Forget explored"

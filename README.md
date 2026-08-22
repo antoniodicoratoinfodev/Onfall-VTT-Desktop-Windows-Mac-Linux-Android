@@ -150,17 +150,25 @@ far as the vision radius. That radius is a map-wide value in feet, in metres in 
 combatants can be given their own, zero meaning blind. Like range, it is measured in Chebyshev
 squares: a diagonal costs one.
 
-Dynamic sight draws three tiers rather than two. Cells in sight stay clear, cells the party has
-already seen stay in half-light, and cells nobody has ever seen are black. That memory is saved with
+Dynamic sight draws three tiers rather than two: cells in sight stay clear, cells the party has
+already seen stay in half-light, and cells nobody has ever seen use the selected veil. Both the GM
+and player outputs have the same three rendering choices: **All** removes the veil, **Memory + black**
+turns never-seen cells solid black, and **Memory + half-light** leaves them readable but darker than
+the explored area. Creatures outside current sight are never left as silhouettes; switch to All when
+the GM needs to administer hidden pieces. That memory is saved with
 the session; the painted mask is left untouched in the file, so switching back to Painted restores
 the fog exactly as it was. **Forget explored** wipes the memory and deliberately sits outside Board
 Undo — no undo step could honour it — while the mode itself and every radius are ordinary undoable
 steps.
 
-The GM view and the player output do not look through the same eyes. The GM looks through whoever
-holds the turn, monsters included, over a translucent veil that keeps the scene readable while a
-creature moves. The player preview always looks through the standing party, all of them at once: a
-combatant or scene token the party cannot see is not dimmed but left undrawn — one visible square of
+The GM view and the player output do not have to look through the same eyes. The GM eye switch on the
+Fog bar offers **Turn**, which looks through whoever holds the turn, monsters included, and **Party**,
+which answers "what can the characters see right now?". The player output always uses the standing
+party. The rendering selectors beside it are independent, so changing the GM's veil never changes the
+player output and vice versa. None of these choices stops the party from writing explored memory.
+
+The player preview always looks through the standing party, all of them at once: a combatant or scene
+token the party cannot see is not dimmed but left undrawn — one visible square of
 it is enough to show it, so a Huge creature leaning out of a corner does not appear from nowhere —
 and the same goes for the movement, range and area-resolution overlays centred on it. Characters who
 are down keep their turn and their death saves but stop being eyes, and only the party ever writes to

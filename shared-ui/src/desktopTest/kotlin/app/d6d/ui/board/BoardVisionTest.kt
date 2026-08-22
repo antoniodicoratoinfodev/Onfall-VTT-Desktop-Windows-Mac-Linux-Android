@@ -16,6 +16,9 @@ class BoardVisionTest {
     fun `nella vista del master guarda chi ha il turno anche se e' un mostro`() {
         val eyes = visionEyes(
             playerPreview = false,
+            lens = MasterLens.TURN,
+            masterPresentation = VisionPresentation.MEMORY_DIM,
+            playerPresentation = VisionPresentation.MEMORY_BLACK,
             activeIds = listOf("goblin"),
             partyIds = party,
             onTheirFeet = standing,
@@ -26,9 +29,61 @@ class BoardVisionTest {
     }
 
     @Test
+    fun `la lente Gruppo guarda con gli occhi dei personaggi anche nel turno del mostro`() {
+        val eyes = visionEyes(
+            playerPreview = false,
+            lens = MasterLens.PARTY,
+            masterPresentation = VisionPresentation.MEMORY_DIM,
+            playerPresentation = VisionPresentation.MEMORY_BLACK,
+            activeIds = listOf("goblin"),
+            partyIds = party,
+            onTheirFeet = standing,
+        )
+
+        assertEquals(party, eyes.display, "risponde a «cosa vedono adesso i personaggi?»")
+        assertEquals(VisionPresentation.MEMORY_DIM, eyes.presentation)
+    }
+
+    @Test
+    fun `la resa Tutto toglie il velo al master ma non la memoria al gruppo`() {
+        val eyes = visionEyes(
+            playerPreview = false,
+            lens = MasterLens.TURN,
+            masterPresentation = VisionPresentation.ALL,
+            playerPresentation = VisionPresentation.MEMORY_BLACK,
+            activeIds = listOf("hero"),
+            partyIds = party,
+            onTheirFeet = standing,
+        )
+
+        assertEquals(VisionPresentation.ALL, eyes.presentation)
+        assertEquals(emptyList<String>(), eyes.display, "nessun campo da calcolare")
+        assertEquals(party, eyes.memory, "ma il gruppo continua a ricordare dove e' passato")
+    }
+
+    @Test
+    fun `in anteprima la resa e la lente del master non hanno voce`() {
+        val eyes = visionEyes(
+            playerPreview = true,
+            lens = MasterLens.TURN,
+            masterPresentation = VisionPresentation.ALL,
+            playerPresentation = VisionPresentation.MEMORY_BLACK,
+            activeIds = listOf("goblin"),
+            partyIds = party,
+            onTheirFeet = standing,
+        )
+
+        assertEquals(VisionPresentation.MEMORY_BLACK, eyes.presentation)
+        assertEquals(party, eyes.display)
+    }
+
+    @Test
     fun `l anteprima giocatori guarda sempre la squadra, mai il mostro di turno`() {
         val eyes = visionEyes(
             playerPreview = true,
+            lens = MasterLens.TURN,
+            masterPresentation = VisionPresentation.MEMORY_DIM,
+            playerPresentation = VisionPresentation.MEMORY_BLACK,
             activeIds = listOf("goblin"),
             partyIds = party,
             onTheirFeet = standing,
@@ -42,6 +97,9 @@ class BoardVisionTest {
     fun `l anteprima mostra la squadra intera anche durante il turno di un solo eroe`() {
         val eyes = visionEyes(
             playerPreview = true,
+            lens = MasterLens.TURN,
+            masterPresentation = VisionPresentation.MEMORY_DIM,
+            playerPresentation = VisionPresentation.MEMORY_BLACK,
             activeIds = listOf("hero"),
             partyIds = party,
             onTheirFeet = standing,
@@ -54,6 +112,9 @@ class BoardVisionTest {
     fun `chi e' a terra non e' un occhio, ne' per la vista ne' per la memoria`() {
         val eyes = visionEyes(
             playerPreview = false,
+            lens = MasterLens.TURN,
+            masterPresentation = VisionPresentation.MEMORY_DIM,
+            playerPresentation = VisionPresentation.MEMORY_BLACK,
             activeIds = listOf("hero"),
             partyIds = party,
             onTheirFeet = { it != "hero" },
@@ -67,6 +128,9 @@ class BoardVisionTest {
     fun `senza nessuno in piedi non resta un occhio da nessuna parte`() {
         val eyes = visionEyes(
             playerPreview = false,
+            lens = MasterLens.TURN,
+            masterPresentation = VisionPresentation.MEMORY_DIM,
+            playerPresentation = VisionPresentation.MEMORY_BLACK,
             activeIds = listOf("hero"),
             partyIds = party,
             onTheirFeet = { false },
@@ -80,7 +144,9 @@ class BoardVisionTest {
     private fun onlyCellVisible(column: Int, row: Int): BoardVisionField {
         val visible = BooleanArray(16)
         visible[row * 4 + column] = true
-        return BoardVisionField(true, 4, 4, visible, ExploredMask.empty(4, 4))
+        return BoardVisionField(
+            true, 4, 4, VisionPresentation.MEMORY_BLACK, visible, ExploredMask.empty(4, 4),
+        )
     }
 
     @Test
@@ -110,6 +176,9 @@ class BoardVisionTest {
     fun `fuori dal combattimento nessuno ha il turno e guarda la squadra`() {
         val eyes = visionEyes(
             playerPreview = false,
+            lens = MasterLens.TURN,
+            masterPresentation = VisionPresentation.MEMORY_DIM,
+            playerPresentation = VisionPresentation.MEMORY_BLACK,
             activeIds = emptyList(),
             partyIds = party,
             onTheirFeet = standing,
@@ -117,5 +186,64 @@ class BoardVisionTest {
 
         assertEquals(party, eyes.display, "una sessione appena aperta non deve nascere nera")
         assertEquals(party, eyes.memory)
+    }
+
+    @Test
+    fun `le tre rese hanno livelli distinti e ordinati`() {
+        assertEquals(null, VisionPresentation.ALL.fogAlpha())
+        assertEquals(VisionFogAlpha(0.78f, 1f), VisionPresentation.MEMORY_BLACK.fogAlpha())
+        assertEquals(VisionFogAlpha(0.32f, 0.62f), VisionPresentation.MEMORY_DIM.fogAlpha())
+
+        VisionPresentation.entries.mapNotNull { it.fogAlpha() }.forEach { alpha ->
+            assertTrue(alpha.explored < alpha.unseen, "il mai-visto deve essere più scuro della memoria")
+        }
+    }
+
+    @Test
+    fun `anche i giocatori possono scegliere Tutto senza fermare la memoria`() {
+        val eyes = visionEyes(
+            playerPreview = true,
+            lens = MasterLens.TURN,
+            masterPresentation = VisionPresentation.MEMORY_DIM,
+            playerPresentation = VisionPresentation.ALL,
+            activeIds = listOf("goblin"),
+            partyIds = party,
+            onTheirFeet = standing,
+        )
+
+        assertEquals(VisionPresentation.ALL, eyes.presentation)
+        assertEquals(emptyList<String>(), eyes.display)
+        assertEquals(party, eyes.memory)
+    }
+
+    @Test
+    fun `le tre rese di master e giocatori restano completamente indipendenti`() {
+        VisionPresentation.entries.forEach { masterPresentation ->
+            VisionPresentation.entries.forEach { playerPresentation ->
+                val masterEyes = visionEyes(
+                    playerPreview = false,
+                    lens = MasterLens.PARTY,
+                    masterPresentation = masterPresentation,
+                    playerPresentation = playerPresentation,
+                    activeIds = listOf("goblin"),
+                    partyIds = party,
+                    onTheirFeet = standing,
+                )
+                val playerEyes = visionEyes(
+                    playerPreview = true,
+                    lens = MasterLens.TURN,
+                    masterPresentation = masterPresentation,
+                    playerPresentation = playerPresentation,
+                    activeIds = listOf("goblin"),
+                    partyIds = party,
+                    onTheirFeet = standing,
+                )
+
+                assertEquals(masterPresentation, masterEyes.presentation)
+                assertEquals(playerPresentation, playerEyes.presentation)
+                assertEquals(party, masterEyes.memory)
+                assertEquals(party, playerEyes.memory)
+            }
+        }
     }
 }

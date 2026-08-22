@@ -38,6 +38,7 @@ class BoardVisionField(
     val active: Boolean,
     val columns: Int,
     val rows: Int,
+    val presentation: VisionPresentation,
     private val visible: BooleanArray,
     private val explored: ExploredMask,
 ) {
@@ -93,9 +94,9 @@ class BoardVisionField(
     }
 
     companion object {
-        /** Campo inerte: tutto visibile, nessun calcolo. È la nebbia dipinta a mano. */
+        /** Campo inerte: tutto visibile, per nebbia dipinta, strato spento o resa «Tutto». */
         fun inactive(): BoardVisionField =
-            BoardVisionField(false, 0, 0, BooleanArray(0), ExploredMask.empty(0, 0))
+            BoardVisionField(false, 0, 0, VisionPresentation.ALL, BooleanArray(0), ExploredMask.empty(0, 0))
     }
 }
 
@@ -107,42 +108,99 @@ data class VisionViewer(
 )
 
 /**
- * Gli occhi della mappa: chi guarda adesso, e chi ricorda.
+ * Con quali occhi guarda il master. Non tocca mai l'uscita dei giocatori.
  *
- * Sono due elenchi diversi di proposito.
+ * Nessuna delle due ferma la memoria del gruppo: l'esplorato cresce lo stesso,
+ * altrimenti il modo in cui il master guarda cambierebbe ciò che i giocatori
+ * ricordano.
+ */
+enum class MasterLens {
+    /** Gli occhi di chi ha il turno, mostri compresi: sapere cosa vede la creatura
+     *  che si sta muovendo è metà del mestiere. */
+    TURN,
+
+    /** Gli occhi della squadra, gli stessi dei giocatori: risponde a «cosa vedono
+     *  adesso i personaggi?» senza dover passare dall'anteprima. */
+    PARTY,
+}
+
+/**
+ * Quanto la nebbia nasconde la mappa. E' un asse distinto dagli occhi usati:
+ * master e giocatori possono avere ciascuno una delle stesse tre rese.
+ */
+enum class VisionPresentation {
+    /** Mappa intera, senza velo. */
+    ALL,
+
+    /** Vista e memoria; ciò che non è mai stato visto è nero pieno. */
+    MEMORY_BLACK,
+
+    /** Vista e memoria; ciò che non è mai stato visto resta leggibile, ma più scuro. */
+    MEMORY_DIM,
+}
+
+/** Opacità dei due livelli non visibili; `null` significa che non si disegna alcun velo. */
+data class VisionFogAlpha(val explored: Float, val unseen: Float)
+
+fun VisionPresentation.fogAlpha(): VisionFogAlpha? = when (this) {
+    VisionPresentation.ALL -> null
+    VisionPresentation.MEMORY_BLACK -> VisionFogAlpha(explored = 0.78f, unseen = 1f)
+    VisionPresentation.MEMORY_DIM -> VisionFogAlpha(explored = 0.32f, unseen = 0.62f)
+}
+
+/**
+ * Gli occhi della mappa: chi guarda adesso, chi ricorda e come viene reso il velo.
  *
- * [display] decide cosa si vede in questo istante. Nella vista del master guarda
- * chi ha il turno, nemici compresi: sapere cosa vede il mostro che si sta muovendo
- * è metà del mestiere. Nell'anteprima giocatori guarda invece sempre la squadra,
+ * Sono elenchi diversi di proposito.
+ *
+ * [display] decide cosa si vede in questo istante e lo sceglie [MasterLens], ma
+ * solo nella vista del master. Nell'anteprima giocatori guarda sempre la squadra,
  * tutta insieme — quello schermo è dei giocatori, e mostrarvi il campo visivo del
  * mostro di turno gli regalerebbe il corridoio in cui si trova e, peggio,
  * cancellerebbe dalla mappa i loro stessi personaggi ogni volta che il mostro non
- * li vede.
+ * li vede. [presentation] viene invece scelta separatamente per i due schermi.
  *
  * [memory] è chi scrive nell'esplorato, e sono sempre e solo i membri della
  * squadra. Aver visto una stanza non dipende da chi ha l'iniziativa in quel
- * momento, né dal fatto che il master tenga aperta l'anteprima: se ne dipendesse,
- * la stessa partita ricorderebbe cose diverse a seconda di un suo interruttore.
+ * momento, né da come il master ha scelto di guardare: se ne dipendesse, la stessa
+ * partita ricorderebbe cose diverse a seconda di un suo interruttore.
+ *
+ * Con [VisionPresentation.ALL] niente viene nascosto, ma [memory] resta pieno e
+ * il gruppo continua a ricordare.
  *
  * Chi è a terra non è un occhio, in nessuno dei due elenchi: un personaggio
  * privo di sensi ha ancora il suo turno — tira i suoi tiri salvezza contro morte —
  * ma non illumina più niente.
  */
-data class VisionEyes(val display: List<String>, val memory: List<String>)
+data class VisionEyes(
+    val display: List<String>,
+    val memory: List<String>,
+    val presentation: VisionPresentation,
+)
 
 fun visionEyes(
     playerPreview: Boolean,
+    lens: MasterLens,
+    masterPresentation: VisionPresentation,
+    playerPresentation: VisionPresentation,
     activeIds: List<String>,
     partyIds: List<String>,
     onTheirFeet: (String) -> Boolean,
 ): VisionEyes {
     val party = partyIds.filter(onTheirFeet)
-    if (playerPreview) return VisionEyes(party, party)
-    // Fuori dal combattimento nessuno ha il turno, e chi è a terra ce l'ha ma non
-    // vede: in entrambi i casi guarda la squadra, altrimenti una sessione appena
-    // aperta nascerebbe nera prima ancora del primo tiro.
-    val active = activeIds.filter(onTheirFeet)
-    return VisionEyes(active.ifEmpty { party }, party)
+    val presentation = if (playerPreview) playerPresentation else masterPresentation
+    if (presentation == VisionPresentation.ALL) {
+        return VisionEyes(emptyList(), party, presentation)
+    }
+    if (playerPreview) return VisionEyes(party, party, presentation)
+    val display = when (lens) {
+        // Fuori dal combattimento nessuno ha il turno, e chi è a terra ce l'ha ma
+        // non vede: in entrambi i casi guarda la squadra, altrimenti una sessione
+        // appena aperta nascerebbe nera prima ancora del primo tiro.
+        MasterLens.TURN -> activeIds.filter(onTheirFeet).ifEmpty { party }
+        MasterLens.PARTY -> party
+    }
+    return VisionEyes(display, party, presentation)
 }
 
 /**
@@ -156,10 +214,14 @@ fun visionEyes(
  *
  * [memoryViewers] sono gli occhi che ricordano — la squadra — e quasi sempre
  * coincidono con [viewers]: quando succede il campo si calcola una volta sola.
+ *
+ * Con [VisionPresentation.ALL] non si disegna e non si nasconde niente, ma la
+ * memoria del gruppo si calcola e si scrive lo stesso.
  */
 @Composable
 fun rememberBoardVision(
     dynamic: Boolean,
+    presentation: VisionPresentation,
     grid: MapGrid,
     walls: WallMask,
     explored: ExploredMask,
@@ -170,9 +232,9 @@ fun rememberBoardVision(
 ): BoardVisionField {
     val columns = grid.columns()
     val rows = grid.rows()
-    val key = remember(dynamic, columns, rows, boardRevision, viewers, memoryViewers) {
+    val key = remember(dynamic, presentation, columns, rows, boardRevision, viewers, memoryViewers) {
         buildString {
-            append(dynamic).append('/').append(columns).append('x').append(rows)
+            append(dynamic).append('/').append(presentation).append('/').append(columns).append('x').append(rows)
             append('/').append(boardRevision)
             appendViewers(viewers)
             append('#')
@@ -182,28 +244,33 @@ fun rememberBoardVision(
 
     val computed = remember(key) {
         if (!dynamic || columns <= 0 || rows <= 0) {
-            null
+            VisionFields(null, null)
         } else {
-            val visible = fieldOf(viewers, walls, columns, rows)
-            val remembered = when {
-                memoryViewers.isEmpty() -> null
-                memoryViewers == viewers -> visible
-                else -> fieldOf(memoryViewers, walls, columns, rows)
+            val remembered = if (memoryViewers.isEmpty()) null else fieldOf(memoryViewers, walls, columns, rows)
+            // Nessun occhio non è "nessun velo": una squadra tutta a terra non vede
+            // niente, ed è un campo vuoto, non un campo assente.
+            val visible = when {
+                presentation == VisionPresentation.ALL -> null
+                remembered != null && memoryViewers == viewers -> remembered
+                else -> fieldOf(viewers, walls, columns, rows)
             }
-            visible to remembered
+            VisionFields(visible, remembered)
         }
     }
 
     LaunchedEffect(key) {
-        val remembered = computed?.second ?: return@LaunchedEffect
+        val remembered = computed.remembered ?: return@LaunchedEffect
         onExplored(remembered, columns, rows)
     }
 
-    val visible = computed?.first ?: return BoardVisionField.inactive()
+    val visible = computed.visible ?: return BoardVisionField.inactive()
     return remember(key, explored) {
-        BoardVisionField(true, columns, rows, visible, explored.resized(columns, rows))
+        BoardVisionField(true, columns, rows, presentation, visible, explored.resized(columns, rows))
     }
 }
+
+/** Il campo da disegnare e quello da ricordare: il primo manca con la resa «Tutto». */
+private class VisionFields(val visible: BooleanArray?, val remembered: BooleanArray?)
 
 private fun fieldOf(
     viewers: List<VisionViewer>,

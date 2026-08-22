@@ -53,7 +53,9 @@ import app.d6d.domain.space.MapGrid
 import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardTool
+import app.d6d.ui.board.MasterLens
 import app.d6d.ui.board.BoardToolState
+import app.d6d.ui.board.VisionPresentation
 import app.d6d.ui.components.AppGlyph
 import app.d6d.ui.components.GlyphIcon
 import app.d6d.ui.i18n.BoardStrings
@@ -338,6 +340,20 @@ private fun BoardLayersPanel(state: BoardToolState, board: BoardController, comp
         LayerToggle(words.fog, layers.fogVisible(), compact) {
             board.setLayers(layers.withFogVisible(it))
         }
+        if (board.document.vision().dynamic()) {
+            VisionPresentationSelector(
+                label = words.visionPlayerPresentation,
+                selected = state.playerVisionPresentation,
+                compact = compact,
+                onSelect = { state.playerVisionPresentation = it },
+            )
+            VisionPresentationSelector(
+                label = words.visionMasterPresentation,
+                selected = state.masterVisionPresentation,
+                compact = compact,
+                onSelect = { state.masterVisionPresentation = it },
+            )
+        }
         LayerToggle(if (layers.locked()) words.unlock else words.lock, layers.locked(), compact) {
             board.setLayers(layers.withLocked(it))
             if (it && state.active !in setOf(BoardTool.TABLE, BoardTool.HAND, BoardTool.MEASURE, BoardTool.PING)) {
@@ -396,6 +412,31 @@ private fun LayerToggle(
     onChange: (Boolean) -> Unit,
 ) {
     BoardOptionButton(label, compact, selected = selected, enabled = enabled, onClick = { onChange(!selected) })
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun VisionPresentationSelector(
+    label: String,
+    selected: VisionPresentation,
+    compact: Boolean,
+    onSelect: (VisionPresentation) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(label, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            VisionPresentation.entries.forEach { presentation ->
+                BoardOptionButton(
+                    presentation.label(strings.board), compact,
+                    selected = selected == presentation,
+                    onClick = { onSelect(presentation) },
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -503,6 +544,7 @@ internal fun BoardToolOptions(
                     VisionOptions(
                         vision = vision,
                         board = board,
+                        state = state,
                         grid = grid,
                         compact = compact,
                         inspectedCombatantId = inspectedCombatantId,
@@ -628,6 +670,17 @@ private fun TemplateShape.label(words: BoardStrings): String = when (this) {
     TemplateShape.SPHERE -> words.sphere
 }
 
+private fun MasterLens.label(words: BoardStrings): String = when (this) {
+    MasterLens.TURN -> words.visionLensTurn
+    MasterLens.PARTY -> words.visionLensParty
+}
+
+private fun VisionPresentation.label(words: BoardStrings): String = when (this) {
+    VisionPresentation.ALL -> words.visionPresentationAll
+    VisionPresentation.MEMORY_BLACK -> words.visionPresentationBlack
+    VisionPresentation.MEMORY_DIM -> words.visionPresentationDim
+}
+
 private fun StampKind.label(words: BoardStrings): String = when (this) {
     StampKind.FLAME -> words.flame
     StampKind.LIGHT -> words.light
@@ -673,6 +726,7 @@ private fun BoardObject.rotated(delta: Double): BoardObject? = when (this) {
 private fun VisionOptions(
     vision: VisionSettings,
     board: BoardController,
+    state: BoardToolState,
     grid: MapGrid,
     compact: Boolean,
     inspectedCombatantId: String?,
@@ -683,6 +737,27 @@ private fun VisionOptions(
     val step = grid.feetPerSquare().coerceAtLeast(1)
 
     fun label(feet: Int): String = if (feet <= 0) words.visionBlind else distanceLabel(feet, language)
+
+    VisionPresentationSelector(
+        label = words.visionPlayerPresentation,
+        selected = state.playerVisionPresentation,
+        compact = compact,
+        onSelect = { state.playerVisionPresentation = it },
+    )
+    VisionPresentationSelector(
+        label = words.visionMasterPresentation,
+        selected = state.masterVisionPresentation,
+        compact = compact,
+        onSelect = { state.masterVisionPresentation = it },
+    )
+
+    Text(words.visionLens, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+    MasterLens.entries.forEach { lens ->
+        BoardOptionButton(
+            lens.label(words), compact, selected = state.masterLens == lens,
+            onClick = { state.masterLens = lens },
+        )
+    }
 
     Text(words.visionRadius, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
     BoardOptionButton("−", compact, enabled = vision.radiusFeet() > 0, onClick = {

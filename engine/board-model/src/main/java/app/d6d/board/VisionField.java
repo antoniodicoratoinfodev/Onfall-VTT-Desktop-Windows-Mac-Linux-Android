@@ -67,7 +67,9 @@ public final class VisionField {
         }
         if (columns <= 0 || rows <= 0) return;
         if (originColumn < 0 || originRow < 0 || originColumn >= columns || originRow >= rows) return;
-        if (radiusSquares < 0) return;
+        // Zero è il valore esplicito di «cieco»: non vede neppure la casella che
+        // occupa e, soprattutto, muovendosi non scrive una scia nella memoria.
+        if (radiusSquares <= 0) return;
 
         // L'occhio vede sempre la propria casella, muro o no: è dove si trova.
         field[originRow * columns + originColumn] = true;
