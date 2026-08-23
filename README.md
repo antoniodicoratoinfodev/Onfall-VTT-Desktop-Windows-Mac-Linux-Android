@@ -457,8 +457,9 @@ order alone, without the numbers; or the order with each combatant's initiative 
 screens, or bare still stone, which is a few frames less to draw.
 
 The last group is about data. **Panel layout** — widths, collapsed panels, map zoom, plate positions
-— can be reset in one move, and the **data folder** the application writes to is shown so it can be
-found, backed up, or copied to another machine. On the desktop a second section holds the cursors;
+— can be reset in one move, the **data folder** the application writes to is shown so it can be
+found, backed up, or copied to another machine, and the **version** is written out beside it, the
+same one the window title carries, so a bug report can say which Onfall it came from. On the desktop a second section holds the cursors;
 on Android, where the pointer is not the application's to set, that section is simply not there.
 
 <table>
@@ -517,6 +518,33 @@ Every engine module, the content pack and the presentation state carry their own
 
 The local disk is the source of truth: sheets, ability catalog, sessions, images and preferences are
 written under `~/.onfall`, atomically and with backups.
+
+## Version
+
+The product version is written once, in `gradle.properties`:
+
+```properties
+onfall.version=0.4.0
+```
+
+Gradle carries it from there into every place a version can appear: the desktop packages, the
+Android `versionName` and its `versionCode` (`0.4.0` becomes `400`, so it keeps growing on its own),
+and a generated Kotlin constant that the window title and the Settings screen read. Nothing else
+needs editing, and a release can override the number without touching the file:
+
+```bash
+./gradlew :desktop-app:packageDmg -Ponfall.version=0.5.0
+```
+
+The form is checked as soon as the build is configured — three numbers separated by dots, nothing
+else — because a malformed one would otherwise surface only when packaging fails, minutes later.
+
+macOS is the single exception: `jpackage` refuses an application version whose first number is
+zero, so while Onfall is below 1.0 the `.app` bundle carries a placeholder `1.0.0` in its metadata.
+The real version is the one the application itself shows.
+
+These numbers say nothing about file compatibility: saves, catalogs and boards each carry their own
+`schemaVersion`, decided by the engine and moved only when a format actually changes.
 
 ## Run
 

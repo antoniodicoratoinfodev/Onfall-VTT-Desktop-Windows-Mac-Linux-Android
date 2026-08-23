@@ -16,6 +16,16 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+// Stessa versione dell'interfaccia e dell'APK: la decide il progetto radice.
+val appVersion: String = version.toString()
+
+// jpackage rifiuta un numero maggiore uguale a zero ("The first number in an
+// app-version cannot be zero or negative"), quindi finche' Onfall resta sotto
+// l'1.0 il bundle macOS porta una versione di comodo. Quella vera resta scritta
+// nel titolo della finestra e in Impostazioni, dove l'utente la va a cercare.
+val macBundleVersion: String =
+    if (appVersion.substringBefore('.').toInt() > 0) appVersion else "1.0.0"
+
 dependencies {
     implementation(project(":shared-ui"))
     implementation(compose.desktop.currentOs)
@@ -54,12 +64,15 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             // Nome tecnico del pacchetto: jpackage non accetta spazi.
             packageName = "Onfall"
-            packageVersion = "1.0.0"
+            packageVersion = appVersion
             description = "Strumento di combattimento compatibile con 5.5e / SRD"
 
             // Ogni sistema vuole il proprio formato: macOS .icns, Windows .ico,
             // Linux un PNG. Sono tre incisioni della stessa immagine.
-            macOS { iconFile.set(project.file("icons/arcano/Onfall.icns")) }
+            macOS {
+                packageVersion = macBundleVersion
+                iconFile.set(project.file("icons/arcano/Onfall.icns"))
+            }
             windows { iconFile.set(project.file("icons/arcano/Onfall.ico")) }
             linux { iconFile.set(project.file("icons/arcano/onfall-512.png")) }
         }

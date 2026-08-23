@@ -19,6 +19,16 @@ object AppIdentity {
     const val displayName: String = "Onfall"
 
     /**
+     * Versione dell'applicazione.
+     *
+     * Il numero non e' scritto qui: arriva da `onfall.version` in
+     * `gradle.properties` attraverso la costante generata [BuildInfo], la stessa
+     * che marchia i pacchetti desktop e l'APK. Un solo posto da aggiornare, e
+     * nessun modo di sbagliarne uno.
+     */
+    val version: String = BuildInfo.VERSION
+
+    /**
      * Dicitura di compatibilita'.
      *
      * Il documento impone la formula prudente: si dichiara la compatibilita', non
@@ -36,5 +46,5 @@ object AppIdentity {
      * vale la pena saperlo invece di scoprirlo.
      */
     fun windowTitle(language: AppLanguage): String =
-        "$displayName — ${compatibilityLine(language)}"
+        "$displayName $version — ${compatibilityLine(language)}"
 }

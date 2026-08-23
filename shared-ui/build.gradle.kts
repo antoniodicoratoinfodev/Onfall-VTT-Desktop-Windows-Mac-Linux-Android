@@ -8,6 +8,34 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
 }
 
+// La versione decisa dal progetto radice entra nel codice come costante generata,
+// invece di essere ricopiata a mano in un file Kotlin: cosi' pacchetti nativi,
+// APK e schermata Impostazioni non possono raccontare numeri diversi.
+val appVersion: String = version.toString()
+
+val generateBuildInfo by tasks.registering {
+    // Copia locale: il task non deve leggere il progetto mentre gira.
+    val declaredVersion = appVersion
+    val outputDirectory = layout.buildDirectory.dir("generated/onfall/kotlin")
+    inputs.property("version", declaredVersion)
+    outputs.dir(outputDirectory)
+    doLast {
+        val packageDirectory = outputDirectory.get().asFile.resolve("app/d6d/ui")
+        packageDirectory.mkdirs()
+        packageDirectory.resolve("BuildInfo.kt").writeText(
+            """
+            package app.d6d.ui
+
+            /** Generato da Gradle a partire da `onfall.version`. Non modificare a mano. */
+            internal object BuildInfo {
+                const val VERSION: String = "$declaredVersion"
+            }
+
+            """.trimIndent(),
+        )
+    }
+}
+
 kotlin {
     android {
         namespace = "app.d6d.ui"
@@ -27,6 +55,7 @@ kotlin {
     sourceSets {
         val jvmSharedMain = create("jvmSharedMain") {
             dependsOn(getByName("commonMain"))
+            kotlin.srcDir(generateBuildInfo)
             dependencies {
                 api(project(":engine:domain-model"))
                 api(project(":engine:core-engine"))
@@ -74,4 +103,7 @@ kotlin {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    // Chiude il giro: il numero che il build ha scritto nella costante generata
+    // arriva anche al test, che verifica sia proprio quello a comparire nell'app.
+    systemProperty("onfall.version", appVersion)
 }

@@ -279,6 +279,7 @@ private fun GeneralSettings(
                     )
                 }
                 InfoRow(text.dataFolder, dataDirectory.toString())
+                InfoRow(text.version, AppIdentity.version)
                 InfoRow(AppIdentity.displayName, AppIdentity.compatibilityLine(strings.language))
             }
         }

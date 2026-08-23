@@ -43,6 +43,7 @@ interface SettingsStrings {
     val panelLayoutHint: String
     val resetLayout: String
     val dataFolder: String
+    val version: String
 
     val resetLayoutTitle: String
     val resetLayoutBody: String
@@ -102,6 +103,7 @@ internal object SettingsStringsIt : SettingsStrings {
         "Larghezze, collassi, zoom della mappa e posizione delle targhe."
     override val resetLayout = "Ripristina disposizione"
     override val dataFolder = "Cartella dati"
+    override val version = "Versione"
 
     override val resetLayoutTitle = "Ripristinare la disposizione?"
     override val resetLayoutBody = "Pannelli, larghezze, zoom della mappa e targhe tornano " +
@@ -161,6 +163,7 @@ internal object SettingsStringsEn : SettingsStrings {
     override val panelLayoutHint = "Widths, collapsed panels, map zoom and plate positions."
     override val resetLayout = "Reset layout"
     override val dataFolder = "Data folder"
+    override val version = "Version"
 
     override val resetLayoutTitle = "Reset the layout?"
     override val resetLayoutBody = "Panels, widths, map zoom and plates go back to their " +
