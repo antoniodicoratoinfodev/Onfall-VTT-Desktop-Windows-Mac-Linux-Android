@@ -77,6 +77,7 @@ import app.d6d.domain.space.TokenPlacement
 import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardVisionField
+import app.d6d.ui.board.VisionPresentation
 import app.d6d.ui.board.VisionTier
 import app.d6d.ui.board.fogAlpha
 import app.d6d.ui.board.BoardTool
@@ -304,7 +305,11 @@ internal fun BoardVisionFogLayer(
             drawVisionFog(
                 vision, camera, mapOffset, cellPx,
                 exploredColor = Palette.Abyss.copy(alpha = alpha.explored),
-                unseenColor = Palette.Abyss.copy(alpha = alpha.unseen),
+                unseenColor = if (vision.presentation == VisionPresentation.MEMORY_BLACK) {
+                    Color.Black
+                } else {
+                    Palette.Abyss.copy(alpha = alpha.unseen)
+                },
             )
         } else if (playerPreview && !board.document.vision().dynamic()) {
             drawFog(board.document.fog(), camera, mapOffset, cellPx, Palette.Abyss.copy(alpha = 0.97f))
