@@ -47,6 +47,7 @@ import app.d6d.board.SceneToken
 import app.d6d.board.StampKind
 import app.d6d.board.TemplateShape
 import app.d6d.board.VisionMode
+import app.d6d.board.VisionField
 import app.d6d.board.VisionSettings
 import app.d6d.board.WallMask
 import app.d6d.domain.space.MapGrid
@@ -341,18 +342,7 @@ private fun BoardLayersPanel(state: BoardToolState, board: BoardController, comp
             board.setLayers(layers.withFogVisible(it))
         }
         if (board.document.vision().dynamic()) {
-            VisionPresentationSelector(
-                label = words.visionPlayerPresentation,
-                selected = state.playerVisionPresentation,
-                compact = compact,
-                onSelect = { state.playerVisionPresentation = it },
-            )
-            VisionPresentationSelector(
-                label = words.visionMasterPresentation,
-                selected = state.masterVisionPresentation,
-                compact = compact,
-                onSelect = { state.masterVisionPresentation = it },
-            )
+            VisionPresentationControls(state, compact)
         }
         LayerToggle(if (layers.locked()) words.unlock else words.lock, layers.locked(), compact) {
             board.setLayers(layers.withLocked(it))
@@ -437,6 +427,23 @@ private fun VisionPresentationSelector(
             }
         }
     }
+}
+
+@Composable
+private fun VisionPresentationControls(state: BoardToolState, compact: Boolean) {
+    val words = strings.board
+    VisionPresentationSelector(
+        label = words.visionPlayerPresentation,
+        selected = state.playerVisionPresentation,
+        compact = compact,
+        onSelect = { state.playerVisionPresentation = it },
+    )
+    VisionPresentationSelector(
+        label = words.visionMasterPresentation,
+        selected = state.masterVisionPresentation,
+        compact = compact,
+        onSelect = { state.masterVisionPresentation = it },
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -735,21 +742,12 @@ private fun VisionOptions(
     val words = strings.board
     val language = AppLocale.language
     val step = grid.feetPerSquare().coerceAtLeast(1)
+    var confirmForgetExplored by remember { mutableStateOf(false) }
 
-    fun label(feet: Int): String = if (feet <= 0) words.visionBlind else distanceLabel(feet, language)
+    fun label(feet: Int): String =
+        if (VisionField.radiusSquares(feet, step) == 0) words.visionBlind else distanceLabel(feet, language)
 
-    VisionPresentationSelector(
-        label = words.visionPlayerPresentation,
-        selected = state.playerVisionPresentation,
-        compact = compact,
-        onSelect = { state.playerVisionPresentation = it },
-    )
-    VisionPresentationSelector(
-        label = words.visionMasterPresentation,
-        selected = state.masterVisionPresentation,
-        compact = compact,
-        onSelect = { state.masterVisionPresentation = it },
-    )
+    VisionPresentationControls(state, compact)
 
     Text(words.visionLens, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
     MasterLens.entries.forEach { lens ->
@@ -807,8 +805,24 @@ private fun VisionOptions(
         )
     }
 
-    BoardOptionButton(words.forgetExplored, compact, onClick = {
-        board.resetExplored(grid.columns(), grid.rows())
-    })
+    BoardOptionButton(words.forgetExplored, compact, onClick = { confirmForgetExplored = true })
+    Text(words.forgetExploredHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
     Text(words.visionDynamicHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+
+    if (confirmForgetExplored) {
+        AlertDialog(
+            onDismissRequest = { confirmForgetExplored = false },
+            title = { Text(words.forgetExplored) },
+            text = { Text(words.forgetExploredConfirm) },
+            confirmButton = {
+                GameButton(strings.common.confirm, onClick = {
+                    board.resetExplored(grid.columns(), grid.rows())
+                    confirmForgetExplored = false
+                })
+            },
+            dismissButton = {
+                GameButton(strings.common.cancel, onClick = { confirmForgetExplored = false })
+            },
+        )
+    }
 }

@@ -77,9 +77,8 @@ import app.d6d.domain.space.TokenPlacement
 import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardVisionField
-import app.d6d.ui.board.VisionPresentation
 import app.d6d.ui.board.VisionTier
-import app.d6d.ui.board.fogAlpha
+import app.d6d.ui.board.forEachFogRun
 import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.i18n.currentLanguage
@@ -124,7 +123,9 @@ internal fun BoardContentLayer(
                 drawFloors(document.floors(), camera, mapOffset, cellPx)
             }
             document.objects().forEach { item ->
-                if (!item.bounds(grid.feetPerSquare()).intersects(visible)) return@forEach
+                val bounds = item.bounds(grid.feetPerSquare())
+                if (!bounds.intersects(visible)) return@forEach
+                if (playerPreview && !vision.showsToPlayers(bounds)) return@forEach
                 when (item) {
                     is StaticStamp -> if (layers.stampsVisible()) drawStamp(item, mapOffset, cellPx)
                     is Label, is SceneToken -> Unit
@@ -146,7 +147,9 @@ internal fun BoardContentLayer(
 
         if (layers.annotationsVisible()) {
             document.objects().filterIsInstance<Label>().forEach { label ->
-                if (!labelVisualBounds(label, cellPx).intersects(visible)) return@forEach
+                val bounds = labelVisualBounds(label, cellPx)
+                if (!bounds.intersects(visible)) return@forEach
+                if (playerPreview && !vision.showsToPlayers(bounds)) return@forEach
                 val point = camera.screenAt(label.position(), mapOffset)
                 Text(
                     text = label.text(),
@@ -162,7 +165,9 @@ internal fun BoardContentLayer(
                 )
             }
             document.objects().filterIsInstance<Measurement>().forEach { measurement ->
-                if (!measurement.bounds(grid.feetPerSquare()).intersects(visible)) return@forEach
+                val bounds = measurement.bounds(grid.feetPerSquare())
+                if (!bounds.intersects(visible)) return@forEach
+                if (playerPreview && !vision.showsToPlayers(bounds)) return@forEach
                 MeasurementTotalLabel(measurement.points(), grid.feetPerSquare(), camera, mapOffset)
             }
         }
@@ -301,15 +306,11 @@ internal fun BoardVisionFogLayer(
     if (!board.document.layers().fogVisible()) return
     Canvas(modifier) {
         if (vision.active) {
-            val alpha = vision.presentation.fogAlpha() ?: return@Canvas
+            val colors = vision.presentation.fogColors() ?: return@Canvas
             drawVisionFog(
                 vision, camera, mapOffset, cellPx,
-                exploredColor = Palette.Abyss.copy(alpha = alpha.explored),
-                unseenColor = if (vision.presentation == VisionPresentation.MEMORY_BLACK) {
-                    Color.Black
-                } else {
-                    Palette.Abyss.copy(alpha = alpha.unseen)
-                },
+                exploredColor = colors.explored,
+                unseenColor = colors.unseen,
             )
         } else if (playerPreview && !board.document.vision().dynamic()) {
             drawFog(board.document.fog(), camera, mapOffset, cellPx, Palette.Abyss.copy(alpha = 0.97f))
@@ -876,17 +877,19 @@ private fun DrawScope.drawVisionFog(
     unseenColor: Color,
 ) {
     if (vision.columns <= 0 || vision.rows <= 0) return
-    for (row in camera.visibleRows(mapOffset)) for (column in camera.visibleColumns(mapOffset)) {
-        if (!vision.insideGrid(column, row)) continue
-        val color = when (vision.tier(column, row)) {
-            VisionTier.VISIBLE -> continue
-            VisionTier.EXPLORED -> exploredColor
-            VisionTier.UNSEEN -> unseenColor
-        }
+    val visibleColumns = camera.visibleColumns(mapOffset)
+    val visibleRows = camera.visibleRows(mapOffset)
+    if (visibleColumns.isEmpty() || visibleRows.isEmpty()) return
+    vision.forEachFogRun(
+        firstColumn = visibleColumns.first,
+        lastColumnExclusive = visibleColumns.last + 1,
+        firstRow = visibleRows.first,
+        lastRowExclusive = visibleRows.last + 1,
+    ) { row, firstColumn, lastColumnExclusive, tier ->
         drawRect(
-            color,
-            Offset(mapOffset.x + column * cellPx, mapOffset.y + row * cellPx),
-            Size(cellPx + 0.5f, cellPx + 0.5f),
+            color = if (tier == VisionTier.EXPLORED) exploredColor else unseenColor,
+            topLeft = Offset(mapOffset.x + firstColumn * cellPx, mapOffset.y + row * cellPx),
+            size = Size((lastColumnExclusive - firstColumn) * cellPx + 0.5f, cellPx + 0.5f),
         )
     }
 }

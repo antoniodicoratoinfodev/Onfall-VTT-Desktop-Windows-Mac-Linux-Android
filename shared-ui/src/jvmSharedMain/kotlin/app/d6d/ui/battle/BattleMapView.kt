@@ -107,6 +107,7 @@ import app.d6d.ui.board.BoardTool
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.board.MapInteraction
 import app.d6d.ui.board.resolveMapInteraction
+import app.d6d.ui.board.shouldSuspendDynamicVisionForSetup
 import app.d6d.ui.components.Faction
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumberView
@@ -1881,6 +1882,12 @@ private fun rememberDynamicVision(
     // il verso giusto in cui sbagliare: spegnere un occhio dello strato non deve
     // regalare esplorato che nessuno ha visto.
     if (!vision.dynamic() || !document.layers().fogVisible()) return BoardVisionField.inactive()
+    val preparingWithoutParty = shouldSuspendDynamicVisionForSetup(
+        playerPreview = playerPreview,
+        activeIds = viewModel.activeCombatantIds,
+        hasPlacedPartyMember = viewModel.partyIds.any { viewModel.placementOf(it) != null },
+    )
+    if (preparingWithoutParty) return BoardVisionField.inactive()
 
     val eyes = visionEyes(
         playerPreview = playerPreview,

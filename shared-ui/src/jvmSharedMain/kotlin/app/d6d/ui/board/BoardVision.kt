@@ -81,6 +81,9 @@ class BoardVisionField(
      */
     fun sees(bounds: BoardBounds): Boolean {
         if (!active) return true
+        if (bounds.right() <= 0.0 || bounds.bottom() <= 0.0 ||
+            bounds.left() >= columns || bounds.top() >= rows
+        ) return false
         val firstColumn = max(0, floor(bounds.left()).toInt())
         val firstRow = max(0, floor(bounds.top()).toInt())
         val lastColumn = min(columns - 1, max(firstColumn, ceil(bounds.right()).toInt() - 1))
@@ -93,10 +96,45 @@ class BoardVisionField(
         return false
     }
 
+    /** In anteprima i contenuti informativi seguono la vista, non il solo velo traslucido. */
+    internal fun showsToPlayers(bounds: BoardBounds): Boolean = !active || sees(bounds)
+
     companion object {
         /** Campo inerte: tutto visibile, per nebbia dipinta, strato spento o resa «Tutto». */
         fun inactive(): BoardVisionField =
             BoardVisionField(false, 0, 0, VisionPresentation.ALL, BooleanArray(0), ExploredMask.empty(0, 0))
+    }
+}
+
+/**
+ * Visita segmenti orizzontali omogenei, omettendo le celle già visibili. Il
+ * renderer paga così un rettangolo per segmento, non uno per ogni casella.
+ */
+internal inline fun BoardVisionField.forEachFogRun(
+    firstColumn: Int,
+    lastColumnExclusive: Int,
+    firstRow: Int,
+    lastRowExclusive: Int,
+    visit: (row: Int, firstColumn: Int, lastColumnExclusive: Int, tier: VisionTier) -> Unit,
+) {
+    val startColumn = firstColumn.coerceIn(0, columns)
+    val endColumn = lastColumnExclusive.coerceIn(startColumn, columns)
+    val startRow = firstRow.coerceIn(0, rows)
+    val endRow = lastRowExclusive.coerceIn(startRow, rows)
+    for (row in startRow until endRow) {
+        var column = startColumn
+        while (column < endColumn) {
+            val runTier = tier(column, row)
+            if (runTier == VisionTier.VISIBLE) {
+                column++
+                continue
+            }
+            val runStart = column
+            do {
+                column++
+            } while (column < endColumn && tier(column, row) == runTier)
+            visit(row, runStart, column, runTier)
+        }
     }
 }
 
@@ -137,15 +175,6 @@ enum class VisionPresentation {
 
     /** Vista e memoria; ciò che non è mai stato visto resta leggibile, ma più scuro. */
     MEMORY_DIM,
-}
-
-/** Opacità dei due livelli non visibili; `null` significa che non si disegna alcun velo. */
-data class VisionFogAlpha(val explored: Float, val unseen: Float)
-
-fun VisionPresentation.fogAlpha(): VisionFogAlpha? = when (this) {
-    VisionPresentation.ALL -> null
-    VisionPresentation.MEMORY_BLACK -> VisionFogAlpha(explored = 0.78f, unseen = 1f)
-    VisionPresentation.MEMORY_DIM -> VisionFogAlpha(explored = 0.32f, unseen = 0.62f)
 }
 
 /**
@@ -202,6 +231,17 @@ fun visionEyes(
     }
     return VisionEyes(display, party, presentation)
 }
+
+/**
+ * Durante la preparazione, prima di piazzare il primo PG e prima dell'inizio del
+ * combattimento, il master deve poter amministrare la mappa. Non vale per
+ * l'anteprima giocatori né per una squadra piazzata ma interamente a terra.
+ */
+internal fun shouldSuspendDynamicVisionForSetup(
+    playerPreview: Boolean,
+    activeIds: List<String>,
+    hasPlacedPartyMember: Boolean,
+): Boolean = !playerPreview && activeIds.isEmpty() && !hasPlacedPartyMember
 
 /**
  * Calcola il campo visivo e ne affida la memoria al Lucido.

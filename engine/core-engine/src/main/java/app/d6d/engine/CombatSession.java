@@ -42,6 +42,7 @@ import app.d6d.domain.combat.TurnBudget;
 import app.d6d.domain.space.TokenPlacement;
 import app.d6d.domain.space.MapGrid;
 import app.d6d.domain.space.GridPosition;
+import app.d6d.domain.space.GridLineTraversal;
 import app.d6d.domain.space.BattleMap;
 import app.d6d.domain.space.MapBackground;
 
@@ -1517,27 +1518,9 @@ public final class CombatSession {
 
     /** Bresenham conservativo: anche un angolo chiuso da un muro interrompe la linea. */
     private boolean clearLine(GridPosition source, GridPosition target) {
-        int x = source.column();
-        int y = source.row();
-        int dx = Math.abs(target.column() - x);
-        int dy = Math.abs(target.row() - y);
-        int sx = Integer.compare(target.column(), x);
-        int sy = Integer.compare(target.row(), y);
-        int error = dx - dy;
-        while (x != target.column() || y != target.row()) {
-            int twice = error * 2;
-            boolean moveX = twice > -dy;
-            boolean moveY = twice < dx;
-            if (moveX && moveY) {
-                if (blockedCells.contains(new GridPosition(x + sx, y))
-                        || blockedCells.contains(new GridPosition(x, y + sy))) return false;
-            }
-            if (moveX) { error -= dy; x += sx; }
-            if (moveY) { error += dx; y += sy; }
-            if (x == target.column() && y == target.row()) return true;
-            if (blockedCells.contains(new GridPosition(x, y))) return false;
-        }
-        return true;
+        return GridLineTraversal.clear(
+                source.column(), source.row(), target.column(), target.row(),
+                (column, row) -> blockedCells.contains(new GridPosition(column, row)));
     }
 
     private void requireConfiguredMap() {

@@ -124,6 +124,7 @@ class VisionFieldTest {
     void ilRaggioInCaselleArrotondaPerDifetto() {
         assertEquals(12, VisionField.radiusSquares(60, 5));
         assertEquals(3, VisionField.radiusSquares(35, 10));
+        assertEquals(0, VisionField.radiusSquares(5, 10));
         assertEquals(0, VisionField.radiusSquares(0, 5));
         assertEquals(0, VisionField.radiusSquares(60, 0));
     }

@@ -1,16 +1,14 @@
 package app.d6d.board;
 
+import app.d6d.domain.space.GridLineTraversal;
 import java.util.Objects;
 
 /**
  * Quali caselle un occhio posato su una casella riesce a vedere.
  *
- * <p><b>La linea è la stessa del motore.</b> {@code CombatSession.clearLine}
- * decide già se un muro interrompe un attacco o la linea d'effetto di un'area:
- * qui è ricopiata passo per passo, angolo chiuso compreso. Due tracciati diversi
- * produrrebbero il caso peggiore che un tavolo possa incontrare — «lo vedo ma il
- * motore mi dice che non posso colpirlo» — e nessuna delle due risposte
- * sembrerebbe sbagliata guardandola da sola.</p>
+ * <p><b>La linea è la stessa del motore.</b> Vista e linea d'effetto delegano
+ * entrambe a {@link GridLineTraversal}: non possono divergere nel caso peggiore
+ * «lo vedo ma il motore mi dice che non posso colpirlo».</p>
  *
  * <p>Il raggio si misura in Chebyshev, come la gittata: sulla griglia la diagonale
  * vale una casella, quindi un raggio di dodici caselle è un quadrato di venticinque
@@ -88,36 +86,12 @@ public final class VisionField {
         }
     }
 
-    /**
-     * Bresenham conservativo, copia di {@code CombatSession.clearLine}.
-     *
-     * <p>Quando il passo è diagonale entrambe le caselle ortogonali devono essere
-     * libere: un angolo chiuso da due muri non si guarda in diagonale, come non lo
-     * si attraversa con una freccia.</p>
-     */
+    /** Bresenham conservativo condiviso con la linea d'effetto del combattimento. */
     public static boolean clearLine(
             WallMask walls, int sourceColumn, int sourceRow, int targetColumn, int targetRow) {
         Objects.requireNonNull(walls, "walls");
-        int x = sourceColumn;
-        int y = sourceRow;
-        int dx = Math.abs(targetColumn - x);
-        int dy = Math.abs(targetRow - y);
-        int sx = Integer.compare(targetColumn, x);
-        int sy = Integer.compare(targetRow, y);
-        int error = dx - dy;
-        while (x != targetColumn || y != targetRow) {
-            int twice = error * 2;
-            boolean moveX = twice > -dy;
-            boolean moveY = twice < dx;
-            if (moveX && moveY) {
-                if (walls.blocked(x + sx, y) || walls.blocked(x, y + sy)) return false;
-            }
-            if (moveX) { error -= dy; x += sx; }
-            if (moveY) { error += dx; y += sy; }
-            if (x == targetColumn && y == targetRow) return true;
-            if (walls.blocked(x, y)) return false;
-        }
-        return true;
+        return GridLineTraversal.clear(
+                sourceColumn, sourceRow, targetColumn, targetRow, walls::blocked);
     }
 
     /** Converte una distanza del regolamento nel raggio in caselle, arrotondando per difetto. */

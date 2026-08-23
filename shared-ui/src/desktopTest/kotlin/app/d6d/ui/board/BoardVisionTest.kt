@@ -168,6 +168,43 @@ class BoardVisionTest {
     }
 
     @Test
+    fun `un rettangolo oltre alto e sinistra non eredita la visibilita di zero zero`() {
+        val field = onlyCellVisible(0, 0)
+
+        assertFalse(field.sees(BoardBounds(-9.0, -9.0, -5.0, -5.0)))
+        assertFalse(field.sees(BoardBounds(-4.0, 0.2, -1.0, 0.8)))
+        assertFalse(field.sees(BoardBounds(0.2, -4.0, 0.8, -1.0)))
+    }
+
+    @Test
+    fun `i contenuti informativi dei giocatori richiedono almeno una casella visibile`() {
+        val field = onlyCellVisible(0, 0)
+
+        assertTrue(field.showsToPlayers(BoardBounds(0.0, 0.0, 1.0, 1.0)))
+        assertFalse(field.showsToPlayers(BoardBounds(2.0, 2.0, 3.0, 3.0)))
+        assertTrue(BoardVisionField.inactive().showsToPlayers(BoardBounds(20.0, 20.0, 21.0, 21.0)))
+    }
+
+    @Test
+    fun `la nebbia uniforme produce un segmento per riga non uno per casella`() {
+        val field = BoardVisionField(
+            true, 400, 400, VisionPresentation.MEMORY_BLACK,
+            BooleanArray(400 * 400), ExploredMask.empty(400, 400),
+        )
+        var runs = 0
+        var coveredCells = 0
+
+        field.forEachFogRun(0, 400, 0, 400) { _, first, last, tier ->
+            runs++
+            coveredCells += last - first
+            assertEquals(VisionTier.UNSEEN, tier)
+        }
+
+        assertEquals(400, runs)
+        assertEquals(160_000, coveredCells)
+    }
+
+    @Test
     fun `con la nebbia dipinta il campo inerte non nasconde niente`() {
         assertTrue(BoardVisionField.inactive().sees(BoardBounds(40.0, 40.0, 44.0, 44.0)))
     }
@@ -189,14 +226,11 @@ class BoardVisionTest {
     }
 
     @Test
-    fun `le tre rese hanno livelli distinti e ordinati`() {
-        assertEquals(null, VisionPresentation.ALL.fogAlpha())
-        assertEquals(VisionFogAlpha(0.78f, 1f), VisionPresentation.MEMORY_BLACK.fogAlpha())
-        assertEquals(VisionFogAlpha(0.32f, 0.62f), VisionPresentation.MEMORY_DIM.fogAlpha())
-
-        VisionPresentation.entries.mapNotNull { it.fogAlpha() }.forEach { alpha ->
-            assertTrue(alpha.explored < alpha.unseen, "il mai-visto deve essere più scuro della memoria")
-        }
+    fun `la preparazione senza PG piazzati sospende il velo soltanto al master`() {
+        assertTrue(shouldSuspendDynamicVisionForSetup(false, emptyList(), false))
+        assertFalse(shouldSuspendDynamicVisionForSetup(true, emptyList(), false))
+        assertFalse(shouldSuspendDynamicVisionForSetup(false, listOf("goblin"), false))
+        assertFalse(shouldSuspendDynamicVisionForSetup(false, emptyList(), true))
     }
 
     @Test

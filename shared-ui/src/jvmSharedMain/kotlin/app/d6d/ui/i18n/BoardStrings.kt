@@ -45,6 +45,7 @@ interface BoardStrings {
     val visionBlind: String
     val forgetExplored: String
     val forgetExploredHint: String
+    val forgetExploredConfirm: String
     val visionUseMapRadius: String
     val visionPickCombatantHint: String
     fun visionOf(name: String): String
@@ -189,6 +190,8 @@ object BoardStringsIt : BoardStrings {
     override val visionBlind = "Cieco"
     override val forgetExplored = "Dimentica esplorato"
     override val forgetExploredHint = "Riporta al nero tutto cio' che il gruppo ricorda."
+    override val forgetExploredConfirm =
+        "Tutto ciò che il gruppo ricorda tornerà nero. Questa operazione non può essere annullata."
     override val visionUseMapRadius = "Raggio di mappa"
     override val visionPickCombatantHint = "Scegli un combattente sulla mappa per dargli un raggio suo."
     override fun visionOf(name: String) = "Vista di $name"
@@ -336,6 +339,8 @@ object BoardStringsEn : BoardStrings {
     override val visionBlind = "Blind"
     override val forgetExplored = "Forget explored"
     override val forgetExploredHint = "Turns everything the party remembers back to black."
+    override val forgetExploredConfirm =
+        "Everything the party remembers will turn back to black. This action cannot be undone."
     override val visionUseMapRadius = "Map radius"
     override val visionPickCombatantHint = "Pick a combatant on the map to give them their own radius."
     override fun visionOf(name: String) = "$name's sight"
