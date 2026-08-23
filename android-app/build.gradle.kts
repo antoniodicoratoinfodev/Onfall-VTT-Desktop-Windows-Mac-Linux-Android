@@ -8,11 +8,9 @@ plugins {
 // Stessa versione del desktop e dell'interfaccia: la decide il progetto radice.
 val appVersion: String = version.toString()
 
-// Il Play Store confronta interi, non stringhe: 0.4.0 diventa 400, e ogni
-// versione successiva resta piu' grande della precedente senza doverci pensare.
-// I tre numeri esistono di sicuro: il progetto radice rifiuta ogni altra forma.
-val appVersionCode: Int = appVersion.split('.')
-    .let { (major, minor, patch) -> major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt() }
+// Il progetto radice calcola e valida anche il codice numerico usato da Android:
+// 0.4.0 diventa 400, senza collisioni, overflow o valori rifiutati da Google Play.
+val appVersionCode: Int = rootProject.extra["onfall.versionCode"] as Int
 
 android {
     namespace = "app.d6d.android"

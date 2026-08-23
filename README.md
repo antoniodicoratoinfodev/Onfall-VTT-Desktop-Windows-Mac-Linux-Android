@@ -536,12 +536,16 @@ needs editing, and a release can override the number without touching the file:
 ./gradlew :desktop-app:packageDmg -Ponfall.version=0.5.0
 ```
 
-The form is checked as soon as the build is configured — three numbers separated by dots, nothing
-else — because a malformed one would otherwise surface only when packaging fails, minutes later.
+The form is checked as soon as the build is configured — three numbers separated by dots, no
+leading zeroes, with major between 0 and 255 and minor/patch between 0 and 99 — because those bounds
+fit every package format and make the Android code unambiguous. Gradle also rejects `0.0.0` and
+versions whose code would exceed Google Play's limit.
 
-macOS is the single exception: `jpackage` refuses an application version whose first number is
-zero, so while Onfall is below 1.0 the `.app` bundle carries a placeholder `1.0.0` in its metadata.
-The real version is the one the application itself shows.
+On macOS, `jpackage` refuses its command-line application version when the first number is zero,
+although `CFBundleShortVersionString` supports the product's three-part version. The build therefore
+feeds `jpackage` a positive, monotonic technical number and records it as Apple's `CFBundleVersion`.
+The final DMG name and the `.app` metadata keep the real product version (`0.4.0`) in
+`CFBundleShortVersionString` and `OnfallProductVersion`.
 
 These numbers say nothing about file compatibility: saves, catalogs and boards each carry their own
 `schemaVersion`, decided by the engine and moved only when a format actually changes.

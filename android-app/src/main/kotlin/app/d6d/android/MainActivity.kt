@@ -7,6 +7,7 @@ import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
@@ -17,7 +18,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.d6d.ui.AppRoot
@@ -50,6 +54,12 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val filePicker = rememberAndroidImagePicker()
+            var exitRequested by remember { mutableStateOf(false) }
+
+            // Il gesto Indietro e la X desktop devono avere la stessa semantica:
+            // prima si completano gli autosave e, se resta una bozza senza nome,
+            // l'utente decide esplicitamente se conservarla o abbandonarla.
+            BackHandler { exitRequested = true }
 
             BoxWithConstraints(
                 Modifier
@@ -63,6 +73,9 @@ class MainActivity : ComponentActivity() {
                     compact = maxWidth < 1000.dp,
                     modifier = Modifier.fillMaxSize(),
                     filePicker = filePicker,
+                    exitRequested = exitRequested,
+                    onExitRequestHandled = { exitRequested = false },
+                    onExitConfirmed = ::finish,
                 )
             }
         }
