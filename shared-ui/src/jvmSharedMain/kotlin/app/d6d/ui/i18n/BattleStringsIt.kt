@@ -25,8 +25,8 @@ internal object BattleStringsIt : BattleStrings {
     override val attackResourceNotSaved =
         "Il consumo della risorsa dell'attacco non è stato salvato nella scheda."
     override val noActingCombatant = "Nessun attore di turno."
-    override val inspectedSheetReadOnly =
-        "Le capacità della scheda in esame sono solo consultabili: non è il suo turno."
+    override val inspectedSheetNotTurn =
+        "Le capacità della scheda in esame non si possono usare perché non è il suo turno."
     override val abilityNotFound = "Capacità non trovata."
     override val druidSheetUnavailable = "La scheda originale del druido non è disponibile."
     override val wildShapeNeedsTwoLevels = "Forma Selvatica richiede almeno due livelli da Druido."
@@ -184,7 +184,7 @@ internal object BattleStringsIt : BattleStrings {
     // --- Targhe sulla mappa ---------------------------------------------------
 
     override val plateInspectedTarget = "In esame · bersaglio"
-    override val plateInspectedReadOnly = "In esame · consultazione"
+    override val plateInspecting = "In esame"
     override val plateSelectedTarget = "Bersaglio selezionato"
     override val plateSharedTurn = "Turno condiviso"
     override val plateActiveTurn = "Turno attivo"
@@ -203,7 +203,7 @@ internal object BattleStringsIt : BattleStrings {
     override fun hitPointsSentence(current: Int, max: Int) = "$current punti ferita su $max."
     override val selectedTargetSentence = " Bersaglio selezionato."
     override val activeTurnSentence = " Turno attivo."
-    override val inspectedReadOnlySentence = " Scheda in esame, solo consultazione."
+    override val inspectedSentence = " Scheda in esame."
     override fun roleAndName(role: String, name: String) = "$role: $name"
     override fun hitPointsShort(current: Int, max: Int) = "$current/$max PF"
     override fun armorClassShort(value: Int) = "CA $value"
@@ -235,12 +235,12 @@ internal object BattleStringsIt : BattleStrings {
     override val resumeCpu = "Riprendi CPU"
     override val skipTurn = "Salta turno"
     override val endTurn = "Fine turno"
-    override val readOnlyZeroHitPoints = "Solo consultazione · 0 PF, il suo turno viene saltato."
+    override val inspectedZeroHitPointsTurnSkipped = "0 PF · il suo turno viene saltato."
 
     override fun turnOfShort(name: String) = "Turno: $name"
     override fun inspectingShort(name: String) = "In esame: $name"
     override fun targetShort(name: String) = "Bersaglio: $name"
-    override fun readOnlyNotTurnOf(name: String) = "Solo consultazione · non è il turno di $name."
+    override fun notTurnOf(name: String) = "Non è il turno di $name."
     override fun chooseTargetOf(ability: String) = "Scegli il bersaglio di «$ability» · "
     override val chooseTargetHint = "riclicca l'abilità o annulla per tornare all'ispezione."
 

@@ -35,7 +35,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.dismissDialogOnTap
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.components.keepDialogOpenOnTap
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.i18n.Strings
 import app.d6d.ui.i18n.strings
@@ -103,7 +105,7 @@ fun BattleItemsDialog(
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
     ) {
         BoxWithConstraints(
-            Modifier.fillMaxSize().padding(12.dp),
+            Modifier.fillMaxSize().dismissDialogOnTap(onDismiss).padding(12.dp),
             contentAlignment = Alignment.Center,
         ) {
             val stacked = maxWidth < 560.dp
@@ -116,6 +118,7 @@ fun BattleItemsDialog(
                     .panelBrush(dialogShape)
                     .border(1.dp, Palette.Bronze.copy(alpha = 0.6f), dialogShape)
                     .ornateFrame(accent = Palette.Gold, alpha = 0.5f)
+                    .keepDialogOpenOnTap()
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {

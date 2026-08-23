@@ -255,7 +255,7 @@ internal fun BoxScope.FloatingCombatantPlates(viewModel: BattleViewModel) {
                         if (viewModel.selectedTargetId == combatantId) {
                             words.plateInspectedTarget
                         } else {
-                            words.plateInspectedReadOnly
+                            words.plateInspecting
                         }
                     } else {
                         words.plateSelectedTarget
@@ -470,7 +470,7 @@ private fun StagePlate(
         append(words.hitPointsSentence(combatant.currentHitPoints(), snapshot.maxHitPoints()))
         if (isTarget) append(words.selectedTargetSentence)
         if (isActive) append(words.activeTurnSentence)
-        if (isInspected) append(words.inspectedReadOnlySentence)
+        if (isInspected) append(words.inspectedSentence)
         if (combatant.dead()) append(words.deadSentence)
         else if (combatant.defeated()) append(words.defeatedSentence)
     }

@@ -3,6 +3,7 @@ package app.d6d.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +34,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -150,6 +153,7 @@ fun AppRoot(
     AppTheme {
         val uiScope = rememberCoroutineScope()
         var destination by remember { mutableStateOf(Destination.INCONTRO) }
+        var compactNavigationOpen by remember { mutableStateOf(true) }
         var requestedCompendiumItemId by remember { mutableStateOf<String?>(null) }
         var requestedCompendiumNewKind by remember { mutableStateOf<RosterKind?>(null) }
 
@@ -513,8 +517,12 @@ fun AppRoot(
                 if (compact) {
                     Column(Modifier.fillMaxSize()) {
                         Box(Modifier.weight(1f)) { content(Modifier.fillMaxSize()) }
-                        GoldenRule()
-                        BottomNav(destination) { destination = it }
+                        CompactBottomNavigation(
+                            current = destination,
+                            open = compactNavigationOpen,
+                            onOpenChange = { compactNavigationOpen = it },
+                            onSelect = { destination = it },
+                        )
                     }
                 } else {
                     val density = LocalDensity.current
@@ -597,6 +605,66 @@ fun AppRoot(
                 )
             }
         }
+    }
+}
+
+/**
+ * Navigazione mobile richiudibile.
+ *
+ * Un tocco sulla presa o un trascinamento verso il basso tolgono dal tavolo le
+ * quattro destinazioni. Rimane soltanto una striscia sottile: non sottrae spazio
+ * alla mappa ma offre sempre il gesto inverso per riaprire la navigazione.
+ */
+@Composable
+private fun CompactBottomNavigation(
+    current: Destination,
+    open: Boolean,
+    onOpenChange: (Boolean) -> Unit,
+    onSelect: (Destination) -> Unit,
+) {
+    val density = LocalDensity.current
+    var dragDistance by remember { mutableStateOf(0f) }
+    val thresholdPx = with(density) { 30.dp.toPx() }
+    val dragModifier = Modifier.pointerInput(open, thresholdPx) {
+        detectVerticalDragGestures(
+            onDragStart = { dragDistance = 0f },
+            onDragCancel = { dragDistance = 0f },
+            onDragEnd = {
+                if (open && dragDistance > thresholdPx) onOpenChange(false)
+                if (!open && dragDistance < -thresholdPx) onOpenChange(true)
+                dragDistance = 0f
+            },
+            onVerticalDrag = { change, amount ->
+                change.consume()
+                dragDistance += amount
+            },
+        )
+    }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.Abyss)
+            .then(dragModifier),
+    ) {
+        GoldenRule()
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(if (open) 25.dp else 31.dp)
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = if (open) strings.nav.collapseRail else strings.nav.expandRail,
+                ) { onOpenChange(!open) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (open) "⌄" else "⌃",
+                color = Palette.Gold,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        if (open) BottomNav(current, onSelect)
     }
 }
 

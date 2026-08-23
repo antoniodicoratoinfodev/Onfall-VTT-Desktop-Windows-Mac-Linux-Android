@@ -31,8 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.dismissDialogOnTap
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.Faction
+import app.d6d.ui.components.keepDialogOpenOnTap
 import app.d6d.ui.components.PanelScrollbar
 import app.d6d.ui.roster.RosterItem
 import app.d6d.ui.roster.RosterKind
@@ -69,7 +71,7 @@ fun BattleRosterDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         BoxWithConstraints(
-            Modifier.fillMaxSize().padding(12.dp),
+            Modifier.fillMaxSize().dismissDialogOnTap(onDismiss).padding(12.dp),
             contentAlignment = Alignment.Center,
         ) {
             val dialogShape = RoundedCornerShape(14.dp)
@@ -81,6 +83,7 @@ fun BattleRosterDialog(
                     .panelBrush(dialogShape)
                     .border(1.dp, Palette.Bronze.copy(alpha = 0.6f), dialogShape)
                     .ornateFrame(accent = accent, alpha = 0.5f)
+                    .keepDialogOpenOnTap()
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(13.dp),
             ) {

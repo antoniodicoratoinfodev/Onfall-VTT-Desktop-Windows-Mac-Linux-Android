@@ -33,6 +33,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.d6d.sheet.ImageStore
 import app.d6d.ui.battle.GameButton
+import app.d6d.ui.components.dismissDialogOnTap
+import app.d6d.ui.components.keepDialogOpenOnTap
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.i18n.strings
@@ -67,7 +69,7 @@ fun MapPickerDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         BoxWithConstraints(
-            Modifier.fillMaxSize().padding(12.dp),
+            Modifier.fillMaxSize().dismissDialogOnTap(onDismiss).padding(12.dp),
             contentAlignment = Alignment.Center,
         ) {
             val compact = maxWidth < 460.dp
@@ -80,6 +82,7 @@ fun MapPickerDialog(
                     .panelBrush(dialogShape)
                     .border(1.dp, Palette.Bronze.copy(alpha = 0.6f), dialogShape)
                     .ornateFrame(accent = Palette.Gold, alpha = 0.5f)
+                    .keepDialogOpenOnTap()
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {

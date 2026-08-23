@@ -497,10 +497,11 @@ that section is simply not there.
 
 ## On the phone
 
-The same screens run on Android from the same code. The battle becomes one surface at a time
-(Stage, Party, Enemies, Log), with the controls always within thumb reach, and the desktop shell
-falls back to the same compact layout when its window is narrowed below the width three panels
-need.
+i pulThe same screens run on Android from the same code. The battle keeps the map visible while Party
+slides in from the left and Enemies from the right; the event log opens from a small control above
+the vertically resizable command area. The session heading and the app navigation can both be
+folded away to give the map more room. The desktop shell falls back to the same compact layout when
+its window is narrowed below the width three panels need.
 
 ## SRD content pack
 

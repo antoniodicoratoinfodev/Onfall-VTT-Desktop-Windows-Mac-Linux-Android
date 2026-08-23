@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.d6d.ui.battle.GameButton
+import app.d6d.ui.components.dismissDialogOnTap
+import app.d6d.ui.components.keepDialogOpenOnTap
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
@@ -42,7 +44,10 @@ fun UnsavedSessionDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.fillMaxSize().dismissDialogOnTap(onDismiss).padding(16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             val dialogShape = RoundedCornerShape(14.dp)
             Column(
                 Modifier
@@ -52,6 +57,7 @@ fun UnsavedSessionDialog(
                     // Cornice ambrata: e' un avvertimento, non un pannello qualunque.
                     .border(1.dp, Palette.Bloodied.copy(alpha = 0.65f), dialogShape)
                     .ornateFrame(accent = Palette.Bloodied, alpha = 0.6f)
+                    .keepDialogOpenOnTap()
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {

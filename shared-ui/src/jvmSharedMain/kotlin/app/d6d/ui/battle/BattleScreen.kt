@@ -1,9 +1,15 @@
 package app.d6d.ui.battle
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -13,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -22,6 +29,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -103,8 +112,9 @@ internal suspend fun scheduleEnemyCpuTurnIfStillCurrent(
  * Schermata di combattimento.
  *
  * `compact` distingue le due shell che il documento chiede di NON unificare:
- * il desktop tiene squadra, palco e nemici visibili insieme, il mobile mostra
- * una superficie alla volta. Il motore e lo stato sono gli stessi.
+ * il desktop tiene squadra, palco e nemici visibili insieme; il mobile conserva
+ * la mappa al centro e porta le due fazioni sopra di essa dai bordi. Il motore e
+ * lo stato sono gli stessi.
  */
 @Composable
 fun BattleScreen(
@@ -446,7 +456,7 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
     }
 }
 
-/** Layout mobile: una superficie alla volta, comandi sempre raggiungibili col pollice. */
+/** Layout mobile: mappa stabile, fazioni laterali e comandi ridimensionabili col pollice. */
 @Composable
 private fun CompactBattleBody(
     viewModel: BattleViewModel,
@@ -459,78 +469,229 @@ private fun CompactBattleBody(
     onCreateRosterCreature: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var tab by remember { mutableStateOf(CompactTab.PALCO) }
+    val layout = LocalUiLayout.current
+    val density = LocalDensity.current
+    var drawer by remember { mutableStateOf<CompactBattleDrawer?>(null) }
+    var logOpen by remember { mutableStateOf(false) }
 
     Column(modifier) {
-        Row(
-            Modifier.fillMaxWidth().background(Palette.Surface.copy(alpha = 0.91f)).padding(6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            CompactTab.entries.forEach { entry ->
-                GameButton(
-                    label = entry.label(strings),
-                    accent = if (tab == entry) Palette.Gold else Palette.TextMuted,
-                    selected = tab == entry,
-                    onClick = { tab = entry },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-
         Box(Modifier.weight(1f)) {
-            when (tab) {
-                CompactTab.PALCO -> BattleStage(
-                    viewModel,
-                    portraits,
-                    board = board,
-                    roster = roster,
-                    activeSessionId = activeSessionId,
-                    compact = true,
-                )
-                CompactTab.SQUADRA -> Rail(
-                    viewModel = viewModel,
-                    title = strings.battle.squad,
-                    ids = viewModel.partyIds,
-                    faction = Faction.PARTY,
-                    roster = roster,
-                    onOpenSheet = onOpenCombatantSheet,
-                    onCreateRosterCharacter = onCreateRosterCharacter,
-                    onCreateRosterCreature = onCreateRosterCreature,
-                    modifier = Modifier.fillMaxSize(),
-                )
+            BattleStage(
+                viewModel,
+                portraits,
+                board = board,
+                roster = roster,
+                activeSessionId = activeSessionId,
+                compact = true,
+            )
 
-                CompactTab.NEMICI -> Rail(
-                    viewModel = viewModel,
-                    title = strings.battle.enemies,
-                    ids = viewModel.enemyIds,
-                    faction = Faction.ENEMY,
-                    roster = roster,
-                    onOpenSheet = onOpenCombatantSheet,
-                    onCreateRosterCharacter = onCreateRosterCharacter,
-                    onCreateRosterCreature = onCreateRosterCreature,
-                    modifier = Modifier.fillMaxSize(),
+            if (drawer == null) {
+                CompactDrawerHandle(
+                    label = strings.battle.squad,
+                    leading = true,
+                    onClick = { drawer = CompactBattleDrawer.PARTY },
+                    modifier = Modifier.align(Alignment.CenterStart),
                 )
-
-                CompactTab.REGISTRO -> BattleLog(viewModel, Modifier.fillMaxSize())
+                CompactDrawerHandle(
+                    label = strings.battle.enemies,
+                    leading = false,
+                    onClick = { drawer = CompactBattleDrawer.ENEMIES },
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
             }
+
+            if (drawer != null) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Palette.Abyss.copy(alpha = 0.58f))
+                        .clickable { drawer = null },
+                )
+            }
+
+            CompactBattleDrawer(
+                drawer = drawer,
+                side = CompactBattleDrawer.PARTY,
+                viewModel = viewModel,
+                roster = roster,
+                onOpenCombatantSheet = onOpenCombatantSheet,
+                onCreateRosterCharacter = onCreateRosterCharacter,
+                onCreateRosterCreature = onCreateRosterCreature,
+                onDismiss = { drawer = null },
+                modifier = Modifier.align(Alignment.CenterStart),
+            )
+            CompactBattleDrawer(
+                drawer = drawer,
+                side = CompactBattleDrawer.ENEMIES,
+                viewModel = viewModel,
+                roster = roster,
+                onOpenCombatantSheet = onOpenCombatantSheet,
+                onCreateRosterCharacter = onCreateRosterCharacter,
+                onCreateRosterCreature = onCreateRosterCreature,
+                onDismiss = { drawer = null },
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
         }
 
+        CompactCommandResizeBar(
+            onDrag = { dragPx ->
+                layout.commandBarHeight = (
+                    layout.commandBarHeight - with(density) { dragPx.toDp() }
+                ).coerceIn(132.dp, 460.dp)
+            },
+            onOpenLog = { logOpen = true },
+        )
         CommandBar(viewModel, roster, compact = true)
+    }
+
+    CompactBattleLogSheet(viewModel, logOpen, onDismiss = { logOpen = false })
+}
+
+private enum class CompactBattleDrawer { PARTY, ENEMIES }
+
+@Composable
+private fun CompactDrawerHandle(
+    label: String,
+    leading: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    GameButton(
+        label = if (leading) "$label ›" else "‹ $label",
+        accent = if (leading) Palette.Party else Palette.Enemy,
+        dense = true,
+        onClick = onClick,
+        modifier = modifier.padding(4.dp),
+    )
+}
+
+/** Pannello mobile che entra dal proprio bordo e vi torna con un trascinamento. */
+@Composable
+private fun CompactBattleDrawer(
+    drawer: CompactBattleDrawer?,
+    side: CompactBattleDrawer,
+    viewModel: BattleViewModel,
+    roster: RosterViewModel,
+    onOpenCombatantSheet: (String) -> Unit,
+    onCreateRosterCharacter: () -> Unit,
+    onCreateRosterCreature: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val leading = side == CompactBattleDrawer.PARTY
+    val density = LocalDensity.current
+    val dismissThreshold = with(density) { 54.dp.toPx() }
+    var dragDistance by remember(side) { mutableStateOf(0f) }
+    val faction = if (leading) Faction.PARTY else Faction.ENEMY
+    val accent = if (leading) Palette.Party else Palette.Enemy
+
+    AnimatedVisibility(
+        visible = drawer == side,
+        modifier = modifier.fillMaxHeight().fillMaxWidth(0.88f),
+        enter = slideInHorizontally { width -> if (leading) -width else width } + fadeIn(),
+        exit = slideOutHorizontally { width -> if (leading) -width else width } + fadeOut(),
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(Palette.Abyss.copy(alpha = 0.98f))
+                .border(1.dp, accent.copy(alpha = 0.72f))
+                .pointerInput(side, dismissThreshold) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragDistance = 0f },
+                        onDragCancel = { dragDistance = 0f },
+                        onDragEnd = {
+                            if (leading && dragDistance < -dismissThreshold) onDismiss()
+                            if (!leading && dragDistance > dismissThreshold) onDismiss()
+                            dragDistance = 0f
+                        },
+                        onHorizontalDrag = { change, amount ->
+                            change.consume()
+                            dragDistance += amount
+                        },
+                    )
+                },
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 5.dp),
+                horizontalArrangement = if (leading) Arrangement.End else Arrangement.Start,
+            ) {
+                GameButton(
+                    label = if (leading) "${strings.common.close} ‹" else "› ${strings.common.close}",
+                    accent = accent,
+                    dense = true,
+                    onClick = onDismiss,
+                )
+            }
+            Rail(
+                viewModel = viewModel,
+                title = if (leading) strings.battle.squad else strings.battle.enemies,
+                ids = if (leading) viewModel.partyIds else viewModel.enemyIds,
+                faction = faction,
+                roster = roster,
+                onOpenSheet = onOpenCombatantSheet,
+                onCreateRosterCharacter = onCreateRosterCharacter,
+                onCreateRosterCreature = onCreateRosterCreature,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
-private enum class CompactTab {
-    PALCO,
-    SQUADRA,
-    NEMICI,
-    REGISTRO,
+/** Presa tattile sopra i comandi: il log resta un'azione piccola e indipendente. */
+@Composable
+private fun CompactCommandResizeBar(
+    onDrag: (Float) -> Unit,
+    onOpenLog: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(38.dp)
+            .background(Palette.Surface.copy(alpha = 0.96f)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { change, amount ->
+                        change.consume()
+                        onDrag(amount)
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("⋮⋮", color = Palette.Gold, style = MaterialTheme.typography.titleSmall)
+        }
+        GameButton(
+            label = strings.battle.logLabel,
+            accent = Palette.TextMuted,
+            dense = true,
+            onClick = onOpenLog,
+            modifier = Modifier.padding(end = 7.dp),
+        )
+    }
 }
 
-private fun CompactTab.label(strings: Strings): String = when (this) {
-    CompactTab.PALCO -> strings.battle.mapLabel
-    CompactTab.SQUADRA -> strings.battle.squad
-    CompactTab.NEMICI -> strings.battle.enemies
-    CompactTab.REGISTRO -> strings.battle.logLabel
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CompactBattleLogSheet(
+    viewModel: BattleViewModel,
+    open: Boolean,
+    onDismiss: () -> Unit,
+) {
+    if (!open) return
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Palette.Abyss,
+    ) {
+        BattleLog(
+            viewModel = viewModel,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 280.dp, max = 520.dp).height(440.dp),
+        )
+    }
 }
 
 @Composable
@@ -640,6 +801,10 @@ private fun BattleTopBar(
 ) {
     val layout = LocalUiLayout.current
     val turnOrderMode = layout.turnOrderDisplayMode
+    val density = LocalDensity.current
+    var compactSessionHeaderOpen by remember { mutableStateOf(true) }
+    var compactHeaderDragDistance by remember { mutableStateOf(0f) }
+    val compactHeaderDragThreshold = with(density) { 32.dp.toPx() }
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         // Il vecchio layout resta intatto. Cambia ramo in base allo spazio che
@@ -651,46 +816,115 @@ private fun BattleTopBar(
                 Modifier
                     .fillMaxWidth()
                     .background(Palette.Surface.copy(alpha = 0.92f))
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
+                    .pointerInput(compactSessionHeaderOpen, compactHeaderDragThreshold) {
+                        detectVerticalDragGestures(
+                            onDragStart = { compactHeaderDragDistance = 0f },
+                            onDragCancel = { compactHeaderDragDistance = 0f },
+                            onDragEnd = {
+                                if (
+                                    compactSessionHeaderOpen &&
+                                    compactHeaderDragDistance < -compactHeaderDragThreshold
+                                ) {
+                                    compactSessionHeaderOpen = false
+                                } else if (
+                                    !compactSessionHeaderOpen &&
+                                    compactHeaderDragDistance > compactHeaderDragThreshold
+                                ) {
+                                    compactSessionHeaderOpen = true
+                                }
+                                compactHeaderDragDistance = 0f
+                            },
+                            onVerticalDrag = { change, amount ->
+                                change.consume()
+                                compactHeaderDragDistance += amount
+                            },
+                        )
+                    }
+                    .padding(
+                        horizontal = 10.dp,
+                        vertical = if (compactSessionHeaderOpen) 7.dp else 0.dp,
+                    ),
+                verticalArrangement = Arrangement.spacedBy(if (compactSessionHeaderOpen) 7.dp else 0.dp),
             ) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    BattleMark()
-                    BattleTitle(sessions, modifier = Modifier.weight(1f))
-                    if (viewModel.status != CombatStatus.ACTIVE) {
-                        Chip(text = viewModel.status.label(currentLanguage), color = viewModel.status.tint)
+                if (compactSessionHeaderOpen) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BattleMark()
+                        BattleTitle(sessions, modifier = Modifier.weight(1f))
+                        if (viewModel.status != CombatStatus.ACTIVE) {
+                            Chip(text = viewModel.status.label(currentLanguage), color = viewModel.status.tint)
+                        }
+                        Text(
+                            text = "⌃",
+                            color = Palette.Gold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(5.dp))
+                                .clickable { compactSessionHeaderOpen = false }
+                                .padding(horizontal = 9.dp, vertical = 5.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
                     }
                 }
-                if (labelNeedsOwnRow) {
+                if (turnOrderMode == TurnOrderDisplayMode.HIDDEN) {
+                    // Quando l'ordine e' chiuso, etichetta e azioni condividono
+                    // l'unica riga rimasta. Se anche il titolo e' nascosto, la
+                    // presa per riaprirlo vive qui e non riserva altezza propria.
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (!compactSessionHeaderOpen) {
+                            CompactSessionHeaderRestore(
+                                onOpen = { compactSessionHeaderOpen = true },
+                            )
+                        }
+                        TurnsLabel(
+                            turnOrderMode,
+                            layout::cycleTurnOrderDisplayMode,
+                            compactWidth = true,
+                        )
+                        Box(Modifier.weight(1f))
+                        CompactTurnOrderActions(
+                            viewModel = viewModel,
+                            sessions = sessions,
+                            openSessionCount = openSessionCount,
+                            autosaveWarning = autosaveWarning,
+                        )
+                    }
+                } else if (labelNeedsOwnRow) {
                     // Sulle finestre molto strette l'etichetta usa tutta la riga:
                     // i pulsanti non possono piu' ridurne la larghezza.
-                    TurnsLabel(
-                        turnOrderMode,
-                        layout::cycleTurnOrderDisplayMode,
-                        Modifier.align(Alignment.CenterHorizontally),
-                    )
+                    Box(Modifier.fillMaxWidth()) {
+                        if (!compactSessionHeaderOpen) {
+                            CompactSessionHeaderRestore(
+                                onOpen = { compactSessionHeaderOpen = true },
+                                modifier = Modifier.align(Alignment.CenterStart),
+                            )
+                        }
+                        TurnsLabel(
+                            turnOrderMode,
+                            layout::cycleTurnOrderDisplayMode,
+                            Modifier.align(Alignment.Center),
+                        )
+                    }
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (turnOrderMode != TurnOrderDisplayMode.HIDDEN) {
-                            Box(
-                                Modifier.weight(1f),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                TurnOrderStrip(
-                                    viewModel,
-                                    editing = viewModel.editMode,
-                                    showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
-                                )
-                            }
-                        } else {
-                            Box(Modifier.weight(1f))
+                        Box(
+                            Modifier.weight(1f),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            TurnOrderStrip(
+                                viewModel,
+                                editing = viewModel.editMode,
+                                showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
+                            )
                         }
                         CompactTurnOrderActions(
                             viewModel = viewModel,
@@ -705,19 +939,22 @@ private fun BattleTopBar(
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                         verticalAlignment = Alignment.Top,
                     ) {
+                        if (!compactSessionHeaderOpen) {
+                            CompactSessionHeaderRestore(
+                                onOpen = { compactSessionHeaderOpen = true },
+                            )
+                        }
                         Column(
                             Modifier.weight(1f),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(3.dp),
                         ) {
                             TurnsLabel(turnOrderMode, layout::cycleTurnOrderDisplayMode)
-                            if (turnOrderMode != TurnOrderDisplayMode.HIDDEN) {
-                                TurnOrderStrip(
-                                    viewModel,
-                                    editing = viewModel.editMode,
-                                    showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
-                                )
-                            }
+                            TurnOrderStrip(
+                                viewModel,
+                                editing = viewModel.editMode,
+                                showInitiative = turnOrderMode == TurnOrderDisplayMode.WITH_INITIATIVE,
+                            )
                         }
                         CompactTurnOrderActions(
                             viewModel = viewModel,
@@ -839,6 +1076,22 @@ private fun BattleTopBar(
 }
 
 @Composable
+private fun CompactSessionHeaderRestore(
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = "⌄",
+        color = Palette.Gold,
+        modifier = modifier
+            .clip(RoundedCornerShape(5.dp))
+            .clickable(role = Role.Button, onClick = onOpen)
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+        style = MaterialTheme.typography.labelMedium,
+    )
+}
+
+@Composable
 private fun CompactTurnOrderActions(
     viewModel: BattleViewModel,
     sessions: SessionManager,
@@ -883,6 +1136,7 @@ private fun TurnsLabel(
     mode: TurnOrderDisplayMode,
     onCycle: () -> Unit,
     modifier: Modifier = Modifier,
+    compactWidth: Boolean = false,
 ) {
     val words = strings.battle
     val nextAction = when (mode) {
@@ -894,7 +1148,7 @@ private fun TurnsLabel(
         modifier
             // Il testo decide la larghezza naturale e non viene mai forzato nei
             // 132 dp precedenti, insufficienti con font/DPI di Windows.
-            .widthIn(min = 168.dp)
+            .widthIn(min = if (compactWidth) 0.dp else 168.dp)
             .clip(RoundedCornerShape(5.dp))
             .clickable(
                 role = Role.Button,

@@ -782,7 +782,7 @@ class BattleViewModel(
             return
         }
         if (inspectedCombatantId != attacker || !canUseAbilitiesOf(attacker)) {
-            say { it.battle.inspectedSheetReadOnly }
+            say { it.battle.inspectedSheetNotTurn }
             return
         }
         val ability = abilities(attacker).firstOrNull { it.id() == abilityId } ?: run {
@@ -1017,7 +1017,7 @@ class BattleViewModel(
             return
         }
         if (inspectedCombatantId != caster || !canUseAbilitiesOf(caster)) {
-            say { it.battle.inspectedSheetReadOnly }
+            say { it.battle.inspectedSheetNotTurn }
             return
         }
         val ability = abilities(caster).firstOrNull { it.id() == abilityId } ?: return

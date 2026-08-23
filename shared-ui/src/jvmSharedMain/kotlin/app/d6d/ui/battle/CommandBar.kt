@@ -475,6 +475,9 @@ fun CommandBar(
     roster: RosterViewModel,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    // Sul mobile la fascia si ridimensiona come sul desktop e non si nasconde:
+    // il valore predefinito deriva dalla forma per mantenere invariati i chiamanti.
+    collapsible: Boolean = !compact,
 ) {
     val layout = LocalUiLayout.current
     val strings = strings
@@ -484,7 +487,7 @@ fun CommandBar(
     var itemsOpen by remember { mutableStateOf(false) }
     // Il collasso vive nel layout persistito, cosi' si ricorda fra un avvio e
     // l'altro e la maniglia di ridimensionamento sa quando mostrarsi.
-    val collapsed = layout.commandsCollapsed
+    val collapsed = collapsible && layout.commandsCollapsed
     val scrollState = rememberScrollState()
     val activeId = viewModel.activeActorId
     val inspectedId = viewModel.inspectedCombatantId
@@ -507,12 +510,12 @@ fun CommandBar(
         onDismiss = { itemsOpen = false },
     )
 
-    // Sul desktop la fascia ha l'altezza scelta dall'utente. Intestazione e riga dei
+    // La fascia ha l'altezza scelta dall'utente su entrambe le forme. Intestazione e riga dei
     // comandi restano di dimensione fissa e sempre visibili; sono solo le capacita'
     // nel mezzo a prendersi lo spazio in piu' — allargando la fascia se ne vedono di
     // piu' in griglia, non le si ingrandisce fino a far sparire tutto il resto.
-    val scaled = !compact && !collapsed
-    val outerModifier = if (scaled) {
+    val bounded = !collapsed
+    val outerModifier = if (bounded) {
         modifier
             .fillMaxWidth()
             .height(layout.commandBarHeight)
@@ -526,7 +529,7 @@ fun CommandBar(
     Box(outerModifier) {
     Column(
         Modifier.fillMaxWidth()
-            .then(if (scaled) Modifier.fillMaxHeight() else Modifier)
+            .then(if (bounded) Modifier.fillMaxHeight() else Modifier)
             .padding(11.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
@@ -560,12 +563,14 @@ fun CommandBar(
                     key(inspectedId, trait.id()) { PassiveTraitChip(trait) }
                 }
             }
-            CollapseToggle(
-                collapsed = collapsed,
-                expandedLabel = words.commandsCollapse,
-                collapsedLabel = words.commandsExpand,
-                onToggle = { layout.commandsCollapsed = !layout.commandsCollapsed },
-            )
+            if (collapsible) {
+                CollapseToggle(
+                    collapsed = collapsed,
+                    expandedLabel = words.commandsCollapse,
+                    collapsedLabel = words.commandsExpand,
+                    onToggle = { layout.commandsCollapsed = !layout.commandsCollapsed },
+                )
+            }
         }
 
         if (!collapsed) {
@@ -575,7 +580,7 @@ fun CommandBar(
         // qui sotto resta ancorata e sempre visibile, anche allargando la fascia.
         Column(
             Modifier.fillMaxWidth().then(
-                if (scaled) Modifier.weight(1f).verticalScroll(scrollState) else Modifier,
+                if (bounded) Modifier.weight(1f).verticalScroll(scrollState) else Modifier,
             ),
             verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
@@ -601,9 +606,9 @@ fun CommandBar(
         if (inspectedId != null && !displayedActorCanAct) {
             Text(
                 text = if (viewModel.combatant(inspectedId)?.let { it.defeated() || it.dead() } == true) {
-                    words.readOnlyZeroHitPoints
+                    words.inspectedZeroHitPointsTurnSkipped
                 } else {
-                    words.readOnlyNotTurnOf(viewModel.name(inspectedId))
+                    words.notTurnOf(viewModel.name(inspectedId))
                 },
                 color = Palette.TextFaint,
                 fontWeight = FontWeight.Bold,

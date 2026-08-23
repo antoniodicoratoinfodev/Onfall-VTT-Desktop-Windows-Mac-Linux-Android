@@ -98,7 +98,7 @@ fun CombatantRailCard(
         append(words.hitPointsSentence(combatant.currentHitPoints(), snapshot.maxHitPoints()))
         if (targeted) append(words.selectedTargetSentence)
         if (active) append(words.activeTurnSentence)
-        if (inspected) append(words.inspectedReadOnlySentence)
+        if (inspected) append(words.inspectedSentence)
         if (combatant.dead()) append(words.deadSentence)
         else if (defeated) append(words.defeatedSentence)
     }

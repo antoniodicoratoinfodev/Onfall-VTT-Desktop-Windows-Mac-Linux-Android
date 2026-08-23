@@ -22,8 +22,8 @@ internal object BattleStringsEn : BattleStrings {
     override val attackResourceNotSaved =
         "The resource this attack spent was not saved to the sheet."
     override val noActingCombatant = "No combatant is acting."
-    override val inspectedSheetReadOnly =
-        "The abilities on the sheet you are inspecting are read-only: it is not its turn."
+    override val inspectedSheetNotTurn =
+        "The abilities on the sheet you are inspecting cannot be used because it is not its turn."
     override val abilityNotFound = "Ability not found."
     override val druidSheetUnavailable = "The druid's original sheet is unavailable."
     override val wildShapeNeedsTwoLevels = "Wild Shape requires at least two Druid levels."
@@ -180,7 +180,7 @@ internal object BattleStringsEn : BattleStrings {
     // --- Targhe sulla mappa ---------------------------------------------------
 
     override val plateInspectedTarget = "Inspecting · target"
-    override val plateInspectedReadOnly = "Inspecting · read-only"
+    override val plateInspecting = "Inspecting"
     override val plateSelectedTarget = "Selected target"
     override val plateSharedTurn = "Shared turn"
     override val plateActiveTurn = "Active turn"
@@ -197,7 +197,7 @@ internal object BattleStringsEn : BattleStrings {
     override fun hitPointsSentence(current: Int, max: Int) = "$current hit points out of $max."
     override val selectedTargetSentence = " Selected target."
     override val activeTurnSentence = " Active turn."
-    override val inspectedReadOnlySentence = " Sheet being inspected, read-only."
+    override val inspectedSentence = " Sheet being inspected."
     override fun roleAndName(role: String, name: String) = "$role: $name"
     override fun hitPointsShort(current: Int, max: Int) = "$current/$max HP"
     override fun armorClassShort(value: Int) = "AC $value"
@@ -229,12 +229,12 @@ internal object BattleStringsEn : BattleStrings {
     override val resumeCpu = "Resume CPU"
     override val skipTurn = "Skip turn"
     override val endTurn = "End turn"
-    override val readOnlyZeroHitPoints = "Read-only · 0 HP, its turn is skipped."
+    override val inspectedZeroHitPointsTurnSkipped = "0 HP · its turn is skipped."
 
     override fun turnOfShort(name: String) = "Turn: $name"
     override fun inspectingShort(name: String) = "Inspecting: $name"
     override fun targetShort(name: String) = "Target: $name"
-    override fun readOnlyNotTurnOf(name: String) = "Read-only · it is not $name's turn."
+    override fun notTurnOf(name: String) = "It is not $name's turn."
     override fun chooseTargetOf(ability: String) = "Choose a target for “$ability” · "
     override val chooseTargetHint = "click the ability again, or cancel, to go back to inspecting."
 

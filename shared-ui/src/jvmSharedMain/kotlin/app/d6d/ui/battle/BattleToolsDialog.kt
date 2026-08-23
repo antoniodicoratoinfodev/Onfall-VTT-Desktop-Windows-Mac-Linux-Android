@@ -37,7 +37,9 @@ import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.SaveAbility
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.dismissDialogOnTap
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.components.keepDialogOpenOnTap
 import app.d6d.i18n.label
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.state.BattleViewModel
@@ -95,7 +97,7 @@ fun BattleToolsDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         BoxWithConstraints(
-            Modifier.fillMaxSize().padding(12.dp),
+            Modifier.fillMaxSize().dismissDialogOnTap(onDismiss).padding(12.dp),
             contentAlignment = Alignment.Center,
         ) {
             val dialogShape = RoundedCornerShape(14.dp)
@@ -107,6 +109,7 @@ fun BattleToolsDialog(
                     .panelBrush(dialogShape)
                     .border(1.dp, Palette.Bronze.copy(alpha = 0.6f), dialogShape)
                     .ornateFrame(accent = Palette.Gold, alpha = 0.5f)
+                    .keepDialogOpenOnTap()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),

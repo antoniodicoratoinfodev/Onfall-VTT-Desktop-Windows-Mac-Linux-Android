@@ -25,7 +25,7 @@ interface BattleStrings {
 
     val attackResourceNotSaved: String
     val noActingCombatant: String
-    val inspectedSheetReadOnly: String
+    val inspectedSheetNotTurn: String
     val abilityNotFound: String
     val druidSheetUnavailable: String
     val wildShapeNeedsTwoLevels: String
@@ -153,7 +153,7 @@ interface BattleStrings {
     // --- Targhe sulla mappa ---------------------------------------------------
 
     val plateInspectedTarget: String
-    val plateInspectedReadOnly: String
+    val plateInspecting: String
     val plateSelectedTarget: String
     val plateSharedTurn: String
     val plateActiveTurn: String
@@ -169,7 +169,7 @@ interface BattleStrings {
     fun hitPointsSentence(current: Int, max: Int): String
     val selectedTargetSentence: String
     val activeTurnSentence: String
-    val inspectedReadOnlySentence: String
+    val inspectedSentence: String
     fun roleAndName(role: String, name: String): String
     fun hitPointsShort(current: Int, max: Int): String
     fun armorClassShort(value: Int): String
@@ -201,11 +201,11 @@ interface BattleStrings {
     val resumeCpu: String
     val skipTurn: String
     val endTurn: String
-    val readOnlyZeroHitPoints: String
+    val inspectedZeroHitPointsTurnSkipped: String
     fun turnOfShort(name: String): String
     fun inspectingShort(name: String): String
     fun targetShort(name: String): String
-    fun readOnlyNotTurnOf(name: String): String
+    fun notTurnOf(name: String): String
     fun chooseTargetOf(ability: String): String
     val chooseTargetHint: String
 
