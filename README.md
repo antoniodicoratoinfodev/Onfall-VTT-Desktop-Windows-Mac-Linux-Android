@@ -1,6 +1,6 @@
 # Onfall
 
-Onfall is an offline-first combat and encounter tracker compatible with 5e and 5.5e (D&D 2024).
+Onfall is an offline-first combat and encounter tracker compatible with 5.5e (D&D 2024).
 Multiplayer support is planned for the future. The application includes a separate bilingual SRD
 5.2.1 content pack (Italian and English) for guided character creation, class progression, feats,
 actions and spells.
@@ -24,15 +24,15 @@ Five parts living on the same engine:
    of ruthlessness or not at all;
 5. a **game interface** that presents the fight as a turn based battle.
 
-Four destinations hold them together — **Battle**, **Game**, **Compendium** and **Settings** — and
-the navigation rail on the left collapses to icons, or disappears entirely, when the table needs the
+Four destinations hold them together: **Battle**, **Game**, **Compendium** and **Settings**. The
+navigation rail on the left collapses to icons, or disappears entirely, when the table needs the
 room. The screenshots below are taken in English; the whole interface, units included, switches to
 Italian at runtime and back.
 
 ## Starting a session
 
 A session begins from one of four places: a **bundled encounter**, the **templates** already in the
-Compendium, **from scratch** — which opens the Compendium to write the cast first — or a **saved
+Compendium, **from scratch**, which opens the Compendium to write the cast first, or a **saved
 session**. The three bundled encounters are written to be played as they are and to show the engine
 at different points of a campaign: *The Ruins of Deepvale* (level 1), *The Iron Ford* (level 4),
 *The Broken Crown* (level 20). Their names follow the interface language, like everything else the
@@ -50,29 +50,29 @@ the table moves the enemies exactly as it moves the allies, or one of the three 
 below.
 
 A combatant is **copied** into the session, so ordinary changes to HP, conditions, turns, and
-position never alter its Compendium template. Explicit stat corrections and spent resources — Action
-Surge, Wild Shape, spell and Pact slots, healing uses, and each of them under Undo too — are instead
-synchronized with the authoritative sheet, and the log says so plainly when a write does not go
-through. Several sessions stay open at once in independent tabs, each with its own map, turn order,
-dice state, event log and undo history.
+position never alter its Compendium template. Explicit stat corrections and spent resources, such as
+Action Surge, Wild Shape, spell and Pact slots and healing uses, are instead synchronized with the
+authoritative sheet, including when Undo restores them. The log says so plainly when a write does not
+go through. Several sessions stay open at once in independent tabs, each with its own map, turn
+order, dice state, event log and undo history.
 
 <table>
 <tr>
 <td align="center">
 <img src="sample/session-start.png" width="720"/><br/>
-<sub>Starting a session — bundled encounters, saved templates, from scratch, or a saved session</sub>
+<sub>Starting a session: bundled encounters, saved templates, from scratch, or a saved session</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/session-grid.png" width="720"/><br/>
-<sub>Encounter builder — grid size and the distance each square represents</sub>
+<sub>Encounter builder: grid size and the distance each square represents</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/session-mode.png" width="720"/><br/>
-<sub>How to begin — Fight mode, or the same grid left empty for roleplay and exploration</sub>
+<sub>How to begin: Fight mode, or the same grid left empty for roleplay and exploration</sub>
 </td>
 </tr>
 </table>
@@ -80,15 +80,27 @@ dice state, event log and undo history.
 ## The battle
 
 On the desktop the battle screen keeps three areas visible together: the **party** on the left, the
-**battle scene** in the center, the **enemies** on the right. The turn order runs across the top —
-bare, with each initiative roll beside it, or hidden altogether to give the map the room — and the
+**battle scene** in the center, the **enemies** on the right. The turn order runs across the top. It
+can show the order alone, include every initiative roll, or stay hidden to give the map more room. The
 event log stays below the enemies. The side columns **resize by dragging their edge**, and when
 they get narrow each combatant's information folds into a vertical list instead of being truncated.
 
-The active combatant's abilities are listed under the map. Picking one puts the screen in aiming
-mode; picking a target completes it. The engine covers attacks and area effects with digital d20
+The active combatant's abilities are listed under the map. Automated single-target abilities enter
+aiming mode and resolve when a target is picked. Area abilities are centred on a map square, detect
+every creature they cover and resolve saving throws, with half damage when the ability calls for it.
+In Edit mode the table can mark those saves manually before applying the result. Passive abilities
+remain available as rules text, while abilities that require a table decision are explicitly marked
+for manual resolution.
+
+Each turn tracks movement, Action, Bonus Action and Reaction separately. The command bar shows what
+is still available, supports shared initiative turns, lets the table choose which tied combatant is
+acting, and provides explicit controls to skip or end a turn. Action Surge grants its extra Action
+through the same resource system, while Wild Shape replaces the Druid's combat projection with the
+chosen Beast form without losing the authoritative character sheet.
+
+The engine covers attacks and area effects with digital d20
 rolls, advantage and disadvantage, damage types, saving throws, conditions, concentration, death
-saves, healing, temporary hit points and exhaustion, and it refuses what the rules refuse — an
+saves, healing, temporary hit points and exhaustion. It also refuses what the rules refuse; an
 out-of-range shot is reported as a warning, not silently resolved.
 
 **Healing abilities are resolved by the app**, not called by hand: the engine checks the target is
@@ -117,36 +129,37 @@ The map also owns a persistent **Board layer**, independent from combat rules an
 history. Its toolbox holds thirteen tools: **Table**, which hands the pointer back to normal play,
 **Edit Board**, which picks a drawing up to move, resize, rotate, retype or delete it, and then hand,
 measurement, freehand ink, area templates, labels, pings, fog, floor tiles, walls, scene tokens and
-an eraser. Area templates have two modes — the rules shapes (cone, cube, cylinder, emanation, line,
+an eraser. Area templates have two modes: the rules shapes (cone, cube, cylinder, emanation, line,
 sphere), drawn for illustration only, and a set of **stamps**: flame, light, danger, door, treasure.
 A measurement stays live while it is being taken and can be **pinned** to the board to survive the
 next one. On the desktop the toolbox can be pinned open beside the map instead of reopened each time.
 
 The **Layers** panel shows and hides background, floor, grid, scene tokens, annotations, stamps,
 walls and fog one by one; combatants are a protected layer and cannot be hidden. In its painted mode
-fog is laid down directly from the GM view with three brush sizes — 1×1, 3×3, 5×5 — or covered and revealed all at
-once; player preview is only needed to check the final view. The Board can be **locked** against
-accidental changes, or shown through that preview — both leave only Table, hand, measurement and
-ping in reach — and its own Undo and Redo never rewind attacks, turns, or other engine commands.
+fog is laid down directly from the GM view with three brush sizes (1×1, 3×3 and 5×5), or covered and
+revealed all at once; player preview is only needed to check the final view. The Board can be
+**locked** against accidental changes, or shown through that preview. Both leave only Table, hand,
+measurement and ping in reach. Its own Undo and Redo never rewind attacks, turns, or other engine
+commands.
 Board contents travel with the session and its recovery draft.
 
 The **Walls layer** paints blocked grid cells with add and erase brushes, in those same three sizes.
 A combatant cannot be placed on a wall; movement follows the shortest legal route around it and
 spends that real distance, while a closed barrier makes the destination unreachable. Walls also
-block attacks and area line of effect. Hiding their layer changes only presentation—the rule remains
+block attacks and area line of effect. Hiding their layer changes only presentation; the rule remains
 active until the wall is erased.
 
 The **Floor layer** paints visible map blocks with the same brush workflow. Floor is deliberately
-presentation-only: every map cell is walkable by default, whether or not it has a floor tile.
+for presentation only: every map cell is walkable by default, whether or not it has a floor tile.
 Painting floor over a wall clears that wall, while only cells currently marked as Walls block
 movement and line of effect. Floor can also fill the whole map or be removed at once; filling the
 map preserves every existing Wall.
 
 The Fog tool carries two modes. **Painted** is the one described above. **Dynamic sight** computes
-what can actually be seen instead: sight leaves whoever is looking, is stopped by Walls — the same
-conservative line the engine already walks for attacks and area line of effect, closed diagonal
-corners included, so the map never reveals a target the rules would refuse to hit — and reaches as
-far as the vision radius. That radius is a map-wide value in feet, in metres in Italian, and single
+what can actually be seen instead. Sight leaves whoever is looking and is stopped by Walls, using
+the same conservative line the engine already walks for attacks and area line of effect. Closed
+diagonal corners are included, so the map never reveals a target the rules would refuse to hit.
+Sight reaches as far as the vision radius. That radius is a map-wide value in feet, in metres in Italian, and single
 combatants can be given their own, zero meaning blind. Like range, it is measured in Chebyshev
 squares: a diagonal costs one.
 
@@ -162,8 +175,8 @@ three visibility presentations:
 Creatures outside current sight are never left as silhouettes; switch to All when the GM needs to
 administer hidden pieces. Explored memory is saved with the session, while the painted mask is left
 untouched in the file, so switching back to Painted restores the fog exactly as it was. **Forget
-explored** wipes the memory and deliberately sits outside Board Undo — no undo step could honour it
-— while the mode itself and every radius are ordinary undoable steps.
+explored** wipes the memory and deliberately sits outside Board Undo because no undo step could
+honour it. The mode itself and every radius are ordinary undoable steps.
 
 The GM view and the player output do not have to look through the same eyes. The GM eye switch on the
 Fog bar offers **Turn**, which looks through whoever holds the turn, monsters included, and **Party**,
@@ -172,12 +185,12 @@ party. The rendering selectors beside it are independent, so changing the GM's v
 player output and vice versa. None of these choices stops the party from writing explored memory.
 
 The player preview always looks through the standing party, all of them at once: a combatant or scene
-token the party cannot see is not dimmed but left undrawn — one visible square of
-it is enough to show it, so a Huge creature leaning out of a corner does not appear from nowhere —
+token the party cannot see is not dimmed but left undrawn. One visible square of
+it is enough to show it, so a Huge creature leaning out of a corner does not appear from nowhere,
 and the same goes for the movement, range and area-resolution overlays centred on it. Characters who
 are down keep their turn and their death saves but stop being eyes, and only the party ever writes to
 the explored memory: a monster crossing a corridor does not hand it to the players. Hiding the Fog
-layer turns sight off along with the veil — nothing is computed, and nothing is hidden.
+layer turns sight off along with the veil; nothing is computed and nothing is hidden.
 
 **Scene tokens** are narrative map objects rather than combatants: they have no HP, initiative, turn,
 or rules. A token can use an imported image (including PNG) or Onfall's fallback medallion, and has
@@ -206,13 +219,13 @@ descriptions written by the user are kept as entered.
 <tr>
 <td align="center">
 <img src="sample/battle-board-tools.png" width="720"/><br/>
-<sub>Board tools — Fog, Walls, Layers, map brushes, scene tokens, and a separate Undo history in the current battle UI</sub>
+<sub>Board tools: Fog, Walls, Layers, map brushes, scene tokens, and a separate Undo history in the current battle UI</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/battle-dynamic-sight.png" width="720"/><br/>
-<sub>Dynamic sight on a dungeon map — Aelis's current sight is clear, the route already explored
+<sub>Dynamic sight on a dungeon map: Aelis's current sight is clear, the route already explored
 remains visible as dim memory, and never-seen rooms stay covered. The GM and player outputs can each
 use All, Memory + black, or Memory + half-light; the GM can also switch between Turn and Party eyes.</sub>
 </td>
@@ -220,7 +233,7 @@ use All, Memory + black, or Memory + half-light; the GM can also switch between 
 <tr>
 <td align="center">
 <img src="sample/battle-dynamic-sight-layers.png" width="720"/><br/>
-<sub>Layers over the same explored dungeon — GM and player presentation selectors remain available
+<sub>Layers over the same explored dungeon: GM and player presentation selectors remain available
 beside the layer toggles, Board lock, and Player preview; half-light keeps unexplored rooms readable
 as darker context.</sub>
 </td>
@@ -228,26 +241,26 @@ as darker context.</sub>
 <tr>
 <td align="center">
 <img src="sample/scene-token-editor.png" width="720"/><br/>
-<sub>Scene token editor — the SRD Wolf as a Monster, using Onfall's fallback medallion because the pack contains no artwork</sub>
+<sub>Scene token editor: the SRD Wolf as a Monster, using Onfall's fallback medallion because the pack contains no artwork</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/scene-token-loot.png" width="720"/><br/>
-<sub>Collectible token — the SRD Longbow as weapon loot, with quantity and rules data from the content pack</sub>
+<sub>Collectible token: the SRD Longbow as weapon loot, with quantity and rules data from the content pack</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/character-inventory.png" width="720"/><br/>
-<sub>Items — Aelis's SRD Ranger equipment, with Longbow details and category filters</sub>
+<sub>Items: Aelis's SRD Ranger equipment, with Longbow details and category filters</sub>
 </td>
 </tr>
 </table>
 
 **Table tools** cover the same state changes when they have to be entered by hand: an ability check
-with its modifier, damage of a chosen type, healing, temporary hit points, conditions and
-exhaustion, on any combatant and not only the one holding the turn.
+with its modifier, damage of a chosen type, healing, temporary hit points, conditions, exhaustion
+and death saves, on any combatant and not only the one holding the turn.
 
 With **Edit mode** on, the table composes the scene freely: it corrects name, AC, HP, and initiative
 directly on the cards, reorders the turns and picks the current one, adds combatants to either side,
@@ -262,19 +275,19 @@ would have followed anyway.
 <tr>
 <td align="center">
 <img src="sample/battle-screen.png" width="720"/><br/>
-<sub>Battle screen — party, tactical map, enemies, turn order, event log</sub>
+<sub>Battle screen: party, tactical map, enemies, turn order, event log</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/battle-edit-mode.png" width="720"/><br/>
-<sub>Edit mode — name, AC, HP and initiative corrected on the cards, tokens moved freely</sub>
+<sub>Edit mode: name, AC, HP and initiative corrected on the cards, tokens moved freely</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/battle-table-tools.png" width="720"/><br/>
-<sub>Table tools — ability checks, damage, healing, temporary HP and conditions by hand</sub>
+<sub>Table tools: ability checks, damage, healing, temporary HP, conditions and death saves by hand</sub>
 </td>
 </tr>
 </table>
@@ -295,7 +308,8 @@ uses, so its moves land in the same event log, cost the same turn budget, and ca
 same history.
 
 Difficulty changes only the **quality of the choices**. Rolls, armour class, hit points and the turn
-budget are the engine's, identical at all three levels — nothing is inflated to make the CPU harder.
+budget are the engine's and are identical at all three levels. Nothing is inflated to make the CPU
+harder.
 
 | Level | How it plays |
 |---|---|
@@ -313,21 +327,22 @@ moves it took.
 
 The whole CPU turn can be **undone as one batch**, after which automation stays paused until *Resume
 CPU* is pressed, so the table can take the enemy side back at any point. If the state changes
-between one command and the next — someone edits a card, applies damage by hand, resolves something
-at the table — the CPU stops rather than acting on a board it did not plan for, and says so. A
+between one command and the next, for example because someone edits a card, applies damage by hand or
+resolves something at the table, the CPU stops rather than acting on a board it did not plan for and
+says so. A
 safety limit of sixteen decisions per combatant guarantees it always hands the turn back.
 
 <table>
 <tr>
 <td align="center">
 <img src="sample/session-difficulty.png" width="720"/><br/>
-<sub>Choosing the opposition — Sandbox, or three levels that change the choices and never the rules</sub>
+<sub>Choosing the opposition: Sandbox, or three levels that change the choices and never the rules</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/battle-cpu-turn.png" width="720"/><br/>
-<sub>After a CPU turn — the enemies closed in and focused one target down to bloodied, with the
+<sub>After a CPU turn: the enemies closed in and focused one target down to bloodied, with the
 summary above the map and every command in the log</sub>
 </td>
 </tr>
@@ -345,15 +360,20 @@ the SRD prescribes, and validates each choice as it is made.
 Existing manual sheets are left untouched until the guided mode is activated on them. From there a
 character advances from level 1 to 20 at the official XP thresholds; class resources, proficiencies,
 feats, cantrips, prepared spells, spellbooks, always-prepared spells and derived Extra Attacks stay
-attached to the sheet and are available to the Compendium and the combat screens. **Spell slots** —
-and the Warlock's Pact slots, counted apart — are derived per level and tracked on the sheet, so the
-fight starts from the pool the character actually has left. Short and long rests restore the
+attached to the sheet and are available to the Compendium and the combat screens. **Spell slots**,
+with the Warlock's Pact slots counted separately, are derived per level and tracked on the sheet, so
+the fight starts from the pool the character actually has left. Short and long rests restore the
 resource pools from the sheet itself, and a long rest is also where a Druid swaps one known Wild
 Shape form for another.
 
-The armour class is not a single number typed in: the sheet chooses a **base method** — manual final
-AC, unarmoured defence, a class feature such as Draconic Resilience, worn armour — and lists the
-modifiers on top of it, so the total can be read back as the sum that produced it.
+The armour class is not a single number typed in. The sheet chooses a **base method**, such as manual
+final AC, unarmoured defence, a class feature such as Draconic Resilience or worn armour, and lists
+the modifiers on top of it, so the total can be read back as the sum that produced it.
+
+The full character editor also covers ability scores, saving throws, skills, speed,
+proficiencies, weapons, traits, feats, spellcasting, equipment, inventory and notes. Entries drawn
+from the shared ability archive remain linked to their rule data instead of being copied as loose
+text.
 
 Creatures use the 2025 stat block model, wider than the projection the engine needs for combat, with
 a live preview of the finished block at the top of the editor.
@@ -362,31 +382,31 @@ a live preview of the finished block at the top of the editor.
 <tr>
 <td align="center">
 <img src="sample/sheet-progression.png" width="720"/><br/>
-<sub>Character sheet — class, SRD progression, class resources, AC calculation</sub>
+<sub>Character sheet: class, SRD progression, class resources, AC calculation</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/sheet-guided-creation.png" width="720"/><br/>
-<sub>Guided SRD creation — class, background, skills and starting equipment</sub>
+<sub>Guided SRD creation: class, background, skills and starting equipment</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/creature-stat-block.png" width="720"/><br/>
-<sub>Compendium, creature — 2025 stat block with its live preview on top</sub>
+<sub>Compendium, creature: 2025 stat block with its live preview on top</sub>
 </td>
 </tr>
 </table>
 
 ### Ability archive
 
-Every rule the application can attach to a sheet lives in one archive, filtered by **category** —
+Every rule the application can attach to a sheet lives in one archive, filtered by **category**:
 common action, class feature, subclass feature, origin feat, general feat, fighting style, epic boon,
-cantrip, spell, metamagic, eldritch invocation, class option, custom — and by **class**. Each entry
+cantrip, spell, metamagic, eldritch invocation, class option and custom, as well as by **class**. Each entry
 declares how it behaves at the table: cost, whether it is active or passive, and, for spells, level,
 school, casting time, components, duration and concentration. An entry that **restores hit points**
-declares the amount and who may receive it — self only, ally only, or either — and how many dice it
+declares the amount, who may receive it (self only, ally only, or either), and how many dice it
 gains per slot level above its own; healing is always active and automated, because the app resolves
 it, so it cannot be marked passive. When an ability is picked from a sheet instead, the same catalog
 is searched by name, rule text or prerequisite.
@@ -399,7 +419,7 @@ to play them as active or passive. Anything else can be written from scratch, or
 <tr>
 <td align="center">
 <img src="sample/ability-archive.png" width="720"/><br/>
-<sub>Ability archive — entries filtered by category and class, spell detail on the right</sub>
+<sub>Ability archive: entries filtered by category and class, spell detail on the right</sub>
 </td>
 </tr>
 </table>
@@ -412,7 +432,7 @@ image-licensing dependency.
 
 The map archive is the one exception: it ships with four battle maps, installed on first run so the
 table is usable straight away. They are third-party artwork and their redistribution licence is
-**not yet cleared** — see [NOTICE-MAPS.md](NOTICE-MAPS.md) before publishing a build. Everything
+**not yet cleared**. See [NOTICE-MAPS.md](NOTICE-MAPS.md) before publishing a build. Everything
 else in the local libraries is only ever what the player chose. Maps also have a folder of their
 own, shown in the archive, so an existing collection can be dropped in instead of uploaded one by
 one.
@@ -425,13 +445,13 @@ picked and remembered across runs.
 <tr>
 <td align="center">
 <img src="sample/map-archive.png" width="720"/><br/>
-<sub>Map archive — backgrounds uploaded once and reused in every session</sub>
+<sub>Map archive: backgrounds uploaded once and reused in every session</sub>
 </td>
 </tr>
 <tr>
 <td align="center">
 <img src="sample/cursors.png" width="720"/><br/>
-<sub>Desktop cursors — five pairs, each with a pointing and a map-grabbing pose</sub>
+<sub>Desktop cursors: five pairs, each with a pointing and a map-grabbing pose</sub>
 </td>
 </tr>
 </table>
@@ -443,8 +463,8 @@ including the ones already open, and they are written to disk as soon as they ch
 
 **Language** switches the whole interface between Italian and English at once, with no restart, and
 carries the units with it: metres in Italian, feet in English. Game terms follow the System
-Reference Document in the language being read. The choice is only recorded once it is actually made
-— until then the application follows the system, so carrying your data to a machine configured in
+Reference Document in the language being read. The choice is only recorded once it is actually made.
+Until then the application follows the system, so carrying your data to a machine configured in
 another language gives you that machine's language, not the previous one's.
 
 **CPU pace** sets how the enemy turn is played back: *Slow*, *Normal*, *Fast*, or *Instant*, which
@@ -456,17 +476,18 @@ order alone, without the numbers; or the order with each combatant's initiative 
 **Backdrop** is a trade between looks and frames: embers and glow drifting slowly behind the
 screens, or bare still stone, which is a few frames less to draw.
 
-The last group is about data. **Panel layout** — widths, collapsed panels, map zoom, plate positions
-— can be reset in one move, the **data folder** the application writes to is shown so it can be
-found, backed up, or copied to another machine, and the **version** is written out beside it, the
-same one the window title carries, so a bug report can say which Onfall it came from. On the desktop a second section holds the cursors;
-on Android, where the pointer is not the application's to set, that section is simply not there.
+The last group is about data. **Panel layout**, including widths, collapsed panels, map zoom and plate
+positions, can be reset in one move. The **data folder** the application writes to is shown so it can
+be found, backed up, or copied to another machine, and the **version** is written out beside it, the
+same one the window title carries, so a bug report can say which Onfall it came from. On the desktop
+a second section holds the cursors; on Android, where the pointer is not the application's to set,
+that section is simply not there.
 
 <table>
 <tr>
 <td align="center">
 <img src="sample/settings.png" width="720"/><br/>
-<sub>Settings — language, CPU pace, what the turn-order strip shows, and the backdrop</sub>
+<sub>Settings: language, CPU pace, what the turn-order strip shows, and the backdrop</sub>
 </td>
 </tr>
 </table>
@@ -536,8 +557,8 @@ needs editing, and a release can override the number without touching the file:
 ./gradlew :desktop-app:packageDmg -Ponfall.version=0.5.0
 ```
 
-The form is checked as soon as the build is configured — three numbers separated by dots, no
-leading zeroes, with major between 0 and 255 and minor/patch between 0 and 99 — because those bounds
+The form is checked as soon as the build is configured: three numbers separated by dots, no
+leading zeroes, with major between 0 and 255 and minor/patch between 0 and 99. Those bounds
 fit every package format and make the Android code unambiguous. Gradle also rejects `0.0.0` and
 versions whose code would exceed Google Play's limit.
 
@@ -551,6 +572,8 @@ These numbers say nothing about file compatibility: saves, catalogs and boards e
 `schemaVersion`, decided by the engine and moved only when a format actually changes.
 
 ## Run
+
+Building from source requires a JDK 17 installation. Android builds also require the Android SDK.
 
 ### Desktop
 
@@ -571,6 +594,24 @@ shared UI, so the window can take a minute or two to appear. The `run` task
 stays attached to the running application: close the window (or press `Ctrl+C`)
 to stop it.
 
+Native desktop packages include their own runtime, so the installed application does not require a
+separate Java installation. Build the format for the current operating system with the matching
+task:
+
+```bash
+# macOS
+./gradlew :desktop-app:packageDmg
+
+# Windows
+./gradlew :desktop-app:packageMsi
+
+# Linux
+./gradlew :desktop-app:packageDeb
+```
+
+The generated package is written below `desktop-app/build/compose/binaries/main`. Native packages
+must be built on their target operating system.
+
 ### Android
 
 With a device or emulator connected:
@@ -580,6 +621,12 @@ With a device or emulator connected:
 ```
 
 Then launch Onfall from the device's or emulator's app launcher.
+
+To create a debug APK without installing it:
+
+```bash
+./gradlew :android-app:assembleDebug
+```
 
 ### Tests
 
