@@ -1,12 +1,15 @@
 # Onfall
 
-Onfall is an offline-first combat and encounter tracker compatible with 5.5e (D&D 2024).
-Multiplayer support is planned for the future. The application includes a separate bilingual SRD
-5.2.1 content pack (Italian and English) for guided character creation, class progression, feats,
-actions and spells.
-Its attribution and licence notice are in [`NOTICE-SRD.md`](NOTICE-SRD.md). The engine, user
-interface and bundled encounter examples are original, and desktop and Android share the same
-engine, data, and screens.
+Onfall is an offline-first combat and encounter tracker compatible with 5.5e (D&D 2024) and the
+System Reference Document 5.2.1. The application uses the SRD as its reference for rules,
+terminology and game content; it does not rely on material from proprietary rulebooks outside the
+SRD. Multiplayer support is planned for the future.
+
+The SRD material is supplied through a separate bilingual content pack (Italian and English) for
+guided character creation, class progression, feats, actions, spells, equipment and creatures. Its
+attribution and licence notice are in [`NOTICE-SRD.md`](NOTICE-SRD.md). Onfall's engine, user
+interface and bundled encounter examples are original, while desktop and Android share the same
+engine, data and screens.
 
 > **Source-available repository.** The application may be downloaded, compiled, installed, and used
 > to play games for personal, non-commercial purposes. The source may also be reviewed for technical
