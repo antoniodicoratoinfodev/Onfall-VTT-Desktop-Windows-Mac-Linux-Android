@@ -125,6 +125,7 @@ public final class CombatSessionJsonCodec {
                 "partyCombatantIds", state.partyCombatantIds().stream().sorted().toList(),
                 "simultaneousTies", state.simultaneousTies(),
                 "battleMap", encodeBattleMap(state.battleMap()),
+                "alarmRadiusFeet", state.alarmRadiusFeet(),
                 "dormantCombatantIds", state.dormantCombatantIds().stream().sorted().toList());
     }
 
@@ -175,6 +176,11 @@ public final class CombatSessionJsonCodec {
                 value.containsKey("battleMap")
                         ? decodeBattleMap(objectValue(value, "battleMap", path), path + ".battleMap")
                         : BattleMap.none(),
+                // Aggiunto insieme all'attivazione persistente: i file precedenti
+                // usano la convenzione documentata dei sessanta piedi.
+                value.containsKey("alarmRadiusFeet")
+                        ? integer(value, "alarmRadiusFeet", path)
+                        : CombatState.DEFAULT_ALARM_RADIUS_FEET,
                 // Aggiunta dopo: un salvataggio precedente non sa dell'attivazione e
                 // va riaperto con tutti svegli, che era il solo comportamento possibile.
                 optionalStringSet(value, "dormantCombatantIds", path));

@@ -207,7 +207,8 @@ object BoardStringsIt : BoardStrings {
     override val awarenessOff = "Tutti attivi"
     override val awarenessHint =
         "Le creature restano immobili finché non vedono la squadra o non sono viste da lei. " +
-            "Un colpo le sveglia comunque, e chi si sveglia dà l'allarme a chi ha vicino."
+            "Essere bersaglio di un attacco o di una condizione le sveglia comunque, " +
+            "e chi si sveglia dà l'allarme a chi ha vicino."
     override val awarenessDormant = "Inattivo"
     override val awarenessAwake = "Attivo"
     override fun awarenessOf(name: String) = "Stato di $name"
@@ -365,7 +366,8 @@ object BoardStringsEn : BoardStrings {
     override val awarenessOff = "All active"
     override val awarenessHint =
         "Creatures hold still until they see the party or the party sees them. " +
-            "A hit wakes them anyway, and whoever wakes raises the alarm nearby."
+            "Being targeted by an attack or condition wakes them anyway, " +
+            "and whoever wakes raises the alarm nearby."
     override val awarenessDormant = "Dormant"
     override val awarenessAwake = "Active"
     override fun awarenessOf(name: String) = "$name's state"

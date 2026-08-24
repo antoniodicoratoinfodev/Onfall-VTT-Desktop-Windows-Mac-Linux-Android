@@ -8,6 +8,8 @@ import app.d6d.domain.combat.AttackRequest;
 import app.d6d.domain.combat.AttackResult;
 import app.d6d.domain.combat.AutomationStatus;
 import app.d6d.domain.combat.CombatState;
+import app.d6d.domain.combat.ConditionInstance;
+import app.d6d.domain.combat.ConditionType;
 import app.d6d.domain.combat.D20RollInput;
 import app.d6d.domain.combat.DamageComponent;
 import app.d6d.domain.combat.DamageFormula;
@@ -99,15 +101,27 @@ class CreatureActivationTest {
     }
 
     @Test
+    void ancheEssereBersaglioDiUnaCondizioneSveglia() {
+        CombatSession session = encounter();
+        session.setDormantCombatants(List.of("goblin"));
+
+        session.applyCondition("goblin", ConditionInstance.manual(
+                "preso-di-mira", ConditionType.POISONED, "hero", "", session.currentState().round()));
+
+        assertFalse(session.currentState().dormant("goblin"));
+    }
+
+    @Test
     void chiSiSvegliaDaLAllarmeAChiHaVicinoMaNonAChiELontano() {
         CombatSession session = encounter();
-        session.configureMap(MapGrid.standard(60, 20));
+        session.configureMap(MapGrid.standard(30, 20));
         session.placeCombatant("hero", new GridPosition(0, 0), 1);
         session.placeCombatant("goblin", new GridPosition(2, 0), 1);
         // Sei caselle da cinque piedi: trenta piedi, dentro il raggio dell'allarme.
         session.placeCombatant("orco", new GridPosition(8, 0), 1);
-        // Quarantasei caselle: oltre duecento piedi, ben fuori portata di voce.
-        session.placeCombatant("troll", new GridPosition(48, 0), 1);
+        // Il troll sente l'orco ma non il goblin: deve restare inattivo, perché
+        // chi riceve l'allarme non lo rilancia a catena.
+        session.placeCombatant("troll", new GridPosition(18, 0), 1);
         session.setDormantCombatants(List.of("goblin", "orco", "troll"));
 
         session.applyDamage("hero", "goblin", List.of(new DamageComponent(DamageType.FORCE, 3)), false);
@@ -116,6 +130,23 @@ class CreatureActivationTest {
         assertFalse(after.dormant("goblin"));
         assertFalse(after.dormant("orco"));
         assertTrue(after.dormant("troll"));
+    }
+
+    @Test
+    void ilRaggioDAllarmeConfiguratoVieneRispettato() {
+        CombatSession session = encounter();
+        session.configureMap(MapGrid.standard(20, 20));
+        session.placeCombatant("hero", new GridPosition(0, 0), 1);
+        session.placeCombatant("goblin", new GridPosition(2, 0), 1);
+        session.placeCombatant("orco", new GridPosition(3, 0), 1);
+        session.setDormantCombatants(List.of("goblin", "orco"));
+        session.setAlarmRadiusFeet(0);
+
+        session.applyDamage("hero", "goblin", List.of(new DamageComponent(DamageType.FORCE, 3)), false);
+
+        assertFalse(session.currentState().dormant("goblin"));
+        assertTrue(session.currentState().dormant("orco"));
+        assertEquals(0, session.currentState().alarmRadiusFeet());
     }
 
     @Test

@@ -1875,6 +1875,8 @@ class BattleViewModel(
      */
     private var boardWalls: WallMask = WallMask.empty(0, 0)
     private var boardVision: VisionSettings = VisionSettings.defaults()
+    /** Evita di valutare una sessione caricata prima che arrivi il suo Lucido. */
+    private var boardSightReady = false
 
     private var awarenessEnabledState by mutableStateOf(true)
 
@@ -1909,13 +1911,18 @@ class BattleViewModel(
     fun setDormant(combatantId: String, dormant: Boolean) {
         if (dormant) session.markDormant(combatantId) else session.awaken(listOf(combatantId))
         state = session.currentState()
+        // Una forzatura incoerente con la situazione corrente non deve durare
+        // fino al comando successivo: chi è già visibile, a terra o fuori mappa
+        // viene riallineato immediatamente alle stesse regole automatiche.
+        if (dormant) refreshAwareness()
     }
 
     /** Sincronizza nel motore i muri e i raggi di vista posseduti dalla Board. */
     fun setBoardSight(walls: WallMask, vision: VisionSettings) {
-        val changed = walls != boardWalls || vision != boardVision
+        val changed = !boardSightReady || walls != boardWalls || vision != boardVision
         boardWalls = walls
         boardVision = vision
+        boardSightReady = true
         setBlockedCells(walls)
         // Aprire una porta o allungare un raggio cambia chi vede cosa, esattamente
         // come muovere una pedina.
@@ -1948,18 +1955,51 @@ class BattleViewModel(
      * i personaggi sono rientrati dietro l'angolo.
      */
     private fun refreshAwareness() {
-        val dormant = state.dormantCombatantIds()
+        var dormant = state.dormantCombatantIds()
         if (dormant.isEmpty()) return
         if (!awarenessEnabled || !state.battleMap().configured()) {
-            adoptAwakened(session.awaken(dormant))
+            clearDormancy(dormant)
             return
         }
-        // Chi non è più sulla mappa non può essere notato da nessuno: lasciarlo
-        // inattivo lo toglierebbe dal combattimento per sempre.
-        val unplaced = dormant.filter { placementOf(it) == null }
+        // Durante load/recovery il CombatState arriva prima del documento Board.
+        // Valutare adesso significherebbe attraversare muri non ancora caricati e
+        // svegliare per sempre creature che nel salvataggio erano ancora ignare.
+        if (!boardSightReady) return
+
+        // Chi è a terra non è un corpo da scoprire; chi non è più sulla mappa non
+        // può essere trovato. In entrambi i casi la dormienza sarebbe soltanto un
+        // modo silenzioso di togliere il combattente dalla partita. La rimozione è
+        // intenzionalmente muta: un incosciente o un assente non può dare l'allarme.
+        val cannotWait = dormant.filter { !standing(it) || placementOf(it) == null }
+        clearDormancy(cannotWait)
+        dormant = state.dormantCombatantIds()
+        if (dormant.isEmpty()) return
+
+        val standingParty = partyIds.filter(::standing)
+        val eyes = standingParty.mapNotNull(::viewerOf)
+        when {
+            // Incontri senza schieramento o senza una sola pedina della squadra
+            // collocata devono restare giocabili: non esiste una percezione da simulare.
+            partyIds.isEmpty() || (standingParty.isNotEmpty() && eyes.isEmpty()) -> {
+                clearDormancy(dormant)
+                return
+            }
+
+            // Se la squadra intera è a terra, invece, nessun occhio si accende da
+            // solo: restano validi colpi, condizioni e decisioni manuali.
+            standingParty.isEmpty() -> return
+        }
+
         val sleepers = dormant.mapNotNull(::viewerOf)
-        val noticed = awareOfParty(partyEyes(), sleepers, boardWalls)
-        adoptAwakened(session.awaken(unplaced + noticed))
+        val noticed = awareOfParty(eyes, sleepers, boardWalls)
+        adoptAwakened(session.awaken(noticed))
+    }
+
+    /** Toglie uno stato non più applicabile senza produrre un allarme fittizio. */
+    private fun clearDormancy(combatantIds: Collection<String>) {
+        if (combatantIds.isEmpty()) return
+        session.setDormantCombatants(session.dormantCombatantIds() - combatantIds.toSet())
+        state = session.currentState()
     }
 
     private fun adoptAwakened(woken: List<String>) {
@@ -1979,13 +2019,13 @@ class BattleViewModel(
      * il gruppo fin dietro l'angolo si dimenticherebbe di lui.
      */
     fun sleepUnawareCreatures() {
-        if (!awarenessEnabled || !state.battleMap().configured()) return
+        if (!boardSightReady || !awarenessEnabled || !state.battleMap().configured()) return
         val eyes = partyEyes()
         // Senza un solo personaggio in piedi sulla mappa nessuno può accorgersi di
         // niente, e addormentare l'incontro intero lo bloccherebbe.
         if (eyes.isEmpty()) return
         val candidates = state.rosterOrder()
-            .filter { !isParty(it) && !state.dormant(it) }
+            .filter { !isParty(it) && standing(it) && !state.dormant(it) }
             .mapNotNull(::viewerOf)
         if (candidates.isEmpty()) return
         val noticed = awareOfParty(eyes, candidates, boardWalls)
@@ -1997,7 +2037,9 @@ class BattleViewModel(
 
     /** La stessa regola per una sola creatura, quando entra in scena da sola. */
     private fun sleepIfUnaware(combatantId: String) {
-        if (!awarenessEnabled || isParty(combatantId) || !state.battleMap().configured()) return
+        if (!boardSightReady || !awarenessEnabled || isParty(combatantId) || !standing(combatantId) ||
+            !state.battleMap().configured()
+        ) return
         val eyes = partyEyes()
         if (eyes.isEmpty()) return
         val viewer = viewerOf(combatantId) ?: return
@@ -2183,6 +2225,9 @@ class BattleViewModel(
         diceTrayOpen = false
         session = loaded
         sessionGeneration++
+        // Sessione e Lucido vengono adottati in due passi. La percezione riparte
+        // soltanto dalla callback del nuovo documento Board, mai dai muri vecchi.
+        boardSightReady = false
         // Il vecchio coroutine puo' ancora uscire dalla propria pausa. Staccarlo
         // ora, insieme al controllo d'identita' nel playback, gli impedisce di
         // azzerare busy o il riferimento di un turno appartenente alla sessione

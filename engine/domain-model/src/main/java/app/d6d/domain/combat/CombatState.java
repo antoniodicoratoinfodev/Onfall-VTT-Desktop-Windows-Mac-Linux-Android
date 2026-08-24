@@ -42,6 +42,9 @@ public record CombatState(
          */
         BattleMap battleMap,
 
+        /** Raggio in piedi entro cui una creatura appena sveglia allerta il proprio schieramento. */
+        int alarmRadiusFeet,
+
         /**
          * Chi non si e' ancora accorto del gruppo.
          *
@@ -58,6 +61,9 @@ public record CombatState(
          */
         Set<String> dormantCombatantIds) {
 
+    /** Valore dei salvataggi creati prima che il raggio d'allarme fosse persistito. */
+    public static final int DEFAULT_ALARM_RADIUS_FEET = 60;
+
     public CombatState {
         encounterId = requireText(encounterId, "encounterId");
         rulesetVersion = requireText(rulesetVersion, "rulesetVersion");
@@ -66,6 +72,7 @@ public record CombatState(
         if (revision < 0 || round < 0 || turnIndex < -1) {
             throw new IllegalArgumentException("Invalid encounter counters");
         }
+        if (alarmRadiusFeet < 0) throw new IllegalArgumentException("Alarm radius cannot be negative");
         rosterOrder = List.copyOf(Objects.requireNonNull(rosterOrder, "rosterOrder"));
         combatants = immutableLinkedMap(combatants);
         initiativeScores = immutableLinkedMap(initiativeScores);
@@ -182,7 +189,7 @@ public record CombatState(
             boolean simultaneousTies) {
         this(encounterId, rulesetVersion, contentVersion, status, revision, randomSeed, randomState,
                 rosterOrder, combatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
-                partyCombatantIds, simultaneousTies, BattleMap.none(), Set.of());
+                partyCombatantIds, simultaneousTies, BattleMap.none(), DEFAULT_ALARM_RADIUS_FEET, Set.of());
     }
 
     /**
@@ -211,7 +218,32 @@ public record CombatState(
             BattleMap battleMap) {
         this(encounterId, rulesetVersion, contentVersion, status, revision, randomSeed, randomState,
                 rosterOrder, combatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
-                partyCombatantIds, simultaneousTies, battleMap, Set.of());
+                partyCombatantIds, simultaneousTies, battleMap, DEFAULT_ALARM_RADIUS_FEET, Set.of());
+    }
+
+    /** Costruttore di compatibilita' per lo stato con dormienza ma senza raggio persistito. */
+    public CombatState(
+            String encounterId,
+            String rulesetVersion,
+            String contentVersion,
+            CombatStatus status,
+            long revision,
+            long randomSeed,
+            long randomState,
+            List<String> rosterOrder,
+            Map<String, CombatantState> combatants,
+            Map<String, Integer> initiativeScores,
+            List<String> initiativeOrder,
+            int round,
+            int turnIndex,
+            Map<String, TurnBudget> turnBudgets,
+            Set<String> partyCombatantIds,
+            boolean simultaneousTies,
+            BattleMap battleMap,
+            Set<String> dormantCombatantIds) {
+        this(encounterId, rulesetVersion, contentVersion, status, revision, randomSeed, randomState,
+                rosterOrder, combatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
+                partyCombatantIds, simultaneousTies, battleMap, DEFAULT_ALARM_RADIUS_FEET, dormantCombatantIds);
     }
 
     /** Vero se la creatura e' nell'incontro ma non si e' ancora accorta del gruppo. */

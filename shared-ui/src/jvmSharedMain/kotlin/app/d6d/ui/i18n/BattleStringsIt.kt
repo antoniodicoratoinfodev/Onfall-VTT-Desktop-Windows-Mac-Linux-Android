@@ -49,7 +49,7 @@ internal object BattleStringsIt : BattleStrings {
         "Il consumo della risorsa dell'area non è stato salvato nella scheda."
     override val waitForCpuTurn = "Attendi che la CPU completi la parte nemica di questo turno."
     override fun creaturesNoticedParty(names: String) = "Vi hanno individuato: $names"
-    override val dormantSuffix = ", non si è accorto del gruppo"
+    override val dormantSuffix = ", non si è accorto del gruppo"
     override val combatantIsCpuControlled = "Questo combattente è controllato dalla CPU nemica."
     override val cpuControlsThisTurn = "La CPU sta controllando questo turno."
     override val noActiveActor = "Nessun attore attivo."

@@ -76,7 +76,7 @@ public final class CombatSession {
      * regolamento lascia la percezione al tavolo — ma una convenzione dichiarata,
      * cosi' il tavolo sa esattamente cosa aspettarsi.</p>
      */
-    public static final int DEFAULT_ALARM_RADIUS_FEET = 60;
+    public static final int DEFAULT_ALARM_RADIUS_FEET = CombatState.DEFAULT_ALARM_RADIUS_FEET;
 
     private MutableState state;
     private final DeterministicDice dice;
@@ -84,8 +84,6 @@ public final class CombatSession {
     private final Deque<Checkpoint> undoStack = new ArrayDeque<>();
     /** Regole spaziali della Board: persistono nel documento Board, non nell'Undo del combattimento. */
     private Set<GridPosition> blockedCells = Set.of();
-    /** Quanto lontano arriva l'allarme di chi si accorge del gruppo. */
-    private int alarmRadiusFeet = DEFAULT_ALARM_RADIUS_FEET;
     private long nextEventSequence;
     private long revisionCounter;
 
@@ -1322,11 +1320,11 @@ public final class CombatSession {
     /** Raggio dell'allarme in piedi; zero lo spegne e ognuno si sveglia per conto suo. */
     public synchronized void setAlarmRadiusFeet(int feet) {
         if (feet < 0) throw new IllegalArgumentException("The alarm radius cannot be negative");
-        alarmRadiusFeet = feet;
+        state.alarmRadiusFeet = feet;
     }
 
     public synchronized int alarmRadiusFeet() {
-        return alarmRadiusFeet;
+        return state.alarmRadiusFeet;
     }
 
     /**
@@ -1340,12 +1338,12 @@ public final class CombatSession {
     private void awakenWithAlarm(String combatantId, Collection<String> woken) {
         if (combatantId == null || !state.dormantCombatantIds.remove(combatantId)) return;
         woken.add(combatantId);
-        if (alarmRadiusFeet <= 0 || state.dormantCombatantIds.isEmpty()) return;
+        if (state.alarmRadiusFeet <= 0 || state.dormantCombatantIds.isEmpty()) return;
         boolean party = state.partyCombatantIds.contains(combatantId);
         for (String other : List.copyOf(state.dormantCombatantIds)) {
             if (state.partyCombatantIds.contains(other) != party) continue;
             Optional<Integer> distance = state.battleMap.distanceFeet(combatantId, other);
-            if (distance.isPresent() && distance.get() <= alarmRadiusFeet) {
+            if (distance.isPresent() && distance.get() <= state.alarmRadiusFeet) {
                 state.dormantCombatantIds.remove(other);
                 woken.add(other);
             }
@@ -2798,6 +2796,7 @@ public final class CombatSession {
         private final LinkedHashSet<String> partyCombatantIds;
         private boolean simultaneousTies;
         private BattleMap battleMap = BattleMap.none();
+        private int alarmRadiusFeet = DEFAULT_ALARM_RADIUS_FEET;
         private final LinkedHashSet<String> dormantCombatantIds = new LinkedHashSet<>();
 
         private MutableState(
@@ -2843,6 +2842,7 @@ public final class CombatSession {
                     state.turnBudgets(), state.partyCombatantIds());
             restored.simultaneousTies = state.simultaneousTies();
             restored.battleMap = state.battleMap();
+            restored.alarmRadiusFeet = state.alarmRadiusFeet();
             restored.dormantCombatantIds.addAll(state.dormantCombatantIds());
             return restored;
         }
@@ -2855,6 +2855,7 @@ public final class CombatSession {
                     partyCombatantIds);
             duplicate.simultaneousTies = simultaneousTies;
             duplicate.battleMap = battleMap;
+            duplicate.alarmRadiusFeet = alarmRadiusFeet;
             duplicate.dormantCombatantIds.addAll(dormantCombatantIds);
             return duplicate;
         }
@@ -2864,7 +2865,7 @@ public final class CombatSession {
             combatants.forEach((id, combatant) -> domainCombatants.put(id, combatant.toDomain()));
             return new CombatState(encounterId, rulesetVersion, contentVersion, status, revision, seed, randomState,
                     rosterOrder, domainCombatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
-                    partyCombatantIds, simultaneousTies, battleMap, dormantCombatantIds);
+                    partyCombatantIds, simultaneousTies, battleMap, alarmRadiusFeet, dormantCombatantIds);
         }
     }
 }

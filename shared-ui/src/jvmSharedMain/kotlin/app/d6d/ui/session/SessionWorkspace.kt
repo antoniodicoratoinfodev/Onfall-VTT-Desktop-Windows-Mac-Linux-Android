@@ -39,6 +39,7 @@ internal data class WorkspaceSessionRecoveryKey(
     val currentSlug: String?,
     val stateRevision: Long,
     val eventCount: Int,
+    val dormantCombatantIds: Set<String>,
     val sessionGeneration: Long,
     val boardRevision: Long,
     val presentation: Map<String, String>,
@@ -315,6 +316,9 @@ class SessionWorkspace(
                 currentSlug = opened.manager.currentSlug,
                 stateRevision = opened.battle.state.revision(),
                 eventCount = opened.battle.events.size,
+                // La percezione non apre revisioni: senza l'insieme nella chiave,
+                // un risveglio manuale poteva non aggiornare la bozza di recupero.
+                dormantCombatantIds = opened.battle.state.dormantCombatantIds(),
                 sessionGeneration = opened.battle.sessionGeneration,
                 boardRevision = opened.board.revision,
                 presentation = opened.battle.presentationState(),

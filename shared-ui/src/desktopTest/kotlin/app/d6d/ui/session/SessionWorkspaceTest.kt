@@ -1,6 +1,8 @@
 package app.d6d.ui.session
 
 import app.d6d.domain.combat.D20Mode
+import app.d6d.domain.space.GridPosition
+import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
 import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.persistence.session.SessionArchiveStore
@@ -14,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -375,6 +378,31 @@ class SessionWorkspaceTest {
         assertEquals(SessionSaveResult.SAVED, second.manager.save("Seconda"))
         workspace.reconcileAutosaveWarning()
         assertEquals(null, workspace.autosaveWarning)
+    }
+
+    @Test
+    fun `la dormienza senza revisione invalida comunque la bozza di recupero`() {
+        val session = SampleEncounter.startedSession(seed = 101L)
+        val hero = session.currentState().partyCombatantIds().first()
+        val enemy = session.currentState().rosterOrder().first { it !in session.currentState().partyCombatantIds() }
+        session.configureMap(MapGrid.standard(40, 12))
+        session.placeCombatant(hero, GridPosition(0, 0), 1)
+        session.placeCombatant(enemy, GridPosition(30, 0), 1)
+        session.setDormantCombatants(listOf(enemy))
+        val workspace = SessionWorkspace(store = store()).apply {
+            openNew(session, "Recupero attivazione")
+        }
+        val before = workspace.recoveryKey()
+
+        workspace.active.battle.setDormant(enemy, false)
+
+        val after = workspace.recoveryKey()
+        val beforeSession = before.sessions.single()
+        val afterSession = after.sessions.single()
+        assertNotEquals(before, after)
+        assertEquals(beforeSession.stateRevision, afterSession.stateRevision)
+        assertTrue(enemy in beforeSession.dormantCombatantIds)
+        assertFalse(enemy in afterSession.dormantCombatantIds)
     }
 }
 

@@ -139,10 +139,12 @@ class NewStatePersistenceTest {
     void leCreatureInattiveSopravvivono() {
         CombatSession session = richSession();
         session.setDormantCombatants(List.of("wolf"));
+        session.setAlarmRadiusFeet(25);
 
         CombatSession reopened = roundTrip(session);
 
         assertEquals(Set.of("wolf"), reopened.currentState().dormantCombatantIds());
+        assertEquals(25, reopened.alarmRadiusFeet());
         assertTrue(reopened.currentState().dormant("wolf"));
         assertFalse(reopened.currentState().dormant("goblin"));
     }
@@ -155,11 +157,13 @@ class NewStatePersistenceTest {
         Map<String, Object> state = new java.util.LinkedHashMap<>(
                 (Map<String, Object>) encoded.get("currentState"));
         state.remove("dormantCombatantIds");
+        state.remove("alarmRadiusFeet");
         encoded.put("currentState", state);
 
         CombatSession reopened = codec.decode(Json.parseObject(Json.encode(encoded)));
 
         assertEquals(Set.of(), reopened.currentState().dormantCombatantIds());
+        assertEquals(CombatState.DEFAULT_ALARM_RADIUS_FEET, reopened.alarmRadiusFeet());
     }
 
     @Test
