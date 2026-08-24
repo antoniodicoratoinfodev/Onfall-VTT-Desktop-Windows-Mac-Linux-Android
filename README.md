@@ -497,11 +497,40 @@ that section is simply not there.
 
 ## On the phone
 
-i pulThe same screens run on Android from the same code. The battle keeps the map visible while Party
+The same screens run on Android from the same code. The battle keeps the map visible while Party
 slides in from the left and Enemies from the right; the event log opens from a small control above
 the vertically resizable command area. The session heading and the app navigation can both be
 folded away to give the map more room. The desktop shell falls back to the same compact layout when
 its window is narrowed below the width three panels need.
+
+<table>
+<tr>
+<td align="center">
+<img src="sample/android-phone/home.png" width="320"/><br/>
+<sub>Starting a bundled game on Android</sub>
+</td>
+<td align="center">
+<img src="sample/android-phone/session-setup.png" width="320"/><br/>
+<sub>Choosing the party and opposition</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/android-phone/battle.png" width="320"/><br/>
+<sub>The compact battle layout keeps the tactical map in view</sub>
+</td>
+<td align="center">
+<img src="sample/android-phone/compendium.png" width="320"/><br/>
+<sub>Character and creature sheets in the Compendium</sub>
+</td>
+</tr>
+<tr>
+<td align="center" colspan="2">
+<img src="sample/android-phone/settings.png" width="320"/><br/>
+<sub>Application preferences on Android</sub>
+</td>
+</tr>
+</table>
 
 ## SRD content pack
 
