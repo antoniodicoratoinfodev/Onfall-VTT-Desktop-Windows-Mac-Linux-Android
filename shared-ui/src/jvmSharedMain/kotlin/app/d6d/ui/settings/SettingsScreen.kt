@@ -38,6 +38,8 @@ import app.d6d.ui.i18n.strings
 import app.d6d.ui.layout.TurnOrderDisplayMode
 import app.d6d.ui.layout.UiLayoutState
 import app.d6d.ui.state.EnemyCpuSpeed
+import app.d6d.ui.dice.DiceRollVisibility
+import app.d6d.ui.dice.DiceSkinId
 import app.d6d.ui.state.label
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.OrnateDivider
@@ -76,14 +78,17 @@ fun SettingsScreen(
     }
 
     Column(modifier.fillMaxSize()) {
-        // Senza cursori resta una sezione sola: una barra con un unico pulsante
-        // non offre alcuna scelta, e su Android sarebbe solo una striscia in piu'.
-        if (cursorPreferences != null) {
-            SettingsSectionBar(current = section, onSelect = { section = it })
-        }
+        SettingsSectionBar(
+            current = section,
+            showCursors = cursorPreferences != null,
+            onSelect = { section = it },
+        )
         when (section) {
             SettingsSection.GENERAL ->
                 GeneralSettings(preferences, layout, dataDirectory, Modifier.weight(1f))
+
+            SettingsSection.DICE ->
+                DiceSettings(preferences, Modifier.weight(1f))
 
             SettingsSection.CURSORS -> cursorPreferences?.let {
                 CursorArchive(it, compact, Modifier.weight(1f))
@@ -94,11 +99,13 @@ fun SettingsScreen(
 
 private enum class SettingsSection {
     GENERAL,
+    DICE,
     CURSORS,
 }
 
 private fun SettingsSection.label(strings: Strings): String = when (this) {
     SettingsSection.GENERAL -> strings.settings.sectionGeneral
+    SettingsSection.DICE -> strings.dice.title
     SettingsSection.CURSORS -> strings.settings.sectionCursors
 }
 
@@ -107,6 +114,7 @@ private fun SettingsSection.label(strings: Strings): String = when (this) {
 @Composable
 private fun SettingsSectionBar(
     current: SettingsSection,
+    showCursors: Boolean,
     onSelect: (SettingsSection) -> Unit,
 ) {
     val strings = strings
@@ -119,7 +127,7 @@ private fun SettingsSectionBar(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        SettingsSection.entries.forEach { entry ->
+        SettingsSection.entries.filter { it != SettingsSection.CURSORS || showCursors }.forEach { entry ->
             GameButton(
                 label = entry.label(strings),
                 accent = if (current == entry) Palette.Gold else Palette.TextMuted,
@@ -129,6 +137,101 @@ private fun SettingsSectionBar(
             )
         }
     }
+}
+
+/** Preferenze visive dei dadi, comuni alle sessioni aperte e future. */
+@Composable
+private fun DiceSettings(
+    preferences: AppPreferencesState,
+    modifier: Modifier = Modifier,
+) {
+    val text = strings.dice
+    Column(modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(Palette.Surface)
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Eyebrow(text.settingsTitle.uppercase())
+            Text(
+                text = text.settingsTitle,
+                color = Palette.Text,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(text.settingsDescription, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+        }
+        GoldenRule()
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(Palette.Night.copy(alpha = 0.72f))
+                .verticalScroll(rememberScrollState())
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            SettingsGroup(text.rollVisibility, text.settingsDescription) {
+                SettingsChoice(
+                    label = text.rollVisibility,
+                    hint = if (preferences.diceRollVisibility == DiceRollVisibility.VISIBLE) {
+                        text.visibleRollsHint
+                    } else {
+                        text.hiddenRollsHint
+                    },
+                ) {
+                    DiceRollVisibility.entries.forEach { visibility ->
+                        val selected = preferences.diceRollVisibility == visibility
+                        GameButton(
+                            label = if (visibility == DiceRollVisibility.VISIBLE) text.visibleRolls else text.hiddenRolls,
+                            selected = selected,
+                            accent = if (selected) Palette.Gold else Palette.TextMuted,
+                            dense = true,
+                            onClick = { preferences.diceRollVisibility = visibility },
+                        )
+                    }
+                }
+            }
+            SettingsGroup(text.skin, text.skinHint) {
+                SettingsChoice(text.skin, text.skinHint) {
+                    DiceSkinId.entries.forEach { skin ->
+                        val selected = preferences.diceSkin == skin
+                        GameButton(
+                            label = text.skin(skin),
+                            selected = selected,
+                            accent = diceSkinAccent(skin),
+                            dense = true,
+                            onClick = { preferences.diceSkin = skin },
+                        )
+                    }
+                }
+            }
+            SettingsGroup(text.effects, text.fullEffectsHint) {
+                SettingsChoice(
+                    text.effects,
+                    if (preferences.reducedDiceEffects) text.reducedEffectsHint else text.fullEffectsHint,
+                ) {
+                    listOf(false, true).forEach { reduced ->
+                        val selected = preferences.reducedDiceEffects == reduced
+                        GameButton(
+                            label = if (reduced) text.reducedEffects else text.fullEffects,
+                            selected = selected,
+                            accent = if (selected) Palette.Gold else Palette.TextMuted,
+                            dense = true,
+                            onClick = { preferences.reducedDiceEffects = reduced },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun diceSkinAccent(skin: DiceSkinId) = when (skin) {
+    DiceSkinId.RUNIC_OBSIDIAN -> Palette.Crit
+    DiceSkinId.DRAGONFORGE -> Palette.Bloodied
+    DiceSkinId.MOON_IVORY -> Palette.Party
 }
 
 @Composable

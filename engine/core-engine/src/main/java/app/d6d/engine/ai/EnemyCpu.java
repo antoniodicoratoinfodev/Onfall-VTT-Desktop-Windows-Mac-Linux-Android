@@ -110,6 +110,9 @@ public final class EnemyCpu {
         if (state.partyCombatantIds().contains(actorId)) {
             return new EnemyCpuDecision.Done(actorId, EnemyCpuReason.NOT_CONTROLLED);
         }
+        if (state.dormant(actorId)) {
+            return new EnemyCpuDecision.Done(actorId, EnemyCpuReason.ACTOR_DORMANT);
+        }
         List<String> activeEnemies = active.stream()
                 .filter(id -> !state.partyCombatantIds().contains(id))
                 .toList();
@@ -210,6 +213,11 @@ public final class EnemyCpu {
         CombatantState actor = state.combatants().get(actorId);
         if (actor == null || actor.defeated() || actor.dead() || incapacitates(actor)) {
             return new EnemyCpuDecision.Done(actorId, EnemyCpuReason.ACTOR_CANNOT_ACT);
+        }
+        // Chi non si e' accorto del gruppo non pianifica: non e' un attore che non
+        // trova niente di utile, e' un attore che non sa che c'e' una battaglia.
+        if (state.dormant(actorId)) {
+            return new EnemyCpuDecision.Done(actorId, EnemyCpuReason.ACTOR_DORMANT);
         }
         if (!state.currentCombatantIds().contains(actorId)) {
             return new EnemyCpuDecision.Done(actorId, EnemyCpuReason.NOT_IN_CURRENT_TURN);

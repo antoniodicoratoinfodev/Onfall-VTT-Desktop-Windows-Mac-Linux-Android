@@ -40,7 +40,23 @@ public record CombatState(
          * Mappa tattica, facoltativa. Quando non e' configurata l'incontro resta
          * astratto e nulla cambia rispetto al gioco senza mappa.
          */
-        BattleMap battleMap) {
+        BattleMap battleMap,
+
+        /**
+         * Chi non si e' ancora accorto del gruppo.
+         *
+         * <p>Una creatura inattiva sta nell'ordine d'iniziativa ma non agisce: la
+         * CPU la salta, e il suo turno passa senza che si muova o attacchi. Non e'
+         * una condizione del regolamento e non concede vantaggi a chi la attacca:
+         * e' la distinzione fra il mostro che sta ancora facendo la guardia in
+         * fondo al corridoio e quello che ha visto arrivare qualcuno.</p>
+         *
+         * <p>Vuoto e' il valore normale, ed e' anche quello dei salvataggi nati
+         * prima che l'attivazione esistesse: senza informazioni sulla vista, tutti
+         * agiscono. Il risveglio e' definitivo, perche' una creatura che ha visto
+         * il gruppo non torna a non saperlo.</p>
+         */
+        Set<String> dormantCombatantIds) {
 
     public CombatState {
         encounterId = requireText(encounterId, "encounterId");
@@ -57,10 +73,12 @@ public record CombatState(
         turnBudgets = immutableLinkedMap(turnBudgets);
         partyCombatantIds = Set.copyOf(Objects.requireNonNull(partyCombatantIds, "partyCombatantIds"));
         battleMap = battleMap == null ? BattleMap.none() : battleMap;
+        dormantCombatantIds = dormantCombatantIds == null ? Set.of() : Set.copyOf(dormantCombatantIds);
         if (!combatants.keySet().containsAll(rosterOrder) || !combatants.keySet().containsAll(initiativeOrder)
                 || !combatants.keySet().containsAll(initiativeScores.keySet())
                 || !combatants.keySet().containsAll(turnBudgets.keySet())
-                || !combatants.keySet().containsAll(partyCombatantIds)) {
+                || !combatants.keySet().containsAll(partyCombatantIds)
+                || !combatants.keySet().containsAll(dormantCombatantIds)) {
             throw new IllegalArgumentException("State references an unknown combatant");
         }
         if (new HashSet<>(rosterOrder).size() != rosterOrder.size()) {
@@ -164,7 +182,41 @@ public record CombatState(
             boolean simultaneousTies) {
         this(encounterId, rulesetVersion, contentVersion, status, revision, randomSeed, randomState,
                 rosterOrder, combatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
-                partyCombatantIds, simultaneousTies, BattleMap.none());
+                partyCombatantIds, simultaneousTies, BattleMap.none(), Set.of());
+    }
+
+    /**
+     * Costruttore di compatibilita' per chi non conosce l'attivazione.
+     *
+     * <p>Senza l'insieme delle creature inattive nessuno lo e', che e' il solo
+     * comportamento possibile prima che la vista entrasse nel modello.</p>
+     */
+    public CombatState(
+            String encounterId,
+            String rulesetVersion,
+            String contentVersion,
+            CombatStatus status,
+            long revision,
+            long randomSeed,
+            long randomState,
+            List<String> rosterOrder,
+            Map<String, CombatantState> combatants,
+            Map<String, Integer> initiativeScores,
+            List<String> initiativeOrder,
+            int round,
+            int turnIndex,
+            Map<String, TurnBudget> turnBudgets,
+            Set<String> partyCombatantIds,
+            boolean simultaneousTies,
+            BattleMap battleMap) {
+        this(encounterId, rulesetVersion, contentVersion, status, revision, randomSeed, randomState,
+                rosterOrder, combatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
+                partyCombatantIds, simultaneousTies, battleMap, Set.of());
+    }
+
+    /** Vero se la creatura e' nell'incontro ma non si e' ancora accorta del gruppo. */
+    public boolean dormant(String combatantId) {
+        return dormantCombatantIds.contains(combatantId);
     }
 
     /**

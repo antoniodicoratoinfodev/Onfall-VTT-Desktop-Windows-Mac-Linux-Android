@@ -21,8 +21,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -131,6 +133,33 @@ class NewStatePersistenceTest {
 
         // Da 3,4 a 9,9: sei caselle di Chebyshev con passo dieci piedi.
         assertEquals(60, after.distanceFeet("hero", "goblin").orElseThrow());
+    }
+
+    @Test
+    void leCreatureInattiveSopravvivono() {
+        CombatSession session = richSession();
+        session.setDormantCombatants(List.of("wolf"));
+
+        CombatSession reopened = roundTrip(session);
+
+        assertEquals(Set.of("wolf"), reopened.currentState().dormantCombatantIds());
+        assertTrue(reopened.currentState().dormant("wolf"));
+        assertFalse(reopened.currentState().dormant("goblin"));
+    }
+
+    @Test
+    void unSalvataggioSenzaAttivazioneRiapreConTuttiSvegli() {
+        CombatSessionJsonCodec codec = new CombatSessionJsonCodec();
+        Map<String, Object> encoded = new java.util.LinkedHashMap<>(codec.encode(richSession()));
+        // Come un file scritto prima che l'attivazione esistesse.
+        Map<String, Object> state = new java.util.LinkedHashMap<>(
+                (Map<String, Object>) encoded.get("currentState"));
+        state.remove("dormantCombatantIds");
+        encoded.put("currentState", state);
+
+        CombatSession reopened = codec.decode(Json.parseObject(Json.encode(encoded)));
+
+        assertEquals(Set.of(), reopened.currentState().dormantCombatantIds());
     }
 
     @Test

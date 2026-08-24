@@ -6,6 +6,8 @@ import androidx.compose.runtime.setValue
 import app.d6d.i18n.AppLanguage
 import app.d6d.board.StampKind
 import app.d6d.board.TemplateShape
+import app.d6d.ui.dice.DiceRollVisibility
+import app.d6d.ui.dice.DiceSkinId
 import androidx.compose.runtime.staticCompositionLocalOf
 
 /**
@@ -25,6 +27,9 @@ class AppPreferencesState(
     var boardStrokeWidth by mutableStateOf(initial.boardStrokeWidth)
     var boardTemplateShape by mutableStateOf(initial.templateShapeOrDefault())
     var boardStampKind by mutableStateOf(initial.stampKindOrDefault())
+    var diceRollVisibility by mutableStateOf(initial.diceRollVisibilityOrDefault())
+    var diceSkin by mutableStateOf(initial.diceSkinOrDefault())
+    var reducedDiceEffects by mutableStateOf(initial.reducedDiceEffects)
 
     /**
      * La lingua dell'interfaccia.
@@ -67,6 +72,9 @@ class AppPreferencesState(
             boardStrokeWidth = boardStrokeWidth,
             boardTemplateShape = boardTemplateShape.name,
             boardStampKind = boardStampKind.name,
+            diceRollVisibility = diceRollVisibility.name,
+            diceSkin = diceSkin.name,
+            reducedDiceEffects = reducedDiceEffects,
         ).sanitized()
     }
 
@@ -93,6 +101,9 @@ class AppPreferencesState(
         boardStrokeWidth = value.boardStrokeWidth
         boardTemplateShape = value.templateShapeOrDefault()
         boardStampKind = value.stampKindOrDefault()
+        diceRollVisibility = value.diceRollVisibilityOrDefault()
+        diceSkin = value.diceSkinOrDefault()
+        reducedDiceEffects = value.reducedDiceEffects
         language = value.languageOrSystemDefault()
         languageIsSystemDefault = value.language.isBlank()
         lastSaved = value
@@ -107,6 +118,9 @@ class AppPreferencesState(
         boardStrokeWidth = defaults.boardStrokeWidth
         boardTemplateShape = defaults.templateShapeOrDefault()
         boardStampKind = defaults.stampKindOrDefault()
+        diceRollVisibility = defaults.diceRollVisibilityOrDefault()
+        diceSkin = defaults.diceSkinOrDefault()
+        reducedDiceEffects = defaults.reducedDiceEffects
         // La lingua torna a quella del sistema, cioe' allo stato di chi non ha
         // ancora scelto: e' il valore di fabbrica anche per lei.
         language = defaults.languageOrSystemDefault()

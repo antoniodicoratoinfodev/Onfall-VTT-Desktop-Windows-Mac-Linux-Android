@@ -66,12 +66,26 @@ import java.util.stream.Collectors;
  * audited and undoable; rejected commands change neither game state nor RNG.
  */
 public final class CombatSession {
+
+    /**
+     * Raggio dell'allarme, in piedi.
+     *
+     * <p>Sessanta piedi sono la distanza a cui un grido si sente in un corridoio
+     * senza che serva vedersi: l'allarme infatti non chiede la linea di vista,
+     * perche' il suono gira l'angolo. Non e' una regola del manuale — il
+     * regolamento lascia la percezione al tavolo — ma una convenzione dichiarata,
+     * cosi' il tavolo sa esattamente cosa aspettarsi.</p>
+     */
+    public static final int DEFAULT_ALARM_RADIUS_FEET = 60;
+
     private MutableState state;
     private final DeterministicDice dice;
     private final List<CombatEvent> audit;
     private final Deque<Checkpoint> undoStack = new ArrayDeque<>();
     /** Regole spaziali della Board: persistono nel documento Board, non nell'Undo del combattimento. */
     private Set<GridPosition> blockedCells = Set.of();
+    /** Quanto lontano arriva l'allarme di chi si accorge del gruppo. */
+    private int alarmRadiusFeet = DEFAULT_ALARM_RADIUS_FEET;
     private long nextEventSequence;
     private long revisionCounter;
 
@@ -446,6 +460,9 @@ public final class CombatSession {
 
         beginCommand();
         try {
+            // Anche un colpo mancato si sente passare: chi e' preso di mira smette
+            // di essere una creatura che non si e' accorta di niente.
+            noticed(request.targetId());
             consumeAttackActivationCost(
                     request.attackerId(), ability.activationCost(), ability.spellOrCantrip());
             consumeAbilityResource(request.attackerId(), attacker, ability);
@@ -1247,6 +1264,104 @@ public final class CombatSession {
         return blockedCells;
     }
 
+    // --- attivazione ---------------------------------------------------------------
+
+    /**
+     * Chi e' nell'incontro ma non si e' ancora accorto del gruppo.
+     *
+     * <p>Non e' una condizione del regolamento: e' lo stato di una creatura che
+     * sta ancora facendo la guardia. La CPU non le fa giocare il turno; tutto il
+     * resto del motore le tratta come qualunque altro combattente, perche' una
+     * creatura distratta resta colpibile esattamente come le altre.</p>
+     */
+    public synchronized Set<String> dormantCombatantIds() {
+        return Set.copyOf(state.dormantCombatantIds);
+    }
+
+    public synchronized boolean dormant(String combatantId) {
+        return state.dormantCombatantIds.contains(combatantId);
+    }
+
+    /**
+     * Dichiara chi e' inattivo, sostituendo l'insieme precedente.
+     *
+     * <p>Come i muri della Board, non e' un comando: non apre una revisione e non
+     * scrive nell'audit. Chi la chiama sta dicendo al motore com'e' il mondo
+     * adesso — a inizio combattimento, quando entra un nuovo nemico, o perche' il
+     * master ha deciso a mano — non sta giocando una mossa. Gli identificatori
+     * sconosciuti vengono ignorati: e' una fotografia, non una regola violata.</p>
+     */
+    public synchronized void setDormantCombatants(Collection<String> combatantIds) {
+        Objects.requireNonNull(combatantIds, "combatantIds");
+        LinkedHashSet<String> next = new LinkedHashSet<>();
+        for (String id : combatantIds) {
+            if (id != null && state.combatants.containsKey(id)) next.add(id);
+        }
+        state.dormantCombatantIds.clear();
+        state.dormantCombatantIds.addAll(next);
+    }
+
+    /** Rende inattiva una sola creatura; falso se non esiste o lo era gia'. */
+    public synchronized boolean markDormant(String combatantId) {
+        if (combatantId == null || !state.combatants.containsKey(combatantId)) return false;
+        return state.dormantCombatantIds.add(combatantId);
+    }
+
+    /**
+     * Sveglia le creature indicate, e con loro chi e' abbastanza vicino da sentirle.
+     *
+     * @return chi si e' davvero svegliato, nell'ordine in cui e' accaduto
+     */
+    public synchronized List<String> awaken(Collection<String> combatantIds) {
+        Objects.requireNonNull(combatantIds, "combatantIds");
+        List<String> woken = new ArrayList<>();
+        for (String id : combatantIds) awakenWithAlarm(id, woken);
+        return List.copyOf(woken);
+    }
+
+    /** Raggio dell'allarme in piedi; zero lo spegne e ognuno si sveglia per conto suo. */
+    public synchronized void setAlarmRadiusFeet(int feet) {
+        if (feet < 0) throw new IllegalArgumentException("The alarm radius cannot be negative");
+        alarmRadiusFeet = feet;
+    }
+
+    public synchronized int alarmRadiusFeet() {
+        return alarmRadiusFeet;
+    }
+
+    /**
+     * Sveglia una creatura e da' l'allarme ai suoi.
+     *
+     * <p>L'allarme non chiede la linea di vista: un grido gira l'angolo. Non e'
+     * pero' transitivo — chi lo sente si sveglia ma non lo rilancia — altrimenti
+     * il primo colpo sveglierebbe il sotterraneo intero passando di creatura in
+     * creatura.</p>
+     */
+    private void awakenWithAlarm(String combatantId, Collection<String> woken) {
+        if (combatantId == null || !state.dormantCombatantIds.remove(combatantId)) return;
+        woken.add(combatantId);
+        if (alarmRadiusFeet <= 0 || state.dormantCombatantIds.isEmpty()) return;
+        boolean party = state.partyCombatantIds.contains(combatantId);
+        for (String other : List.copyOf(state.dormantCombatantIds)) {
+            if (state.partyCombatantIds.contains(other) != party) continue;
+            Optional<Integer> distance = state.battleMap.distanceFeet(combatantId, other);
+            if (distance.isPresent() && distance.get() <= alarmRadiusFeet) {
+                state.dormantCombatantIds.remove(other);
+                woken.add(other);
+            }
+        }
+    }
+
+    /**
+     * Chi viene colpito, mancato di un soffio o preso di mira da una capacita' si
+     * accorge del gruppo: e' la parte del risveglio che non dipende dalla vista, e
+     * quindi appartiene al motore e non a chi disegna la mappa.
+     */
+    private void noticed(String combatantId) {
+        if (state.dormantCombatantIds.isEmpty()) return;
+        awakenWithAlarm(combatantId, new ArrayList<>());
+    }
+
     /** Immagine di sfondo, indicata per nome nell'archivio locale delle immagini. */
     public synchronized void setMapBackground(String imageName) {
         beginCommand();
@@ -1556,6 +1671,7 @@ public final class CombatSession {
             }
         }
         beginCommand();
+        noticed(targetCombatantId);
         if (target.snapshot.conditionImmunities().contains(condition.type())) {
             append(EventType.CONDITION_IMMUNE, condition.sourceCombatantId(), targetCombatantId,
                     details("conditionId", condition.id(), "condition", condition.type()));
@@ -1948,6 +2064,7 @@ public final class CombatSession {
             boolean critical,
             D20RollInput concentrationRoll) {
         MutableCombatant target = combatant(targetCombatantId);
+        noticed(targetCombatantId);
         List<DamageComponentResult> resolved = new ArrayList<>();
         long totalRawLong = 0;
         long totalAdjustedLong = 0;
@@ -2681,6 +2798,7 @@ public final class CombatSession {
         private final LinkedHashSet<String> partyCombatantIds;
         private boolean simultaneousTies;
         private BattleMap battleMap = BattleMap.none();
+        private final LinkedHashSet<String> dormantCombatantIds = new LinkedHashSet<>();
 
         private MutableState(
                 String encounterId,
@@ -2725,6 +2843,7 @@ public final class CombatSession {
                     state.turnBudgets(), state.partyCombatantIds());
             restored.simultaneousTies = state.simultaneousTies();
             restored.battleMap = state.battleMap();
+            restored.dormantCombatantIds.addAll(state.dormantCombatantIds());
             return restored;
         }
 
@@ -2736,6 +2855,7 @@ public final class CombatSession {
                     partyCombatantIds);
             duplicate.simultaneousTies = simultaneousTies;
             duplicate.battleMap = battleMap;
+            duplicate.dormantCombatantIds.addAll(dormantCombatantIds);
             return duplicate;
         }
 
@@ -2744,7 +2864,7 @@ public final class CombatSession {
             combatants.forEach((id, combatant) -> domainCombatants.put(id, combatant.toDomain()));
             return new CombatState(encounterId, rulesetVersion, contentVersion, status, revision, seed, randomState,
                     rosterOrder, domainCombatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
-                    partyCombatantIds, simultaneousTies, battleMap);
+                    partyCombatantIds, simultaneousTies, battleMap, dormantCombatantIds);
         }
     }
 }

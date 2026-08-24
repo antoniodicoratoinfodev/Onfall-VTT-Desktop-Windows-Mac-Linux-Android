@@ -58,6 +58,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -610,7 +611,12 @@ fun BattleMapView(
             // tornare a «Tutto» quando deve amministrare ciò che è nascosto.
             if (!boardVision.sees(placement)) return@forEach
             key(placement.combatantId()) {
-                MapToken(viewModel, portraits, placement, liveCell, mapOffset, tokenGestureEnabled)
+                MapToken(
+                    viewModel, portraits, placement, liveCell, mapOffset, tokenGestureEnabled,
+                    // L'attivazione e' informazione del master: dirla nell'anteprima
+                    // giocatori regalerebbe che quel mostro non li ha ancora visti.
+                    showAwareness = !boardTools.playerPreview,
+                )
             }
         }
 
@@ -1242,6 +1248,7 @@ private fun MapToken(
     cellSize: Dp,
     mapOffset: Offset,
     interactive: Boolean,
+    showAwareness: Boolean,
 ) {
     val words = strings.battle
     val id = placement.combatantId()
@@ -1257,6 +1264,7 @@ private fun MapToken(
     val targeted = viewModel.selectedTargetId == id
     val inspected = viewModel.inspectedCombatantId == id
     val defeated = combatant.defeated() || combatant.dead()
+    val dormant = showAwareness && viewModel.isDormant(id)
 
     val side = cellSize * placement.squaresPerSide()
     // Sotto una certa scala il token continua a occupare il corretto spazio della
@@ -1336,6 +1344,7 @@ private fun MapToken(
                     if (targeted) append(words.targetSelectedSuffix)
                     if (inspected) append(words.inspectedSuffix)
                     if (defeated) append(words.outOfCombatSuffix)
+                    if (dormant) append(words.dormantSuffix)
                 }
             }
             .then(
@@ -1517,16 +1526,29 @@ private fun MapToken(
                     radius = size.minDimension * 0.62f,
                 )
             }
+            val outline = when {
+                critFlash -> Palette.Crit
+                active -> Palette.GoldBright
+                targeted -> accent
+                inspected -> Palette.Text
+                else -> accent.copy(alpha = 0.5f)
+            }
             drawCircle(
-                color = when {
-                    critFlash -> Palette.Crit
-                    active -> Palette.GoldBright
-                    targeted -> accent
-                    inspected -> Palette.Text
-                    else -> accent.copy(alpha = 0.5f)
-                },
+                // Anello spezzato: la creatura e' sulla mappa ma non e' ancora
+                // entrata nel combattimento. Non la attenua e non la colora
+                // diversamente, perche' inattiva non vuol dire indebolita: chi la
+                // attacca la colpisce come qualunque altra.
+                color = if (dormant) outline.copy(alpha = 0.55f) else outline,
                 radius = size.minDimension / 2f - inset,
-                style = Stroke(width = if (active || targeted || inspected || critFlash) 2.2f else 1.2f),
+                style = Stroke(
+                    width = if (active || targeted || inspected || critFlash) 2.2f else 1.2f,
+                    pathEffect = if (dormant) {
+                        val dash = size.minDimension * 0.07f
+                        PathEffect.dashPathEffect(floatArrayOf(dash, dash))
+                    } else {
+                        null
+                    },
+                ),
             )
         }
 

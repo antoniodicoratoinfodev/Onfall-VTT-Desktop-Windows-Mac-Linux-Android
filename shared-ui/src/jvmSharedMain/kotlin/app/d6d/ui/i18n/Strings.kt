@@ -29,6 +29,7 @@ interface Strings {
     val common: CommonStrings
     val nav: NavStrings
     val settings: SettingsStrings
+    val dice: DiceStrings
     val battle: BattleStrings
     val maps: MapStrings
     val glossary: GlossaryStrings
@@ -49,6 +50,7 @@ object ItalianStrings : Strings {
     override val common: CommonStrings = CommonStringsIt
     override val nav: NavStrings = NavStringsIt
     override val settings: SettingsStrings = SettingsStringsIt
+    override val dice: DiceStrings = DiceStringsIt
     override val battle: BattleStrings = BattleStringsIt
     override val maps: MapStrings = MapStringsIt
     override val glossary: GlossaryStrings = GlossaryStringsIt
@@ -69,6 +71,7 @@ object EnglishStrings : Strings {
     override val common: CommonStrings = CommonStringsEn
     override val nav: NavStrings = NavStringsEn
     override val settings: SettingsStrings = SettingsStringsEn
+    override val dice: DiceStrings = DiceStringsEn
     override val battle: BattleStrings = BattleStringsEn
     override val maps: MapStrings = MapStringsEn
     override val glossary: GlossaryStrings = GlossaryStringsEn

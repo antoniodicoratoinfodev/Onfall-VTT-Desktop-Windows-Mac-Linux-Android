@@ -44,6 +44,9 @@ interface BattleStrings {
     val markSavesThenApply: String
     val areaResourceNotSaved: String
     val waitForCpuTurn: String
+    /** Nomi delle creature che hanno appena notato il gruppo. */
+    fun creaturesNoticedParty(names: String): String
+    val dormantSuffix: String
     val combatantIsCpuControlled: String
     val cpuControlsThisTurn: String
     val noActiveActor: String

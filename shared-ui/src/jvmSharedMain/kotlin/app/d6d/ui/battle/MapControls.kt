@@ -126,6 +126,16 @@ fun MapControls(
             boardTools, board, grid, compact,
             inspectedCombatantId = viewModel.inspectedCombatantId,
             inspectedCombatantName = viewModel.inspectedCombatantId?.let(viewModel::name).orEmpty(),
+            awarenessEnabled = viewModel.awarenessEnabled,
+            onAwarenessChange = { viewModel.awarenessEnabled = it },
+            // La squadra non ha un'attivazione da amministrare: i personaggi li
+            // muove chi sta al tavolo, e non aspettano di accorgersi di se stessi.
+            inspectedDormant = viewModel.inspectedCombatantId
+                ?.takeUnless(viewModel::isParty)
+                ?.let(viewModel::isDormant),
+            onInspectedDormantChange = { dormant ->
+                viewModel.inspectedCombatantId?.let { viewModel.setDormant(it, dormant) }
+            },
         )
 
         if (viewModel.mapEditMode) {

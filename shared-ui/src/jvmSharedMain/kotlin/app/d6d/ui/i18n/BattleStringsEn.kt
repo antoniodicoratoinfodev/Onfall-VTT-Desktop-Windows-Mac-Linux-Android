@@ -44,6 +44,8 @@ internal object BattleStringsEn : BattleStrings {
     override val areaResourceNotSaved =
         "The resource this area effect spent was not saved to the sheet."
     override val waitForCpuTurn = "Wait for the CPU to finish the enemy part of this turn."
+    override fun creaturesNoticedParty(names: String) = "They have spotted you: $names"
+    override val dormantSuffix = ", has not noticed the party"
     override val combatantIsCpuControlled = "This combatant is controlled by the enemy CPU."
     override val cpuControlsThisTurn = "The CPU is running this turn."
     override val noActiveActor = "No active combatant."

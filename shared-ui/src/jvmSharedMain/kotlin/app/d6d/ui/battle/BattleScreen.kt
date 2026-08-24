@@ -81,6 +81,7 @@ import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.i18n.Strings
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.dice.DiceTrayHost
 import kotlinx.coroutines.delay
 
 private val TURN_ORDER_LABEL_SPACE = 24.dp
@@ -150,87 +151,90 @@ fun BattleScreen(
     }
     // Il fondale resta trasparente in tutta la cornice di battaglia. BattleStage
     // isola invece mappa, griglia e relativi controlli con una superficie opaca.
-    Column(modifier.fillMaxSize()) {
-        BattleTopBar(
-            viewModel,
-            sessions,
-            workspace.openSessions.size,
-            workspace.autosaveWarning != null,
-            compact,
-        )
-        // Filo d'oro sotto l'intestazione: chiude la fascia dei turni come il
-        // bordo inciso di un pannello, senza il peso di un bordo pieno.
-        GoldenRule()
-        // Il bordo inferiore della fascia turni: trascinandolo verso il basso la
-        // fascia cresce. Solo sul desktop e solo quando l'ordine turni e' visibile.
-        if (!compact && layout.turnOrderDisplayMode != TurnOrderDisplayMode.HIDDEN) {
-            HorizontalResizeHandle(
-                onDrag = { dragPx ->
-                    layout.topBarHeight = (layout.topBarHeight + with(density) { dragPx.toDp() })
-                        .coerceIn(TURN_ORDER_MIN_HEIGHT, TURN_ORDER_MAX_HEIGHT)
-                },
-            )
-        }
-        SessionMenuDialog(
-            manager = sessions,
-            onOpenInNewTab = onOpenSavedSession,
-            workspace = workspace,
-        )
-
-        viewModel.actionResolution?.let { resolution ->
-            val tone = if (resolution.isHit) Palette.Heal else Palette.GoldBright
-            Text(
-                text = strings.battle.resolvedImmediately(resolution.text),
-                color = tone,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(tone.copy(alpha = 0.13f))
-                    .clickable { viewModel.dismissActionResolution() }
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-            )
-        }
-
-        viewModel.message?.let { text ->
-            Text(
-                text = strings.battle.warning(text),
-                color = Palette.Bloodied,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Palette.Bloodied.copy(alpha = 0.13f))
-                    .clickable { viewModel.dismissMessage() }
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-            )
-        }
-
-        if (compact) {
-            CompactBattleBody(
+    Box(modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            BattleTopBar(
                 viewModel,
-                portraits,
-                board,
-                activeSessionId,
-                roster,
-                onOpenCombatantSheet,
-                onCreateRosterCharacter,
-                onCreateRosterCreature,
-                Modifier.weight(1f),
+                sessions,
+                workspace.openSessions.size,
+                workspace.autosaveWarning != null,
+                compact,
             )
-        } else {
-            WideBattleBody(
-                viewModel,
-                portraits,
-                board,
-                activeSessionId,
-                roster,
-                onOpenCombatantSheet,
-                onCreateRosterCharacter,
-                onCreateRosterCreature,
-                Modifier.weight(1f),
+            // Filo d'oro sotto l'intestazione: chiude la fascia dei turni come il
+            // bordo inciso di un pannello, senza il peso di un bordo pieno.
+            GoldenRule()
+            // Il bordo inferiore della fascia turni: trascinandolo verso il basso la
+            // fascia cresce. Solo sul desktop e solo quando l'ordine turni e' visibile.
+            if (!compact && layout.turnOrderDisplayMode != TurnOrderDisplayMode.HIDDEN) {
+                HorizontalResizeHandle(
+                    onDrag = { dragPx ->
+                        layout.topBarHeight = (layout.topBarHeight + with(density) { dragPx.toDp() })
+                            .coerceIn(TURN_ORDER_MIN_HEIGHT, TURN_ORDER_MAX_HEIGHT)
+                    },
+                )
+            }
+            SessionMenuDialog(
+                manager = sessions,
+                onOpenInNewTab = onOpenSavedSession,
+                workspace = workspace,
             )
+
+            viewModel.actionResolution?.let { resolution ->
+                val tone = if (resolution.isHit) Palette.Heal else Palette.GoldBright
+                Text(
+                    text = strings.battle.resolvedImmediately(resolution.text),
+                    color = tone,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(tone.copy(alpha = 0.13f))
+                        .clickable { viewModel.dismissActionResolution() }
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                )
+            }
+
+            viewModel.message?.let { text ->
+                Text(
+                    text = strings.battle.warning(text),
+                    color = Palette.Bloodied,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Palette.Bloodied.copy(alpha = 0.13f))
+                        .clickable { viewModel.dismissMessage() }
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                )
+            }
+
+            if (compact) {
+                CompactBattleBody(
+                    viewModel,
+                    portraits,
+                    board,
+                    activeSessionId,
+                    roster,
+                    onOpenCombatantSheet,
+                    onCreateRosterCharacter,
+                    onCreateRosterCreature,
+                    Modifier.weight(1f),
+                )
+            } else {
+                WideBattleBody(
+                    viewModel,
+                    portraits,
+                    board,
+                    activeSessionId,
+                    roster,
+                    onOpenCombatantSheet,
+                    onCreateRosterCharacter,
+                    onCreateRosterCreature,
+                    Modifier.weight(1f),
+                )
+            }
         }
+        DiceTrayHost(viewModel, compact)
     }
 }
 

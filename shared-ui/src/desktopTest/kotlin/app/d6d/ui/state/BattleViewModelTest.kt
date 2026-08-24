@@ -28,6 +28,11 @@ import app.d6d.engine.ai.EnemyCpuTargetReport
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.ui.content.SampleEncounter
+import app.d6d.ui.dice.DiceLinkMode
+import app.d6d.ui.dice.DicePoolSpec
+import app.d6d.ui.dice.DiceRollPurpose
+import app.d6d.ui.dice.DiceRollVisibility
+import app.d6d.ui.dice.presentedRollsFromEvents
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -93,13 +98,14 @@ class BattleViewModelTest {
     private fun guaranteedHitViewModel(
         resourceSink: CombatResourceSink = CombatResourceSink { _, _ -> },
         extraTarget: Boolean = false,
+        damage: DamageFormula = DamageFormula.fixed(DamageType.FORCE, 5),
     ): BattleViewModel {
         val ability = AbilityDefinition.attack(
             "colpo-certo",
             "Colpo certo",
             ActivationCost.ACTION,
             100,
-            DamageFormula.fixed(DamageType.FORCE, 5),
+            damage,
         )
         val attacker = ActorDefinition.builder("attaccante-def", "Attaccante")
             .armorClass(10)
@@ -1573,6 +1579,87 @@ class BattleViewModelTest {
         assertTrue(hitPointsAfter < hitPointsBefore || missed)
         assertTrue(model.events.size > eventsBefore)
         assertNull(model.message)
+    }
+
+    @Test
+    fun `un attacco visibile attende il lancio e applica esattamente i dadi mostrati`() {
+        val model = guaranteedHitViewModel(damage = DamageFormula.dice(DamageType.FORCE, 1, 8, 0))
+        model.applyDiceRollVisibility(DiceRollVisibility.VISIBLE)
+        val revisionBefore = model.state.revision()
+        val randomBefore = model.state.randomState()
+        val eventsBefore = model.events.size
+        val hitPointsBefore = model.combatant("bersaglio")!!.currentHitPoints()
+
+        model.attack("colpo-certo")
+
+        val pending = model.pendingLinkedRoll!!
+        assertEquals(revisionBefore, model.state.revision())
+        assertEquals(randomBefore, model.state.randomState())
+        assertEquals(eventsBefore, model.events.size)
+        assertEquals(hitPointsBefore, model.combatant("bersaglio")!!.currentHitPoints())
+        assertEquals(DiceLinkMode.LINKED, model.diceLinkMode)
+        assertTrue(pending.rolls.any { it.purpose == DiceRollPurpose.ATTACK })
+        assertTrue(pending.rolls.any { it.purpose == DiceRollPurpose.DAMAGE })
+
+        model.startPendingLinkedRoll()
+        model.commitPendingLinkedRoll(pending.id)
+
+        val committedRolls = presentedRollsFromEvents(model.events.drop(eventsBefore))
+        assertEquals(pending.rolls, committedRolls)
+        assertTrue(model.state.revision() > revisionBefore)
+        assertTrue(model.state.randomState() != randomBefore)
+        assertTrue(model.combatant("bersaglio")!!.currentHitPoints() < hitPointsBefore)
+        assertNull(model.pendingLinkedRoll)
+        assertNotNull(model.actionResolution)
+    }
+
+    @Test
+    fun `annullare un tiro collegato lascia intatti stato registro e generatore`() {
+        val model = guaranteedHitViewModel()
+        model.applyDiceRollVisibility(DiceRollVisibility.VISIBLE)
+        val stateBefore = model.state
+        val eventsBefore = model.events
+
+        model.attack("colpo-certo")
+        assertNotNull(model.pendingLinkedRoll)
+        model.cancelPendingLinkedRoll()
+
+        assertEquals(stateBefore, model.state)
+        assertEquals(eventsBefore, model.events)
+        assertNull(model.pendingLinkedRoll)
+        assertEquals(DiceLinkMode.UNLINKED, model.diceLinkMode)
+    }
+
+    @Test
+    fun `un tiro libero con vantaggio non entra mai nel motore`() {
+        val model = guaranteedHitViewModel()
+        val stateBefore = model.state
+        val eventsBefore = model.events
+
+        model.rollUnlinkedDice(
+            DicePoolSpec(count = 3, sides = 100, modifier = -2, mode = D20Mode.ADVANTAGE),
+        )
+
+        val result = model.diceTrayResult!!
+        assertEquals(DiceLinkMode.UNLINKED, result.linkMode)
+        assertEquals(2, result.rolls.size)
+        assertEquals(1, result.rolls.count { it.kept })
+        assertTrue(result.rolls.all { roll -> roll.values.size == 3 && roll.values.all { it in 1..100 } })
+        assertEquals(stateBefore, model.state)
+        assertEquals(eventsBefore, model.events)
+        assertEquals(listOf(result), model.unlinkedDiceHistory)
+    }
+
+    @Test
+    fun `la modalita nascosta conserva la risoluzione immediata storica`() {
+        val model = guaranteedHitViewModel()
+        val revisionBefore = model.state.revision()
+
+        model.attack("colpo-certo")
+
+        assertTrue(model.state.revision() > revisionBefore)
+        assertNull(model.pendingLinkedRoll)
+        assertEquals(15, model.combatant("bersaglio")!!.currentHitPoints())
     }
 
     @Test

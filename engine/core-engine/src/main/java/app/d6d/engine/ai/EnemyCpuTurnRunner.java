@@ -253,6 +253,10 @@ public final class EnemyCpuTurnRunner {
         }
         String next = groupState.currentCombatantIds().stream()
                 .filter(id -> !groupState.partyCombatantIds().contains(id))
+                // Chi non si e' ancora accorto del gruppo non e' un attore: il suo
+                // turno passa senza consumare decisioni e senza chiudere il gruppo
+                // prima del tempo, esattamente come se non ci fosse.
+                .filter(id -> !groupState.dormant(id))
                 .filter(id -> !processedActors.contains(id))
                 .findFirst()
                 .orElse(null);

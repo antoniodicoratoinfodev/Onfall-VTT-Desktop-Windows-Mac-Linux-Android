@@ -445,7 +445,9 @@ class SessionWorkspace(
         )
 
     private fun boardFor(battle: BattleViewModel, document: BoardDocument): BoardController =
-        BoardController(document, onDocumentChanged = { changed -> battle.setBlockedCells(changed.walls()) })
+        BoardController(document, onDocumentChanged = { changed ->
+            battle.setBoardSight(changed.walls(), changed.vision())
+        })
 
     private fun freezeUnplacedFootprints(battle: BattleViewModel) {
         battle.state.combatants().keys.forEach { combatantId ->

@@ -72,6 +72,9 @@ public enum EnemyCpuReason {
     /** Sconfitto, morto o incapacitato: non puo' agire. */
     ACTOR_CANNOT_ACT,
 
+    /** Non si e' ancora accorto del gruppo: sta al suo posto e lascia passare il turno. */
+    ACTOR_DORMANT,
+
     /** Non restano avversari in piedi. */
     NO_OPPONENTS_LEFT,
 

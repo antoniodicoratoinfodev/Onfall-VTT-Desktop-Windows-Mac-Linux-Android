@@ -124,7 +124,8 @@ public final class CombatSessionJsonCodec {
                 "turnBudgets", turnBudgets,
                 "partyCombatantIds", state.partyCombatantIds().stream().sorted().toList(),
                 "simultaneousTies", state.simultaneousTies(),
-                "battleMap", encodeBattleMap(state.battleMap()));
+                "battleMap", encodeBattleMap(state.battleMap()),
+                "dormantCombatantIds", state.dormantCombatantIds().stream().sorted().toList());
     }
 
     private CombatState decodeState(Map<?, ?> value, String path) {
@@ -173,7 +174,10 @@ public final class CombatSessionJsonCodec {
                 // Aggiunta dopo: un salvataggio senza mappa resta un incontro astratto.
                 value.containsKey("battleMap")
                         ? decodeBattleMap(objectValue(value, "battleMap", path), path + ".battleMap")
-                        : BattleMap.none());
+                        : BattleMap.none(),
+                // Aggiunta dopo: un salvataggio precedente non sa dell'attivazione e
+                // va riaperto con tutti svegli, che era il solo comportamento possibile.
+                optionalStringSet(value, "dormantCombatantIds", path));
     }
 
     /** Backward-compatible with early schema-v1 saves created before sides were embedded. */

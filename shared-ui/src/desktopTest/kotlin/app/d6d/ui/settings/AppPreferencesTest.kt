@@ -9,6 +9,8 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import app.d6d.ui.state.EnemyCpuSpeed
+import app.d6d.ui.dice.DiceRollVisibility
+import app.d6d.ui.dice.DiceSkinId
 import app.d6d.board.StampKind
 import app.d6d.board.TemplateShape
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -38,6 +40,8 @@ class AppPreferencesTest {
 
         assertEquals(EnemyCpuSpeed.NORMAL, loaded.speedOrDefault())
         assertTrue(loaded.animatedBackdrop)
+        assertEquals(DiceRollVisibility.HIDDEN, loaded.diceRollVisibilityOrDefault())
+        assertEquals(DiceSkinId.RUNIC_OBSIDIAN, loaded.diceSkinOrDefault())
     }
 
     @Test
@@ -45,6 +49,9 @@ class AppPreferencesTest {
         val saved = AppPreferences(
             enemyCpuSpeed = EnemyCpuSpeed.INSTANT.name,
             animatedBackdrop = false,
+            diceRollVisibility = DiceRollVisibility.VISIBLE.name,
+            diceSkin = DiceSkinId.DRAGONFORGE.name,
+            reducedDiceEffects = true,
         )
 
         val store = store()
@@ -98,6 +105,22 @@ class AppPreferencesTest {
     }
 
     @Test
+    fun `valori dadi sconosciuti ricadono sui predefiniti senza perdere il resto`() {
+        val file = directory.resolve("preferences.json")
+        Files.createDirectories(directory)
+        Files.writeString(
+            file,
+            """{"diceRollVisibility":"MAGICA","diceSkin":"SMERALDO","reducedDiceEffects":true}""",
+        )
+
+        val loaded = store().load()
+
+        assertEquals(DiceRollVisibility.HIDDEN, loaded.diceRollVisibilityOrDefault())
+        assertEquals(DiceSkinId.RUNIC_OBSIDIAN, loaded.diceSkinOrDefault())
+        assertTrue(loaded.reducedDiceEffects)
+    }
+
+    @Test
     fun `le preferenze del Lucido vengono sanificate e persistono`() {
         val store = store()
         store.save(
@@ -128,11 +151,17 @@ class AppPreferencesTest {
 
         state.enemyCpuSpeed = EnemyCpuSpeed.SLOW
         state.animatedBackdrop = false
+        state.diceRollVisibility = DiceRollVisibility.VISIBLE
+        state.diceSkin = DiceSkinId.MOON_IVORY
+        state.reducedDiceEffects = true
         state.persist()
 
         val reloaded = AppPreferencesState(initial = store.load())
         assertEquals(EnemyCpuSpeed.SLOW, reloaded.enemyCpuSpeed)
         assertFalse(reloaded.animatedBackdrop)
+        assertEquals(DiceRollVisibility.VISIBLE, reloaded.diceRollVisibility)
+        assertEquals(DiceSkinId.MOON_IVORY, reloaded.diceSkin)
+        assertTrue(reloaded.reducedDiceEffects)
     }
 
     @Test
@@ -141,6 +170,9 @@ class AppPreferencesTest {
             initial = AppPreferences(
                 enemyCpuSpeed = EnemyCpuSpeed.INSTANT.name,
                 animatedBackdrop = false,
+                diceRollVisibility = DiceRollVisibility.VISIBLE.name,
+                diceSkin = DiceSkinId.DRAGONFORGE.name,
+                reducedDiceEffects = true,
             ),
         )
 
@@ -148,6 +180,9 @@ class AppPreferencesTest {
 
         assertEquals(EnemyCpuSpeed.NORMAL, state.enemyCpuSpeed)
         assertTrue(state.animatedBackdrop)
+        assertEquals(DiceRollVisibility.HIDDEN, state.diceRollVisibility)
+        assertEquals(DiceSkinId.RUNIC_OBSIDIAN, state.diceSkin)
+        assertFalse(state.reducedDiceEffects)
     }
 }
 

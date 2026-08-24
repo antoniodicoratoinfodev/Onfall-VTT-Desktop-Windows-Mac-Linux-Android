@@ -456,6 +456,11 @@ internal fun BoardToolOptions(
     modifier: Modifier = Modifier,
     inspectedCombatantId: String? = null,
     inspectedCombatantName: String = "",
+    awarenessEnabled: Boolean = true,
+    onAwarenessChange: (Boolean) -> Unit = {},
+    /** Stato del combattente ispezionato; nullo quando non ce n'e' uno da attivare. */
+    inspectedDormant: Boolean? = null,
+    onInspectedDormantChange: (Boolean) -> Unit = {},
 ) {
     if (state.active == BoardTool.TABLE || state.active == BoardTool.HAND || state.active == BoardTool.PING ||
         state.active == BoardTool.ERASER || state.active == BoardTool.LABEL
@@ -546,6 +551,17 @@ internal fun BoardToolOptions(
                 BoardOptionButton(
                     words.visionDynamic, compact, selected = vision.dynamic(),
                     onClick = { board.setVision(vision.withMode(VisionMode.DYNAMIC)) },
+                )
+                // L'attivazione sta accanto alla vista perche' dipende dalla vista,
+                // ma non dalla nebbia: vale anche con il velo dipinto a mano, dove i
+                // raggi restano quelli e nessuno li disegna.
+                AwarenessOptions(
+                    enabled = awarenessEnabled,
+                    onEnabledChange = onAwarenessChange,
+                    compact = compact,
+                    inspectedName = inspectedCombatantName,
+                    inspectedDormant = inspectedDormant,
+                    onInspectedDormantChange = onInspectedDormantChange,
                 )
                 if (vision.dynamic()) {
                     VisionOptions(
@@ -729,6 +745,33 @@ private fun BoardObject.rotated(delta: Double): BoardObject? = when (this) {
  * raggio che non è multiplo del passo verrebbe comunque arrotondato per difetto
  * dal calcolo. Meglio non mostrare valori che poi non si vedono applicati.
  */
+@Composable
+private fun AwarenessOptions(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    compact: Boolean,
+    inspectedName: String,
+    inspectedDormant: Boolean?,
+    onInspectedDormantChange: (Boolean) -> Unit,
+) {
+    val words = strings.board
+    Text(words.awareness, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+    BoardOptionButton(words.awarenessOn, compact, selected = enabled, onClick = { onEnabledChange(true) })
+    BoardOptionButton(words.awarenessOff, compact, selected = !enabled, onClick = { onEnabledChange(false) })
+    if (inspectedDormant != null) {
+        Text(words.awarenessOf(inspectedName), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        BoardOptionButton(
+            words.awarenessDormant, compact, selected = inspectedDormant,
+            onClick = { onInspectedDormantChange(true) },
+        )
+        BoardOptionButton(
+            words.awarenessAwake, compact, selected = !inspectedDormant,
+            onClick = { onInspectedDormantChange(false) },
+        )
+    }
+    Text(words.awarenessHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+}
+
 @Composable
 private fun VisionOptions(
     vision: VisionSettings,

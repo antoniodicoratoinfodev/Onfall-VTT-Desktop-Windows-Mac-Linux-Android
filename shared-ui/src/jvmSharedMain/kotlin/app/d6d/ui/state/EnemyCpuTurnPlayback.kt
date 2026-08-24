@@ -366,7 +366,9 @@ internal class EnemyCpuTurnPlayback(
 
     /** Allinea stato, evidenza e feedback a quanto il motore ha appena eseguito. */
     private fun publish() {
+        val lastVisibleSequence = model.events.lastOrNull()?.sequence() ?: -1L
         model.sync()
+        model.presentAutomatedDice(model.events.filter { it.sequence() > lastVisibleSequence })
         val reports = runner.reports()
         while (shownReports < reports.size) {
             val report = reports[shownReports++]

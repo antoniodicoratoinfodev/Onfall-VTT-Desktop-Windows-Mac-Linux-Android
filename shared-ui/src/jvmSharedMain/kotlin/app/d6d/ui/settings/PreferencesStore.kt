@@ -5,6 +5,8 @@ import app.d6d.board.StampKind
 import app.d6d.board.TemplateShape
 import app.d6d.persistence.json.AtomicFiles
 import app.d6d.ui.state.EnemyCpuSpeed
+import app.d6d.ui.dice.DiceRollVisibility
+import app.d6d.ui.dice.DiceSkinId
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.nio.charset.StandardCharsets
@@ -40,6 +42,11 @@ data class AppPreferences(
     val boardStrokeWidth: Float = 0.12f,
     val boardTemplateShape: String = TemplateShape.SPHERE.name,
     val boardStampKind: String = StampKind.FLAME.name,
+    // Predefinito conservativo: aggiornare l'app non inserisce attese nei
+    // combattimenti esistenti finche' il tavolo non sceglie esplicitamente.
+    val diceRollVisibility: String = DiceRollVisibility.HIDDEN.name,
+    val diceSkin: String = DiceSkinId.RUNIC_OBSIDIAN.name,
+    val reducedDiceEffects: Boolean = false,
 ) {
     /** Riporta ogni campo a un valore che l'interfaccia sa rappresentare. */
     fun sanitized(): AppPreferences = copy(
@@ -47,6 +54,8 @@ data class AppPreferences(
         boardStrokeWidth = boardStrokeWidth.takeIf { it.isFinite() }?.coerceIn(0.03f, 2f) ?: 0.12f,
         boardTemplateShape = templateShapeOrDefault().name,
         boardStampKind = stampKindOrDefault().name,
+        diceRollVisibility = diceRollVisibilityOrDefault().name,
+        diceSkin = diceSkinOrDefault().name,
     )
 
     /** Il ritmo salvato, o quello predefinito se il nome non esiste piu'. */
@@ -61,6 +70,13 @@ data class AppPreferences(
 
     fun stampKindOrDefault(): StampKind =
         runCatching { StampKind.valueOf(boardStampKind) }.getOrDefault(StampKind.FLAME)
+
+    fun diceRollVisibilityOrDefault(): DiceRollVisibility =
+        runCatching { DiceRollVisibility.valueOf(diceRollVisibility) }
+            .getOrDefault(DiceRollVisibility.HIDDEN)
+
+    fun diceSkinOrDefault(): DiceSkinId =
+        runCatching { DiceSkinId.valueOf(diceSkin) }.getOrDefault(DiceSkinId.RUNIC_OBSIDIAN)
 
     companion object {
         const val SCHEMA_VERSION = 1

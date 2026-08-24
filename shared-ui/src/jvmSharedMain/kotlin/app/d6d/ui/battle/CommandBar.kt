@@ -722,6 +722,13 @@ fun CommandBar(
                         },
                     )
                 }
+                GameButton(
+                    label = "◆ ${strings.dice.title}",
+                    accent = Palette.Gold,
+                    selected = viewModel.diceTrayOpen,
+                    dense = true,
+                    onClick = viewModel::openDiceTray,
+                )
                 // Compatti e su una riga sola: la fascia comandi resta bassa e lascia
                 // spazio alle schede delle capacita' sopra.
                 //

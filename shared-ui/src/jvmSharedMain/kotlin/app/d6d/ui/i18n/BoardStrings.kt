@@ -49,6 +49,13 @@ interface BoardStrings {
     val visionUseMapRadius: String
     val visionPickCombatantHint: String
     fun visionOf(name: String): String
+    val awareness: String
+    val awarenessOn: String
+    val awarenessOff: String
+    val awarenessHint: String
+    val awarenessDormant: String
+    val awarenessAwake: String
+    fun awarenessOf(name: String): String
     val brushSize: String
     val paintFloors: String
     val eraseFloors: String
@@ -195,6 +202,15 @@ object BoardStringsIt : BoardStrings {
     override val visionUseMapRadius = "Raggio di mappa"
     override val visionPickCombatantHint = "Scegli un combattente sulla mappa per dargli un raggio suo."
     override fun visionOf(name: String) = "Vista di $name"
+    override val awareness = "Attivazione"
+    override val awarenessOn = "Alla vista"
+    override val awarenessOff = "Tutti attivi"
+    override val awarenessHint =
+        "Le creature restano immobili finché non vedono la squadra o non sono viste da lei. " +
+            "Un colpo le sveglia comunque, e chi si sveglia dà l'allarme a chi ha vicino."
+    override val awarenessDormant = "Inattivo"
+    override val awarenessAwake = "Attivo"
+    override fun awarenessOf(name: String) = "Stato di $name"
     override val brushSize = "Pennello"
     override val paintFloors = "Disegna pavimento"
     override val eraseFloors = "Cancella pavimento"
@@ -344,6 +360,15 @@ object BoardStringsEn : BoardStrings {
     override val visionUseMapRadius = "Map radius"
     override val visionPickCombatantHint = "Pick a combatant on the map to give them their own radius."
     override fun visionOf(name: String) = "$name's sight"
+    override val awareness = "Activation"
+    override val awarenessOn = "On sight"
+    override val awarenessOff = "All active"
+    override val awarenessHint =
+        "Creatures hold still until they see the party or the party sees them. " +
+            "A hit wakes them anyway, and whoever wakes raises the alarm nearby."
+    override val awarenessDormant = "Dormant"
+    override val awarenessAwake = "Active"
+    override fun awarenessOf(name: String) = "$name's state"
     override val brushSize = "Brush"
     override val paintFloors = "Paint floor"
     override val eraseFloors = "Erase floor"

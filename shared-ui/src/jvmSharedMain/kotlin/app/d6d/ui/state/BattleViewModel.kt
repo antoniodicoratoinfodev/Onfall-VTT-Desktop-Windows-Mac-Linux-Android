@@ -28,6 +28,8 @@ import app.d6d.domain.space.BattleMap
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.domain.space.TokenPlacement
+import app.d6d.board.VisionField
+import app.d6d.board.VisionSettings
 import app.d6d.board.WallMask
 import app.d6d.engine.CombatRuleException
 import app.d6d.engine.CombatSession
@@ -38,6 +40,8 @@ import app.d6d.engine.ai.EnemyCpuResult
 import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumber
+import app.d6d.ui.board.VisionViewer
+import app.d6d.ui.board.awareOfParty
 import app.d6d.i18n.label
 import app.d6d.ui.content.SessionNaming
 import app.d6d.ui.encounter.EncounterMode
@@ -48,8 +52,17 @@ import app.d6d.ui.i18n.LocalizedText
 import app.d6d.ui.i18n.Strings
 import app.d6d.ui.i18n.literalText
 import app.d6d.ui.maps.gridTooSmallMessage
+import app.d6d.ui.dice.DiceLinkMode
+import app.d6d.ui.dice.DicePoolSpec
+import app.d6d.ui.dice.DiceRollPurpose
+import app.d6d.ui.dice.DiceRollVisibility
+import app.d6d.ui.dice.DiceTrayResult
+import app.d6d.ui.dice.PendingLinkedRoll
+import app.d6d.ui.dice.PresentedDiceRoll
+import app.d6d.ui.dice.presentedRollsFromEvents
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import java.security.SecureRandom
 
 /**
  * Riceve le correzioni fatte durante lo scontro perche' aggiornino anche il
@@ -84,6 +97,12 @@ internal data class BattlePersistenceSnapshot(
     val state: CombatState,
     val presentation: Map<String, String>,
     val generation: Long,
+)
+
+/** La chiusura resta fuori dallo stato Compose: non e' serializzabile ne' parte della partita. */
+private data class PendingDiceCommit(
+    val id: Long,
+    val commit: () -> Unit,
 )
 
 /**
@@ -181,6 +200,29 @@ class BattleViewModel(
         private set
 
     var rollMode by mutableStateOf(D20Mode.NORMAL)
+
+    /** Preferenza globale copiata dalla shell; HIDDEN conserva il percorso sincrono storico. */
+    var diceRollVisibility by mutableStateOf(DiceRollVisibility.HIDDEN)
+        private set
+
+    var diceTrayOpen by mutableStateOf(false)
+        private set
+
+    var diceLinkMode by mutableStateOf(DiceLinkMode.UNLINKED)
+        private set
+
+    var pendingLinkedRoll by mutableStateOf<PendingLinkedRoll?>(null)
+        private set
+
+    var diceTrayResult by mutableStateOf<DiceTrayResult?>(null)
+        private set
+
+    var unlinkedDiceHistory by mutableStateOf<List<DiceTrayResult>>(emptyList())
+        private set
+
+    private var pendingDiceCommit: PendingDiceCommit? = null
+    private var diceSequence = 0L
+    private val freeDice = SecureRandom()
 
     var floating by mutableStateOf<Map<String, List<FloatingNumber>>>(emptyMap())
         internal set
@@ -673,7 +715,163 @@ class BattleViewModel(
 
     // --- comandi ---------------------------------------------------------------------
 
-    fun start() = command { session.start() }
+    fun start() {
+        command { session.start() }
+        // Il primo giro d'iniziativa e' il momento in cui le creature prendono
+        // posizione: chi non vede nessuno resta al suo posto finche' non lo vede.
+        if (status == CombatStatus.ACTIVE) sleepUnawareCreatures()
+    }
+
+    fun applyDiceRollVisibility(value: DiceRollVisibility) {
+        if (diceRollVisibility == value) return
+        diceRollVisibility = value
+        if (value == DiceRollVisibility.HIDDEN) cancelPendingLinkedRoll()
+    }
+
+    fun openDiceTray() {
+        diceTrayOpen = true
+    }
+
+    fun closeDiceTray() {
+        // Un tiro del motore non sparisce dietro a una X: va annullato in modo
+        // esplicito, cosi' e' chiaro che anche l'azione resta ineseguita.
+        if (pendingLinkedRoll != null) return
+        diceTrayOpen = false
+    }
+
+    fun chooseDiceLinkMode(value: DiceLinkMode) {
+        if (value == DiceLinkMode.LINKED && pendingLinkedRoll == null) return
+        diceLinkMode = value
+    }
+
+    fun cancelPendingLinkedRoll() {
+        pendingLinkedRoll = null
+        pendingDiceCommit = null
+        diceLinkMode = DiceLinkMode.UNLINKED
+    }
+
+    fun clearUnlinkedDiceHistory() {
+        unlinkedDiceHistory = emptyList()
+    }
+
+    /** Tiro libero: usa casualita' propria e non legge ne' avanza il seed del combattimento. */
+    fun rollUnlinkedDice(spec: DicePoolSpec) {
+        val poolCount = if (spec.mode == D20Mode.NORMAL) 1 else 2
+        val pools = List(poolCount) {
+            List(spec.count) { 1 + freeDice.nextInt(spec.sides) }
+        }
+        val totals = pools.map { it.sum() + spec.modifier }
+        val keptIndex = when (spec.mode) {
+            D20Mode.NORMAL -> 0
+            D20Mode.ADVANTAGE -> totals.indices.maxBy { totals[it] }
+            D20Mode.DISADVANTAGE -> totals.indices.minBy { totals[it] }
+        }
+        val result = DiceTrayResult(
+            id = ++diceSequence,
+            linkMode = DiceLinkMode.UNLINKED,
+            rolls = pools.mapIndexed { index, values ->
+                PresentedDiceRoll(
+                    purpose = DiceRollPurpose.FREE,
+                    sides = spec.sides,
+                    values = values,
+                    modifier = spec.modifier,
+                    total = totals[index],
+                    mode = spec.mode,
+                    selectedValue = values.singleOrNull(),
+                    kept = index == keptIndex,
+                )
+            },
+        )
+        diceTrayResult = result
+        unlinkedDiceHistory = (listOf(result) + unlinkedDiceHistory).take(10)
+        diceTrayOpen = true
+    }
+
+    /** Avvia l'animazione; il commit viene richiamato dall'host solo dopo l'assestamento. */
+    fun startPendingLinkedRoll() {
+        val pending = pendingLinkedRoll ?: return
+        if (pending.started) return
+        pendingLinkedRoll = pending.copy(started = true)
+        diceTrayResult = DiceTrayResult(pending.id, DiceLinkMode.LINKED, pending.rolls)
+    }
+
+    fun commitPendingLinkedRoll(id: Long) {
+        val pending = pendingLinkedRoll?.takeIf { it.id == id && it.started } ?: return
+        val current = session.currentState()
+        if (current.revision() != pending.baseRevision || current.randomState() != pending.baseRandomState) {
+            cancelPendingLinkedRoll()
+            say { it.dice.staleLinkedRoll }
+            return
+        }
+        val commit = pendingDiceCommit?.takeIf { it.id == id }?.commit ?: return
+        pendingLinkedRoll = null
+        pendingDiceCommit = null
+        diceLinkMode = DiceLinkMode.UNLINKED
+        commit()
+    }
+
+    /** Mostra, senza attendere input, i dadi prodotti dall'ultimo comando della CPU. */
+    internal fun presentAutomatedDice(events: List<app.d6d.domain.combat.CombatEvent>) {
+        if (diceRollVisibility != DiceRollVisibility.VISIBLE || pendingLinkedRoll != null) return
+        val rolls = presentedRollsFromEvents(events)
+        if (rolls.isEmpty()) return
+        diceTrayResult = DiceTrayResult(++diceSequence, DiceLinkMode.LINKED, rolls)
+        diceTrayOpen = true
+    }
+
+    /**
+     * Esegue il comando su una copia con lo stesso stato RNG. Il clone scopre
+     * l'intera sequenza (critici, danni, salvezze e concentrazione compresi),
+     * mentre la sessione viva resta immutata fino al commit dopo l'animazione.
+     */
+    private fun prepareVisibleDiceAction(
+        preview: (CombatSession) -> Unit,
+        commit: () -> Unit,
+    ) {
+        if (diceRollVisibility == DiceRollVisibility.HIDDEN) {
+            commit()
+            return
+        }
+        if (rejectMutationWhileEnemyCpuPending()) return
+        if (pendingLinkedRoll != null) {
+            diceTrayOpen = true
+            return
+        }
+        val base = session.currentState()
+        val clone = CombatSession.restore(base, session.auditTrail()).also {
+            it.setBlockedCells(session.blockedCells())
+        }
+        val before = clone.auditTrail().size
+        val rolls = try {
+            preview(clone)
+            presentedRollsFromEvents(clone.auditTrail().drop(before))
+        } catch (failure: CombatRuleException) {
+            say(ruleMessage(failure.message))
+            return
+        } catch (failure: IllegalArgumentException) {
+            say(ruleMessage(failure.message))
+            return
+        } catch (failure: IllegalStateException) {
+            say(ruleMessage(failure.message))
+            return
+        }
+        if (rolls.isEmpty()) {
+            commit()
+            return
+        }
+        val id = ++diceSequence
+        pendingLinkedRoll = PendingLinkedRoll(
+            id = id,
+            baseRevision = base.revision(),
+            baseRandomState = base.randomState(),
+            rolls = rolls,
+        )
+        pendingDiceCommit = PendingDiceCommit(id, commit)
+        diceLinkMode = DiceLinkMode.LINKED
+        diceTrayResult = null
+        diceTrayOpen = true
+        say(null)
+    }
 
     fun addRosterCombatant(actor: ActorDefinition, party: Boolean): String? {
         if (!editMode) {
@@ -701,6 +899,16 @@ class BattleViewModel(
 
     /** Esegue un attacco sul bersaglio esplicito, senza alcun ripiego automatico. */
     private fun attack(attacker: String, target: String, abilityId: String) {
+        val requestedMode = rollMode
+        prepareVisibleDiceAction(
+            preview = { previewSession ->
+                previewSession.attack(AttackRequest.digital(attacker, target, abilityId, requestedMode))
+            },
+            commit = { attackNow(attacker, target, abilityId, requestedMode) },
+        )
+    }
+
+    private fun attackNow(attacker: String, target: String, abilityId: String, requestedMode: D20Mode) {
         val definitionId = combatant(attacker)?.snapshot()?.definitionId() ?: return
         val ability = abilities(attacker).firstOrNull { it.id() == abilityId }
         val consumesResource = ability?.resourceCost()?.let { it > 0 } == true
@@ -713,7 +921,7 @@ class BattleViewModel(
             val abilityName = ability?.name() ?: abilityId
             val targetName = name(target)
             val targetArmorClass = combatant(target)?.snapshot()?.armorClass()
-            val result = session.attack(AttackRequest.digital(attacker, target, abilityId, rollMode))
+            val result = session.attack(AttackRequest.digital(attacker, target, abilityId, requestedMode))
             if (consumesResource) {
                 persistCombatResourcesOrRollback(
                     attacker,
@@ -943,7 +1151,7 @@ class BattleViewModel(
             targetSelection = targetId
             val revisionBefore = state.revision()
             useHealingAbility(targeting.attackerId, targetId, ability)
-            if (state.revision() != revisionBefore) singleTargeting = null
+            if (state.revision() != revisionBefore || pendingLinkedRoll != null) singleTargeting = null
             return
         }
         if (sanitizeTargetFor(targeting.attackerId, targetId) == null) {
@@ -961,13 +1169,26 @@ class BattleViewModel(
         targetSelection = targetId
         val revisionBefore = state.revision()
         attack(targeting.attackerId, targetId, targeting.abilityId)
-        if (state.revision() != revisionBefore) {
+        if (state.revision() != revisionBefore || pendingLinkedRoll != null) {
             singleTargeting = null
         }
     }
 
     /** Cura strutturata: costo, risorsa, gittata e formula vengono risolti dal motore. */
     private fun useHealingAbility(
+        healerId: String,
+        targetId: String,
+        ability: AbilityDefinition,
+    ) {
+        prepareVisibleDiceAction(
+            preview = { previewSession ->
+                previewSession.useHealingAbility(healerId, targetId, ability.id())
+            },
+            commit = { useHealingAbilityNow(healerId, targetId, ability) },
+        )
+    }
+
+    private fun useHealingAbilityNow(
         healerId: String,
         targetId: String,
         ability: AbilityDefinition,
@@ -1073,28 +1294,37 @@ class BattleViewModel(
                 },
             )
         } else {
-            val definitionId = combatant(targeting.casterId)?.snapshot()?.definitionId() ?: return
-            val consumesResource = abilities(targeting.casterId)
-                .firstOrNull { it.id() == targeting.abilityId }
-                ?.resourceCost()
-                ?.let { it > 0 } == true
-            val undoEffect = if (consumesResource) {
-                UndoEffect.ResourceChange(targeting.casterId, definitionId)
-            } else {
-                UndoEffect.None
-            }
-            command(undoEffect) {
-                val result = session.castArea(targeting.casterId, center, targeting.abilityId)
-                if (consumesResource) {
-                    persistCombatResourcesOrRollback(
-                        targeting.casterId,
-                        definitionId,
-                        AppLocale.current.battle.areaResourceNotSaved,
-                    )
-                }
-                pushAreaResult(result)
-            }
+            prepareVisibleDiceAction(
+                preview = { previewSession ->
+                    previewSession.castArea(targeting.casterId, center, targeting.abilityId)
+                },
+                commit = { resolveAreaNow(targeting, center) },
+            )
             areaTargeting = null
+        }
+    }
+
+    private fun resolveAreaNow(targeting: AreaTargeting, center: GridPosition) {
+        val definitionId = combatant(targeting.casterId)?.snapshot()?.definitionId() ?: return
+        val consumesResource = abilities(targeting.casterId)
+            .firstOrNull { it.id() == targeting.abilityId }
+            ?.resourceCost()
+            ?.let { it > 0 } == true
+        val undoEffect = if (consumesResource) {
+            UndoEffect.ResourceChange(targeting.casterId, definitionId)
+        } else {
+            UndoEffect.None
+        }
+        command(undoEffect) {
+            val result = session.castArea(targeting.casterId, center, targeting.abilityId)
+            if (consumesResource) {
+                persistCombatResourcesOrRollback(
+                    targeting.casterId,
+                    definitionId,
+                    AppLocale.current.battle.areaResourceNotSaved,
+                )
+            }
+            pushAreaResult(result)
         }
     }
 
@@ -1122,19 +1352,29 @@ class BattleViewModel(
         } else {
             UndoEffect.None
         }
-        command(undoEffect) {
-            val saved = pending.targets.associate { it.combatantId to it.saved }
-            val result = session.castAreaManual(pending.casterId, pending.center, pending.abilityId, saved)
-            if (consumesResource) {
-                persistCombatResourcesOrRollback(
-                    pending.casterId,
-                    definitionId,
-                    AppLocale.current.battle.areaResourceNotSaved,
-                )
-            }
-            pushAreaResult(result)
+        val saved = pending.targets.associate { it.combatantId to it.saved }
+        val revisionBefore = state.revision()
+        prepareVisibleDiceAction(
+            preview = { previewSession ->
+                previewSession.castAreaManual(pending.casterId, pending.center, pending.abilityId, saved)
+            },
+            commit = {
+                command(undoEffect) {
+                    val result = session.castAreaManual(pending.casterId, pending.center, pending.abilityId, saved)
+                    if (consumesResource) {
+                        persistCombatResourcesOrRollback(
+                            pending.casterId,
+                            definitionId,
+                            AppLocale.current.battle.areaResourceNotSaved,
+                        )
+                    }
+                    pushAreaResult(result)
+                }
+            },
+        )
+        if (state.revision() != revisionBefore || pendingLinkedRoll != null) {
+            pendingArea = null
         }
-        pendingArea = null
     }
 
     private fun pushAreaResult(result: AreaSpellResult) {
@@ -1289,27 +1529,45 @@ class BattleViewModel(
         targetId: String,
         amount: Int,
         damageType: DamageType = DamageType.FORCE,
-    ) = command {
-        val result = session.applyDamage(
-            activeActorId.orEmpty(),
-            targetId,
-            listOf(DamageComponent(damageType, amount)),
-            false,
+    ) {
+        val sourceId = activeActorId.orEmpty()
+        val components = listOf(DamageComponent(damageType, amount))
+        prepareVisibleDiceAction(
+            preview = { previewSession ->
+                previewSession.applyDamage(sourceId, targetId, components, false)
+            },
+            commit = {
+                command {
+                    val result = session.applyDamage(sourceId, targetId, components, false)
+                    if (result.totalAdjustedDamage() > 0) {
+                        push(
+                            targetId,
+                            FloatingNumber(++floatSequence, "-${result.totalAdjustedDamage()}", FloatKind.DAMAGE),
+                        )
+                    }
+                }
+            },
         )
-        if (result.totalAdjustedDamage() > 0) {
-            push(targetId, FloatingNumber(++floatSequence, "-${result.totalAdjustedDamage()}", FloatKind.DAMAGE))
-        }
     }
 
-    fun rollDeathSave(targetId: String) = command {
-        val result = session.rollDeathSave(targetId, D20RollInput.digital())
-        val words = AppLocale.current.battle
-        val label = when {
-            result.dead() -> words.dead
-            result.stable() -> words.stable
-            else -> words.deathSaves(result.successes(), result.failures())
-        }
-        push(targetId, floatInfo(label))
+    fun rollDeathSave(targetId: String) {
+        prepareVisibleDiceAction(
+            preview = { previewSession ->
+                previewSession.rollDeathSave(targetId, D20RollInput.digital())
+            },
+            commit = {
+                command {
+                    val result = session.rollDeathSave(targetId, D20RollInput.digital())
+                    val words = AppLocale.current.battle
+                    val label = when {
+                        result.dead() -> words.dead
+                        result.stable() -> words.stable
+                        else -> words.deathSaves(result.successes(), result.failures())
+                    }
+                    push(targetId, floatInfo(label))
+                }
+            },
+        )
     }
 
     /**
@@ -1318,12 +1576,27 @@ class BattleViewModel(
      * Usa la modalità d20 già scelta nella barra dei comandi; il motore aggiunge
      * Sfinimento e l'eventuale Svantaggio imposto dall'armatura.
      */
-    fun rollAbilityCheck(combatantId: String, ability: SaveAbility, modifier: Int) = command {
-        session.rollAbilityCheck(
-            combatantId,
-            ability,
-            modifier,
-            D20RollInput.digital(rollMode),
+    fun rollAbilityCheck(combatantId: String, ability: SaveAbility, modifier: Int) {
+        val requestedMode = rollMode
+        prepareVisibleDiceAction(
+            preview = { previewSession ->
+                previewSession.rollAbilityCheck(
+                    combatantId,
+                    ability,
+                    modifier,
+                    D20RollInput.digital(requestedMode),
+                )
+            },
+            commit = {
+                command {
+                    session.rollAbilityCheck(
+                        combatantId,
+                        ability,
+                        modifier,
+                        D20RollInput.digital(requestedMode),
+                    )
+                }
+            },
         )
     }
 
@@ -1592,13 +1865,158 @@ class BattleViewModel(
         session.setBlockedCells(blocked)
     }
 
+    // --- attivazione delle creature -------------------------------------------------
+
+    /**
+     * Muri e raggi di vista posseduti dal Lucido.
+     *
+     * Il motore non conosce né gli uni né gli altri: la vista è del documento
+     * Board, e arriva qui dalla stessa notifica che gli sincronizza i muri.
+     */
+    private var boardWalls: WallMask = WallMask.empty(0, 0)
+    private var boardVision: VisionSettings = VisionSettings.defaults()
+
+    private var awarenessEnabledState by mutableStateOf(true)
+
+    /**
+     * Se le creature debbano aspettare di accorgersi del gruppo prima di agire.
+     *
+     * Spegnerla sveglia subito tutti: un interruttore che lasciasse addormentato
+     * mezzo incontro sarebbe un modo silenzioso di bloccare il combattimento.
+     * Riaccenderla riaddormenta chi in quel momento non vede e non è visto.
+     */
+    var awarenessEnabled: Boolean
+        get() = awarenessEnabledState
+        set(value) {
+            if (awarenessEnabledState == value) return
+            awarenessEnabledState = value
+            if (value) sleepUnawareCreatures() else refreshAwareness()
+        }
+
+    /** Vero se la creatura è nell'incontro ma non si è ancora accorta del gruppo. */
+    fun isDormant(combatantId: String): Boolean = state.dormant(combatantId)
+
+    val dormantCombatantIds: Set<String> get() = state.dormantCombatantIds()
+
+    /**
+     * Decisione manuale del master.
+     *
+     * Riaddormentare una creatura che in quel momento vede il gruppo, o che il
+     * gruppo vede, non regge oltre l'istante: la vigilanza la risveglia subito.
+     * È il verso giusto in cui perdere — meglio un mostro che torna attivo di uno
+     * che resta immobile mentre i personaggi gli passano davanti.
+     */
+    fun setDormant(combatantId: String, dormant: Boolean) {
+        if (dormant) session.markDormant(combatantId) else session.awaken(listOf(combatantId))
+        state = session.currentState()
+    }
+
+    /** Sincronizza nel motore i muri e i raggi di vista posseduti dalla Board. */
+    fun setBoardSight(walls: WallMask, vision: VisionSettings) {
+        val changed = walls != boardWalls || vision != boardVision
+        boardWalls = walls
+        boardVision = vision
+        setBlockedCells(walls)
+        // Aprire una porta o allungare un raggio cambia chi vede cosa, esattamente
+        // come muovere una pedina.
+        if (changed) refreshAwareness()
+    }
+
+    private fun standing(combatantId: String): Boolean =
+        combatant(combatantId)?.let { !it.defeated() && !it.dead() } == true
+
+    /** Gli occhi di un combattente collocato: il raggio è quello della sua scheda di mappa. */
+    private fun viewerOf(combatantId: String): VisionViewer? {
+        val placement = placementOf(combatantId) ?: return null
+        val feetPerSquare = state.battleMap().grid().feetPerSquare()
+        return VisionViewer(
+            combatantId = combatantId,
+            placement = placement,
+            radiusSquares = VisionField.radiusSquares(boardVision.radiusFeetFor(combatantId), feetPerSquare),
+        )
+    }
+
+    /** Chi della squadra è in piedi e sulla mappa: sono gli unici occhi che contano. */
+    private fun partyEyes(): List<VisionViewer> =
+        partyIds.filter(::standing).mapNotNull(::viewerOf)
+
+    /**
+     * Sveglia chi si è appena accorto del gruppo.
+     *
+     * Gira dopo ogni comando, perché ogni comando può spostare un occhio o un
+     * corpo. Non riaddormenta nessuno: chi ha visto il gruppo lo sa anche dopo che
+     * i personaggi sono rientrati dietro l'angolo.
+     */
+    private fun refreshAwareness() {
+        val dormant = state.dormantCombatantIds()
+        if (dormant.isEmpty()) return
+        if (!awarenessEnabled || !state.battleMap().configured()) {
+            adoptAwakened(session.awaken(dormant))
+            return
+        }
+        // Chi non è più sulla mappa non può essere notato da nessuno: lasciarlo
+        // inattivo lo toglierebbe dal combattimento per sempre.
+        val unplaced = dormant.filter { placementOf(it) == null }
+        val sleepers = dormant.mapNotNull(::viewerOf)
+        val noticed = awareOfParty(partyEyes(), sleepers, boardWalls)
+        adoptAwakened(session.awaken(unplaced + noticed))
+    }
+
+    private fun adoptAwakened(woken: List<String>) {
+        if (woken.isEmpty()) return
+        state = session.currentState()
+        val names = woken.filter { !isParty(it) }.map(::name)
+        if (names.isEmpty()) return
+        say { it.battle.creaturesNoticedParty(names.joinToString(", ")) }
+    }
+
+    /**
+     * Rende inattivo chi entra in scena senza essersi accorto di niente.
+     *
+     * Vale a inizio combattimento, quando una creatura viene collocata sulla mappa
+     * a incontro avviato e quando il master riaccende l'attivazione. Non è
+     * continua di proposito: se girasse a ogni comando, un mostro che ha inseguito
+     * il gruppo fin dietro l'angolo si dimenticherebbe di lui.
+     */
+    fun sleepUnawareCreatures() {
+        if (!awarenessEnabled || !state.battleMap().configured()) return
+        val eyes = partyEyes()
+        // Senza un solo personaggio in piedi sulla mappa nessuno può accorgersi di
+        // niente, e addormentare l'incontro intero lo bloccherebbe.
+        if (eyes.isEmpty()) return
+        val candidates = state.rosterOrder()
+            .filter { !isParty(it) && !state.dormant(it) }
+            .mapNotNull(::viewerOf)
+        if (candidates.isEmpty()) return
+        val noticed = awareOfParty(eyes, candidates, boardWalls)
+        val sleeping = candidates.map { it.combatantId }.filterNot { it in noticed }
+        if (sleeping.isEmpty()) return
+        sleeping.forEach { session.markDormant(it) }
+        state = session.currentState()
+    }
+
+    /** La stessa regola per una sola creatura, quando entra in scena da sola. */
+    private fun sleepIfUnaware(combatantId: String) {
+        if (!awarenessEnabled || isParty(combatantId) || !state.battleMap().configured()) return
+        val eyes = partyEyes()
+        if (eyes.isEmpty()) return
+        val viewer = viewerOf(combatantId) ?: return
+        if (awareOfParty(eyes, listOf(viewer), boardWalls).isNotEmpty()) return
+        if (session.markDormant(combatantId)) state = session.currentState()
+    }
+
     /** Colloca lo sfondo sulla griglia (misure in caselle). Un passo annullabile. */
     fun setMapBackgroundTransform(offsetX: Double, offsetY: Double, width: Double, height: Double) = command {
         session.setMapBackgroundTransform(offsetX, offsetY, width, height)
     }
 
-    fun place(combatantId: String, column: Int, row: Int, squaresPerSide: Int) = command {
-        session.placeCombatant(combatantId, GridPosition(column, row), squaresPerSide)
+    fun place(combatantId: String, column: Int, row: Int, squaresPerSide: Int) {
+        // Entrare in scena e cambiare posto non sono la stessa cosa: solo la prima
+        // collocazione puo' rendere inattiva una creatura, altrimenti spostare un
+        // mostro gia' sveglio lo farebbe tornare ignaro del gruppo.
+        val entering = placementOf(combatantId) == null
+        command { session.placeCombatant(combatantId, GridPosition(column, row), squaresPerSide) }
+        if (entering) sleepIfUnaware(combatantId)
     }
 
     /** Riposizionamento di preparazione: non consuma il movimento del turno. */
@@ -1717,6 +2135,7 @@ class BattleViewModel(
         }
         put("editMode", editMode.toString())
         put("mapEditMode", mapEditMode.toString())
+        put("awareness", awarenessEnabled.toString())
         if (footprints.isNotEmpty()) {
             put("footprints", footprints.entries.joinToString(",") { "${it.key}=${it.value}" })
         }
@@ -1756,6 +2175,12 @@ class BattleViewModel(
 
     /** Sostituisce il combattimento con quello caricato dal disco. */
     fun adopt(loaded: CombatSession, presentation: Map<String, String>) {
+        // Una chiusura linked appartiene alla precisa istanza su cui e' stata
+        // preparata. Anche due sessioni con la stessa revisione e lo stesso seed
+        // non possono scambiarsela quando si cambia scheda o si carica un salvataggio.
+        cancelPendingLinkedRoll()
+        diceTrayResult = null
+        diceTrayOpen = false
         session = loaded
         sessionGeneration++
         // Il vecchio coroutine puo' ancora uscire dalla propria pausa. Staccarlo
@@ -1780,6 +2205,10 @@ class BattleViewModel(
         say(null)
         editMode = presentation["editMode"] == "true"
         mapEditMode = editMode && presentation["mapEditMode"] == "true"
+        // Assente vuol dire acceso: una partita salvata prima dell'attivazione
+        // riapre con le creature gia' sveglie, perche' il motore non ne conosce
+        // nessuna inattiva, e da li' in poi la regola vale come per le altre.
+        awarenessEnabledState = presentation["awareness"] != "false"
         activeActorSelection = null
         inspectionSelection = null
         targetSelection = null
@@ -2146,6 +2575,7 @@ class BattleViewModel(
         if (movementReachVisible && !movementReachAvailable) {
             movementReachVisible = false
         }
+        refreshAwareness()
     }
 
     private fun sanitizeTarget(candidate: String?): String? {
