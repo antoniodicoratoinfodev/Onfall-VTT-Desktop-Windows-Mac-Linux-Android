@@ -222,12 +222,14 @@ interface BattleStrings {
     val spellSlots: String
     val pactSlotsCapitalized: String
     val pactSlots: String
+    val classResourcesCapitalized: String
     val maxHitPointsAbbrev: String
     val currentHitPointsAbbrev: String
     val initiativeAbbrev: String
     fun combatantNamed(name: String): String
     fun openFullSheetOf(name: String): String
     fun slotsRemaining(kind: String, level: Int, remaining: Int, total: Int): String
+    fun classResourceRemaining(name: String, remaining: Int, total: Int): String
 
     // --- Barre di stato -------------------------------------------------------
 

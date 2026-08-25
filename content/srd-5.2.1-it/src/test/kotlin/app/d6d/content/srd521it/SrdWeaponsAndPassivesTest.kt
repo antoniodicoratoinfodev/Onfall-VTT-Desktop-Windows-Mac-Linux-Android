@@ -6,8 +6,12 @@ import app.d6d.rules.character.Ability
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceKind
 import app.d6d.rules.character.ChoiceSelection
+import app.d6d.rules.character.CharacterProgression
+import app.d6d.rules.character.ClassLevelState
 import app.d6d.rules.character.ExperienceProgression
 import app.d6d.rules.character.LevelUpRequest
+import app.d6d.rules.character.RecoveryPeriod
+import app.d6d.rules.character.ResourcePoolState
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.WeaponCategory
 import app.d6d.rules.character.WeaponProperty
@@ -19,6 +23,9 @@ import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.GuidedCharacterService
+import app.d6d.sheet.PACT_SLOT_RESOURCE_PREFIX
+import app.d6d.sheet.SpellSlot
+import app.d6d.sheet.Spellcasting
 import app.d6d.sheet.toWeaponEntry
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -224,6 +231,38 @@ class SrdWeaponsAndPassivesTest {
         assertEquals(1, surge.resourceCost())
         assertEquals(1, resource.maximum())
         assertEquals(0, resource.spent())
+    }
+
+    @Test
+    fun `le capacita del warlock consumano lo slot del patto mostrato in combattimento`() {
+        val mirrorId = "srd521-it:resource:warlock:slot-magia-del-patto"
+        val smiteId = "srd521-it:feature:warlock:punizione-occulta"
+        val sheet = CharacterSheet(
+            progression = CharacterProgression(
+                classLevels = listOf(ClassLevelState(CharacterClassId.WARLOCK, 5)),
+                selectedFeatureIds = listOf(smiteId),
+                resourcePools = listOf(
+                    ResourcePoolState(
+                        resourceId = mirrorId,
+                        name = "Slot di Magia del patto",
+                        maximum = 2,
+                        recovery = RecoveryPeriod.SHORT_OR_LONG_REST,
+                    ),
+                ),
+            ),
+            spellcasting = Spellcasting(
+                pactSlots = SpellSlot(level = 3, total = 2),
+            ),
+            abilityIds = listOf(smiteId),
+        )
+
+        val actor = sheet.toActorDefinition(abilityCatalog = Srd521ItContent.catalog)
+        val pactId = "${PACT_SLOT_RESOURCE_PREFIX}3"
+
+        assertEquals(pactId, actor.ability(smiteId).resourceId())
+        assertEquals(1, actor.ability(smiteId).resourceCost())
+        assertEquals(listOf(pactId), actor.resources().map { it.id() })
+        assertEquals(2, actor.resources().single().remaining())
     }
 
     @Test

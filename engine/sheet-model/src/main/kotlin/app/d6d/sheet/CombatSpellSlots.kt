@@ -6,6 +6,14 @@ import app.d6d.domain.combat.SpellSlotResourceId
 const val SPELL_SLOT_RESOURCE_PREFIX = SpellSlotResourceId.STANDARD_PREFIX
 const val PACT_SLOT_RESOURCE_PREFIX = SpellSlotResourceId.PACT_PREFIX
 
+/**
+ * Vecchia risorsa tabellare del pacchetto SRD, oggi rappresentata in modo
+ * autorevole da [SpellSlotResourceId.Kind.PACT] insieme al livello dello slot.
+ */
+private const val WARLOCK_PACT_SLOT_MIRROR_SUFFIX = ":resource:warlock:slot-magia-del-patto"
+
+fun String.isPactSlotMirrorResourceId(): Boolean = endsWith(WARLOCK_PACT_SLOT_MIRROR_SUFFIX)
+
 /** Livello dello slot fotografato come risorsa da combattimento, oppure null. */
 fun CombatResourceState.spellSlotLevelOrNull(): Int? {
     return SpellSlotResourceId.parse(id()).orElse(null)?.level()

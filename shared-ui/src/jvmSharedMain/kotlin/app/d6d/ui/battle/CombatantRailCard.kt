@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.CombatResourceState
 import app.d6d.sheet.isPactSpellSlot
+import app.d6d.sheet.isPactSlotMirrorResourceId
 import app.d6d.sheet.spellSlotLevelOrNull
 import app.d6d.ui.components.CombatantPortrait
 import app.d6d.ui.components.ConditionChip
@@ -229,9 +230,14 @@ fun CombatantRailCard(
             }
 
             if (faction == Faction.PARTY) {
-                val spellSlots = spellSlotIndicators(combatant.resources())
+                val combatResources = combatant.resources()
+                val spellSlots = spellSlotIndicators(combatResources)
                 if (spellSlots.isNotEmpty()) {
                     SpellSlotIndicators(spellSlots)
+                }
+                val classResources = classResourceIndicators(combatResources)
+                if (classResources.isNotEmpty()) {
+                    ClassResourceIndicators(classResources)
                 }
             }
 
@@ -273,6 +279,13 @@ internal data class SpellSlotIndicator(
     val remaining: Int,
 )
 
+internal data class ClassResourceIndicator(
+    val id: String,
+    val name: String,
+    val total: Int,
+    val remaining: Int,
+)
+
 /** Mantiene separati gli slot Incantesimo e del Patto anche quando hanno lo stesso livello. */
 internal fun spellSlotIndicators(resources: List<CombatResourceState>): List<SpellSlotIndicator> =
     resources
@@ -293,6 +306,34 @@ internal fun spellSlotIndicators(resources: List<CombatResourceState>): List<Spe
         }
         .filter { it.total > 0 }
         .sortedWith(compareBy<SpellSlotIndicator> { it.kind.ordinal }.thenBy { it.level })
+
+/**
+ * Le riserve limitate della progressione viaggiano nello stesso snapshot degli
+ * slot. Le separiamo solo nella presentazione, così Ira, Ispirazione bardica,
+ * Recuperare energie e le altre risorse non vengono confuse con livelli di
+ * incantesimo.
+ */
+internal fun classResourceIndicators(resources: List<CombatResourceState>): List<ClassResourceIndicator> =
+    resources
+        .asSequence()
+        .filter { it.spellSlotLevelOrNull() == null }
+        // La progressione del Warlock conserva anche la riga SRD della Magia del
+        // patto, ma lo snapshot possiede già gli slot canonici con il loro livello.
+        // Mostrarla di nuovo produrrebbe due contatori per la stessa riserva.
+        .filterNot { resource ->
+            resource.id().isPactSlotMirrorResourceId() &&
+                resources.any { it.isPactSpellSlot() }
+        }
+        .filter { it.maximum() > 0 }
+        .map {
+            ClassResourceIndicator(
+                id = it.id(),
+                name = it.name(),
+                total = it.maximum(),
+                remaining = it.remaining(),
+            )
+        }
+        .toList()
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -373,6 +414,88 @@ private fun SpellSlotSquare(
         }
     }
 }
+
+@Composable
+private fun ClassResourceIndicators(resources: List<ClassResourceIndicator>) {
+    val words = strings.battle
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.semantics {
+            contentDescription = resources.joinToString("; ") {
+                words.classResourceRemaining(it.name, it.remaining, it.total)
+            }
+        },
+    ) {
+        Text(
+            text = words.classResourcesCapitalized,
+            color = Palette.Gold,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        resources.forEach { resource ->
+            ClassResourceRow(resource)
+        }
+    }
+}
+
+@Composable
+private fun ClassResourceRow(resource: ClassResourceIndicator) {
+    val resourceColor = Palette.Gold
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(resourceColor.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+            .border(1.dp, resourceColor.copy(alpha = 0.65f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = resource.name,
+                color = Palette.Text,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "${resource.remaining}/${resource.total}",
+                color = resourceColor,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        if (resource.total <= MAX_CLASS_RESOURCE_PIPS) {
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                repeat(resource.total) { index ->
+                    val available = index < resource.remaining
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .then(
+                                if (available) {
+                                    Modifier.background(resourceColor, RoundedCornerShape(1.dp))
+                                } else {
+                                    Modifier.border(
+                                        1.dp,
+                                        Palette.TextFaint,
+                                        RoundedCornerShape(1.dp),
+                                    )
+                                },
+                            ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private const val MAX_CLASS_RESOURCE_PIPS = 8
 
 /**
  * Testata della carta: ritratto, nome e statistiche.

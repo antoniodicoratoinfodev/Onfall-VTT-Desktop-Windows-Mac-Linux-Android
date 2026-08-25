@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -18,12 +19,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.rules.character.RecoveryPeriod
 import app.d6d.content.srd521it.SrdBeastForm
 import app.d6d.sheet.CharacterSheet
+import app.d6d.sheet.isPactSlotMirrorResourceId
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.i18n.label
@@ -102,7 +105,10 @@ internal fun ProgressionOverview(
             }
         }
 
-        val visibleResourcePools = sheet.progression.resourcePools.filter { it.maximum > 0 }
+        val hasPactSlots = sheet.spellcasting?.pactSlots?.total?.let { it > 0 } == true
+        val visibleResourcePools = sheet.progression.resourcePools
+            .filter { it.maximum > 0 }
+            .filterNot { hasPactSlots && it.resourceId.isPactSlotMirrorResourceId() }
         if (visibleResourcePools.isNotEmpty()) {
             Text(words.classResourcesCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
             FlowRow(
@@ -131,8 +137,21 @@ internal fun ProgressionOverview(
                             color = Palette.TextMuted,
                             style = MaterialTheme.typography.labelSmall,
                         )
-                        PipRow(pool.maximum, pool.spent, color = Palette.Gold) {
-                            viewModel.setCharacterResourceSpent(pool.resourceId, it)
+                        if (pool.maximum <= MAX_EDITABLE_RESOURCE_PIPS) {
+                            PipRow(pool.maximum, pool.spent, color = Palette.Gold) {
+                                viewModel.setCharacterResourceSpent(pool.resourceId, it)
+                            }
+                        } else {
+                            LargeResourceEditor(
+                                remaining = pool.remaining,
+                                maximum = pool.maximum,
+                                onSetRemaining = { remaining ->
+                                    viewModel.setCharacterResourceSpent(
+                                        pool.resourceId,
+                                        pool.maximum - remaining,
+                                    )
+                                },
+                            )
                         }
                     }
                 }
@@ -181,6 +200,41 @@ internal fun ProgressionOverview(
         )
     }
 }
+
+@Composable
+private fun LargeResourceEditor(
+    remaining: Int,
+    maximum: Int,
+    onSetRemaining: (Int) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        GameButton(
+            label = "−1",
+            dense = true,
+            accent = Palette.TextMuted,
+            enabled = remaining > 0,
+            onClick = { onSetRemaining(remaining - 1) },
+        )
+        Text(
+            text = "$remaining/$maximum",
+            color = Palette.Gold,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        GameButton(
+            label = "+1",
+            dense = true,
+            accent = Palette.TextMuted,
+            enabled = remaining < maximum,
+            onClick = { onSetRemaining(remaining + 1) },
+        )
+    }
+}
+
+private const val MAX_EDITABLE_RESOURCE_PIPS = 9
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

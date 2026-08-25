@@ -53,4 +53,62 @@ class SpellSlotIndicatorsTest {
             ).isEmpty(),
         )
     }
+
+    @Test
+    fun `le risorse di classe diventano contatori distinti dagli slot`() {
+        val indicators = classResourceIndicators(
+            listOf(
+                CombatResourceState("${SPELL_SLOT_RESOURCE_PREFIX}1", "Slot 1", 4, 1),
+                CombatResourceState("ispirazione", "Ispirazione bardica", 4, 1),
+                CombatResourceState("recuperare-energie", "Recuperare energie", 3, 3),
+                CombatResourceState("inattiva", "Risorsa inattiva", 0, 0),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                ClassResourceIndicator(
+                    id = "ispirazione",
+                    name = "Ispirazione bardica",
+                    total = 4,
+                    remaining = 3,
+                ),
+                ClassResourceIndicator(
+                    id = "recuperare-energie",
+                    name = "Recuperare energie",
+                    total = 3,
+                    remaining = 0,
+                ),
+            ),
+            indicators,
+        )
+    }
+
+    @Test
+    fun `la risorsa tabellare del warlock non duplica gli slot del patto`() {
+        val indicators = classResourceIndicators(
+            listOf(
+                CombatResourceState(
+                    "srd521-it:resource:warlock:slot-magia-del-patto",
+                    "Slot di Magia del patto",
+                    2,
+                    0,
+                ),
+                CombatResourceState("${PACT_SLOT_RESOURCE_PREFIX}3", "Slot del patto 3", 2, 1),
+                CombatResourceState("arcanum", "Arcanum mistico (6º)", 1, 0),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                ClassResourceIndicator(
+                    id = "arcanum",
+                    name = "Arcanum mistico (6º)",
+                    total = 1,
+                    remaining = 1,
+                ),
+            ),
+            indicators,
+        )
+    }
 }

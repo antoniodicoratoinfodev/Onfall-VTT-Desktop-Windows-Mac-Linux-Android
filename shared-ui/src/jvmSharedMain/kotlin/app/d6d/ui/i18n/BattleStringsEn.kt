@@ -250,6 +250,7 @@ internal object BattleStringsEn : BattleStrings {
     override val spellSlots = "Spell slots"
     override val pactSlotsCapitalized = "PACT SLOTS"
     override val pactSlots = "Pact slots"
+    override val classResourcesCapitalized = "CLASS RESOURCES"
     override val maxHitPointsAbbrev = "Max HP"
     override val currentHitPointsAbbrev = "Cur. HP"
     override val initiativeAbbrev = "Init."
@@ -258,6 +259,8 @@ internal object BattleStringsEn : BattleStrings {
     override fun openFullSheetOf(name: String) = "Open $name's full sheet"
     override fun slotsRemaining(kind: String, level: Int, remaining: Int, total: Int) =
         "$kind level $level: $remaining of $total remaining"
+    override fun classResourceRemaining(name: String, remaining: Int, total: Int) =
+        "$name: $remaining of $total remaining"
 
     // --- Barre di stato -------------------------------------------------------
 

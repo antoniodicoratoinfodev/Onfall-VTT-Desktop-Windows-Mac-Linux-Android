@@ -907,6 +907,9 @@ data class CharacterSheet(
         }
         val weaponIds = combatAbilities.mapTo(mutableSetOf()) { it.id() }
         val healingClassLevels = progression.classLevels.associate { it.classId to it.level }
+        val pactSlotResourceId = spellcasting?.pactSlots
+            ?.takeIf { it.total > 0 }
+            ?.let { app.d6d.domain.combat.SpellSlotResourceId.pact(it.level).id() }
         val catalogAbilities = abilityIds
             .distinct()
             .mapNotNull { selectedId -> abilityCatalog.firstOrNull { it.id == selectedId } }
@@ -921,13 +924,25 @@ data class CharacterSheet(
                 } else {
                     ability
                 }
-                val classCastingAbility = resolved.classEligibility
+                // Le vecchie progressioni conservano gli slot del Patto anche
+                // come risorsa di classe senza livello. In combattimento esiste
+                // una sola fonte autorevole: lo slot canonico con il livello
+                // corrente, usato anche dal contatore mostrato nell'interfaccia.
+                val resourceResolved = if (
+                    resolved.resourceId?.isPactSlotMirrorResourceId() == true &&
+                    pactSlotResourceId != null
+                ) {
+                    resolved.copy(resourceId = pactSlotResourceId)
+                } else {
+                    resolved
+                }
+                val classCastingAbility = resourceResolved.classEligibility
                     .asSequence()
                     .filter { progression.levelIn(it.classId) >= it.minimumLevel }
                     .mapNotNull { spellcasting?.abilitiesByClass?.get(it.classId) }
                     .firstOrNull()
                 val effectiveCastingAbility = classCastingAbility ?: spellcasting?.ability
-                resolved.toDefinition(
+                resourceResolved.toDefinition(
                     rulesetVersion,
                     HealingFormulaContext(
                         spellcastingAbilityModifier = effectiveCastingAbility?.let(::modifier) ?: 0,
@@ -962,6 +977,9 @@ data class CharacterSheet(
             buildList {
                 progression.resourcePools
                     .filter { it.maximum > 0 }
+                    .filterNot {
+                        pactSlotResourceId != null && it.resourceId.isPactSlotMirrorResourceId()
+                    }
                     .mapTo(this) {
                         CombatResourceState(it.resourceId, it.name, it.maximum, it.spent)
                     }
