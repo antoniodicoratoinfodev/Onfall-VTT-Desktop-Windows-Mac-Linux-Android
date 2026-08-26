@@ -114,6 +114,21 @@ public final class AtomicJsonStore {
     }
 
     /**
+     * Deletes the current document, leaving versioned backups untouched.
+     *
+     * <p>The path is the same validated path used by every other operation on
+     * this store. Callers therefore do not need to rebuild it from an unchecked
+     * base name.</p>
+     */
+    public synchronized boolean deleteCurrent() throws IOException {
+        boolean deleted = Files.deleteIfExists(dataFile);
+        if (deleted) {
+            AtomicFiles.forceDirectoryBestEffort(dataDirectory);
+        }
+        return deleted;
+    }
+
+    /**
      * Exports the validated current object to {@code destination}. The export
      * itself also uses a same-directory temporary file and replacing move.
      */

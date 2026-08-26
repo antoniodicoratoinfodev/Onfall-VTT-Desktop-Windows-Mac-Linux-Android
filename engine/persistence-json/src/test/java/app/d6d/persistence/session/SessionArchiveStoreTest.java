@@ -197,6 +197,17 @@ class SessionArchiveStoreTest {
     }
 
     @Test
+    void eliminareRifiutaUnPercorsoInveceDiUscireDallArchivio() throws IOException {
+        SessionArchiveStore store = store();
+        Path outside = directory.resolve("fuori.json");
+        Files.writeString(outside, "da non cancellare");
+
+        assertThrows(IllegalArgumentException.class, () -> store.delete("../fuori"));
+
+        assertTrue(Files.exists(outside));
+    }
+
+    @Test
     void unFileDanneggiatoNonImpedisceDiVedereGliAltri() throws IOException {
         SessionArchiveStore store = store();
         store.save("buona", session(1L), Map.of());

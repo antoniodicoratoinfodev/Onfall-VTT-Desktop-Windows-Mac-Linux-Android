@@ -180,7 +180,7 @@ public final class SessionArchiveStore {
     }
 
     public synchronized void delete(String slug) throws IOException {
-        Files.deleteIfExists(directory.resolve(slug + ".json"));
+        store(slug).deleteCurrent();
     }
 
     private SessionSummary readSummary(String slug) throws IOException {

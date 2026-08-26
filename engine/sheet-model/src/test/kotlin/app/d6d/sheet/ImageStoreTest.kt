@@ -312,6 +312,18 @@ class ImageStoreTest {
     }
 
     @Test
+    fun `una mappa inclusa non puo usare un percorso come nome`() {
+        val outside = dataDirectory.resolve("fuga.png")
+        Files.write(outside, pngHeader(1, 1))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            store().writeMapImage("../fuga.png", pngHeader(1, 1))
+        }
+
+        assertArrayEquals(pngHeader(1, 1), Files.readAllBytes(outside))
+    }
+
+    @Test
     fun `una mappa inclusa non copre un ritratto che si chiama allo stesso modo`() {
         // `resolve` cerca prima fra le mappe: scritta col nome di un ritratto gia'
         // esistente, la mappa glielo nasconderebbe, e al posto della faccia di un

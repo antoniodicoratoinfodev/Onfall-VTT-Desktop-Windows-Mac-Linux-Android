@@ -80,7 +80,12 @@ class ImageStore(private val dataDirectory: Path) {
     fun importImage(
         source: Path,
         language: AppLanguage = AppLanguage.ITALIAN,
-        destination: Path = imagesDirectory,
+    ): String = importImageInto(source, language, imagesDirectory)
+
+    private fun importImageInto(
+        source: Path,
+        language: AppLanguage,
+        destination: Path,
     ): String {
         require(Files.isRegularFile(source)) {
             language.pick("Il file non esiste: $source", "The file does not exist: $source")
@@ -129,7 +134,7 @@ class ImageStore(private val dataDirectory: Path) {
 
     /** Copia un'immagine nella cartella delle mappe e ne restituisce il nome interno. */
     fun importMapImage(source: Path, language: AppLanguage = AppLanguage.ITALIAN): String =
-        importImage(source, language, mapsDirectory)
+        importImageInto(source, language, mapsDirectory)
 
     /**
      * Scrive fra le mappe un'immagine che arriva dal pacchetto dell'applicazione.
@@ -150,6 +155,9 @@ class ImageStore(private val dataDirectory: Path) {
      * il nome restituito, non quello che aveva chiesto.
      */
     fun writeMapImage(preferredName: String, bytes: ByteArray): String {
+        require(isArchiveName(preferredName)) {
+            "Il nome della mappa deve essere un nome di file semplice: $preferredName"
+        }
         if (Files.isRegularFile(mapsDirectory.resolve(preferredName))) return preferredName
         Files.createDirectories(mapsDirectory)
         val name = uniqueName(preferredName)
@@ -212,9 +220,7 @@ class ImageStore(private val dataDirectory: Path) {
      * spostare i file di nessuno.
      */
     fun resolve(name: String): Path? {
-        if (name.isBlank()) return null
-        // Solo nomi semplici: un percorso relativo non deve poter uscire dall'archivio.
-        if (name.contains('/') || name.contains('\\') || name.contains("..")) return null
+        if (!isArchiveName(name)) return null
         return sequenceOf(mapsDirectory, imagesDirectory)
             .map { it.resolve(name) }
             .firstOrNull { Files.isRegularFile(it) }
@@ -241,6 +247,14 @@ class ImageStore(private val dataDirectory: Path) {
     fun deleteImage(name: String) {
         resolve(name)?.let { Files.deleteIfExists(it) }
     }
+
+    /** Solo nomi semplici: un percorso relativo non deve poter uscire dall'archivio. */
+    private fun isArchiveName(name: String): Boolean =
+        name.isNotBlank() &&
+            !name.contains('/') &&
+            !name.contains('\\') &&
+            !name.contains("..") &&
+            !name.contains('\u0000')
 
     fun loadMapLibrary(): MapLibrary {
         if (!Files.exists(mapLibraryFile) && !Files.exists(mapLibraryBackup)) return MapLibrary()

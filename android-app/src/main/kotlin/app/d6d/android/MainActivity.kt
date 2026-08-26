@@ -28,6 +28,7 @@ import app.d6d.ui.AppRoot
 import app.d6d.ui.images.FilePicker
 import app.d6d.ui.i18n.AppLocale
 import app.d6d.ui.theme.Palette
+import app.d6d.sheet.ImageStore
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -171,10 +172,24 @@ class MainActivity : ComponentActivity() {
         )
         val input = contentResolver.openInputStream(uri)
             ?: throw IOException(AppLocale.current.maps.imageProviderReturnedNoData)
-        input.use { source ->
-            Files.newOutputStream(temporary).use(source::copyTo)
+        try {
+            input.use { source ->
+                Files.newOutputStream(temporary).use { destination ->
+                    try {
+                        source.copyToLimited(destination, ImageStore.MAX_IMAGE_BYTES)
+                    } catch (tooLarge: InputSizeLimitExceededException) {
+                        throw IOException(
+                            AppLocale.current.maps.imageTooLarge(ImageStore.maxSizeLabel),
+                            tooLarge,
+                        )
+                    }
+                }
+            }
+            return temporary
+        } catch (failure: Throwable) {
+            runCatching { Files.deleteIfExists(temporary) }
+            throw failure
         }
-        return temporary
     }
 
     private fun supportedExtension(displayName: String?): String? = displayName

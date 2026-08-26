@@ -53,4 +53,11 @@ dependencies {
     implementation(libs.androidx.compose.material3)
 
     coreLibraryDesugaring(libs.android.desugar.jdk.libs)
+
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }

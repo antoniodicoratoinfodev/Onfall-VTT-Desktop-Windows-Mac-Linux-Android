@@ -37,6 +37,7 @@ interface MapStrings {
     fun mapsCount(count: Int): String
     fun deleteMapBody(name: String): String
     fun formatsAndLimit(formats: String, maxSize: String): String
+    fun imageTooLarge(maxSize: String): String
     fun mapAdded(name: String): String
     fun mapDeleted(name: String): String
     fun cannotOpenImage(detail: String): String
@@ -82,6 +83,8 @@ internal object MapStringsIt : MapStrings {
     override fun deleteMapBody(name: String) = "«$name» verrà rimossa dall'archivio. " +
         "Le partite che la usano come sfondo resteranno senza immagine."
     override fun formatsAndLimit(formats: String, maxSize: String) = "$formats · max $maxSize"
+    override fun imageTooLarge(maxSize: String) =
+        "L'immagine selezionata supera il limite di $maxSize."
     override fun mapAdded(name: String) = "Mappa «$name» aggiunta all'archivio."
     override fun mapDeleted(name: String) = "Mappa «$name» eliminata."
     override fun cannotOpenImage(detail: String) = "Impossibile aprire l'immagine: $detail"
@@ -127,6 +130,8 @@ internal object MapStringsEn : MapStrings {
     override fun deleteMapBody(name: String) = "“$name” will be removed from the archive. " +
         "Games using it as a backdrop will be left without an image."
     override fun formatsAndLimit(formats: String, maxSize: String) = "$formats · max $maxSize"
+    override fun imageTooLarge(maxSize: String) =
+        "The selected image exceeds the $maxSize limit."
     override fun mapAdded(name: String) = "Map “$name” added to the archive."
     override fun mapDeleted(name: String) = "Map “$name” deleted."
     override fun cannotOpenImage(detail: String) = "Could not open the image: $detail"
