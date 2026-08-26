@@ -324,38 +324,51 @@ class RosterViewModel(
         return true
     }
 
-    /** Conserva nella scheda risorse e slot spesi (o ripristinati con Undo). */
+    /** Conserva nella scheda massimo e usi spesi delle risorse (anche dopo Undo). */
     fun applyCombatResources(
         definitionId: String,
         resources: List<CombatResourceState>,
     ): Boolean {
         val character = sheets.library.characters.firstOrNull { it.id == definitionId }
             ?: return true
-        val spentById = resources.associate { it.id() to it.spent() }
+        val resourcesById = resources.associateBy { it.id() }
         val updatedPools = character.progression.resourcePools.map { pool ->
-            val spent = spentById[pool.resourceId] ?: return@map pool
-            pool.copy(spent = spent.coerceIn(0, pool.maximum))
+            val resource = resourcesById[pool.resourceId] ?: return@map pool
+            pool.copy(
+                maximum = resource.maximum(),
+                spent = resource.spent().coerceIn(0, resource.maximum()),
+            )
         }
         val casting = character.spellcasting
-        val standardSlotSpent = resources
+        val standardSlots = resources
             .filterNot { it.isPactSpellSlot() }
             .mapNotNull { resource ->
-                resource.spellSlotLevelOrNull()?.let { level -> level to resource.spent() }
+                resource.spellSlotLevelOrNull()?.let { level -> level to resource }
             }
             .toMap()
-        val pactSlotSpent = resources
+        val pactSlot = resources
             .firstOrNull { it.isPactSpellSlot() }
-            ?.let { resource -> resource.spellSlotLevelOrNull()?.let { it to resource.spent() } }
+            ?.let { resource -> resource.spellSlotLevelOrNull()?.let { it to resource } }
         val updatedCasting = casting?.copy(
             slots = casting.slots.map { slot ->
-                standardSlotSpent[slot.level]
-                    ?.let { slot.copy(spent = it.coerceIn(0, slot.total)) }
+                standardSlots[slot.level]
+                    ?.let {
+                        slot.copy(
+                            total = it.maximum(),
+                            spent = it.spent().coerceIn(0, it.maximum()),
+                        )
+                    }
                     ?: slot
             },
             pactSlots = casting.pactSlots?.let { slot ->
-                pactSlotSpent
+                pactSlot
                     ?.takeIf { it.first == slot.level }
-                    ?.let { slot.copy(spent = it.second.coerceIn(0, slot.total)) }
+                    ?.let {
+                        slot.copy(
+                            total = it.second.maximum(),
+                            spent = it.second.spent().coerceIn(0, it.second.maximum()),
+                        )
+                    }
                     ?: slot
             },
         )
@@ -365,7 +378,7 @@ class RosterViewModel(
         ) {
             return true
         }
-        return sheets.upsertCharacterSilently(
+        return sheets.upsertCharacterResourcesSilently(
             character.copy(
                 progression = character.progression.copy(resourcePools = updatedPools),
                 spellcasting = updatedCasting,

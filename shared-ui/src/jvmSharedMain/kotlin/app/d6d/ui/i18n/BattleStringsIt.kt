@@ -267,6 +267,21 @@ internal object BattleStringsIt : BattleStrings {
         "$kind livello $level: $remaining rimanenti su $total"
     override fun classResourceRemaining(name: String, remaining: Int, total: Int) =
         "$name: $remaining rimanenti su $total"
+    override val editResourcesHint = "TOCCA UNA RISORSA PER CORREGGERLA"
+    override val resourceEditorEyebrow = "CORREZIONE AL TAVOLO"
+    override val availableQuantity = "Disponibili"
+    override val maximumQuantity = "Massimo"
+    override val resourceQuantityHelp =
+        "Imposta quanti usi restano e la capienza totale. La modifica aggiorna anche la scheda."
+    override val turnResourceQuantityHelp =
+        "Le risorse del turno valgono 0 se spese e 1 se disponibili."
+    override val exhaustResource = "Esaurisci"
+    override val restoreResource = "Ripristina"
+    override val resourceCorrectionNotSaved = "La correzione della risorsa non è stata salvata"
+    override fun editResourceFor(resource: String, combatant: String) =
+        "$resource · $combatant"
+    override fun decreaseQuantity(label: String) = "Riduci $label"
+    override fun increaseQuantity(label: String) = "Aumenta $label"
 
     // --- Barre di stato -------------------------------------------------------
 

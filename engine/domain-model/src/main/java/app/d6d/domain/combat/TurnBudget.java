@@ -187,4 +187,35 @@ public record TurnBudget(
                 additionalActionMagicRestricted, actionSurgeUsedThisTurn,
                 attackActionInProgress);
     }
+
+    /**
+     * Corregge al tavolo la disponibilita' di una risorsa 0/1 senza ricostruire
+     * o azzerare il resto del turno. In particolare gli attacchi ancora compresi
+     * in un'Azione di Attacco e l'eventuale azione aggiuntiva restano distinti.
+     */
+    public TurnBudget withAvailability(TurnResource resource, boolean available) {
+        if (resource == null) throw new IllegalArgumentException("Turn resource is required");
+        return new TurnBudget(
+                movementAllowanceFeet,
+                movementSpentFeet,
+                resource == TurnResource.ACTION ? available : actionAvailable,
+                resource == TurnResource.BONUS_ACTION ? available : bonusActionAvailable,
+                resource == TurnResource.REACTION ? available : reactionAvailable,
+                objectInteractionAvailable,
+                attacksRemaining,
+                spellSlotSpentThisTurn,
+                additionalActionAvailable,
+                additionalActionMagicRestricted,
+                actionSurgeUsedThisTurn,
+                attackActionInProgress);
+    }
+
+    public boolean available(TurnResource resource) {
+        if (resource == null) throw new IllegalArgumentException("Turn resource is required");
+        return switch (resource) {
+            case ACTION -> actionAvailable;
+            case BONUS_ACTION -> bonusActionAvailable;
+            case REACTION -> reactionAvailable;
+        };
+    }
 }

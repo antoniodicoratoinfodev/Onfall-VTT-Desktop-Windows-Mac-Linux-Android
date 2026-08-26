@@ -198,6 +198,8 @@ private val EventType.tint: Color
         EventType.DIED -> Palette.Critical
         EventType.EXHAUSTION_CHANGED -> Palette.Enemy
         EventType.COMBATANT_EDITED,
+        EventType.COMBAT_RESOURCE_SET,
+        EventType.TURN_RESOURCE_SET,
         EventType.COMBATANT_TRANSFORMED,
         -> Palette.Party
         EventType.COMBATANT_MOVED, EventType.COMBATANT_PLACED -> Palette.Party
@@ -427,6 +429,26 @@ internal fun CombatEvent.describe(viewModel: BattleViewModel, strings: Strings):
             after = detail("after"),
             d20Penalty = detail("d20Penalty"),
             speedPenalty = detail("speedPenaltyFeet").asDistance(language),
+        )
+
+        EventType.COMBAT_RESOURCE_SET -> words.combatResourceSet(
+            actor = actor,
+            resource = detail("resourceName").ifBlank { detail("resourceId") },
+            previousRemaining = detail("previousRemaining"),
+            remaining = detail("remaining"),
+            previousMaximum = detail("previousMaximum"),
+            maximum = detail("maximum"),
+        )
+        EventType.TURN_RESOURCE_SET -> words.turnResourceSet(
+            actor = actor,
+            resource = when (detail("resource")) {
+                "ACTION" -> strings.glossary.action
+                "BONUS_ACTION" -> strings.battle.bonusActionLabel
+                "REACTION" -> strings.glossary.reaction
+                else -> detail("resource")
+            },
+            before = detail("before"),
+            after = detail("after"),
         )
 
         EventType.COMBATANT_EDITED -> {

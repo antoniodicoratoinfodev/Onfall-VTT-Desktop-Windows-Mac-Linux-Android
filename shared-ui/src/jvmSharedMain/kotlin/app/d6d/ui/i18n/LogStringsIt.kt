@@ -220,6 +220,19 @@ internal object LogStringsIt : LogStrings {
     override val statInitiative = "Iniziativa"
     override val statConstitutionSave = "TS Cos"
 
+    override fun combatResourceSet(
+        actor: String,
+        resource: String,
+        previousRemaining: String,
+        remaining: String,
+        previousMaximum: String,
+        maximum: String,
+    ) = "$actor corregge $resource: disponibili $previousRemaining→$remaining, " +
+        "massimo $previousMaximum→$maximum"
+
+    override fun turnResourceSet(actor: String, resource: String, before: String, after: String) =
+        "$actor corregge $resource: $before→$after"
+
     override fun combatantEdited(rename: String, changes: String, version: String) = buildString {
         append("Scheda corretta: ").append(rename)
         if (changes.isNotEmpty()) append(" — ").append(changes)

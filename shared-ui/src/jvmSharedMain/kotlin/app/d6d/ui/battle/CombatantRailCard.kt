@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.CombatResourceState
+import app.d6d.domain.combat.TurnResource
 import app.d6d.sheet.isPactSpellSlot
 import app.d6d.sheet.isPactSlotMirrorResourceId
 import app.d6d.sheet.spellSlotLevelOrNull
@@ -86,6 +88,13 @@ fun CombatantRailCard(
     val inspected = viewModel.inspectedCombatantId == combatantId
     val defeated = combatant.defeated() || combatant.dead()
     val budget = viewModel.budget(combatantId)
+    var resourceEditor by remember(combatantId) {
+        mutableStateOf<ResourceEditorTarget?>(null)
+    }
+
+    LaunchedEffect(viewModel.editMode) {
+        if (!viewModel.editMode) resourceEditor = null
+    }
 
     val shape = RoundedCornerShape(10.dp)
     val outline = when {
@@ -95,6 +104,7 @@ fun CombatantRailCard(
         else -> Modifier.border(1.dp, Palette.Line, shape)
     }
     val words = strings.battle
+    val activationWords = strings.glossary
     val cardState = buildString {
         append(words.hitPointsSentence(combatant.currentHitPoints(), snapshot.maxHitPoints()))
         if (targeted) append(words.selectedTargetSentence)
@@ -220,24 +230,85 @@ fun CombatantRailCard(
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodySmall,
                 )
-                if (active && budget != null) {
+                if ((active || viewModel.editMode) && budget != null) {
                     ResourcePips(
                         actionAvailable = budget.actionAvailable(),
                         bonusAvailable = budget.bonusActionAvailable(),
                         reactionAvailable = budget.reactionAvailable(),
+                        editable = viewModel.editMode,
+                        onActionClick = {
+                            resourceEditor = ResourceEditorTarget.Turn(
+                                TurnResource.ACTION,
+                                activationWords.action,
+                                budget.actionAvailable(),
+                                Palette.Gold,
+                            )
+                        },
+                        onBonusClick = {
+                            resourceEditor = ResourceEditorTarget.Turn(
+                                TurnResource.BONUS_ACTION,
+                                words.bonusActionLabel,
+                                budget.bonusActionAvailable(),
+                                Palette.Party,
+                            )
+                        },
+                        onReactionClick = {
+                            resourceEditor = ResourceEditorTarget.Turn(
+                                TurnResource.REACTION,
+                                activationWords.reaction,
+                                budget.reactionAvailable(),
+                                Palette.Heal,
+                            )
+                        },
                     )
                 }
             }
 
-            if (faction == Faction.PARTY) {
-                val combatResources = combatant.resources()
+            val combatResources = combatant.resources()
+            if (viewModel.editMode && (budget != null || combatResources.isNotEmpty())) {
+                Text(
+                    text = "✎  ${words.editResourcesHint}",
+                    color = Palette.Heal,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+
+            // In gioco normale il dettaglio resta nella colonna della squadra;
+            // in Modifica compare anche sui nemici, perche' una correzione del
+            // tavolo deve poter raggiungere ogni risorsa presente nell'incontro.
+            if (faction == Faction.PARTY || viewModel.editMode) {
                 val spellSlots = spellSlotIndicators(combatResources)
                 if (spellSlots.isNotEmpty()) {
-                    SpellSlotIndicators(spellSlots)
+                    SpellSlotIndicators(
+                        slots = spellSlots,
+                        editing = viewModel.editMode,
+                        onEdit = { slot ->
+                            resourceEditor = ResourceEditorTarget.Pool(
+                                id = slot.resourceId,
+                                name = slot.name,
+                                remaining = slot.remaining,
+                                maximum = slot.total,
+                                accent = if (slot.kind == SpellSlotKind.PACT) Palette.Gold else Palette.Party,
+                            )
+                        },
+                    )
                 }
                 val classResources = classResourceIndicators(combatResources)
                 if (classResources.isNotEmpty()) {
-                    ClassResourceIndicators(classResources)
+                    ClassResourceIndicators(
+                        resources = classResources,
+                        editing = viewModel.editMode,
+                        onEdit = { resource ->
+                            resourceEditor = ResourceEditorTarget.Pool(
+                                id = resource.id,
+                                name = resource.name,
+                                remaining = resource.remaining,
+                                maximum = resource.total,
+                                accent = Palette.Gold,
+                            )
+                        },
+                    )
                 }
             }
 
@@ -251,6 +322,30 @@ fun CombatantRailCard(
                     }
                 }
             }
+        }
+
+        resourceEditor?.let { target ->
+            ResourceQuantityEditor(
+                target = target,
+                combatantName = snapshot.name(),
+                onConfirm = { remaining, maximum ->
+                    when (target) {
+                        is ResourceEditorTarget.Pool -> viewModel.setCombatResourceQuantities(
+                            combatantId = combatantId,
+                            resourceId = target.id,
+                            remaining = remaining,
+                            maximum = maximum,
+                        )
+                        is ResourceEditorTarget.Turn -> viewModel.setTurnResourceAvailable(
+                            combatantId,
+                            target.resource,
+                            remaining > 0,
+                        )
+                    }
+                    resourceEditor = null
+                },
+                onDismiss = { resourceEditor = null },
+            )
         }
     }
 }
@@ -273,6 +368,8 @@ internal fun SpellSlotKind.accessibleLabel(strings: Strings): String = when (thi
 }
 
 internal data class SpellSlotIndicator(
+    val resourceId: String,
+    val name: String,
     val kind: SpellSlotKind,
     val level: Int,
     val total: Int,
@@ -298,6 +395,8 @@ internal fun spellSlotIndicators(resources: List<CombatResourceState>): List<Spe
         .groupBy({ it.first }, { it.second })
         .map { (kindAndLevel, sameKindAndLevel) ->
             SpellSlotIndicator(
+                resourceId = sameKindAndLevel.first().id(),
+                name = sameKindAndLevel.first().name(),
                 kind = kindAndLevel.first,
                 level = kindAndLevel.second,
                 total = sameKindAndLevel.sumOf { it.maximum() },
@@ -337,7 +436,11 @@ internal fun classResourceIndicators(resources: List<CombatResourceState>): List
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun SpellSlotIndicators(slots: List<SpellSlotIndicator>) {
+private fun SpellSlotIndicators(
+    slots: List<SpellSlotIndicator>,
+    editing: Boolean,
+    onEdit: (SpellSlotIndicator) -> Unit,
+) {
     val strings = strings
     Column(
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -369,7 +472,7 @@ private fun SpellSlotIndicators(slots: List<SpellSlotIndicator>) {
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     kindSlots.forEach { slot ->
-                        SpellSlotSquare(slot, slotColor)
+                        SpellSlotSquare(slot, slotColor, editing) { onEdit(slot) }
                     }
                 }
             }
@@ -382,12 +485,30 @@ private fun SpellSlotIndicators(slots: List<SpellSlotIndicator>) {
 private fun SpellSlotSquare(
     slot: SpellSlotIndicator,
     slotColor: Color,
+    editing: Boolean,
+    onEdit: () -> Unit,
 ) {
+    val shape = RoundedCornerShape(6.dp)
     Column(
         modifier = Modifier
             .size(44.dp)
-            .background(slotColor.copy(alpha = 0.10f), RoundedCornerShape(6.dp))
-            .border(1.dp, slotColor.copy(alpha = 0.9f), RoundedCornerShape(6.dp))
+            .background(slotColor.copy(alpha = if (editing) 0.16f else 0.10f), shape)
+            .border(
+                if (editing) 1.5.dp else 1.dp,
+                if (editing) Palette.Heal else slotColor.copy(alpha = 0.9f),
+                shape,
+            )
+            .then(
+                if (editing) {
+                    Modifier.clickable(
+                        role = Role.Button,
+                        onClickLabel = slot.name,
+                        onClick = onEdit,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -398,25 +519,45 @@ private fun SpellSlotSquare(
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
         )
-        FlowRow(
-            modifier = Modifier.width(28.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-            maxItemsInEachRow = 4,
-        ) {
-            repeat(slot.remaining) {
-                Box(
-                    Modifier
-                        .size(5.dp)
-                        .background(slotColor, RoundedCornerShape(1.dp)),
-                )
+        if (slot.total <= MAX_SPELL_SLOT_PIPS) {
+            FlowRow(
+                modifier = Modifier.width(28.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                maxItemsInEachRow = 4,
+            ) {
+                repeat(slot.total) { index ->
+                    val available = index < slot.remaining
+                    Box(
+                        Modifier
+                            .size(5.dp)
+                            .then(
+                                if (available) {
+                                    Modifier.background(slotColor, RoundedCornerShape(1.dp))
+                                } else {
+                                    Modifier.border(1.dp, Palette.TextFaint, RoundedCornerShape(1.dp))
+                                },
+                            ),
+                    )
+                }
             }
+        } else {
+            Text(
+                text = "${slot.remaining}/${slot.total}",
+                color = slotColor,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelSmall,
+            )
         }
     }
 }
 
 @Composable
-private fun ClassResourceIndicators(resources: List<ClassResourceIndicator>) {
+private fun ClassResourceIndicators(
+    resources: List<ClassResourceIndicator>,
+    editing: Boolean,
+    onEdit: (ClassResourceIndicator) -> Unit,
+) {
     val words = strings.battle
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -433,19 +574,39 @@ private fun ClassResourceIndicators(resources: List<ClassResourceIndicator>) {
             style = MaterialTheme.typography.labelSmall,
         )
         resources.forEach { resource ->
-            ClassResourceRow(resource)
+            ClassResourceRow(resource, editing) { onEdit(resource) }
         }
     }
 }
 
 @Composable
-private fun ClassResourceRow(resource: ClassResourceIndicator) {
+private fun ClassResourceRow(
+    resource: ClassResourceIndicator,
+    editing: Boolean,
+    onEdit: () -> Unit,
+) {
     val resourceColor = Palette.Gold
+    val shape = RoundedCornerShape(6.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(resourceColor.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
-            .border(1.dp, resourceColor.copy(alpha = 0.65f), RoundedCornerShape(6.dp))
+            .background(resourceColor.copy(alpha = if (editing) 0.13f else 0.08f), shape)
+            .border(
+                if (editing) 1.5.dp else 1.dp,
+                if (editing) Palette.Heal else resourceColor.copy(alpha = 0.65f),
+                shape,
+            )
+            .then(
+                if (editing) {
+                    Modifier.clickable(
+                        role = Role.Button,
+                        onClickLabel = resource.name,
+                        onClick = onEdit,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = 6.dp, vertical = 5.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -496,6 +657,7 @@ private fun ClassResourceRow(resource: ClassResourceIndicator) {
 }
 
 private const val MAX_CLASS_RESOURCE_PIPS = 8
+private const val MAX_SPELL_SLOT_PIPS = 8
 
 /**
  * Testata della carta: ritratto, nome e statistiche.

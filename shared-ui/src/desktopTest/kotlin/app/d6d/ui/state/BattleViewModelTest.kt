@@ -19,6 +19,7 @@ import app.d6d.domain.combat.HealingTarget
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import app.d6d.domain.combat.SpellSlotResourceId
+import app.d6d.domain.combat.TurnResource
 import app.d6d.engine.CombatSession
 import app.d6d.engine.ai.EnemyCpuActionReport
 import app.d6d.engine.ai.EnemyCpuActionType
@@ -175,6 +176,49 @@ class BattleViewModelTest {
             session.markReady()
             session.start()
         }
+    }
+
+    @Test
+    fun `la correzione di una risorsa aggiorna massimo disponibile persistenza e undo`() {
+        val persisted = mutableListOf<Pair<Int, Int>>()
+        val model = BattleViewModel(
+            actionSurgeSession(),
+            resourceSink = CombatResourceSink { _, resources ->
+                resources.single { it.id() == ACTION_SURGE_RESOURCE }.let {
+                    persisted += it.maximum() to it.remaining()
+                }
+            },
+        )
+
+        model.setCombatResourceQuantities("fighter", ACTION_SURGE_RESOURCE, remaining = 2, maximum = 3)
+
+        val corrected = model.combatant("fighter")!!.resources().single()
+        assertEquals(3, corrected.maximum())
+        assertEquals(2, corrected.remaining())
+        assertEquals(listOf(3 to 2), persisted)
+        assertTrue(model.events.any { it.type() == EventType.COMBAT_RESOURCE_SET })
+
+        model.undo()
+
+        val restored = model.combatant("fighter")!!.resources().single()
+        assertEquals(1, restored.maximum())
+        assertEquals(1, restored.remaining())
+        assertEquals(listOf(3 to 2, 1 to 1), persisted)
+    }
+
+    @Test
+    fun `le correzioni di azione bonus e reazione restano indipendenti`() {
+        val model = BattleViewModel(actionSurgeSession())
+
+        model.setTurnResourceAvailable("fighter", TurnResource.BONUS_ACTION, false)
+
+        assertTrue(model.budget("fighter")!!.actionAvailable())
+        assertFalse(model.budget("fighter")!!.bonusActionAvailable())
+        assertTrue(model.budget("fighter")!!.reactionAvailable())
+        assertTrue(model.events.any { it.type() == EventType.TURN_RESOURCE_SET })
+
+        model.undo()
+        assertTrue(model.budget("fighter")!!.bonusActionAvailable())
     }
 
     /** Due segnalini dalla stessa scheda: la quantita' scelta nel wizard dell'incontro. */

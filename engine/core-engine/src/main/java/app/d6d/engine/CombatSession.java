@@ -39,6 +39,7 @@ import app.d6d.domain.combat.ResolutionMethod;
 import app.d6d.domain.combat.RollSource;
 import app.d6d.domain.combat.SpellSlotResourceId;
 import app.d6d.domain.combat.TurnBudget;
+import app.d6d.domain.combat.TurnResource;
 import app.d6d.domain.space.TokenPlacement;
 import app.d6d.domain.space.MapGrid;
 import app.d6d.domain.space.GridPosition;
@@ -931,6 +932,58 @@ public final class CombatSession {
         if (hitPoints == 0 && !wasDead) {
             append(EventType.DIED, "", combatantId, details("cause", "manual current hit points edit"));
         }
+    }
+
+    /**
+     * Corregge massimo e quantita' disponibile di una risorsa limitata.
+     *
+     * <p>La risorsa deve gia' appartenere alla fotografia dell'incontro: questo
+     * comando corregge il contatore, non inventa nuove capacita'. La modifica e'
+     * registrata e annullabile come le altre correzioni decise al tavolo.</p>
+     */
+    public synchronized void setCombatResource(
+            String combatantId,
+            String resourceId,
+            int maximum,
+            int remaining) {
+        MutableCombatant target = combatant(combatantId);
+        requireText(resourceId, "resourceId");
+        CombatResourceState previous = target.resources.get(resourceId);
+        if (previous == null) throw rule("Unknown combat resource: " + resourceId);
+        if (maximum < 0 || remaining < 0 || remaining > maximum) {
+            throw rule("Available resource uses must be between 0 and the maximum");
+        }
+        if (previous.maximum() == maximum && previous.remaining() == remaining) return;
+
+        CombatResourceState updated = new CombatResourceState(
+                previous.id(), previous.name(), maximum, maximum - remaining);
+        beginCommand();
+        target.resources.put(resourceId, updated);
+        append(EventType.COMBAT_RESOURCE_SET, combatantId, "", details(
+                "resourceId", resourceId,
+                "resourceName", previous.name(),
+                "previousRemaining", previous.remaining(),
+                "remaining", remaining,
+                "previousMaximum", previous.maximum(),
+                "maximum", maximum));
+    }
+
+    /** Corregge una risorsa 0/1 del turno senza toccare le altre disponibilita'. */
+    public synchronized void setTurnResourceAvailable(
+            String combatantId,
+            TurnResource resource,
+            boolean available) {
+        combatant(combatantId);
+        Objects.requireNonNull(resource, "resource");
+        TurnBudget previous = budget(combatantId);
+        if (previous.available(resource) == available) return;
+
+        beginCommand();
+        state.turnBudgets.put(combatantId, previous.withAvailability(resource, available));
+        append(EventType.TURN_RESOURCE_SET, combatantId, "", details(
+                "resource", resource,
+                "before", previous.available(resource) ? 1 : 0,
+                "after", available ? 1 : 0));
     }
 
     /**

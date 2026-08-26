@@ -53,6 +53,10 @@ public enum EventType {
 
     /** Correzione dichiarata di una scheda durante lo scontro. */
     COMBATANT_EDITED,
+    /** Correzione dichiarata del massimo o degli usi residui di una risorsa. */
+    COMBAT_RESOURCE_SET,
+    /** Correzione dichiarata di Azione, Azione bonus o Reazione. */
+    TURN_RESOURCE_SET,
     /** Forma Selvatica o un'altra trasformazione esplicita del combattente. */
     COMBATANT_TRANSFORMED,
 

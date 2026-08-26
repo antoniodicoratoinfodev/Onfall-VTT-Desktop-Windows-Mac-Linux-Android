@@ -230,6 +230,18 @@ interface BattleStrings {
     fun openFullSheetOf(name: String): String
     fun slotsRemaining(kind: String, level: Int, remaining: Int, total: Int): String
     fun classResourceRemaining(name: String, remaining: Int, total: Int): String
+    val editResourcesHint: String
+    val resourceEditorEyebrow: String
+    val availableQuantity: String
+    val maximumQuantity: String
+    val resourceQuantityHelp: String
+    val turnResourceQuantityHelp: String
+    val exhaustResource: String
+    val restoreResource: String
+    val resourceCorrectionNotSaved: String
+    fun editResourceFor(resource: String, combatant: String): String
+    fun decreaseQuantity(label: String): String
+    fun increaseQuantity(label: String): String
 
     // --- Barre di stato -------------------------------------------------------
 

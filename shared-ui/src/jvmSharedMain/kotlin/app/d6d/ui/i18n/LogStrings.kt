@@ -172,6 +172,15 @@ interface LogStrings {
     val statSpeed: String
     val statInitiative: String
     val statConstitutionSave: String
+    fun combatResourceSet(
+        actor: String,
+        resource: String,
+        previousRemaining: String,
+        remaining: String,
+        previousMaximum: String,
+        maximum: String,
+    ): String
+    fun turnResourceSet(actor: String, resource: String, before: String, after: String): String
     fun combatantEdited(rename: String, changes: String, version: String): String
     fun combatantTransformed(
         actor: String,

@@ -391,21 +391,25 @@ class RosterViewModelTest {
             ),
         )
         assertTrue(roster.sheets.save())
+        roster.sheets.character = roster.sheets.character.copy(characterName = "Bozza non salvata")
 
         assertTrue(
             roster.applyCombatResources(
                 "pg-tarvos",
-                listOf(CombatResourceState(resourceId, "Azione impetuosa", 2, 1)),
+                listOf(CombatResourceState(resourceId, "Azione impetuosa", 3, 1)),
             ),
         )
 
         val sheetPool = roster.sheets.library.characters
             .first { it.id == "pg-tarvos" }
             .progression.resourcePools.single()
+        assertEquals(3, sheetPool.maximum)
         assertEquals(1, sheetPool.spent)
+        assertEquals("Bozza non salvata", roster.sheets.character.characterName)
+        assertEquals(3, roster.sheets.character.progression.resourcePools.single().maximum)
         assertEquals(
-            1,
-            catalogEntry("pg-tarvos")!!.combatDefinition().resources().single().spent(),
+            3,
+            catalogEntry("pg-tarvos")!!.combatDefinition().resources().single().maximum(),
         )
     }
 
@@ -428,8 +432,8 @@ class RosterViewModelTest {
             roster.applyCombatResources(
                 "pg-tarvos",
                 listOf(
-                    CombatResourceState("${SPELL_SLOT_RESOURCE_PREFIX}1", "Slot 1", 4, 2),
-                    CombatResourceState("${PACT_SLOT_RESOURCE_PREFIX}2", "Patto 2", 2, 1),
+                    CombatResourceState("${SPELL_SLOT_RESOURCE_PREFIX}1", "Slot 1", 5, 2),
+                    CombatResourceState("${PACT_SLOT_RESOURCE_PREFIX}2", "Patto 2", 3, 1),
                 ),
             ),
         )
@@ -437,17 +441,19 @@ class RosterViewModelTest {
         val casting = roster.sheets.library.characters
             .first { it.id == "pg-tarvos" }
             .spellcasting!!
+        assertEquals(5, casting.slots.first { it.level == 1 }.total)
         assertEquals(2, casting.slots.first { it.level == 1 }.spent)
+        assertEquals(3, casting.pactSlots!!.total)
         assertEquals(1, casting.pactSlots!!.spent)
 
         val catalogResources = catalogEntry("pg-tarvos")!!.combatDefinition().resources()
         assertEquals(
-            2,
-            catalogResources.single { it.id() == "${SPELL_SLOT_RESOURCE_PREFIX}1" }.spent(),
+            5,
+            catalogResources.single { it.id() == "${SPELL_SLOT_RESOURCE_PREFIX}1" }.maximum(),
         )
         assertEquals(
-            1,
-            catalogResources.single { it.id() == "${PACT_SLOT_RESOURCE_PREFIX}2" }.spent(),
+            3,
+            catalogResources.single { it.id() == "${PACT_SLOT_RESOURCE_PREFIX}2" }.maximum(),
         )
     }
 

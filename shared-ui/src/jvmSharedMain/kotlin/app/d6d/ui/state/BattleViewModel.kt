@@ -24,6 +24,7 @@ import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import app.d6d.domain.combat.SpellSlotResourceId
 import app.d6d.domain.combat.TurnBudget
+import app.d6d.domain.combat.TurnResource
 import app.d6d.domain.space.BattleMap
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
@@ -1625,6 +1626,40 @@ class BattleViewModel(
     fun setCurrentHitPoints(combatantId: String, value: Int) {
         val maximum = combatant(combatantId)?.snapshot()?.maxHitPoints() ?: return
         command { session.setCurrentHitPoints(combatantId, value.coerceIn(0, maximum)) }
+    }
+
+    /**
+     * Corregge il contatore di una risorsa dell'incontro e riallinea la scheda
+     * autorevole. Il massimo e' parte della correzione, non soltanto gli usi
+     * spesi: serve per slot personalizzati e riserve cambiate al tavolo.
+     */
+    fun setCombatResourceQuantities(
+        combatantId: String,
+        resourceId: String,
+        remaining: Int,
+        maximum: Int,
+    ) {
+        val combatant = combatant(combatantId) ?: return
+        val previous = combatant.resources().firstOrNull { it.id() == resourceId } ?: return
+        if (previous.remaining() == remaining && previous.maximum() == maximum) return
+        val definitionId = combatant.snapshot().definitionId()
+        command(UndoEffect.ResourceChange(combatantId, definitionId)) {
+            session.setCombatResource(combatantId, resourceId, maximum, remaining)
+            persistCombatResourcesOrRollback(
+                combatantId,
+                definitionId,
+                AppLocale.current.battle.resourceCorrectionNotSaved,
+            )
+        }
+    }
+
+    /** Corregge Azione, Azione bonus o Reazione come disponibilita' 0/1. */
+    fun setTurnResourceAvailable(
+        combatantId: String,
+        resource: TurnResource,
+        available: Boolean,
+    ) = command {
+        session.setTurnResourceAvailable(combatantId, resource, available)
     }
 
     fun grantTemporary(targetId: String, amount: Int) = command {

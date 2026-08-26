@@ -23,18 +23,24 @@ class SpellSlotIndicatorsTest {
         assertEquals(
             listOf(
                 SpellSlotIndicator(
+                    resourceId = "${SPELL_SLOT_RESOURCE_PREFIX}1",
+                    name = "Slot 1",
                     kind = SpellSlotKind.STANDARD,
                     level = 1,
                     total = 4,
                     remaining = 3,
                 ),
                 SpellSlotIndicator(
+                    resourceId = "${SPELL_SLOT_RESOURCE_PREFIX}2",
+                    name = "Slot 2",
                     kind = SpellSlotKind.STANDARD,
                     level = 2,
                     total = 3,
                     remaining = 0,
                 ),
                 SpellSlotIndicator(
+                    resourceId = "${PACT_SLOT_RESOURCE_PREFIX}2",
+                    name = "Patto 2",
                     kind = SpellSlotKind.PACT,
                     level = 2,
                     total = 2,

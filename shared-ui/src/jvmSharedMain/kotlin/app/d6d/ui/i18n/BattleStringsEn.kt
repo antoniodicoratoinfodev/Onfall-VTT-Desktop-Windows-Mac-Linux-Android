@@ -261,6 +261,21 @@ internal object BattleStringsEn : BattleStrings {
         "$kind level $level: $remaining of $total remaining"
     override fun classResourceRemaining(name: String, remaining: Int, total: Int) =
         "$name: $remaining of $total remaining"
+    override val editResourcesHint = "TAP A RESOURCE TO CORRECT IT"
+    override val resourceEditorEyebrow = "TABLE CORRECTION"
+    override val availableQuantity = "Available"
+    override val maximumQuantity = "Maximum"
+    override val resourceQuantityHelp =
+        "Set the uses left and the total capacity. The correction also updates the character sheet."
+    override val turnResourceQuantityHelp =
+        "Turn resources are 0 when spent and 1 when available."
+    override val exhaustResource = "Exhaust"
+    override val restoreResource = "Restore"
+    override val resourceCorrectionNotSaved = "The resource correction could not be saved"
+    override fun editResourceFor(resource: String, combatant: String) =
+        "$resource · $combatant"
+    override fun decreaseQuantity(label: String) = "Decrease $label"
+    override fun increaseQuantity(label: String) = "Increase $label"
 
     // --- Barre di stato -------------------------------------------------------
 

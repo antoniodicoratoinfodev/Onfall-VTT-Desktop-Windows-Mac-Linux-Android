@@ -482,6 +482,52 @@ class SheetViewModel(
     }
 
     /**
+     * Variante per i contatori corretti in combattimento.
+     *
+     * Se la stessa scheda ha una bozza aperta, massimo e spesa vengono fusi nella
+     * bozza invece di sostituirla: un successivo Salva non puo' quindi cancellare
+     * la correzione, ma conserva tutte le altre modifiche non ancora salvate.
+     */
+    fun upsertCharacterResourcesSilently(sheet: CharacterSheet): Boolean =
+        guard(LocalizedText { it.sheet.sheetUpdatedFromBattle }) {
+            val updatedLibrary = library.copy(
+                characters = library.characters.filterNot { it.id == sheet.id } + sheet,
+            )
+            store.save(updatedLibrary)
+            library = updatedLibrary
+            if (selectedId == sheet.id && kind == SheetKind.PERSONAGGIO) {
+                val poolsById = sheet.progression.resourcePools.associateBy { it.resourceId }
+                val updatedCasting = sheet.spellcasting
+                character = character.copy(
+                    progression = character.progression.copy(
+                        resourcePools = character.progression.resourcePools.map { draft ->
+                            poolsById[draft.resourceId]?.let { stored ->
+                                draft.copy(maximum = stored.maximum, spent = stored.spent)
+                            } ?: draft
+                        },
+                    ),
+                    spellcasting = character.spellcasting?.let { draft ->
+                        val slotsByLevel = updatedCasting?.slots.orEmpty().associateBy { it.level }
+                        draft.copy(
+                            slots = draft.slots.map { slot ->
+                                slotsByLevel[slot.level]?.let { stored ->
+                                    slot.copy(total = stored.total, spent = stored.spent)
+                                } ?: slot
+                            },
+                            pactSlots = draft.pactSlots?.let { pact ->
+                                updatedCasting?.pactSlots
+                                    ?.takeIf { it.level == pact.level }
+                                    ?.let { pact.copy(total = it.total, spent = it.spent) }
+                                    ?: pact
+                            },
+                        )
+                    },
+                )
+            }
+            onSaved?.invoke(SheetKind.PERSONAGGIO)
+        }
+
+    /**
      * Aggiorna soltanto l'inventario persistito, fondendolo nell'eventuale bozza
      * aperta della stessa scheda. Gli altri campi non salvati restano quindi
      * intatti e un salvataggio successivo non può cancellare il loot appena preso.

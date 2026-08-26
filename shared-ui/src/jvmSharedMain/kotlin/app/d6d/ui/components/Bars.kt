@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -35,7 +36,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -161,6 +164,10 @@ fun ResourcePips(
     bonusAvailable: Boolean,
     reactionAvailable: Boolean,
     modifier: Modifier = Modifier,
+    editable: Boolean = false,
+    onActionClick: () -> Unit = {},
+    onBonusClick: () -> Unit = {},
+    onReactionClick: () -> Unit = {},
 ) {
     val words = strings.battle
     val activation = strings.glossary
@@ -177,16 +184,67 @@ fun ResourcePips(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Pip(activation.actionInitial, actionAvailable, Palette.Gold, activation.action)
-        Pip(activation.bonusActionInitial, bonusAvailable, Palette.Party, words.bonusActionLabel)
-        Pip(activation.reactionInitial, reactionAvailable, Palette.Heal, activation.reaction)
+        Pip(
+            activation.actionInitial,
+            actionAvailable,
+            Palette.Gold,
+            activation.action,
+            editable,
+            onActionClick,
+        )
+        Pip(
+            activation.bonusActionInitial,
+            bonusAvailable,
+            Palette.Party,
+            words.bonusActionLabel,
+            editable,
+            onBonusClick,
+        )
+        Pip(
+            activation.reactionInitial,
+            reactionAvailable,
+            Palette.Heal,
+            activation.reaction,
+            editable,
+            onReactionClick,
+        )
     }
 }
 
 @Composable
-private fun Pip(letter: String, available: Boolean, activeColor: Color, label: String) {
+private fun Pip(
+    letter: String,
+    available: Boolean,
+    activeColor: Color,
+    label: String,
+    editable: Boolean,
+    onClick: () -> Unit,
+) {
     val color = if (available) activeColor else Palette.TextFaint
-    HoverLabel(label) {
+    val shape = RoundedCornerShape(5.dp)
+    HoverLabel(
+        label = label,
+        modifier = Modifier
+            .then(
+                if (editable) {
+                    Modifier
+                        .background(activeColor.copy(alpha = 0.09f), shape)
+                        .border(1.dp, activeColor.copy(alpha = 0.48f), shape)
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = label,
+                            onClick = onClick,
+                        )
+                        .padding(horizontal = 4.dp, vertical = 3.dp)
+                        .semantics {
+                            role = Role.Button
+                            stateDescription = if (available) "1/1" else "0/1"
+                        }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Canvas(Modifier.size(7.dp)) {
                 if (available) {
@@ -211,7 +269,11 @@ private fun Pip(letter: String, available: Boolean, activeColor: Color, label: S
  * mouse non esiste — ma l'API e' condivisa e resta innocua su Android.
  */
 @Composable
-private fun HoverLabel(label: String, content: @Composable () -> Unit) {
+private fun HoverLabel(
+    label: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     var visible by remember { mutableStateOf(false) }
@@ -227,7 +289,7 @@ private fun HoverLabel(label: String, content: @Composable () -> Unit) {
         }
     }
 
-    Box(Modifier.hoverable(interaction)) {
+    Box(modifier.hoverable(interaction)) {
         content()
         if (visible) {
             Popup(popupPositionProvider = position) {
