@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import app.d6d.ui.abilities.AbilityArchive
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.ClassIcon
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
 import app.d6d.ui.images.PortraitRepository
@@ -89,6 +90,7 @@ fun RosterScreen(
             is RosterNavigation.Select -> when (navigation.item.kind) {
                 RosterKind.PERSONAGGIO ->
                     viewModel.sheets.selectCharacter(navigation.item.id, discardUnsavedChanges = discard)
+                RosterKind.NPC,
                 RosterKind.CREATURA ->
                     viewModel.sheets.selectMonster(navigation.item.id, discardUnsavedChanges = discard)
             }
@@ -112,6 +114,26 @@ fun RosterScreen(
                 )
                 if (kindResult == SheetNavigationResult.APPLIED) {
                     viewModel.sheets.newSheet(discardUnsavedChanges = discard)
+                } else {
+                    kindResult
+                }
+            }
+
+            RosterNavigation.NewNpc -> {
+                val kindResult = viewModel.sheets.requestKind(
+                    SheetKind.MOSTRO,
+                    discardUnsavedChanges = discard,
+                )
+                if (kindResult == SheetNavigationResult.APPLIED) {
+                    viewModel.sheets.newSheet(discardUnsavedChanges = discard).also { result ->
+                        if (result == SheetNavigationResult.APPLIED) {
+                            viewModel.sheets.monster = viewModel.sheets.monster.copy(
+                                actorKind = app.d6d.sheet.StatBlockActorKind.NPC,
+                                npcDisposition = app.d6d.sheet.NpcDisposition.NEUTRAL,
+                                id = viewModel.sheets.monster.id.replaceFirst("mostro-", "npc-"),
+                            )
+                        }
+                    }
                 } else {
                     kindResult
                 }
@@ -144,6 +166,7 @@ fun RosterScreen(
             requestNavigation(
                 when (kind) {
                     RosterKind.PERSONAGGIO -> RosterNavigation.NewCharacter
+                    RosterKind.NPC -> RosterNavigation.NewNpc
                     RosterKind.CREATURA -> RosterNavigation.NewCreature
                 },
             )
@@ -156,6 +179,7 @@ fun RosterScreen(
             RosterKind.PERSONAGGIO ->
                 CharacterSheetEditor(viewModel.sheets, portraits, compact, editorModifier)
 
+            RosterKind.NPC,
             RosterKind.CREATURA ->
                 MonsterStatBlockEditor(viewModel.sheets, portraits, compact, editorModifier)
         }
@@ -187,6 +211,7 @@ fun RosterScreen(
                     RosterHeader(
                         compact = compact,
                         onNewCharacter = { requestNavigation(RosterNavigation.NewCharacter) },
+                        onNewNpc = { requestNavigation(RosterNavigation.NewNpc) },
                         onNewCreature = { requestNavigation(RosterNavigation.NewCreature) },
                     )
                     GoldenRule()
@@ -296,6 +321,7 @@ private fun RosterSectionBar(
 private sealed interface RosterNavigation {
     data class Select(val item: RosterItem) : RosterNavigation
     data object NewCharacter : RosterNavigation
+    data object NewNpc : RosterNavigation
     data object NewCreature : RosterNavigation
 }
 
@@ -304,6 +330,7 @@ private sealed interface RosterNavigation {
 private fun RosterHeader(
     compact: Boolean,
     onNewCharacter: () -> Unit,
+    onNewNpc: () -> Unit,
     onNewCreature: () -> Unit,
 ) {
     val strings = strings
@@ -319,6 +346,7 @@ private fun RosterHeader(
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 GameButton(words.addCharacter, accent = Palette.Party, onClick = onNewCharacter)
+                GameButton(words.addNpc, accent = Palette.Gold, onClick = onNewNpc)
                 GameButton(words.addCreature, accent = Palette.Enemy, onClick = onNewCreature)
             }
         }
@@ -330,6 +358,7 @@ private fun RosterHeader(
         ) {
             RosterTitle(Modifier.weight(1f))
             GameButton(words.addCharacter, accent = Palette.Party, onClick = onNewCharacter)
+            GameButton(words.addNpc, accent = Palette.Gold, onClick = onNewNpc)
             GameButton(words.addCreature, accent = Palette.Enemy, onClick = onNewCreature)
         }
     }
@@ -406,6 +435,7 @@ private fun RosterList(
     val words = strings.compendium
     val items = viewModel.items
     val people = items.filter { it.kind == RosterKind.PERSONAGGIO }
+    val npcs = items.filter { it.kind == RosterKind.NPC }
     val creatures = items.filter { it.kind == RosterKind.CREATURA }
 
     Column(
@@ -425,6 +455,16 @@ private fun RosterList(
                 if (people.isNotEmpty()) {
                     item { Eyebrow(words.charactersCount(people.size), color = Palette.Party) }
                     items(people) { RosterRow(it, viewModel, onSelect) }
+                }
+                if (npcs.isNotEmpty()) {
+                    item {
+                        Eyebrow(
+                            words.npcsCount(npcs.size),
+                            color = Palette.Gold,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+                    items(npcs) { RosterRow(it, viewModel, onSelect) }
                 }
                 if (creatures.isNotEmpty()) {
                     item {
@@ -449,7 +489,11 @@ private fun RosterRow(
     onSelect: (RosterItem) -> Unit,
 ) {
     val selected = viewModel.selectedId == item.id && viewModel.editorKind == item.kind
-    val accent = if (item.kind == RosterKind.PERSONAGGIO) Palette.Party else Palette.Enemy
+    val accent = when (item.kind) {
+        RosterKind.PERSONAGGIO -> Palette.Party
+        RosterKind.NPC -> Palette.Gold
+        RosterKind.CREATURA -> Palette.Enemy
+    }
 
     Column(
         Modifier.fillMaxWidth()
@@ -459,14 +503,18 @@ private fun RosterRow(
             .padding(9.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Text(
-            text = item.name,
-            color = Palette.Text,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            item.classId?.let { ClassIcon(it, size = 28.dp) }
+            Text(
+                text = item.name,
+                color = Palette.Text,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+        }
         Chip(item.subtitle, accent)
     }
 }

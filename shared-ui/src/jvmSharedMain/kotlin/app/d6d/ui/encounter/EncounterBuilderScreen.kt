@@ -46,6 +46,7 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.roster.RosterKind
+import app.d6d.ui.components.ClassIcon
 import app.d6d.ui.session.OpenSavedSessionDialog
 import app.d6d.ui.session.OpenSessionsPanel
 import app.d6d.ui.session.SessionWorkspace
@@ -178,7 +179,7 @@ private fun TemplateChoiceStep(
 ) {
     val words = strings.encounter
     val people = viewModel.participants.count { it.kind == RosterKind.PERSONAGGIO }
-    val creatures = viewModel.participants.count { it.kind == RosterKind.CREATURA }
+    val creatures = viewModel.participants.count { it.kind != RosterKind.PERSONAGGIO }
     Box(
         modifier
             .fillMaxWidth()
@@ -302,8 +303,9 @@ private fun ParticipantsStep(
         }
 
         val people = viewModel.participants.filter { it.kind == RosterKind.PERSONAGGIO }
+        val npcs = viewModel.participants.filter { it.kind == RosterKind.NPC }
         val creatures = viewModel.participants.filter { it.kind == RosterKind.CREATURA }
-        if (people.isEmpty() && creatures.isEmpty()) {
+        if (people.isEmpty() && npcs.isEmpty() && creatures.isEmpty()) {
             EmptyCompendium(
                 onOpenCompendium = onOpenCompendium,
                 creatingFromScratch = viewModel.templateSource == TemplateSource.DA_ZERO,
@@ -326,6 +328,10 @@ private fun ParticipantsStep(
                 if (creatures.isNotEmpty()) {
                     item { Eyebrow(words.creaturesCount(creatures.size), Palette.Enemy, Modifier.padding(top = 7.dp)) }
                     items(creatures, key = { "creatura-${it.id}" }) { ParticipantCard(it, viewModel) }
+                }
+                if (npcs.isNotEmpty()) {
+                    item { Eyebrow(strings.compendium.npcsCount(npcs.size), Palette.Gold, Modifier.padding(top = 7.dp)) }
+                    items(npcs, key = { "npc-${it.id}" }) { ParticipantCard(it, viewModel) }
                 }
             }
         }
@@ -361,6 +367,7 @@ private fun ParticipantCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Checkbox(checked = participant.selected, onCheckedChange = null)
+            participant.item.classId?.let { ClassIcon(it, size = 30.dp) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = participant.name,
@@ -379,8 +386,16 @@ private fun ParticipantCard(
                 )
             }
             Chip(
-                if (participant.kind == RosterKind.PERSONAGGIO) strings.compendium.characterLabel else strings.compendium.creatureLabel,
-                if (participant.kind == RosterKind.PERSONAGGIO) Palette.Party else Palette.Enemy,
+                when (participant.kind) {
+                    RosterKind.PERSONAGGIO -> strings.compendium.characterLabel
+                    RosterKind.NPC -> strings.compendium.npcLabel
+                    RosterKind.CREATURA -> strings.compendium.creatureLabel
+                },
+                when (participant.kind) {
+                    RosterKind.PERSONAGGIO -> Palette.Party
+                    RosterKind.NPC -> Palette.Gold
+                    RosterKind.CREATURA -> Palette.Enemy
+                },
             )
         }
 

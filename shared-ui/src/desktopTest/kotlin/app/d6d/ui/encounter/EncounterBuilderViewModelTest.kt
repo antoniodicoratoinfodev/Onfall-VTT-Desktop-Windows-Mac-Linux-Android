@@ -5,7 +5,11 @@ import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.ui.state.EnemyCpuSpeed
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.ArmorClassMethod
+import app.d6d.sheet.MonsterStatBlock
+import app.d6d.sheet.NpcDisposition
 import app.d6d.sheet.SheetStore
+import app.d6d.sheet.StatBlockActorKind
+import app.d6d.rules.character.CharacterClassId
 import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.sheet.SheetKind
@@ -42,6 +46,54 @@ class EncounterBuilderViewModelTest {
         assertTrue(creatures.isNotEmpty())
         assertTrue(creatures.all { !it.selected && it.faction == EncounterFaction.AVVERSARI })
         assertEquals(characters.size, builder.selectedCount)
+    }
+
+    @Test
+    fun `gli npc seguono la disposizione ma possono combattere su entrambi i lati`() {
+        val sheets = SheetStore(directory.resolve("schede.json"))
+        val library = sheets.load()
+        sheets.save(
+            library.copy(
+                monsters = library.monsters + listOf(
+                    MonsterStatBlock(
+                        id = "npc-amico",
+                        name = "Guardiana",
+                        actorKind = StatBlockActorKind.NPC,
+                        npcDisposition = NpcDisposition.FRIENDLY,
+                        characterClassId = CharacterClassId.PALADIN,
+                    ),
+                    MonsterStatBlock(
+                        id = "npc-ostile",
+                        name = "Rivale",
+                        actorKind = StatBlockActorKind.NPC,
+                        npcDisposition = NpcDisposition.HOSTILE,
+                        characterClassId = CharacterClassId.ROGUE,
+                    ),
+                ),
+            ),
+        )
+        val roster = RosterViewModel(ActorCatalogStore(directory), sheets)
+        val builder = EncounterBuilderViewModel(roster, seedProvider = { 99L })
+        val friendly = builder.participants.first { it.id == "npc-amico" }
+        val hostile = builder.participants.first { it.id == "npc-ostile" }
+
+        assertFalse(friendly.selected)
+        assertEquals(EncounterFaction.ALLEATI, friendly.faction)
+        assertFalse(hostile.selected)
+        assertEquals(EncounterFaction.AVVERSARI, hostile.faction)
+
+        builder.clearSelection()
+        builder.setSelected(friendly.id, true)
+        builder.setFaction(friendly.id, EncounterFaction.AVVERSARI)
+        builder.setSelected(hostile.id, true)
+        builder.setFaction(hostile.id, EncounterFaction.ALLEATI)
+
+        val state = builder.startedSession().currentState()
+        assertEquals(setOf(hostile.id), state.partyCombatantIds())
+        assertEquals(
+            setOf(friendly.id, hostile.id),
+            state.combatants().values.map { it.snapshot().definitionId() }.toSet(),
+        )
     }
 
     @Test

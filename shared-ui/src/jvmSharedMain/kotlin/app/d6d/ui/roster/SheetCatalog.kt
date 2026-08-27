@@ -13,6 +13,7 @@ import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.CreatureSize
 import app.d6d.sheet.MonsterSpeeds
 import app.d6d.sheet.MonsterStatBlock
+import app.d6d.sheet.StatBlockActorKind
 import app.d6d.sheet.Proficiency
 import app.d6d.sheet.StatBlockEntry
 import app.d6d.sheet.WeaponEntry
@@ -67,7 +68,12 @@ fun MonsterStatBlock.toCatalogEntry(): ActorCatalogEntry {
     val definition = toActorDefinition(language = AppLocale.language)
     val challengeRating = runCatching { BigDecimal(challengeRating.trim()) }.getOrElse { BigDecimal.ZERO }
     return ActorCatalogEntry(
-        ActorTemplate(id, definition.name, ActorKind.CREATURE, 0),
+        ActorTemplate(
+            id,
+            definition.name,
+            if (actorKind == StatBlockActorKind.NPC) ActorKind.NON_PLAYER_CHARACTER else ActorKind.CREATURE,
+            if (actorKind == StatBlockActorKind.NPC) classLevel.coerceIn(1, 20) else 0,
+        ),
         definition,
         false,
         challengeRating.max(BigDecimal.ZERO),

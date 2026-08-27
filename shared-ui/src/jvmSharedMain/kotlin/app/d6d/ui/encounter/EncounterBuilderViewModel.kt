@@ -21,6 +21,7 @@ import app.d6d.ui.maps.gridTooSmallMessage
 import app.d6d.ui.roster.RosterItem
 import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
+import app.d6d.sheet.NpcDisposition
 
 /** I due schieramenti che il motore conserva nella sessione portabile. */
 enum class EncounterFaction {
@@ -113,9 +114,10 @@ private data class ParticipantChoice(
 /**
  * Configura un incontro partendo esclusivamente dalle schede del Compendio.
  *
- * I personaggi sono proposti come alleati, le creature come avversari. La scelta
- * resta modificabile per ogni voce e le quantita' producono istanze distinte della
- * stessa definizione, senza duplicare o alterare la scheda originale.
+ * I personaggi sono proposti come alleati, le creature come avversari e i PNG
+ * seguono la loro disposizione abituale. La scelta resta modificabile per ogni
+ * voce e le quantita' producono istanze distinte della stessa definizione, senza
+ * duplicare o alterare la scheda originale.
  */
 class EncounterBuilderViewModel(
     private val roster: RosterViewModel,
@@ -460,6 +462,15 @@ class EncounterBuilderViewModel(
 
     private fun defaultChoice(item: RosterItem): ParticipantChoice = when (item.kind) {
         RosterKind.PERSONAGGIO -> ParticipantChoice(true, MIN_QUANTITY, EncounterFaction.ALLEATI)
+        RosterKind.NPC -> ParticipantChoice(
+            selected = false,
+            quantity = MIN_QUANTITY,
+            faction = if (item.npcDisposition == NpcDisposition.HOSTILE) {
+                EncounterFaction.AVVERSARI
+            } else {
+                EncounterFaction.ALLEATI
+            },
+        )
         RosterKind.CREATURA -> ParticipantChoice(false, MIN_QUANTITY, EncounterFaction.AVVERSARI)
     }
 

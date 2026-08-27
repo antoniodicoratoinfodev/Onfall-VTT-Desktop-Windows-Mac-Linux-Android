@@ -16,6 +16,34 @@ import java.nio.file.Path
 
 class SheetStoreTest {
     @Test
+    fun `un npc conserva classe e disposizione mentre le creature legacy ricevono i predefiniti`() {
+        val file = directory.resolve("npc.json")
+        val store = SheetStore(file)
+        val npc = MonsterStatBlock(
+            id = "npc-capitana",
+            name = "Capitana Mira",
+            actorKind = StatBlockActorKind.NPC,
+            npcDisposition = NpcDisposition.FRIENDLY,
+            characterClassId = CharacterClassId.FIGHTER,
+            classLevel = 7,
+        )
+
+        store.save(SheetLibrary(monsters = listOf(npc)))
+
+        assertEquals(npc, store.load().monsters.single())
+
+        Files.writeString(
+            file,
+            """{"schemaVersion":12,"characters":[],"monsters":[{"id":"creatura-legacy","name":"Lupo"}]}""",
+        )
+        val legacy = store.load().monsters.single()
+        assertEquals(StatBlockActorKind.CREATURE, legacy.actorKind)
+        assertEquals(NpcDisposition.HOSTILE, legacy.npcDisposition)
+        assertEquals(null, legacy.characterClassId)
+        assertEquals(1, legacy.classLevel)
+    }
+
+    @Test
     fun `un archivio senza versione viene migrato dallo schema uno`() {
         val file = directory.resolve("versionless.json")
         Files.writeString(

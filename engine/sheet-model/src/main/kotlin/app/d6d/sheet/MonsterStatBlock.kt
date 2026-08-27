@@ -15,7 +15,23 @@ import app.d6d.domain.combat.DamageFormula
 import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
+import app.d6d.rules.character.CharacterClassId
 import kotlinx.serialization.Serializable
+
+/** Natura della scheda ridotta: creatura generica oppure personaggio non giocante. */
+@Serializable
+enum class StatBlockActorKind {
+    CREATURE,
+    NPC,
+}
+
+/** Affiliazione abituale di un NPC nel Compendio; ogni incontro può comunque cambiarne il lato. */
+@Serializable
+enum class NpcDisposition {
+    FRIENDLY,
+    HOSTILE,
+    NEUTRAL,
+}
 
 /** Velocita' del mostro, con le cinque forme di movimento piu' la fluttuazione. */
 @Serializable
@@ -76,6 +92,16 @@ data class MonsterStatBlock(
      */
     val contentLanguage: AppLanguage = AppLanguage.ITALIAN,
     val name: String = "",
+
+    /**
+     * Le vecchie schede erano tutte creature e continuano a esserlo grazie al
+     * predefinito. Un NPC usa lo stesso stat block operativo, ma può portare una
+     * classe e un'affiliazione senza essere promosso a personaggio giocante.
+     */
+    val actorKind: StatBlockActorKind = StatBlockActorKind.CREATURE,
+    val npcDisposition: NpcDisposition = NpcDisposition.HOSTILE,
+    val characterClassId: CharacterClassId? = null,
+    val classLevel: Int = 1,
 
     // --- intestazione ---
     val size: CreatureSize = CreatureSize.MEDIUM,

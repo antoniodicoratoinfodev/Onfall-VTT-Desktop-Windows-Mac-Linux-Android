@@ -10,6 +10,8 @@ import app.d6d.domain.combat.CombatResourceState
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.sheet.SheetStore
 import app.d6d.sheet.InventoryItem
+import app.d6d.sheet.NpcDisposition
+import app.d6d.sheet.StatBlockActorKind
 import app.d6d.sheet.isPactSpellSlot
 import app.d6d.sheet.i18n.localizedSheetError
 import app.d6d.sheet.spellSlotLevelOrNull
@@ -19,15 +21,20 @@ import app.d6d.ui.sheet.SheetKind
 import app.d6d.ui.sheet.SheetViewModel
 import app.d6d.ui.i18n.AppLocale
 import app.d6d.ui.i18n.Strings
+import app.d6d.rules.character.CharacterClassId
+import app.d6d.i18n.label
+import app.d6d.i18n.pick
 
-/** Tipo di attore nel roster: le due categorie ora coincidono con i due editor. */
+/** Tipo di attore nel roster; PNG e creature condividono l'editor dello stat block. */
 enum class RosterKind {
     PERSONAGGIO,
+    NPC,
     CREATURA,
 }
 
 fun RosterKind.label(strings: Strings): String = when (this) {
     RosterKind.PERSONAGGIO -> strings.compendium.characters
+    RosterKind.NPC -> strings.compendium.npcs
     RosterKind.CREATURA -> strings.compendium.creatures
 }
 
@@ -37,6 +44,8 @@ data class RosterItem(
     val name: String,
     val kind: RosterKind,
     val subtitle: String,
+    val classId: CharacterClassId? = null,
+    val npcDisposition: NpcDisposition? = null,
 )
 
 /** Inventario reale di un personaggio del roster, pronto per la UI di battaglia. */
@@ -107,14 +116,26 @@ class RosterViewModel(
                 } else {
                     words.classAndLevel(it.className, it.level).trim().ifBlank { words.characterLabel }
                 },
+                classId = it.progression.classLevels.firstOrNull()?.classId,
             )
         }
         val creatures = sheets.library.monsters.map {
+            val isNpc = it.actorKind == StatBlockActorKind.NPC
+            val classSummary = it.characterClassId?.let { classId ->
+                words.classAndLevel(classId.label(AppLocale.language), it.classLevel.coerceIn(1, 20))
+            }
+            val disposition = if (isNpc) it.npcDisposition.label(AppLocale.language) else null
             RosterItem(
                 it.id,
                 it.name.ifBlank { words.unnamed },
-                RosterKind.CREATURA,
-                words.challengeRating(it.challengeRating),
+                if (isNpc) RosterKind.NPC else RosterKind.CREATURA,
+                listOfNotNull(
+                    disposition,
+                    classSummary,
+                    words.challengeRating(it.challengeRating),
+                ).joinToString(" · "),
+                classId = it.characterClassId,
+                npcDisposition = it.npcDisposition.takeIf { isNpc },
             )
         }
         people + creatures
@@ -184,6 +205,12 @@ class RosterViewModel(
         return null
     }
 
+    /** Classe primaria mostrata sul combattente, risolta dalla scheda autorevole. */
+    fun classIdFor(definitionId: String): CharacterClassId? =
+        sheets.library.characters.firstOrNull { it.id == definitionId }
+            ?.progression?.classLevels?.firstOrNull()?.classId
+            ?: sheets.library.monsters.firstOrNull { it.id == definitionId }?.characterClassId
+
     fun druidLevelFor(id: String): Int =
         sheets.library.characters.firstOrNull { it.id == id }
             ?.progression?.levelIn(app.d6d.rules.character.CharacterClassId.DRUID)
@@ -235,7 +262,11 @@ class RosterViewModel(
 
     /** Quale editor e' aperto, dedotto dal tipo di scheda in modifica. */
     val editorKind: RosterKind
-        get() = if (sheets.kind == SheetKind.PERSONAGGIO) RosterKind.PERSONAGGIO else RosterKind.CREATURA
+        get() = when {
+            sheets.kind == SheetKind.PERSONAGGIO -> RosterKind.PERSONAGGIO
+            sheets.monster.actorKind == StatBlockActorKind.NPC -> RosterKind.NPC
+            else -> RosterKind.CREATURA
+        }
 
     fun select(item: RosterItem) {
         when (item.kind) {
@@ -244,6 +275,7 @@ class RosterViewModel(
                 sheets.selectCharacter(item.id)
             }
 
+            RosterKind.NPC,
             RosterKind.CREATURA -> {
                 sheets.kind = SheetKind.MOSTRO
                 sheets.selectMonster(item.id)
@@ -259,6 +291,16 @@ class RosterViewModel(
     fun newCreature() {
         sheets.kind = SheetKind.MOSTRO
         sheets.newSheet()
+    }
+
+    fun newNpc() {
+        sheets.kind = SheetKind.MOSTRO
+        sheets.newSheet()
+        sheets.monster = sheets.monster.copy(
+            actorKind = StatBlockActorKind.NPC,
+            npcDisposition = NpcDisposition.NEUTRAL,
+            id = sheets.monster.id.replaceFirst("mostro-", "npc-"),
+        )
     }
 
     /**
@@ -406,4 +448,10 @@ class RosterViewModel(
             )
         }
     }
+}
+
+fun NpcDisposition.label(language: app.d6d.i18n.AppLanguage): String = when (this) {
+    NpcDisposition.FRIENDLY -> language.pick("Amichevole", "Friendly")
+    NpcDisposition.HOSTILE -> language.pick("Ostile", "Hostile")
+    NpcDisposition.NEUTRAL -> language.pick("Neutrale", "Neutral")
 }

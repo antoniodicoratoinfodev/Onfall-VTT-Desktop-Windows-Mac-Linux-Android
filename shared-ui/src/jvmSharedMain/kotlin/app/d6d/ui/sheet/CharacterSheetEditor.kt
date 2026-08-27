@@ -56,6 +56,7 @@ import app.d6d.sheet.abilityModifier
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.battle.label
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.ClassIcon
 import app.d6d.ui.images.PortraitPicker
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.runDiskIo
@@ -233,6 +234,9 @@ private fun HeaderSection(
         }
 
         SheetBox(strings.compendium.characterLabel, Modifier.weight(2.4f)) {
+            sheet.progression.classLevels.firstOrNull()?.classId?.let {
+                ClassIcon(it, size = 36.dp)
+            }
             SheetField(words.characterName, sheet.characterName) {
                 update(sheet.copy(characterName = it))
             }
@@ -354,6 +358,9 @@ private fun CompactHeaderSection(
         }
 
         SheetBox(strings.compendium.characterLabel, Modifier.fillMaxWidth()) {
+            sheet.progression.classLevels.firstOrNull()?.classId?.let {
+                ClassIcon(it, size = 36.dp)
+            }
             SheetField(words.characterName, sheet.characterName) {
                 update(sheet.copy(characterName = it))
             }

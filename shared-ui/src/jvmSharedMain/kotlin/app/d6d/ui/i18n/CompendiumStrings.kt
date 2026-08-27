@@ -21,11 +21,14 @@ interface CompendiumStrings {
     val sheets: String
     val maps: String
     val characters: String
+    val npcs: String
     val creatures: String
     val characterLabel: String
+    val npcLabel: String
     val creatureLabel: String
     val classLabel: String
     val addCharacter: String
+    val addNpc: String
     val addCreature: String
     val characterSheet: String
     val statBlock: String
@@ -40,6 +43,7 @@ interface CompendiumStrings {
     val newActor: String
     val editableField: String
     fun charactersCount(count: Int): String
+    fun npcsCount(count: Int): String
     fun creaturesCount(count: Int): String
     fun classAndLevel(className: String, level: Int): String
     fun challengeRating(rating: String): String
@@ -56,11 +60,14 @@ internal object CompendiumStringsIt : CompendiumStrings {
     override val sheets = "Schede"
     override val maps = "Mappe"
     override val characters = "Personaggi"
+    override val npcs = "PNG"
     override val creatures = "Creature"
     override val characterLabel = "Personaggio"
+    override val npcLabel = "PNG"
     override val creatureLabel = "Creatura"
     override val classLabel = "Classe"
     override val addCharacter = "+ Personaggio"
+    override val addNpc = "+ PNG"
     override val addCreature = "+ Creatura"
     override val characterSheet = "Scheda personaggio"
     override val statBlock = "Stat block"
@@ -76,6 +83,7 @@ internal object CompendiumStringsIt : CompendiumStrings {
     override val newActor = "Nuovo attore"
     override val editableField = "Campo modificabile"
     override fun charactersCount(count: Int) = "Personaggi ($count)"
+    override fun npcsCount(count: Int) = "PNG ($count)"
     override fun creaturesCount(count: Int) = "Creature ($count)"
     override fun classAndLevel(className: String, level: Int) = "$className $level"
     override fun challengeRating(rating: String) = "GS $rating"
@@ -92,11 +100,14 @@ internal object CompendiumStringsEn : CompendiumStrings {
     override val sheets = "Sheets"
     override val maps = "Maps"
     override val characters = "Characters"
+    override val npcs = "NPCs"
     override val creatures = "Creatures"
     override val characterLabel = "Character"
+    override val npcLabel = "NPC"
     override val creatureLabel = "Creature"
     override val classLabel = "Class"
     override val addCharacter = "+ Character"
+    override val addNpc = "+ NPC"
     override val addCreature = "+ Creature"
     override val characterSheet = "Character sheet"
     override val statBlock = "Stat block"
@@ -111,6 +122,7 @@ internal object CompendiumStringsEn : CompendiumStrings {
     override val newActor = "New actor"
     override val editableField = "Editable field"
     override fun charactersCount(count: Int) = "Characters ($count)"
+    override fun npcsCount(count: Int) = "NPCs ($count)"
     override fun creaturesCount(count: Int) = "Creatures ($count)"
     override fun classAndLevel(className: String, level: Int) = "$className $level"
     override fun challengeRating(rating: String) = "CR $rating"

@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.ClassIcon
 import app.d6d.ui.components.dismissDialogOnTap
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.Faction
@@ -54,6 +55,7 @@ fun BattleRosterDialog(
     viewModel: BattleViewModel,
     roster: RosterViewModel,
     onCreateCharacter: () -> Unit,
+    onCreateNpc: () -> Unit,
     onCreateCreature: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -64,6 +66,7 @@ fun BattleRosterDialog(
     val accent = if (party) Palette.Party else Palette.Enemy
     val destination = if (party) strings.battle.squad else strings.battle.enemies
     val people = roster.items.filter { it.kind == RosterKind.PERSONAGGIO }
+    val npcs = roster.items.filter { it.kind == RosterKind.NPC }
     val creatures = roster.items.filter { it.kind == RosterKind.CREATURA }
 
     Dialog(
@@ -116,6 +119,7 @@ fun BattleRosterDialog(
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     GameButton(words.addCharacter, accent = Palette.Party, onClick = onCreateCharacter)
+                    GameButton(strings.compendium.addNpc, accent = Palette.Gold, onClick = onCreateNpc)
                     GameButton(words.addCreature, accent = Palette.Enemy, onClick = onCreateCreature)
                 }
 
@@ -146,7 +150,17 @@ fun BattleRosterDialog(
                                 }
                             }
                         }
-                        if (people.isEmpty() && creatures.isEmpty()) {
+                        if (npcs.isNotEmpty()) {
+                            item { Eyebrow(strings.compendium.npcsCount(npcs.size), color = Palette.Gold) }
+                            items(npcs, key = { it.id }) { item ->
+                                RosterCombatantRow(item, Palette.Gold) {
+                                    roster.definitionFor(item.id)?.let { actor ->
+                                        if (viewModel.addRosterCombatant(actor, party) != null) onDismiss()
+                                    } ?: viewModel.showMessage(words.sheetUnavailable(item.name))
+                                }
+                            }
+                        }
+                        if (people.isEmpty() && npcs.isEmpty() && creatures.isEmpty()) {
                             item {
                                 Text(
                                     words.grimoireEmpty,
@@ -179,6 +193,7 @@ private fun RosterCombatantRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        item.classId?.let { ClassIcon(it, size = 30.dp) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 item.name,

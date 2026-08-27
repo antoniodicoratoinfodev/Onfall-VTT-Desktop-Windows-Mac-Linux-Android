@@ -34,7 +34,9 @@ import app.d6d.domain.combat.DamageType
 import app.d6d.sheet.Ability
 import app.d6d.sheet.CreatureSize
 import app.d6d.sheet.MonsterStatBlock
+import app.d6d.sheet.NpcDisposition
 import app.d6d.sheet.Proficiency
+import app.d6d.sheet.StatBlockActorKind
 import app.d6d.sheet.Skill
 import app.d6d.sheet.StatBlockEntry
 import app.d6d.sheet.WeaponEntry
@@ -47,6 +49,8 @@ import app.d6d.ui.images.PortraitPicker
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.runDiskIo
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.ClassIcon
+import app.d6d.rules.character.CharacterClassId
 import app.d6d.i18n.label
 import app.d6d.i18n.pick
 import app.d6d.ui.i18n.currentLanguage
@@ -95,13 +99,31 @@ fun MonsterStatBlockEditor(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            Text(
-                text = block.name.ifBlank { words.unnamedCreature },
-                color = Palette.GoldBright,
-                fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.displaySmall,
-            )
-            Text(block.subtitle(language), color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                block.characterClassId?.let { ClassIcon(it, size = 44.dp) }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = block.name.ifBlank { words.unnamedCreature },
+                        color = Palette.GoldBright,
+                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.displaySmall,
+                    )
+                    Text(block.subtitle(language), color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+                    if (block.actorKind == StatBlockActorKind.NPC) {
+                        Text(
+                            listOfNotNull(
+                                language.pick("PNG", "NPC"),
+                                block.npcDisposition.visibleLabel(language),
+                                block.characterClassId?.let { classId ->
+                                    "${classId.label(language)} ${block.classLevel.coerceIn(1, 20)}"
+                                },
+                            ).joinToString(" · "),
+                            color = Palette.Gold,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
             StatLine(language.pick("CA", "AC"), "${block.armorClass}")
             StatLine(
                 words.initiativeLabel,
@@ -139,6 +161,61 @@ fun MonsterStatBlockEditor(
                     },
                 ),
             )
+            Text(language.pick("Tipo di attore", "Actor type"), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                StatBlockActorKind.entries.forEach { actorKind ->
+                    val selected = block.actorKind == actorKind
+                    SheetCheck(
+                        if (actorKind == StatBlockActorKind.NPC) language.pick("PNG", "NPC") else words.monsters,
+                        selected,
+                    ) { checked ->
+                        if (checked) {
+                            update(
+                                block.copy(
+                                    actorKind = actorKind,
+                                    npcDisposition = if (actorKind == StatBlockActorKind.NPC) {
+                                        block.npcDisposition
+                                    } else {
+                                        NpcDisposition.HOSTILE
+                                    },
+                                    characterClassId = block.characterClassId.takeIf {
+                                        actorKind == StatBlockActorKind.NPC
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+            if (block.actorKind == StatBlockActorKind.NPC) {
+                Text(language.pick("Affiliazione abituale", "Usual affiliation"), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    NpcDisposition.entries.forEach { disposition ->
+                        SheetCheck(disposition.visibleLabel(language), block.npcDisposition == disposition) {
+                            if (it) update(block.copy(npcDisposition = disposition))
+                        }
+                    }
+                }
+                Text(language.pick("Classe", "Class"), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    SheetCheck(
+                        language.pick("Senza classe", "No class"),
+                        block.characterClassId == null,
+                    ) { if (it) update(block.copy(characterClassId = null)) }
+                    CharacterClassId.entries.forEach { classId ->
+                        SheetCheck(classId.label(language), block.characterClassId == classId) {
+                            if (it) update(block.copy(characterClassId = classId))
+                        }
+                    }
+                }
+                block.characterClassId?.let {
+                    SheetNumberField(
+                        language.pick("Livello di classe", "Class level"),
+                        block.classLevel.coerceIn(1, 20),
+                        Modifier.width(150.dp),
+                    ) { update(block.copy(classLevel = it.coerceIn(1, 20))) }
+                }
+            }
             AdaptiveFormRow(
                 compact = compact,
                 compactColumns = if (compact) 2 else 3,
@@ -513,6 +590,12 @@ fun MonsterStatBlockEditor(
             },
         )
     }
+}
+
+private fun NpcDisposition.visibleLabel(language: app.d6d.i18n.AppLanguage): String = when (this) {
+    NpcDisposition.FRIENDLY -> language.pick("Amichevole", "Friendly")
+    NpcDisposition.HOSTILE -> language.pick("Ostile", "Hostile")
+    NpcDisposition.NEUTRAL -> language.pick("Neutrale", "Neutral")
 }
 
 @OptIn(ExperimentalLayoutApi::class)

@@ -446,6 +446,11 @@ fun AppRoot(
                                 requestedCompendiumNewKind = RosterKind.PERSONAGGIO
                                 destination = Destination.COMPENDIO
                             },
+                            onCreateRosterNpc = {
+                                requestedCompendiumItemId = null
+                                requestedCompendiumNewKind = RosterKind.NPC
+                                destination = Destination.COMPENDIO
+                            },
                             onCreateRosterCreature = {
                                 requestedCompendiumItemId = null
                                 requestedCompendiumNewKind = RosterKind.CREATURA

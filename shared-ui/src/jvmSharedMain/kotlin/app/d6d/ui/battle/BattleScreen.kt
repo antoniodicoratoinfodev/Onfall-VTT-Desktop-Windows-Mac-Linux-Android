@@ -127,6 +127,7 @@ fun BattleScreen(
     compact: Boolean,
     onOpenCombatantSheet: (String) -> Unit,
     onCreateRosterCharacter: () -> Unit,
+    onCreateRosterNpc: () -> Unit,
     onCreateRosterCreature: () -> Unit,
     onOpenSavedSession: (SessionSummary) -> Unit,
     modifier: Modifier = Modifier,
@@ -217,6 +218,7 @@ fun BattleScreen(
                     roster,
                     onOpenCombatantSheet,
                     onCreateRosterCharacter,
+                    onCreateRosterNpc,
                     onCreateRosterCreature,
                     Modifier.weight(1f),
                 )
@@ -229,6 +231,7 @@ fun BattleScreen(
                     roster,
                     onOpenCombatantSheet,
                     onCreateRosterCharacter,
+                    onCreateRosterNpc,
                     onCreateRosterCreature,
                     Modifier.weight(1f),
                 )
@@ -248,6 +251,7 @@ private fun WideBattleBody(
     roster: RosterViewModel,
     onOpenCombatantSheet: (String) -> Unit,
     onCreateRosterCharacter: () -> Unit,
+    onCreateRosterNpc: () -> Unit,
     onCreateRosterCreature: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -267,6 +271,7 @@ private fun WideBattleBody(
                 roster = roster,
                 onOpenSheet = onOpenCombatantSheet,
                 onCreateRosterCharacter = onCreateRosterCharacter,
+                onCreateRosterNpc = onCreateRosterNpc,
                 onCreateRosterCreature = onCreateRosterCreature,
                 modifier = Modifier.width(layout.squadWidth),
                 dropTarget = dropTarget,
@@ -325,6 +330,7 @@ private fun WideBattleBody(
                     roster = roster,
                     onOpenSheet = onOpenCombatantSheet,
                     onCreateRosterCharacter = onCreateRosterCharacter,
+                    onCreateRosterNpc = onCreateRosterNpc,
                     onCreateRosterCreature = onCreateRosterCreature,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     dropTarget = dropTarget,
@@ -470,6 +476,7 @@ private fun CompactBattleBody(
     roster: RosterViewModel,
     onOpenCombatantSheet: (String) -> Unit,
     onCreateRosterCharacter: () -> Unit,
+    onCreateRosterNpc: () -> Unit,
     onCreateRosterCreature: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -520,6 +527,7 @@ private fun CompactBattleBody(
                 roster = roster,
                 onOpenCombatantSheet = onOpenCombatantSheet,
                 onCreateRosterCharacter = onCreateRosterCharacter,
+                onCreateRosterNpc = onCreateRosterNpc,
                 onCreateRosterCreature = onCreateRosterCreature,
                 onDismiss = { drawer = null },
                 modifier = Modifier.align(Alignment.CenterStart),
@@ -531,6 +539,7 @@ private fun CompactBattleBody(
                 roster = roster,
                 onOpenCombatantSheet = onOpenCombatantSheet,
                 onCreateRosterCharacter = onCreateRosterCharacter,
+                onCreateRosterNpc = onCreateRosterNpc,
                 onCreateRosterCreature = onCreateRosterCreature,
                 onDismiss = { drawer = null },
                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -578,6 +587,7 @@ private fun CompactBattleDrawer(
     roster: RosterViewModel,
     onOpenCombatantSheet: (String) -> Unit,
     onCreateRosterCharacter: () -> Unit,
+    onCreateRosterNpc: () -> Unit,
     onCreateRosterCreature: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -635,6 +645,7 @@ private fun CompactBattleDrawer(
                 roster = roster,
                 onOpenSheet = onOpenCombatantSheet,
                 onCreateRosterCharacter = onCreateRosterCharacter,
+                onCreateRosterNpc = onCreateRosterNpc,
                 onCreateRosterCreature = onCreateRosterCreature,
                 modifier = Modifier.weight(1f),
             )
@@ -707,6 +718,7 @@ private fun Rail(
     roster: RosterViewModel,
     onOpenSheet: (String) -> Unit,
     onCreateRosterCharacter: () -> Unit,
+    onCreateRosterNpc: () -> Unit,
     onCreateRosterCreature: () -> Unit,
     modifier: Modifier = Modifier,
     dropTarget: TokenPlacementDrag? = null,
@@ -769,6 +781,7 @@ private fun Rail(
                         viewModel = viewModel,
                         combatantId = id,
                         faction = faction,
+                        classId = viewModel.combatant(id)?.snapshot()?.definitionId()?.let(roster::classIdFor),
                         onOpenSheet = onOpenSheet,
                         dropTarget = dropTarget,
                     )
@@ -786,6 +799,10 @@ private fun Rail(
         onCreateCharacter = {
             rosterDialogOpen = false
             onCreateRosterCharacter()
+        },
+        onCreateNpc = {
+            rosterDialogOpen = false
+            onCreateRosterNpc()
         },
         onCreateCreature = {
             rosterDialogOpen = false

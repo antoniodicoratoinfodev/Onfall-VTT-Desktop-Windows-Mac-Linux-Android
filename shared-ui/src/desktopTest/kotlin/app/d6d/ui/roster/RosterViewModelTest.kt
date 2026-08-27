@@ -7,11 +7,16 @@ import app.d6d.domain.combat.CombatResourceState
 import app.d6d.persistence.catalog.ActorCatalogStore
 import app.d6d.rules.character.RecoveryPeriod
 import app.d6d.rules.character.ResourcePoolState
+import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.character.CharacterProgression
+import app.d6d.rules.character.ClassLevelState
 import app.d6d.sheet.Ability
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.MonsterStatBlock
+import app.d6d.sheet.NpcDisposition
+import app.d6d.sheet.StatBlockActorKind
 import app.d6d.sheet.InventoryCategory
 import app.d6d.sheet.InventoryItem
 import app.d6d.sheet.PACT_SLOT_RESOURCE_PREFIX
@@ -86,6 +91,45 @@ class RosterViewModelTest {
 
         assertTrue(roster.items.any { it.kind == RosterKind.PERSONAGGIO })
         assertTrue(roster.items.any { it.kind == RosterKind.CREATURA })
+    }
+
+    @Test
+    fun `classi di personaggi e npc diventano icone e metadati di combattimento`() {
+        val sheets = sheetStore()
+        val library = sheets.load()
+        sheets.save(
+            library.copy(
+                characters = library.characters + CharacterSheet(
+                    id = "pg-iconizzato",
+                    characterName = "Selene",
+                    progression = CharacterProgression(
+                        classLevels = listOf(ClassLevelState(CharacterClassId.WIZARD, 4)),
+                    ),
+                ),
+                monsters = library.monsters + MonsterStatBlock(
+                    id = "npc-esploratrice",
+                    name = "Nara",
+                    actorKind = StatBlockActorKind.NPC,
+                    npcDisposition = NpcDisposition.NEUTRAL,
+                    characterClassId = CharacterClassId.RANGER,
+                    classLevel = 3,
+                ),
+            ),
+        )
+
+        val roster = RosterViewModel(catalogStore(), sheets)
+        val character = roster.items.first { it.id == "pg-iconizzato" }
+        val npc = roster.items.first { it.id == "npc-esploratrice" }
+
+        assertEquals(CharacterClassId.WIZARD, character.classId)
+        assertEquals(CharacterClassId.WIZARD, roster.classIdFor(character.id))
+        assertEquals(RosterKind.NPC, npc.kind)
+        assertEquals(CharacterClassId.RANGER, npc.classId)
+        assertEquals(NpcDisposition.NEUTRAL, npc.npcDisposition)
+        assertEquals(CharacterClassId.RANGER, roster.classIdFor(npc.id))
+        assertEquals(ActorKind.NON_PLAYER_CHARACTER, catalogEntry(npc.id)!!.template().kind())
+        assertEquals(3, catalogEntry(npc.id)!!.template().level())
+        assertFalse(catalogEntry(npc.id)!!.activePartyMember())
     }
 
     @Test

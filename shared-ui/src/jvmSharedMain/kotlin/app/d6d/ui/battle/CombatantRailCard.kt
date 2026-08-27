@@ -50,6 +50,7 @@ import app.d6d.sheet.isPactSpellSlot
 import app.d6d.sheet.isPactSlotMirrorResourceId
 import app.d6d.sheet.spellSlotLevelOrNull
 import app.d6d.ui.components.CombatantPortrait
+import app.d6d.ui.components.ClassIcon
 import app.d6d.ui.components.ConditionChip
 import app.d6d.ui.components.EditableValue
 import app.d6d.ui.components.Faction
@@ -60,6 +61,7 @@ import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.i18n.Strings
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
+import app.d6d.rules.character.CharacterClassId
 
 /**
  * Carta di un combattente nelle barre laterali: squadra a sinistra, nemici a destra.
@@ -76,6 +78,7 @@ fun CombatantRailCard(
     viewModel: BattleViewModel,
     combatantId: String,
     faction: Faction,
+    classId: CharacterClassId? = null,
     onOpenSheet: (String) -> Unit,
     modifier: Modifier = Modifier,
     dropTarget: TokenPlacementDrag? = null,
@@ -171,19 +174,25 @@ fun CombatantRailCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = buildList {
-                        if (active) add(words.inTurnBadge)
-                        if (targeted) add(words.targetBadge)
-                        if (inspected && !active) add(words.inspectedBadge)
-                    }.joinToString(" · "),
-                    color = when {
-                        targeted -> faction.color
-                        active -> Palette.TurnBright
-                        else -> Palette.TextMuted
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    classId?.let { ClassIcon(it, size = 30.dp) }
+                    Text(
+                        text = buildList {
+                            if (active) add(words.inTurnBadge)
+                            if (targeted) add(words.targetBadge)
+                            if (inspected && !active) add(words.inspectedBadge)
+                        }.joinToString(" · "),
+                        color = when {
+                            targeted -> faction.color
+                            active -> Palette.TurnBright
+                            else -> Palette.TextMuted
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
                 Text(
                     text = words.openSheetBadge,
                     color = Palette.TextMuted,
