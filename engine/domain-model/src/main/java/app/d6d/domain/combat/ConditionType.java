@@ -81,7 +81,8 @@ public final class ConditionType implements Comparable<ConditionType> {
     }
 
     @Override public int compareTo(ConditionType other) {
-        return name.toLowerCase(Locale.ROOT).compareTo(other.name.toLowerCase(Locale.ROOT));
+        int folded = name.toLowerCase(Locale.ROOT).compareTo(other.name.toLowerCase(Locale.ROOT));
+        return folded != 0 ? folded : name.compareTo(other.name);
     }
 
     @Override public boolean equals(Object other) {

@@ -26,13 +26,17 @@ nomi o formule specifiche dello SRD.
 - il compilatore indipendente dall'edizione interpreta formule deterministiche, alias e riferimenti,
   tabelle tipizzate, curve PE, randomizzatori d20/dadi/pool/percentile/tabella, risorse, trigger,
   action economy, azioni atomiche, condizioni e tipi di danno con ID aperti;
+- le dipendenze fra risorse e budget di turno sono ordinate dal grafo dei riferimenti e i cicli
+  bloccano la pubblicazione; costi ripetuti o espressi tramite alias vengono sommati sullo stesso
+  pool prima di eseguire l'azione, impedendo spese parziali o oltre il disponibile;
 - `VALUE` dichiara valori `NUMBER`, `BOOLEAN`, `TEXT` o `REFERENCE`, con default, dominio ammesso e
   mutabilità; possono essere letti, corretti o impostati da effetti senza convertirli in testo libero;
 - un `MODIFIER` generico collega obbligatoriamente regola proprietaria e bersaglio e può applicare
   modifiche statiche, cambiare numeri/risorse/condizioni oppure impostare un valore tipizzato; i
   proprietari possono essere attivi per default o attivati durante la sessione, con audit e Undo;
-- caratteristiche/difese numeriche, valori tipizzati, quantità e massimi delle risorse, accumuli di
-  condizione e budget di turno hanno correzioni live validate, persistite, registrate e annullabili;
+- caratteristiche/difese/skill numeriche, valori tipizzati, quantità e massimi delle risorse,
+  accumuli di condizione e budget di turno hanno correzioni live validate, persistite, registrate e
+  annullabili; un effetto che viene saturato allo stesso valore non produce falsi eventi di cambio;
 - ogni stato generico è indirizzabile con `(tipo scope, ID scope, ID regola)`: Sessione, Attore,
   Oggetto, Scena e Campagna possono avere istanze indipendenti della stessa caratteristica, valore,
   risorsa, condizione, owner attivo e budget; Regole consente di scegliere lo scope prima di agire;
@@ -41,11 +45,13 @@ nomi o formule specifiche dello SRD.
 - un effetto dinamico dichiara `recipient=SELF|TARGET|SESSION`: azioni ed eventi possono spendere
   nello scope sorgente, modificare uno scope bersaglio distinto e aggiornare lo stato condiviso in
   un'unica transazione atomica; il registro conserva entrambi gli indirizzi;
-- riferimenti mancanti, tipi incompatibili, valori fuori dominio e cicli fra formule, valori e
-  modificatori statici bloccano la pubblicazione;
+- riferimenti mancanti (inclusi condizioni e budget citati nelle formule), tipi incompatibili,
+  valori fuori dominio e cicli fra formule, valori, pool e modificatori statici bloccano la
+  pubblicazione; il repository ripete la compilazione anche per pubblicazioni/import eseguiti senza UI;
 - classi oltre il livello 20 estendono il limite di progressione; le tabelle PE possono essere
   complete o parziali: sono vincolanti nelle righe dichiarate e lasciano avanzamento manuale oltre
-  l'ultima soglia, senza inventare valori;
+  l'ultima soglia, senza inventare valori; una curva eseguibile deve essere unica, cumulativa,
+  intera, monotona e coerente con l'intervallo di livelli dichiarato;
 - ciascuna scheda e ciascuna proiezione del roster usa il proprio regolamento, anche quando
   nell'archivio convivono personaggi di revisioni diverse;
 - se la revisione esatta di una scheda non è installata, nomi e snapshot restano leggibili ma
@@ -56,7 +62,9 @@ nomi o formule specifiche dello SRD.
 - schede e sessioni precedenti restano leggibili tramite i default legacy;
 - test sintetici 3.5-like e non-D20 verificano formule, pool di d6, budget di turno personalizzati,
   tabelle PE, valori testuali, risorse, trigger concatenati, condizioni, tassonomie dinamiche e
-  transazioni source→target→sessione senza codice specifico dell'edizione.
+  transazioni source→target→sessione senza codice specifico dell'edizione; test di migrazione
+  verificano anche alias di risorsa, speso conservato, stack ricondotti ai nuovi massimi e valori
+  incompatibili riportati al nuovo default.
 
 Il precedente elenco di lacune — ID aperti, formule, PE, risorse/trigger, action economy, danni e
 condizioni dinamici — è quindi superato. “Universale” continua però a non significare che qualunque

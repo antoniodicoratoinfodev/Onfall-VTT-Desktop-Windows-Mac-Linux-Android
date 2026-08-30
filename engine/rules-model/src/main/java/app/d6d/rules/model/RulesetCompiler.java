@@ -158,13 +158,15 @@ public final class RulesetCompiler {
         Map<String, String> attributes = entity.attributes();
         RuleValue.Type type = enumeration(attributes, "valueType", RuleValue.Type.class,
                 RuleValue.Type.TEXT, entity);
-        String fallback = switch (type) {
-            case NUMBER -> "0";
-            case BOOLEAN -> "false";
-            case TEXT -> "";
-            case REFERENCE -> throw invalid(entity, "defaultValue", "is required for a reference value");
-        };
-        String raw = attributes.getOrDefault("defaultValue", fallback);
+        String raw = attributes.get("defaultValue");
+        if (raw == null) {
+            raw = switch (type) {
+                case NUMBER -> "0";
+                case BOOLEAN -> "false";
+                case TEXT -> "";
+                case REFERENCE -> throw invalid(entity, "defaultValue", "is required for a reference value");
+            };
+        }
         RuleValue defaultValue;
         try {
             defaultValue = new RuleValue(type, raw);
@@ -420,11 +422,44 @@ public final class RulesetCompiler {
         });
         triggers.values().forEach(trigger -> trigger.effectRefs()
                 .forEach(ref -> requireEffect(trigger.id(), ref, modifiers, aliases, true)));
-        progressions.stream().filter(candidate -> !candidate.experienceTableRef().isEmpty()).forEach(progression -> {
+        List<CompiledRuleset.ProgressionDefinition> experienceProgressions = progressions.stream()
+                .filter(candidate -> !candidate.experienceTableRef().isEmpty()).toList();
+        if (experienceProgressions.size() > 1) {
+            throw new IllegalArgumentException("A ruleset can define only one executable experience progression");
+        }
+        experienceProgressions.forEach(progression -> {
             String table = resolve(progression.experienceTableRef(), aliases);
             requireKind(progression.id(), "experienceTableRef", table, tables.keySet(), "a table");
-            if (tables.get(table).rows().values().stream().anyMatch(value -> value.type() != RuleValue.Type.NUMBER)) {
+            CompiledRuleset.TableDefinition definition = tables.get(table);
+            if (definition.rows().values().stream().anyMatch(value -> value.type() != RuleValue.Type.NUMBER)) {
                 throw new IllegalArgumentException(progression.id() + ".experienceTableRef must point to a numeric table");
+            }
+            if (definition.lookup() != CompiledRuleset.TableLookup.FLOOR) {
+                throw new IllegalArgumentException(progression.id()
+                        + ".experienceTableRef must use FLOOR lookup for cumulative experience thresholds");
+            }
+            if (definition.rows().firstKey().compareTo(BigDecimal.ZERO) != 0) {
+                throw new IllegalArgumentException(progression.id()
+                        + ".experienceTableRef must define a threshold at zero experience");
+            }
+            Integer previousLevel = null;
+            for (RuleValue value : definition.rows().values()) {
+                final int level;
+                try {
+                    level = value.asNumber().intValueExact();
+                } catch (ArithmeticException failure) {
+                    throw new IllegalArgumentException(progression.id()
+                            + ".experienceTableRef must contain exact integer levels");
+                }
+                if (level < progression.minimumLevel() || level > progression.maximumLevel()) {
+                    throw new IllegalArgumentException(progression.id()
+                            + ".experienceTableRef contains level outside the declared range: " + level);
+                }
+                if (previousLevel != null && level < previousLevel) {
+                    throw new IllegalArgumentException(progression.id()
+                            + ".experienceTableRef levels must not decrease as experience increases");
+                }
+                previousLevel = level;
             }
         });
     }
@@ -812,7 +847,10 @@ public final class RulesetCompiler {
 
     private static BigDecimal decimal(String raw, RuleEntity entity, String field) {
         try {
-            return new BigDecimal(raw.trim()).stripTrailingZeros();
+            BigDecimal normalized = new BigDecimal(raw.trim()).stripTrailingZeros();
+            return normalized.compareTo(BigDecimal.ZERO) == 0
+                    ? BigDecimal.ZERO
+                    : new BigDecimal(normalized.toPlainString());
         } catch (NumberFormatException failure) {
             throw invalid(entity, field, "must be an exact decimal");
         }

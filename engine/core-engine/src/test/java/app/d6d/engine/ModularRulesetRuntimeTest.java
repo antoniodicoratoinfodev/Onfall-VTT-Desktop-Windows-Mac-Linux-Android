@@ -274,6 +274,60 @@ class ModularRulesetRuntimeTest {
         assertFalse(session.genericRuleState(goblin).conditionStacks().containsKey("test:condition:exposed"));
     }
 
+    @Test
+    void automaticActorTurnEventsRouteSessionEffectsToTheSessionScope() {
+        List<RuleEntity> entities = List.of(
+                entity("test:value:actor-marker", RuleKind.VALUE, Map.of(
+                        "valueType", "NUMBER", "defaultValue", "0", "mutable", "true")),
+                entity("test:value:weather", RuleKind.VALUE, Map.of(
+                        "valueType", "TEXT", "defaultValue", "CLEAR",
+                        "allowedValues", "CLEAR,STORM", "mutable", "true")),
+                entity("test:effect:storm-session", RuleKind.MODIFIER, Map.of(
+                        "ownerRef", "test:value:weather", "targetRef", "test:value:weather",
+                        "application", "SET_VALUE", "valueType", "TEXT", "valueLiteral", "STORM",
+                        "recipient", "SESSION")),
+                entity("test:trigger:marked-turn", RuleKind.TRIGGER, Map.of(
+                        "event", "TURN_START", "conditionFormula", "${test:value:actor-marker} == 1",
+                        "effectRefs", "test:effect:storm-session")));
+        RulesetRevision revision = RulesetRevision.create(
+                "test:turn-routing", "revision:turn-routing:1", "1", "Turn routing", "",
+                RulesetOrigin.HOMEBREW, "", CONFIG, entities, "2026-08-30T00:00:00Z");
+        CombatSession session = active(revision);
+        RuleScope hero = RuleScope.actor("hero");
+
+        session.setGenericRuleValue(hero, "test:value:actor-marker", RuleValue.number(1));
+        assertEquals(RuleValue.text("CLEAR"), session.genericTypedRuleValue("test:value:weather"));
+
+        session.endTurn(); // inizia il goblin
+        assertEquals(RuleValue.text("CLEAR"), session.genericTypedRuleValue("test:value:weather"));
+        session.endTurn(); // ricomincia l'eroe: il trigger appartiene al suo scope
+
+        assertEquals(RuleValue.text("STORM"), session.genericTypedRuleValue("test:value:weather"));
+        assertEquals(RuleValue.text("CLEAR"), session.genericTypedRuleValue(hero, "test:value:weather"));
+        assertTrue(session.auditTrail().stream().anyMatch(event ->
+                event.type() == EventType.RULE_EVENT_FIRED
+                        && "ACTOR".equals(event.details().get("scopeKind"))
+                        && "hero".equals(event.details().get("scopeId"))));
+    }
+
+    @Test
+    void revisionMigrationDropsIncompatibleValuesClampsConditionsAndFollowsResourceAliases() {
+        CombatSession session = active(migrationRevision("revision:migration:1", false));
+        session.setGenericRuleValue("test:value:mood", RuleValue.text("RISKY"));
+        session.setGenericConditionStacks("test:condition:marked", 3);
+        session.setGenericResource("test:resource:old", new BigDecimal("2"), new BigDecimal("5"));
+
+        session.changeRuleset(migrationRevision("revision:migration:2", true));
+
+        assertEquals(RuleValue.number(7), session.genericTypedRuleValue("test:value:mood"));
+        assertEquals(1, session.genericRuleState(RuleScope.session())
+                .conditionStacks().get("test:condition:marked"));
+        assertEquals(new BigDecimal("7"), session.genericRuleState(RuleScope.session())
+                .resources().get("test:resource:new").current());
+        assertEquals(new BigDecimal("10"), session.genericRuleState(RuleScope.session())
+                .resources().get("test:resource:new").maximum());
+    }
+
     private CombatSession active(RulesetRevision revision) {
         CombatSession session = CombatSession.create("universal", 42L, revision, "test");
         session.addCombatant("hero", CombatFixtures.hero());
@@ -328,6 +382,26 @@ class ModularRulesetRuntimeTest {
         return RulesetRevision.create("test:universal", revisionId, "1.0.0", "Universal",
                 "Executable universal rules", RulesetOrigin.HOMEBREW, "", CONFIG, entities,
                 "2026-08-30T00:00:00Z");
+    }
+
+    private static RulesetRevision migrationRevision(String revisionId, boolean next) {
+        List<RuleEntity> entities = next
+                ? List.of(
+                    entity("test:value:mood", RuleKind.VALUE, Map.of(
+                            "valueType", "NUMBER", "defaultValue", "7", "mutable", "true")),
+                    entity("test:condition:marked", RuleKind.CONDITION, Map.of("maximumStacks", "1")),
+                    entity("test:resource:new", RuleKind.RESOURCE, Map.of(
+                            "resourceId", "test:resource:old",
+                            "maximumFormula", "10", "initialFormula", "10")))
+                : List.of(
+                    entity("test:value:mood", RuleKind.VALUE, Map.of(
+                            "valueType", "TEXT", "defaultValue", "CALM",
+                            "allowedValues", "CALM,RISKY", "mutable", "true")),
+                    entity("test:condition:marked", RuleKind.CONDITION, Map.of("maximumStacks", "3")),
+                    entity("test:resource:old", RuleKind.RESOURCE, Map.of(
+                            "maximumFormula", "5", "initialFormula", "5")));
+        return RulesetRevision.create("test:migration", revisionId, next ? "2" : "1", "Migration", "",
+                RulesetOrigin.HOMEBREW, "", CONFIG, entities, "2026-08-30T00:00:00Z");
     }
 
     private static RuleEntity entity(String id, RuleKind kind, Map<String, String> attributes) {

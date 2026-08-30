@@ -352,7 +352,8 @@ public final class CombatSession {
         LinkedHashMap<String, RuleValue> values = new LinkedHashMap<>();
         previous.values().forEach((id, value) -> {
             if (id.startsWith("context:") || id.startsWith("level:")) {
-                if (value.type() == RuleValue.Type.NUMBER || value.type() == RuleValue.Type.BOOLEAN) {
+                if (value.type() == RuleValue.Type.NUMBER
+                        || (id.startsWith("context:") && value.type() == RuleValue.Type.BOOLEAN)) {
                     values.put(id, value);
                 }
                 return;

@@ -13,7 +13,7 @@ plugins {
 // APK e schermata Impostazioni non possono raccontare numeri diversi.
 val appVersion: String = version.toString()
 
-val generateBuildInfo by tasks.registering {
+val generateBuildInfo = tasks.register("generateBuildInfo") {
     // Copia locale: il task non deve leggere il progetto mentre gira.
     val declaredVersion = appVersion
     val outputDirectory = layout.buildDirectory.dir("generated/onfall/kotlin")

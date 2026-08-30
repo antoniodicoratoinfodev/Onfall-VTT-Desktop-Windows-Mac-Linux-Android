@@ -327,6 +327,48 @@ class RulesetCompilerTest {
                 Map.of("test:value:target", RuleValue.reference("test:missing")), Set.of()));
     }
 
+    @Test
+    void initialStateRejectsUnknownValuesAndBrokenTrainedSkillMarkers() {
+        CompiledRuleset rules = revision("test:initial-integrity", List.of(
+                entity("test:stat:focus", RuleKind.STAT, Map.of("defaultFormula", "1")),
+                entity("test:skill:notice", RuleKind.SKILL, Map.of("statRef", "test:stat:focus"))))
+                .compile();
+
+        assertThrows(IllegalArgumentException.class, () -> rules.initialState(
+                Map.of("test:typo", RuleValue.number(2)), Set.of()));
+        assertThrows(IllegalArgumentException.class, () -> rules.initialState(
+                Map.of("test:stat:focus", RuleValue.bool(true)), Set.of()));
+        assertThrows(IllegalArgumentException.class, () -> rules.initialState(
+                Map.of(), Set.of("trained:test:skill:missing")));
+
+        RuleRuntimeState valid = rules.initialState(
+                Map.of("context:rank", RuleValue.number(2)), Set.of("trained:test:skill:notice"));
+        assertTrue(valid.activeRuleIds().contains("trained:test:skill:notice"));
+    }
+
+    @Test
+    void experienceProgressionsMustBeUnambiguousAndMonotonic() {
+        IllegalArgumentException decreasing = assertThrows(IllegalArgumentException.class,
+                () -> revision("test:decreasing-xp", List.of(
+                        entity("test:xp", RuleKind.TABLE, Map.of(
+                                "rows", "0=1;100=3;200=2", "lookup", "FLOOR", "valueType", "NUMBER")),
+                        entity("test:progression", RuleKind.PROGRESSION, Map.of(
+                                "experienceTableRef", "test:xp", "maximumLevel", "3"))))
+                        .compile());
+        assertTrue(decreasing.getMessage().contains("must not decrease"));
+
+        IllegalArgumentException ambiguous = assertThrows(IllegalArgumentException.class,
+                () -> revision("test:ambiguous-xp", List.of(
+                        entity("test:xp", RuleKind.TABLE, Map.of(
+                                "rows", "0=1;100=2", "lookup", "FLOOR", "valueType", "NUMBER")),
+                        entity("test:progression:a", RuleKind.PROGRESSION, Map.of(
+                                "experienceTableRef", "test:xp", "maximumLevel", "2")),
+                        entity("test:progression:b", RuleKind.PROGRESSION, Map.of(
+                                "experienceTableRef", "test:xp", "maximumLevel", "2"))))
+                        .compile());
+        assertTrue(ambiguous.getMessage().contains("only one"));
+    }
+
     private static RulesetRevision revision(String projectId, List<RuleEntity> entities) {
         return RulesetRevision.create(projectId, projectId + ":revision:1", "1.0.0", projectId,
                 "Synthetic test ruleset", RulesetOrigin.HOMEBREW, "",

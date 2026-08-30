@@ -93,6 +93,19 @@ class DomainModelTest {
     }
 
     @Test
+    void openDamageAndConditionIdsHaveAnOrderingConsistentWithEquality() {
+        DamageType lowerDamage = DamageType.of("homebrew:void");
+        DamageType upperDamage = DamageType.of("HOMEBREW:VOID");
+        ConditionType lowerCondition = ConditionType.of("homebrew:marked");
+        ConditionType upperCondition = ConditionType.of("HOMEBREW:MARKED");
+
+        assertFalse(lowerDamage.equals(upperDamage));
+        assertTrue(lowerDamage.compareTo(upperDamage) != 0);
+        assertFalse(lowerCondition.equals(upperCondition));
+        assertTrue(lowerCondition.compareTo(upperCondition) != 0);
+    }
+
+    @Test
     void turnBudgetTracksIndependentResources() {
         TurnBudget budget = TurnBudget.fresh(30)
                 .spendMovement(10)

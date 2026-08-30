@@ -86,7 +86,8 @@ public final class DamageType implements Comparable<DamageType> {
     }
 
     @Override public int compareTo(DamageType other) {
-        return name.toLowerCase(Locale.ROOT).compareTo(other.name.toLowerCase(Locale.ROOT));
+        int folded = name.toLowerCase(Locale.ROOT).compareTo(other.name.toLowerCase(Locale.ROOT));
+        return folded != 0 ? folded : name.compareTo(other.name);
     }
 
     @Override public boolean equals(Object other) {

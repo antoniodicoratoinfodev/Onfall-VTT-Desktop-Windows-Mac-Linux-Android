@@ -25,8 +25,11 @@ public record RuleValue(Type type, String canonicalValue) {
             }
             canonicalValue = normalized;
         }
-        if (type == Type.REFERENCE && canonicalValue.isBlank()) {
-            throw new IllegalArgumentException("Rule reference cannot be blank");
+        if (type == Type.REFERENCE) {
+            canonicalValue = canonicalValue.trim();
+            if (canonicalValue.isEmpty()) {
+                throw new IllegalArgumentException("Rule reference cannot be blank");
+            }
         }
     }
 

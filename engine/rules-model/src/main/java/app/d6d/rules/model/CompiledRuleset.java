@@ -365,6 +365,19 @@ public final class CompiledRuleset {
             String resolved = resolveId(id);
             RuleValue supplied = Objects.requireNonNull(value, "supplied value");
             ValueDefinition definition = valueDefinitions.get(resolved);
+            boolean numericOverride = stats.containsKey(resolved) || skills.containsKey(resolved);
+            boolean genericContext = resolved.startsWith("context:");
+            boolean levelContext = resolved.startsWith("level:");
+            if (definition == null && !numericOverride && !genericContext && !levelContext) {
+                throw new IllegalArgumentException("Unknown supplied rule value " + id);
+            }
+            if ((numericOverride || levelContext) && supplied.type() != RuleValue.Type.NUMBER) {
+                throw new IllegalArgumentException("Supplied numeric rule value " + id + " must be numeric");
+            }
+            if (genericContext && supplied.type() != RuleValue.Type.NUMBER
+                    && supplied.type() != RuleValue.Type.BOOLEAN) {
+                throw new IllegalArgumentException("Supplied context value " + id + " must be numeric or boolean");
+            }
             if (definition != null && !definition.accepts(supplied)) {
                 throw new IllegalArgumentException("Invalid supplied value for " + resolved);
             }
@@ -378,7 +391,22 @@ public final class CompiledRuleset {
         entities.values().stream()
                 .filter(entity -> Boolean.parseBoolean(entity.attributes().getOrDefault("activeByDefault", "false")))
                 .forEach(entity -> active.add(entity.id()));
-        Objects.requireNonNull(activeRuleIds, "activeRuleIds").forEach(id -> active.add(resolveId(id)));
+        Objects.requireNonNull(activeRuleIds, "activeRuleIds").forEach(id -> {
+            String normalized = requireId(id);
+            if (normalized.startsWith("trained:")) {
+                String skill = resolveId(normalized.substring("trained:".length()));
+                if (!skills.containsKey(skill)) {
+                    throw new IllegalArgumentException("Unknown trained skill " + id);
+                }
+                active.add("trained:" + skill);
+                return;
+            }
+            String resolved = resolveId(normalized);
+            if (!entities.containsKey(resolved)) {
+                throw new IllegalArgumentException("Unknown active rule " + id);
+            }
+            active.add(resolved);
+        });
         LinkedHashMap<String, RuleRuntimeState.ResourceState> pools = new LinkedHashMap<>();
         LinkedHashSet<String> initializing = new LinkedHashSet<>();
         for (ResourceDefinition definition : resources.values().stream()
@@ -1244,7 +1272,9 @@ public final class CompiledRuleset {
     private static BigDecimal normalize(BigDecimal value) {
         Objects.requireNonNull(value, "value");
         BigDecimal normalized = value.stripTrailingZeros();
-        return normalized.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO : normalized;
+        return normalized.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO
+                : new BigDecimal(normalized.toPlainString());
     }
 
     private static Map<String, RuleFormula> immutableFormulaMap(Map<String, RuleFormula> source) {

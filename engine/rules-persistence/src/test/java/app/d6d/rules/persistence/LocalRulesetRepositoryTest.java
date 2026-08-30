@@ -91,6 +91,29 @@ class LocalRulesetRepositoryTest {
     }
 
     @Test
+    void repositoryCannotPublishAnExecutableRevisionWithBrokenRuntimeLinks() throws IOException {
+        RulesetRevision standard = standard();
+        LocalRulesetRepository repository = new LocalRulesetRepository(directory, List.of(standard));
+        RulesetDraft draft = repository.createHomebrew(standard.canonicalHash(), "Broken", "");
+        RuleEntity brokenAction = new RuleEntity(
+                "homebrew:action:broken", RuleKind.ACTION, RulesetOrigin.HOMEBREW,
+                LocalizedRuleText.bilingual("Rotta", "Broken"),
+                LocalizedRuleText.bilingual("Test", "Test"), "", true, RuleAutomationLevel.FULL,
+                Map.of("costs", "turn:missing=1"), List.of("homebrew"), "Homebrew", "", 0);
+        RulesetDraft changed = draft.withContent(
+                draft.name(), draft.description(), draft.runtime(), draft.patches(),
+                List.of(brokenAction), "changed");
+        repository.saveDraft(changed);
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> repository.publish(changed.id(), "1"));
+
+        assertTrue(failure.getMessage().contains("missing turn resource"));
+        assertNotNull(repository.findDraft(changed.id()));
+        assertEquals(1, repository.revisions().size());
+    }
+
+    @Test
     void aPublishedHomebrewContinuesInANewDraftWithoutMutatingHistory() throws IOException {
         RulesetRevision standard = standard();
         LocalRulesetRepository repository = new LocalRulesetRepository(directory, List.of(standard));

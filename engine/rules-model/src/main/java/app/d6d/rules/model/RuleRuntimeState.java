@@ -122,6 +122,8 @@ public record RuleRuntimeState(
 
     private static BigDecimal normalize(BigDecimal value) {
         BigDecimal normalized = value.stripTrailingZeros();
-        return normalized.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO : normalized;
+        return normalized.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO
+                : new BigDecimal(normalized.toPlainString());
     }
 }
