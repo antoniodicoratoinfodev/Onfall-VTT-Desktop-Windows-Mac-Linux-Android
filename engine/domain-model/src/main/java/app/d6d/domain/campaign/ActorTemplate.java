@@ -15,11 +15,11 @@ public record ActorTemplate(
         id = CampaignValues.requireText(id, "id");
         name = CampaignValues.requireText(name, "name");
         kind = Objects.requireNonNull(kind, "kind");
-        if (level < 0 || level > 20) {
-            throw new IllegalArgumentException("level must be between 0 and 20");
+        if (level < 0) {
+            throw new IllegalArgumentException("level cannot be negative");
         }
         if (kind == ActorKind.PLAYER_CHARACTER && level == 0) {
-            throw new IllegalArgumentException("a player character must have level 1-20");
+            throw new IllegalArgumentException("a player character must have a positive level");
         }
         attributes = CampaignValues.copyStringMap(attributes, "attributes");
     }

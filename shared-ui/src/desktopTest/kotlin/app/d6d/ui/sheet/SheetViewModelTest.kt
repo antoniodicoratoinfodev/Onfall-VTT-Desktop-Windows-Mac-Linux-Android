@@ -9,6 +9,7 @@ import app.d6d.rules.character.Ability
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.CharacterProgression
 import app.d6d.rules.character.ClassLevelState
+import app.d6d.rules.character.LevelUpRequest
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.ui.i18n.AppLocale
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -146,6 +147,35 @@ class SheetViewModelTest {
         assertEquals("Path of the Berserker", model.displayedSubclassName(gudrun))
         assertEquals("Guerriero 1", tarvos.className, "lo switch non deve modificare il documento")
         AppLocale.use(AppLanguage.ITALIAN)
+    }
+
+    @Test
+    fun `una scheda conserva il nome fotografato se la revisione homebrew non e installata`() {
+        val model = model()
+        val customClass = CharacterClassId.of("homebrew:class:chronomancer")
+        val unavailable = model.library.characters.first().copy(
+            className = "Cronomante 27",
+            progression = CharacterProgression(
+                rulesetCanonicalHash = "hash:revisione-non-installata",
+                maximumCharacterLevel = 30,
+                classLevels = listOf(ClassLevelState(customClass, 27)),
+            ),
+        )
+
+        assertEquals("Cronomante 27", model.displayedClassName(unavailable))
+        model.character = unavailable
+        assertFalse(model.characterRulesetAvailable)
+        assertTrue(model.abilityCatalog.isEmpty(), "non deve sostituire il catalogo mancante con lo SRD")
+        assertFalse(
+            model.advanceCharacter(
+                LevelUpRequest(
+                    classId = customClass,
+                    hitPointIncrease = 5,
+                    usedFixedHitPoints = true,
+                ),
+            ),
+        )
+        assertTrue(model.status.orEmpty().contains("non è installata"))
     }
 
     @Test

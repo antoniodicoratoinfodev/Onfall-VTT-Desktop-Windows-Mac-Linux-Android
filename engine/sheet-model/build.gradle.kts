@@ -18,6 +18,7 @@ dependencies {
     // La scheda produce la definizione da combattimento usata dal motore.
     api(project(":engine:domain-model"))
     api(project(":engine:character-rules"))
+    implementation(project(":engine:rules-model"))
     api(libs.kotlinx.serialization.json)
     implementation(project(":engine:persistence-json"))
 

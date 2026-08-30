@@ -5,6 +5,7 @@ import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
+import app.d6d.content.srd521it.Srd521Ruleset
 import app.d6d.i18n.AppLanguage
 import app.d6d.i18n.pick
 import app.d6d.sheet.CharacterSheet
@@ -111,7 +112,13 @@ internal data class SessionTemplate(
                 opponentIds += instanceId
             }
         }
-        val session = CombatSession.fromCombatants(name, seed, setups)
+        val session = CombatSession.fromCombatants(
+            name,
+            seed,
+            setups,
+            Srd521Ruleset.revision,
+            "local-1",
+        )
         session.setPartyCombatants(party.map { it.id })
         val grid = MapGrid(gridColumns, gridRows, feetPerSquare)
         session.configureMap(grid)

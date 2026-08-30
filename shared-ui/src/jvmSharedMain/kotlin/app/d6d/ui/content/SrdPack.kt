@@ -2,7 +2,10 @@ package app.d6d.ui.content
 
 import app.d6d.content.srd521it.Srd521ItContent
 import app.d6d.content.srd521it.SrdChoiceResolver
+import app.d6d.content.srd521it.SrdRulesetCharacterAdapter
+import app.d6d.content.srd521it.toCatalogAbility
 import app.d6d.i18n.AppLanguage
+import app.d6d.rules.model.RulesetRevision
 import app.d6d.sheet.GuidedCharacterService
 import app.d6d.rules.character.RulesContentPack
 import app.d6d.sheet.CatalogAbility
@@ -50,3 +53,38 @@ internal val guidedCharacterService: GuidedCharacterService
     get() = guidedCharacterServiceFor(AppLocale.language)
 
 private val services = HashMap<AppLanguage, GuidedCharacterService>()
+
+/** Proiezione eseguibile di una revisione, indicizzata per hash e lingua. */
+internal fun rulesPackFor(revision: RulesetRevision, language: AppLanguage): RulesContentPack =
+    synchronized(rulesPacks) {
+        rulesPacks.getOrPut(revision.canonicalHash() to language) {
+            SrdRulesetCharacterAdapter.project(revision, language)
+        }
+    }
+
+internal fun rulesCatalogFor(revision: RulesetRevision, language: AppLanguage): List<CatalogAbility> =
+    synchronized(rulesCatalogs) {
+        rulesCatalogs.getOrPut(revision.canonicalHash() to language) {
+            val pack = rulesPackFor(revision, language)
+            pack.elements.map { it.toCatalogAbility(pack) }
+        }
+    }
+
+internal fun guidedCharacterServiceFor(
+    revision: RulesetRevision,
+    language: AppLanguage,
+): GuidedCharacterService = synchronized(rulesServices) {
+    rulesServices.getOrPut(revision.canonicalHash() to language) {
+        val pack = rulesPackFor(revision, language)
+        GuidedCharacterService(pack) { id ->
+            val localizedNames = AppLanguage.entries.mapNotNull { candidate ->
+                rulesPackFor(revision, candidate).element(id)?.name
+            }
+            (localizedNames + SrdChoiceResolver.labelsForId(id, language)).distinct()
+        }
+    }
+}
+
+private val rulesPacks = HashMap<Pair<String, AppLanguage>, RulesContentPack>()
+private val rulesCatalogs = HashMap<Pair<String, AppLanguage>, List<CatalogAbility>>()
+private val rulesServices = HashMap<Pair<String, AppLanguage>, GuidedCharacterService>()

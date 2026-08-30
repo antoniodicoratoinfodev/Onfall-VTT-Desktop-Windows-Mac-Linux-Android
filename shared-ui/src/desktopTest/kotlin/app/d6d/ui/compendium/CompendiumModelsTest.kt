@@ -1,5 +1,6 @@
 package app.d6d.ui.compendium
 
+import app.d6d.domain.campaign.ActorKind
 import app.d6d.domain.combat.AbilityDefinition
 import app.d6d.domain.combat.AutomationStatus
 import app.d6d.domain.combat.DiceExpression
@@ -14,6 +15,18 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class CompendiumModelsTest {
+    @Test
+    fun `il catalogo non tronca i livelli definiti da un regolamento homebrew`() {
+        val entry = ActorDraft(
+            kind = ActorKind.PLAYER_CHARACTER,
+            level = 30,
+            challengeRating = "0",
+            xp = 0,
+        ).toEntry()
+
+        assertEquals(30, entry.template().level())
+    }
+
     @Test
     fun `il roundtrip della bozza conserva la cura senza aggiungere un attacco`() {
         val healing = HealingDefinition.dice(

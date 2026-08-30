@@ -32,6 +32,7 @@ import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.i18n.strings
 import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.character.ClassDefinition
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.CatalogAbility
 import app.d6d.ui.battle.GameButton
@@ -85,6 +86,7 @@ internal fun AbilityList(
     categories: List<RuleElementKind>,
     categoryFilter: RuleElementKind?,
     classFilter: CharacterClassId?,
+    characterClasses: List<ClassDefinition>,
     onCategoryFilter: (RuleElementKind?) -> Unit,
     onClassFilter: (CharacterClassId?) -> Unit,
     selectedId: String?,
@@ -93,6 +95,7 @@ internal fun AbilityList(
 ) {
     val words = strings.abilities
     val language = currentLanguage
+    val classNames = characterClasses.associate { it.id to it.name }
     Column(
         modifier
             .fillMaxSize()
@@ -111,6 +114,7 @@ internal fun AbilityList(
                         categories = categories,
                         categoryFilter = categoryFilter,
                         classFilter = classFilter,
+                        characterClasses = characterClasses,
                         onCategoryFilter = onCategoryFilter,
                         onClassFilter = onClassFilter,
                     )
@@ -136,7 +140,11 @@ internal fun AbilityList(
                     }
                 }
                 items(abilities, key = { it.id }) { ability ->
-                    AbilityListRow(ability, selected = ability.id == selectedId) { onSelect(ability) }
+                    AbilityListRow(
+                        ability,
+                        selected = ability.id == selectedId,
+                        classNames = classNames,
+                    ) { onSelect(ability) }
                 }
             }
             PanelScrollbar(listState, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
@@ -150,6 +158,7 @@ private fun AbilityFilters(
     categories: List<RuleElementKind>,
     categoryFilter: RuleElementKind?,
     classFilter: CharacterClassId?,
+    characterClasses: List<ClassDefinition>,
     onCategoryFilter: (RuleElementKind?) -> Unit,
     onClassFilter: (CharacterClassId?) -> Unit,
 ) {
@@ -198,9 +207,10 @@ private fun AbilityFilters(
                 dense = true,
                 onClick = { onClassFilter(null) },
             )
-            CharacterClassId.entries.forEach { classId ->
+            characterClasses.forEach { definition ->
+                val classId = definition.id
                 GameButton(
-                    label = classId.label(language),
+                    label = definition.name,
                     accent = if (classFilter == classId) Palette.Party else Palette.TextMuted,
                     selected = classFilter == classId,
                     dense = true,
@@ -212,7 +222,12 @@ private fun AbilityFilters(
 }
 
 @Composable
-private fun AbilityListRow(ability: CatalogAbility, selected: Boolean, onClick: () -> Unit) {
+private fun AbilityListRow(
+    ability: CatalogAbility,
+    selected: Boolean,
+    classNames: Map<CharacterClassId, String>,
+    onClick: () -> Unit,
+) {
     val strings = strings
     val words = strings.abilities
     val language = currentLanguage
@@ -247,13 +262,16 @@ private fun AbilityListRow(ability: CatalogAbility, selected: Boolean, onClick: 
             if (ability.dealsDamage) Chip(ability.damageText(language), Palette.Enemy)
             if (ability.isArea) Chip(words.areaOf(distanceLabel(ability.areaRadiusFeet, language)), Palette.Crit)
         }
-        AbilityMetadataChips(ability)
+        AbilityMetadataChips(ability, classNames)
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun AbilityMetadataChips(ability: CatalogAbility) {
+internal fun AbilityMetadataChips(
+    ability: CatalogAbility,
+    classNames: Map<CharacterClassId, String> = emptyMap(),
+) {
     val words = strings.abilities
     val language = currentLanguage
     FlowRow(
@@ -269,7 +287,7 @@ internal fun AbilityMetadataChips(ability: CatalogAbility) {
                 .distinct()
                 .sortedBy { it.ordinal }
                 .forEach { classId ->
-                    Chip(classId.label(language), Palette.Party)
+                    Chip(classNames[classId] ?: classId.label(language), Palette.Party)
                 }
             ability.classEligibility
                 .map { it.minimumLevel }

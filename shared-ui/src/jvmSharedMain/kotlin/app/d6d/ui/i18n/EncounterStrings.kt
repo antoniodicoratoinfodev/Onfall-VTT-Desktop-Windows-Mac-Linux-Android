@@ -14,6 +14,7 @@ interface EncounterStrings {
 
     fun step(current: Int, total: Int, description: String): String
     val stepSource: String
+    val stepRules: String
     val stepParticipants: String
     val stepGrid: String
     val stepMode: String

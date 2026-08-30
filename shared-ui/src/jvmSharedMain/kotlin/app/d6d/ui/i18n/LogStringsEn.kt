@@ -9,6 +9,7 @@ internal object LogStringsEn : LogStrings {
     override val encounterReady = "Encounter ready"
     override val encounterStarted = "The encounter begins"
     override val encounterPaused = "Encounter paused"
+    override fun rulesetChanged(name: String) = "Game ruleset changed to $name"
     override val encounterResumed = "Encounter resumed"
     override val sidesDeclared = "Sides declared"
     override val initiativeOrderSet = "Initiative order set"
@@ -18,6 +19,25 @@ internal object LogStringsEn : LogStrings {
     override fun partyDeclared(names: String) = "Party declared: $names"
     override fun initiativeOrder(order: String) = "Initiative order: $order"
     override fun encounterResolved(outcome: String) = "Encounter resolved: $outcome"
+    override fun genericRuleAction(ruleId: String, eventCount: String) =
+        "Rule “$ruleId” executed · $eventCount effects"
+    override fun genericRuleEvent(event: String, eventCount: String) =
+        "Rules event “$event” · $eventCount effects"
+    override fun genericRandomizer(ruleId: String, draws: String, value: String, tableValue: String) =
+        buildString {
+            append("Roll “$ruleId”: $draws → $value")
+            if (tableValue.isNotBlank()) append(" · $tableValue")
+        }
+    override fun genericValueSet(ruleId: String, before: String, after: String) =
+        "Value “$ruleId”: $before → $after"
+    override fun genericRuleActivation(ruleId: String, active: Boolean) =
+        "Rule “$ruleId” ${if (active) "activated" else "deactivated"}"
+    override fun genericResourceSet(resourceId: String, current: String, maximum: String) =
+        "Resource “$resourceId”: $current / $maximum"
+    override fun genericConditionSet(conditionId: String, before: String, after: String) =
+        "Condition “$conditionId”: $before → $after stacks"
+    override fun genericTurnResourceSet(resourceId: String, before: String, after: String) =
+        "Budget “$resourceId”: $before → $after"
 
     // --- turni e iniziativa ---------------------------------------------------
 

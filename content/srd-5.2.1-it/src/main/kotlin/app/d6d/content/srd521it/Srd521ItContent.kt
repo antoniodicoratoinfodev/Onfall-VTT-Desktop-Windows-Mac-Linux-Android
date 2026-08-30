@@ -1,11 +1,18 @@
 package app.d6d.content.srd521it
 
 import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.abbreviationIn
+import app.d6d.i18n.label
+import app.d6d.rules.character.Ability
+import app.d6d.rules.character.CharacterSkillDefinition
+import app.d6d.rules.character.CharacterStatDefinition
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ClassEligibility
+import app.d6d.rules.character.ExperienceProgression
 import app.d6d.rules.character.RuleElementDefinition
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.RulesContentPack
+import app.d6d.rules.character.Skill
 import app.d6d.sheet.CatalogAbility
 
 /**
@@ -67,6 +74,18 @@ object Srd521ItContent {
             weapons = SrdWeapons.all(language),
             backgrounds = SrdBackgrounds.all(language),
             equipmentPackages = SrdStartingEquipment.all(language),
+            experienceThresholds = ExperienceProgression.thresholds,
+            stats = Ability.entries.map { ability ->
+                CharacterStatDefinition(
+                    id = ability,
+                    name = ability.label(language),
+                    abbreviation = ability.abbreviationIn(language),
+                    advancementMaximum = 20,
+                )
+            },
+            skills = Skill.entries.map { skill ->
+                CharacterSkillDefinition(skill, skill.label(language), skill.ability)
+            },
         )
     }
 

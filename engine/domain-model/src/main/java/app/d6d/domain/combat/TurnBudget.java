@@ -56,6 +56,19 @@ public record TurnBudget(
         return movementAllowanceFeet - movementSpentFeet;
     }
 
+    /**
+     * Aggiorna la velocità effettiva senza restituire movimento già speso.
+     * Se il nuovo limite è più basso della distanza percorsa, il turno resta a zero movimento residuo.
+     */
+    public TurnBudget withMovementAllowance(int feet) {
+        if (feet < 0) throw new IllegalArgumentException("Movement allowance cannot be negative");
+        int safeAllowance = Math.max(feet, movementSpentFeet);
+        return new TurnBudget(safeAllowance, movementSpentFeet, actionAvailable, bonusActionAvailable,
+                reactionAvailable, objectInteractionAvailable, attacksRemaining, spellSlotSpentThisTurn,
+                additionalActionAvailable, additionalActionMagicRestricted, actionSurgeUsedThisTurn,
+                attackActionInProgress);
+    }
+
     public TurnBudget spendMovement(int feet) {
         if (feet < 0 || feet > movementRemainingFeet()) {
             throw new IllegalArgumentException("Movement exceeds the remaining budget");

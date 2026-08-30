@@ -136,4 +136,26 @@ class BattleLogTest {
         assertTrue(concentration.contains("d20 12 + 2 = 14 contro CD 10"))
         assertTrue(concentration.endsWith("mantenuta"))
     }
+
+    @Test
+    fun `un evento di regola mostra lo scope senza perdere i dettagli meccanici`() {
+        val description = event(
+            EventType.RULE_RESOURCE_SET,
+            actorId = "",
+            details = mapOf(
+                "resourceId" to "homebrew:stress",
+                "afterCurrent" to "2",
+                "afterMaximum" to "6",
+                "scopeKind" to "ACTOR",
+                "scopeId" to "hero",
+                "targetScopeKind" to "ACTOR",
+                "targetScopeId" to "goblin",
+            ),
+        ).describe(model(), ItalianStrings)
+
+        assertEquals(
+            "Risorsa «homebrew:stress»: 2 / 6 · actor:hero → actor:goblin",
+            description,
+        )
+    }
 }

@@ -228,6 +228,18 @@ internal fun CombatEvent.describe(viewModel: BattleViewModel, strings: Strings):
     val ability = abilityName.takeIf { it.isNotBlank() }?.let { words.withAbility(it) }.orEmpty()
     val d20 = details().d20Breakdown(words)
     val againstAc = if (d20.isBlank()) "" else words.rollAgainstArmorClass(d20, detail("armorClass"))
+    val ruleScope = detail("scopeKind").takeIf { it.isNotBlank() }?.let { kind ->
+        buildString {
+            append(" · ${kind.lowercase()}:${detail("scopeId")}")
+            val targetKind = detail("targetScopeKind")
+            val targetId = detail("targetScopeId")
+            if (targetKind.isNotBlank() &&
+                (targetKind != kind || targetId != detail("scopeId"))
+            ) {
+                append(" → ${targetKind.lowercase()}:$targetId")
+            }
+        }
+    }.orEmpty()
 
     return when (type()) {
         EventType.ENCOUNTER_CREATED -> words.encounterCreated
@@ -390,6 +402,39 @@ internal fun CombatEvent.describe(viewModel: BattleViewModel, strings: Strings):
         EventType.ENCOUNTER_PAUSED -> words.encounterPaused
         EventType.ENCOUNTER_RESUMED -> words.encounterResumed
         EventType.ENCOUNTER_RESOLVED -> words.encounterResolved(detail("outcome"))
+        EventType.RULESET_CHANGED -> words.rulesetChanged(detail("displayName"))
+        EventType.RULE_ACTION_EXECUTED -> words.genericRuleAction(
+            detail("source"),
+            detail("eventCount"),
+        ) + ruleScope
+        EventType.RULE_EVENT_FIRED -> words.genericRuleEvent(
+            detail("source"),
+            detail("eventCount"),
+        ) + ruleScope
+        EventType.RULE_RANDOMIZER_ROLLED -> words.genericRandomizer(
+            detail("randomizer"),
+            detail("draws"),
+            detail("value"),
+            detail("tableValue"),
+        ) + ruleScope
+        EventType.RULE_VALUE_SET -> words.genericValueSet(
+            detail("ruleId"),
+            detail("before"),
+            detail("after"),
+        ) + ruleScope
+        EventType.RULE_ACTIVATION_CHANGED -> words.genericRuleActivation(
+            detail("ruleId"),
+            detail("after").toBooleanStrictOrNull() == true,
+        ) + ruleScope
+        EventType.RULE_RESOURCE_SET -> words.genericResourceSet(
+            detail("resourceId"), detail("afterCurrent"), detail("afterMaximum"),
+        ) + ruleScope
+        EventType.RULE_CONDITION_SET -> words.genericConditionSet(
+            detail("conditionId"), detail("before"), detail("after"),
+        ) + ruleScope
+        EventType.RULE_TURN_RESOURCE_SET -> words.genericTurnResourceSet(
+            detail("resourceId"), detail("before"), detail("after"),
+        ) + ruleScope
         // L'annullamento resta scritto nel registro invece di sparire: il log e'
         // append-only, quindi la cronologia mostra anche i ripensamenti del tavolo.
         EventType.UNDO_PERFORMED -> words.undoPerformed(detail("revertedRevision"))

@@ -52,6 +52,7 @@ import app.d6d.ui.session.OpenSessionsPanel
 import app.d6d.ui.session.SessionWorkspace
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
+import app.d6d.rules.model.RulesetOrigin
 
 /** Configuratore del prossimo combattimento, alimentato dal Compendio. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -121,6 +122,12 @@ fun EncounterBuilderScreen(
                 modifier = Modifier.weight(1f),
             )
 
+            NewGameStep.REGOLAMENTO -> RulesetSelectionStep(
+                viewModel = viewModel,
+                compact = compact,
+                modifier = Modifier.weight(1f),
+            )
+
             NewGameStep.PARTECIPANTI -> ParticipantsStep(
                 viewModel = viewModel,
                 compact = compact,
@@ -156,15 +163,83 @@ private fun EncounterHeader(step: NewGameStep, compact: Boolean) {
         )
         Text(
             text = when (step) {
-                NewGameStep.TEMPLATE -> words.step(1, 5, words.stepSource)
-                NewGameStep.PARTECIPANTI -> words.step(2, 5, words.stepParticipants)
-                NewGameStep.GRIGLIA -> words.step(3, 5, words.stepGrid)
-                NewGameStep.MODALITA -> words.step(4, 5, words.stepMode)
-                NewGameStep.DIFFICOLTA -> words.step(5, 5, words.stepDifficulty)
+                NewGameStep.TEMPLATE -> words.step(1, 6, words.stepSource)
+                NewGameStep.REGOLAMENTO -> words.step(2, 6, words.stepRules)
+                NewGameStep.PARTECIPANTI -> words.step(3, 6, words.stepParticipants)
+                NewGameStep.GRIGLIA -> words.step(4, 6, words.stepGrid)
+                NewGameStep.MODALITA -> words.step(5, 6, words.stepMode)
+                NewGameStep.DIFFICOLTA -> words.step(6, 6, words.stepDifficulty)
             },
             color = Palette.TextMuted,
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+/** Il regolamento viene scelto prima degli attori: la revisione è parte dell'identità della partita. */
+@Composable
+private fun RulesetSelectionStep(
+    viewModel: EncounterBuilderViewModel,
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val words = strings.rules
+    Column(
+        modifier.fillMaxWidth().padding(if (compact) 12.dp else 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(words.chooseForSession, color = Palette.Text, fontWeight = FontWeight.Black,
+            style = MaterialTheme.typography.headlineSmall)
+        Text(words.chooseForSessionBody, color = Palette.TextMuted,
+            style = MaterialTheme.typography.bodyMedium)
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(viewModel.availableRulesets, key = { it.canonicalHash() }) { revision ->
+                val selected = revision.canonicalHash() == viewModel.selectedRuleset.canonicalHash()
+                val shape = RoundedCornerShape(9.dp)
+                Column(
+                    Modifier.fillMaxWidth()
+                        .background(if (selected) Palette.Gold.copy(alpha = .16f) else Palette.SurfaceHigh, shape)
+                        .border(1.dp, if (selected) Palette.Gold else Palette.Line, shape)
+                        .clickable { viewModel.selectRuleset(revision.canonicalHash()) }
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(revision.name(), color = Palette.Text, fontWeight = FontWeight.Black,
+                            style = MaterialTheme.typography.titleMedium)
+                        Chip(
+                            if (revision.origin() == RulesetOrigin.BUNDLED_STANDARD) words.standard else words.homebrew,
+                            color = if (revision.origin() == RulesetOrigin.BUNDLED_STANDARD) {
+                                Palette.TextMuted
+                            } else {
+                                Palette.GoldBright
+                            },
+                        )
+                    }
+                    Text(words.revision(revision.version()), color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        words.runtimeSummary(
+                            revision.runtime().criticalHitMinimumNatural(),
+                            revision.runtime().maximumExhaustion(),
+                            revision.entities().size,
+                        ),
+                        color = Palette.TextFaint,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Text(
+                        words.automationCoverage(
+                            revision.automationCount(app.d6d.rules.model.RuleAutomationLevel.FULL),
+                            revision.automationCount(app.d6d.rules.model.RuleAutomationLevel.ASSISTED),
+                            revision.automationCount(app.d6d.rules.model.RuleAutomationLevel.MANUAL),
+                        ),
+                        color = Palette.TextFaint,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -665,6 +740,17 @@ private fun DifficultyStep(
                         .padding(10.dp),
                 )
             }
+            if (!viewModel.selectedRulesetSupportsEnemyCpu) {
+                Text(
+                    strings.rules.cpuManualFallback,
+                    color = Palette.GoldBright,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth()
+                        .background(Palette.Gold.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                )
+            }
             // La sandbox apre l'elenco perche' e' l'unica voce che spegne la CPU:
             // le tre sotto scelgono soltanto quanto sara' tattica.
             val sandbox = viewModel.enemyCpuDifficulty == null
@@ -683,6 +769,7 @@ private fun DifficultyStep(
                     subtitle = difficulty.comparison(strings),
                     accent = if (selected) difficulty.accent else Palette.TextMuted,
                     selected = selected,
+                    enabled = viewModel.selectedRulesetSupportsEnemyCpu,
                     onClick = { viewModel.enemyCpuDifficulty = difficulty },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -736,6 +823,14 @@ private fun NewGameFooter(
     ) {
         when (viewModel.step) {
             NewGameStep.TEMPLATE -> Unit
+            NewGameStep.REGOLAMENTO -> {
+                GameButton(strings.common.back, accent = Palette.TextMuted, onClick = { viewModel.back() })
+                GameButton(
+                    label = strings.rules.nextParticipants,
+                    accent = Palette.Heal,
+                    onClick = { viewModel.continueFromRuleset() },
+                )
+            }
             NewGameStep.PARTECIPANTI -> {
                 GameButton(strings.common.back, accent = Palette.TextMuted, onClick = { viewModel.back() })
                 GameButton(strings.common.clear, accent = Palette.TextMuted, onClick = { viewModel.clearSelection() })

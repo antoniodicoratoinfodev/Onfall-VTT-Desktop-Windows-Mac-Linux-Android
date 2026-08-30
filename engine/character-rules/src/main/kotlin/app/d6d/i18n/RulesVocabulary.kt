@@ -36,6 +36,7 @@ val Ability.englishLabel: String
         Ability.INTELLIGENCE -> "Intelligence"
         Ability.WISDOM -> "Wisdom"
         Ability.CHARISMA -> "Charisma"
+        else -> italianLabel
     }
 
 /**
@@ -52,6 +53,7 @@ val Ability.englishAbbreviation: String
         Ability.INTELLIGENCE -> "INT"
         Ability.WISDOM -> "WIS"
         Ability.CHARISMA -> "CHA"
+        else -> abbreviation
     }
 
 fun Ability.label(language: AppLanguage): String = language.pick(italianLabel, englishLabel)
@@ -81,6 +83,7 @@ val Skill.englishLabel: String
         Skill.INTIMIDIRE -> "Intimidation"
         Skill.INTRATTENERE -> "Performance"
         Skill.PERSUASIONE -> "Persuasion"
+        else -> italianLabel
     }
 
 fun Skill.label(language: AppLanguage): String = language.pick(italianLabel, englishLabel)
@@ -101,6 +104,8 @@ val CharacterClassId.englishLabel: String
         CharacterClassId.RANGER -> "Ranger"
         CharacterClassId.SORCERER -> "Sorcerer"
         CharacterClassId.WARLOCK -> "Warlock"
+        else -> contentId.replace('-', ' ').replace('_', ' ')
+            .replaceFirstChar { it.uppercase() }
     }
 
 fun CharacterClassId.label(language: AppLanguage): String =

@@ -12,7 +12,10 @@ public record CombatantState(
         ConcentrationState concentration,
         DeathSaveState deathSaves,
         int exhaustionLevel,
-        List<CombatResourceState> resources) {
+        List<CombatResourceState> resources,
+        int maximumExhaustion,
+        int exhaustionD20PenaltyPerLevel,
+        int exhaustionSpeedPenaltyFeetPerLevel) {
 
     /** Exhaustion arriva a sei: al sesto livello la creatura muore. */
     public static final int MAX_EXHAUSTION = 6;
@@ -25,9 +28,30 @@ public record CombatantState(
         conditions = List.copyOf(Objects.requireNonNull(conditions, "conditions"));
         resources = List.copyOf(Objects.requireNonNull(resources, "resources"));
         deathSaves = deathSaves == null ? DeathSaveState.none() : deathSaves;
-        if (exhaustionLevel < 0 || exhaustionLevel > MAX_EXHAUSTION) {
-            throw new IllegalArgumentException("Exhaustion must be between 0 and " + MAX_EXHAUSTION);
+        if (maximumExhaustion < 1 || maximumExhaustion > 20) {
+            throw new IllegalArgumentException("Maximum Exhaustion must be between 1 and 20");
         }
+        if (exhaustionD20PenaltyPerLevel < 0 || exhaustionD20PenaltyPerLevel > 20
+                || exhaustionSpeedPenaltyFeetPerLevel < 0 || exhaustionSpeedPenaltyFeetPerLevel > 100) {
+            throw new IllegalArgumentException("Invalid Exhaustion penalties");
+        }
+        if (exhaustionLevel < 0 || exhaustionLevel > maximumExhaustion) {
+            throw new IllegalArgumentException("Exhaustion must be between 0 and " + maximumExhaustion);
+        }
+    }
+
+    /** Costruttore completo storico: applica i parametri SRD ai salvataggi e ai chiamanti precedenti. */
+    public CombatantState(
+            CombatantSnapshot snapshot,
+            int currentHitPoints,
+            int temporaryHitPoints,
+            List<ConditionInstance> conditions,
+            ConcentrationState concentration,
+            DeathSaveState deathSaves,
+            int exhaustionLevel,
+            List<CombatResourceState> resources) {
+        this(snapshot, currentHitPoints, temporaryHitPoints, conditions, concentration, deathSaves,
+                exhaustionLevel, resources, MAX_EXHAUSTION, 2, 5);
     }
 
     /** Backward-compatible full constructor: uses the resources captured by the snapshot. */
@@ -69,7 +93,7 @@ public record CombatantState(
     }
 
     public boolean dead() {
-        return deathSaves.dead() || exhaustionLevel >= MAX_EXHAUSTION;
+        return deathSaves.dead() || exhaustionLevel >= maximumExhaustion;
     }
 
     /** Priva di sensi a 0 PF ma non ancora morta. */
@@ -83,12 +107,12 @@ public record CombatantState(
 
     /** Penalita' di Exhaustion a tutti i D20 Test: −2 per livello. */
     public int exhaustionD20Penalty() {
-        return -2 * exhaustionLevel;
+        return -exhaustionD20PenaltyPerLevel * exhaustionLevel;
     }
 
     /** Riduzione di velocita' da Exhaustion: −5 piedi per livello, mai sotto zero. */
     public int effectiveSpeedFeet() {
-        return Math.max(0, snapshot.speedFeet() - 5 * exhaustionLevel);
+        return Math.max(0, snapshot.speedFeet() - exhaustionSpeedPenaltyFeetPerLevel * exhaustionLevel);
     }
 
     public Optional<ConcentrationState> activeConcentration() {

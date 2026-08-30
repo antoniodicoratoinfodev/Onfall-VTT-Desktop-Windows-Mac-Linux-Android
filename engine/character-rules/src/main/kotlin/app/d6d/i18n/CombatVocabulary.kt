@@ -50,6 +50,7 @@ fun DamageType.label(language: AppLanguage): String = language.pick(
         DamageType.SLASHING -> "Tagliente"
         DamageType.THUNDER -> "Tuono"
         DamageType.UNTYPED -> "Non tipizzato"
+        else -> name().openRuleLabel()
     },
     english = when (this) {
         DamageType.ACID -> "Acid"
@@ -66,6 +67,7 @@ fun DamageType.label(language: AppLanguage): String = language.pick(
         DamageType.SLASHING -> "Slashing"
         DamageType.THUNDER -> "Thunder"
         DamageType.UNTYPED -> "Untyped"
+        else -> name().openRuleLabel()
     },
 )
 
@@ -93,6 +95,7 @@ fun DamageType.inlineLabel(language: AppLanguage): String = language.pick(
         DamageType.SLASHING -> "tagliente"
         DamageType.THUNDER -> "tuono"
         DamageType.UNTYPED -> "non tipizzato"
+        else -> name().openRuleLabel().lowercase()
     },
     english = when (this) {
         DamageType.ACID -> "acid"
@@ -109,6 +112,7 @@ fun DamageType.inlineLabel(language: AppLanguage): String = language.pick(
         DamageType.SLASHING -> "slashing"
         DamageType.THUNDER -> "thunder"
         DamageType.UNTYPED -> "untyped"
+        else -> name().openRuleLabel().lowercase()
     },
 )
 
@@ -132,6 +136,7 @@ fun ConditionType.label(language: AppLanguage): String = language.pick(
         ConditionType.STUNNED -> "Stordito"
         ConditionType.UNCONSCIOUS -> "Privo di sensi"
         ConditionType.CUSTOM -> "Personalizzata"
+        else -> name().openRuleLabel()
     },
     english = when (this) {
         ConditionType.BLINDED -> "Blinded"
@@ -150,10 +155,14 @@ fun ConditionType.label(language: AppLanguage): String = language.pick(
         ConditionType.STUNNED -> "Stunned"
         ConditionType.UNCONSCIOUS -> "Unconscious"
         ConditionType.CUSTOM -> "Custom"
+        else -> name().openRuleLabel()
     },
 )
 
 fun ConditionType.inlineLabel(language: AppLanguage): String = label(language).lowercase()
+
+private fun String.openRuleLabel(): String =
+    substringAfterLast(':').replace('-', ' ').replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase)
 
 // --- Caratteristiche dei tiri salvezza ---------------------------------------
 

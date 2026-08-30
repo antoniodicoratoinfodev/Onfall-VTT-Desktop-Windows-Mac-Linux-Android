@@ -44,6 +44,7 @@ import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.HealingTarget
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.character.ClassDefinition
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.Ability
 import app.d6d.sheet.CatalogAbility
@@ -84,6 +85,8 @@ fun AbilityArchive(
     val language = strings.language
     val scope = rememberCoroutineScope()
     val catalog = viewModel.abilityCatalog.sortedBy { it.name.lowercase() }
+    val characterClasses = viewModel.availableCharacterClasses
+    val damageTypes = viewModel.damageTypesFor()
     var categoryFilter by remember { mutableStateOf<RuleElementKind?>(null) }
     var classFilter by remember { mutableStateOf<CharacterClassId?>(null) }
     val categories = RuleElementKind.entries.filter { category ->
@@ -187,6 +190,8 @@ fun AbilityArchive(
                     onDuplicate = { duplicate(draft) },
                     passiveOverridden = viewModel.abilityPassiveIsOverridden(draft.id),
                     onPassiveChange = ::setPassive,
+                    characterClasses = characterClasses,
+                    damageTypes = damageTypes,
                     modifier = Modifier.weight(1f),
                 )
             } else {
@@ -196,6 +201,7 @@ fun AbilityArchive(
                     categories = categories,
                     categoryFilter = categoryFilter,
                     classFilter = classFilter,
+                    characterClasses = characterClasses,
                     onCategoryFilter = { categoryFilter = it },
                     onClassFilter = { classFilter = it },
                     selectedId = selectedId,
@@ -211,6 +217,7 @@ fun AbilityArchive(
                     categories = categories,
                     categoryFilter = categoryFilter,
                     classFilter = classFilter,
+                    characterClasses = characterClasses,
                     onCategoryFilter = { categoryFilter = it },
                     onClassFilter = { classFilter = it },
                     selectedId = selectedId,
@@ -238,6 +245,8 @@ fun AbilityArchive(
                     onDuplicate = { duplicate(draft) },
                     passiveOverridden = viewModel.abilityPassiveIsOverridden(draft.id),
                     onPassiveChange = ::setPassive,
+                    characterClasses = characterClasses,
+                    damageTypes = damageTypes,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -291,6 +300,8 @@ private fun AbilityDetails(
     onDuplicate: () -> Unit,
     passiveOverridden: Boolean,
     onPassiveChange: (Boolean) -> Unit,
+    characterClasses: List<ClassDefinition>,
+    damageTypes: List<DamageType>,
     modifier: Modifier = Modifier,
 ) {
     if (draft.immutable) {
@@ -299,6 +310,7 @@ private fun AbilityDetails(
             onDuplicate = onDuplicate,
             overridden = passiveOverridden,
             onPassiveChange = onPassiveChange,
+            characterClasses = characterClasses,
             modifier = modifier,
         )
     } else {
@@ -307,6 +319,8 @@ private fun AbilityDetails(
             onChange = { updated -> onChange(updated.enforceHealingConstraints()) },
             onSave = onSave,
             onDelete = onDelete,
+            characterClasses = characterClasses,
+            damageTypes = damageTypes,
             modifier = modifier,
         )
     }
@@ -319,11 +333,13 @@ private fun ReadOnlyAbilityDetails(
     onDuplicate: () -> Unit,
     overridden: Boolean,
     onPassiveChange: (Boolean) -> Unit,
+    characterClasses: List<ClassDefinition>,
     modifier: Modifier = Modifier,
 ) {
     val words = strings.abilities
     val language = currentLanguage
     val strings = strings
+    val classNames = characterClasses.associate { it.id to it.name }
     Column(modifier.fillMaxSize()) {
         Column(
             Modifier
@@ -340,7 +356,7 @@ private fun ReadOnlyAbilityDetails(
                     fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleLarge,
                 )
-                AbilityMetadataChips(ability)
+                AbilityMetadataChips(ability, classNames)
                 Text(
                     text = words.abilityId(ability.id),
                     color = Palette.TextFaint,
@@ -373,7 +389,10 @@ private fun ReadOnlyAbilityDetails(
                     if (ability.dealsDamage) Chip(ability.damageText(language), Palette.Enemy)
                     ability.healing?.let { healing ->
                         Chip(
-                            words.healingSummary(healing.amountText(strings), healing.target.label(strings)),
+                            words.healingSummary(
+                                healing.amountText(strings, classNames),
+                                healing.target.label(strings),
+                            ),
                             Palette.Heal,
                         )
                     }
@@ -558,6 +577,8 @@ private fun AbilityEditor(
     onChange: (CatalogAbility) -> Unit,
     onSave: () -> Unit,
     onDelete: (() -> Unit)?,
+    characterClasses: List<ClassDefinition>,
+    damageTypes: List<DamageType>,
     modifier: Modifier = Modifier,
 ) {
     val words = strings.abilities
@@ -842,7 +863,11 @@ private fun AbilityEditor(
                                                     bonusClassId = if (
                                                         source == CatalogHealingBonusSource.CLASS_LEVEL
                                                     ) {
-                                                        healing.bonusClassId ?: CharacterClassId.FIGHTER
+                                                        healing.bonusClassId
+                                                            ?.takeIf { saved ->
+                                                                characterClasses.any { it.id == saved }
+                                                            }
+                                                            ?: characterClasses.first().id
                                                     } else {
                                                         null
                                                     },
@@ -863,9 +888,10 @@ private fun AbilityEditor(
                                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                                 verticalArrangement = Arrangement.spacedBy(5.dp),
                             ) {
-                                CharacterClassId.entries.forEach { classId ->
+                                characterClasses.forEach { definition ->
+                                    val classId = definition.id
                                     GameButton(
-                                        label = classId.label(language),
+                                        label = definition.name,
                                         accent = if (healing.bonusClassId == classId) {
                                             Palette.Heal
                                         } else {
@@ -934,7 +960,7 @@ private fun AbilityEditor(
                             onChange(draft.copy(damageModifier = it))
                         }
                     }
-                    DamageTypeSelector(words.mainTypeCaps, draft.damageType) { type ->
+                    DamageTypeSelector(words.mainTypeCaps, draft.damageType, damageTypes) { type ->
                         onChange(draft.copy(damageType = type))
                     }
 
@@ -981,7 +1007,7 @@ private fun AbilityEditor(
                                     onChange(draft.withAdditionalDamage(index, component.copy(modifier = it)))
                                 }
                             }
-                            DamageTypeSelector(words.extraTypeCaps, component.type) { type ->
+                            DamageTypeSelector(words.extraTypeCaps, component.type, damageTypes) { type ->
                                 onChange(draft.withAdditionalDamage(index, component.copy(type = type)))
                             }
                         }
@@ -1076,14 +1102,19 @@ private fun CatalogAbility.asCustomCopy(strings: Strings): CatalogAbility = copy
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DamageTypeSelector(label: String, selected: DamageType, onSelect: (DamageType) -> Unit) {
+private fun DamageTypeSelector(
+    label: String,
+    selected: DamageType,
+    available: List<DamageType>,
+    onSelect: (DamageType) -> Unit,
+) {
     val language = currentLanguage
     Text(label, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        DamageType.entries.forEach { type ->
+        (available + selected).distinct().forEach { type ->
             GameButton(
                 label = type.label(language),
                 accent = if (selected == type) Palette.Enemy else Palette.TextMuted,
@@ -1117,7 +1148,10 @@ private fun CatalogAbility.enforceHealingConstraints(): CatalogAbility =
         )
     }
 
-private fun CatalogHealing.amountText(strings: Strings): String =
+private fun CatalogHealing.amountText(
+    strings: Strings,
+    classNames: Map<CharacterClassId, String> = emptyMap(),
+): String =
     dice?.let { value ->
         buildString {
             append(value.count).append('d').append(value.sides)
@@ -1129,7 +1163,8 @@ private fun CatalogHealing.amountText(strings: Strings): String =
                     append(strings.abilities.plusSpellcastingModifier)
                 CatalogHealingBonusSource.CLASS_LEVEL -> append(
                     strings.abilities.plusClassLevel(
-                        bonusClassId?.label(strings.language) ?: strings.abilities.classLevel,
+                        bonusClassId?.let { classNames[it] ?: it.label(strings.language) }
+                            ?: strings.abilities.classLevel,
                     ),
                 )
             }

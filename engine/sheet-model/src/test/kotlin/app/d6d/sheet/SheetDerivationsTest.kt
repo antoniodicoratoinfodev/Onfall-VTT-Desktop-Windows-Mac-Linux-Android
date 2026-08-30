@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.CharacterProgression
+import app.d6d.rules.character.CharacterSkillDefinition
+import app.d6d.rules.character.CharacterStatDefinition
 import app.d6d.rules.character.ClassLevelState
 import app.d6d.rules.character.ClassEligibility
 import app.d6d.rules.character.RuleElementKind
@@ -23,6 +25,82 @@ import app.d6d.rules.character.RuleElementKind
  * regolamento e non come farebbe l'aritmetica ingenua.
  */
 class SheetDerivationsTest {
+
+    @Test
+    fun `oltre una tabella PE parziale la progressione prosegue manualmente`() {
+        val classId = CharacterClassId.of("homebrew:class:epic")
+        val sheet = CharacterSheet(
+            experiencePoints = 100,
+            progression = CharacterProgression(
+                maximumCharacterLevel = 4,
+                enforceExperienceThresholds = true,
+                experienceThresholds = listOf(0, 100),
+                classLevels = listOf(ClassLevelState(classId, 2)),
+            ),
+        )
+
+        assertNull(sheet.nextLevelExperienceThreshold)
+        assertTrue(sheet.canLevelUp)
+    }
+
+    @Test
+    fun `caratteristiche skill formule e curva PE aperte guidano davvero la scheda`() {
+        val will = Ability.of("home:stat:will")
+        val luck = Ability.of("home:stat:luck")
+        val ritual = Skill.of("home:skill:ritual")
+        val sheet = CharacterSheet(
+            experiencePoints = 350,
+            abilityScores = mapOf(will to 8),
+            skillProficiencies = mapOf(ritual to Proficiency.EXPERTISE),
+            progression = CharacterProgression(
+                rulesetProjectId = "home:rules",
+                rulesetRevisionId = "home:revision:1",
+                rulesetCanonicalHash = "home:hash",
+                maximumCharacterLevel = 4,
+                experienceThresholds = listOf(0, 100, 300, 600),
+                statDefinitions = listOf(
+                    CharacterStatDefinition(
+                        id = will,
+                        name = "Volontà",
+                        abbreviation = "VOL",
+                        defaultScore = 7,
+                        minimumScore = 0,
+                        maximumScore = 100,
+                        modifierFormula = "floor(\${score} / 3) + \${home:stat:luck:modifier}",
+                        ruleEntityId = "home:stat:will",
+                    ),
+                    CharacterStatDefinition(
+                        id = luck,
+                        name = "Fortuna",
+                        abbreviation = "FOR",
+                        defaultScore = 6,
+                        minimumScore = 0,
+                        maximumScore = 100,
+                        modifierFormula = "\${score} / 2",
+                        ruleEntityId = "home:stat:luck",
+                    ),
+                ),
+                skillDefinitions = listOf(
+                    CharacterSkillDefinition(
+                        id = ritual,
+                        name = "Rituali",
+                        statId = will,
+                        formula = "\${home:stat:will:modifier} + \${level}",
+                        trainedBonusFormula = "\${proficiency} + 1",
+                        ruleEntityId = "home:skill:ritual",
+                    ),
+                ),
+                classLevels = listOf(ClassLevelState(CharacterClassId.of("home:class:mystic"), 2)),
+            ),
+        )
+
+        assertEquals(5, sheet.modifier(will))
+        assertEquals(13, sheet.skillBonus(ritual))
+        assertEquals(3, sheet.experienceEligibleLevel)
+        assertTrue(sheet.canLevelUp)
+        assertEquals(300, sheet.nextLevelExperienceThreshold)
+        assertEquals(0, sheet.experienceToNextLevel)
+    }
 
     @Test
     fun `gli slot incantesimo diventano risorse leggibili nella tab di battaglia`() {

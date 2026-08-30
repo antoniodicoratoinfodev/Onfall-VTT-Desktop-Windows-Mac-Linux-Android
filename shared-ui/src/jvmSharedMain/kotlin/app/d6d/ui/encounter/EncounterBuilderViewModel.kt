@@ -22,6 +22,8 @@ import app.d6d.ui.roster.RosterItem
 import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.sheet.NpcDisposition
+import app.d6d.content.srd521it.Srd521Ruleset
+import app.d6d.rules.model.RulesetRevision
 
 /** I due schieramenti che il motore conserva nella sessione portabile. */
 enum class EncounterFaction {
@@ -37,6 +39,7 @@ fun EncounterFaction.label(strings: Strings): String = when (this) {
 /** Passaggi espliciti della procedura Nuova partita. */
 enum class NewGameStep {
     TEMPLATE,
+    REGOLAMENTO,
     PARTECIPANTI,
     GRIGLIA,
     MODALITA,
@@ -122,6 +125,7 @@ private data class ParticipantChoice(
 class EncounterBuilderViewModel(
     private val roster: RosterViewModel,
     private val seedProvider: () -> Long = { System.currentTimeMillis() },
+    private val rulesetProvider: () -> List<RulesetRevision> = { listOf(Srd521Ruleset.revision) },
 ) {
 
     var step by mutableStateOf(NewGameStep.TEMPLATE)
@@ -129,6 +133,26 @@ class EncounterBuilderViewModel(
 
     var templateSource by mutableStateOf<TemplateSource?>(null)
         private set
+
+    private var selectedRulesetHash by mutableStateOf(Srd521Ruleset.revision.canonicalHash())
+
+    val availableRulesets: List<RulesetRevision>
+        get() = rulesetProvider().ifEmpty { listOf(Srd521Ruleset.revision) }
+
+    val selectedRuleset: RulesetRevision
+        get() = availableRulesets.firstOrNull { it.canonicalHash() == selectedRulesetHash }
+            ?: availableRulesets.first().also { selectedRulesetHash = it.canonicalHash() }
+
+    val selectedRulesetSupportsEnemyCpu: Boolean
+        get() = selectedRuleset.legacyCombatAutomationCompatibleWith(Srd521Ruleset.revision)
+
+    fun selectRuleset(canonicalHash: String) {
+        if (availableRulesets.any { it.canonicalHash() == canonicalHash }) {
+            selectedRulesetHash = canonicalHash
+            if (!selectedRulesetSupportsEnemyCpu) enemyCpuDifficulty = null
+            status = null
+        }
+    }
 
     var mode by mutableStateOf(EncounterMode.ROLEPLAY_FIGHT_EXPLORATION)
 
@@ -210,6 +234,9 @@ class EncounterBuilderViewModel(
     fun restartWizard() {
         step = NewGameStep.TEMPLATE
         templateSource = null
+        selectedRulesetHash = availableRulesets.firstOrNull {
+            it.origin() == app.d6d.rules.model.RulesetOrigin.BUNDLED_STANDARD
+        }?.canonicalHash() ?: availableRulesets.first().canonicalHash()
         scratchBaselineIds = emptySet()
         choices = emptyMap()
         includedTemplateId = null
@@ -230,7 +257,7 @@ class EncounterBuilderViewModel(
         templateSource = TemplateSource.ESISTENTI
         scratchBaselineIds = emptySet()
         resetRecommended()
-        step = NewGameStep.PARTECIPANTI
+        step = NewGameStep.REGOLAMENTO
     }
 
     /** Le partite gia' pronte distribuite con l'app. */
@@ -273,7 +300,7 @@ class EncounterBuilderViewModel(
         // Le partite incluse sono scontri pronti: la mappa si apre gia' schierata.
         mode = EncounterMode.FIGHT
         status = null
-        step = NewGameStep.PARTECIPANTI
+        step = NewGameStep.REGOLAMENTO
     }
 
     /** Conserva l'archivio esistente, ma per questa partita mostra solo le nuove schede. */
@@ -283,7 +310,7 @@ class EncounterBuilderViewModel(
         scratchBaselineIds = roster.items.mapTo(mutableSetOf()) { it.id }
         choices = emptyMap()
         status = null
-        step = NewGameStep.PARTECIPANTI
+        step = NewGameStep.REGOLAMENTO
     }
 
     /** Riallinea soltanto il nome ancora proposto dalla procedura, non uno editato dall'utente. */
@@ -300,11 +327,19 @@ class EncounterBuilderViewModel(
         status = null
         step = when (step) {
             NewGameStep.TEMPLATE -> NewGameStep.TEMPLATE
-            NewGameStep.PARTECIPANTI -> NewGameStep.TEMPLATE
+            NewGameStep.REGOLAMENTO -> NewGameStep.TEMPLATE
+            NewGameStep.PARTECIPANTI -> NewGameStep.REGOLAMENTO
             NewGameStep.GRIGLIA -> NewGameStep.PARTECIPANTI
             NewGameStep.MODALITA -> NewGameStep.GRIGLIA
             NewGameStep.DIFFICOLTA -> NewGameStep.MODALITA
         }
+    }
+
+    fun continueFromRuleset() {
+        status = null
+        selectedRuleset
+        if (!selectedRulesetSupportsEnemyCpu) enemyCpuDifficulty = null
+        step = NewGameStep.PARTECIPANTI
     }
 
     fun continueFromParticipants() {
@@ -422,7 +457,14 @@ class EncounterBuilderViewModel(
             }
         }
 
-        val session = CombatSession.fromCombatants(name, seedProvider(), setups)
+        val ruleset = selectedRuleset
+        val session = CombatSession.fromCombatants(
+            name,
+            seedProvider(),
+            setups,
+            ruleset,
+            "local-1",
+        )
         session.setPartyCombatants(allies)
         val grid = MapGrid(gridColumns, gridRows, feetPerSquare)
         session.configureMap(grid)

@@ -34,6 +34,12 @@ import app.d6d.board.VisionSettings
 import app.d6d.board.WallMask
 import app.d6d.engine.CombatRuleException
 import app.d6d.engine.CombatSession
+import app.d6d.rules.model.RuleKind
+import app.d6d.rules.model.RuleRuntimeState
+import app.d6d.rules.model.RuleScope
+import app.d6d.rules.model.RuleValue
+import app.d6d.rules.model.RulesetRevision
+import app.d6d.content.srd521it.Srd521Ruleset
 import app.d6d.engine.ai.EnemyCpuActionReport
 import app.d6d.engine.ai.EnemyCpuActionType
 import app.d6d.engine.ai.EnemyCpuDifficulty
@@ -323,6 +329,30 @@ class BattleViewModel(
     val canUndo: Boolean get() = session.canUndo()
     val encounterId: String get() = state.encounterId()
     val displayName: String get() = encounterId
+
+    /** Tipi aperti dichiarati dalla revisione esatta; i salvataggi legacy usano il catalogo storico. */
+    val availableDamageTypes: List<DamageType>
+        get() {
+            val declared = state.ruleSession().entities()
+                .filter { it.enabled() && it.kind() == RuleKind.DAMAGE_TYPE }
+                .map { DamageType.of(it.attributes()["damageTypeId"].orEmpty().ifBlank { it.id() }) }
+                .distinct()
+            return declared.ifEmpty { DamageType.values().toList() }
+        }
+
+    val availableConditionTypes: List<ConditionType>
+        get() {
+            val declared = state.ruleSession().entities()
+                .filter { it.enabled() && it.kind() == RuleKind.CONDITION }
+                .map { ConditionType.of(it.attributes()["conditionId"].orEmpty().ifBlank { it.id() }) }
+                .filterNot { it == ConditionType.EXHAUSTION || it == ConditionType.CUSTOM }
+                .distinct()
+            return declared.ifEmpty {
+                ConditionType.values().filterNot {
+                    it == ConditionType.EXHAUSTION || it == ConditionType.CUSTOM
+                }
+            }
+        }
 
     /** Quando e' attiva, un doppio clic su un campo lo rende modificabile. */
     private var editModeState by mutableStateOf(false)
@@ -1614,6 +1644,134 @@ class BattleViewModel(
     fun pause() = command { session.pause() }
 
     fun resume() = command { session.resume() }
+
+    /** Applica una revisione pubblicata; il motore mette in pausa un combattimento attivo. */
+    fun applyRuleset(revision: RulesetRevision): Boolean {
+        settleEnemyCpuTurn()
+        command { session.changeRuleset(revision) }
+        val applied = state.rulesetBinding().canonicalHash() == revision.canonicalHash()
+        if (applied && !revision.legacyCombatAutomationCompatibleWith(Srd521Ruleset.revision)) {
+            enemyCpuEnabled = false
+            suppressedEnemyCpuTurnSignature = null
+            completedEnemyCpuTurnSignature = null
+        }
+        return applied
+    }
+
+    /** Valore calcolato dal runtime universale incorporato nella sessione. */
+    fun genericRuleState(scope: RuleScope = RuleScope.session()): RuleRuntimeState? = runCatching {
+        session.genericRuleState(scope)
+    }.getOrNull()
+
+    fun genericRuleValue(ruleId: String, scope: RuleScope = RuleScope.session()): String? = runCatching {
+        session.genericRuleValue(scope, ruleId).toPlainString()
+    }.getOrNull()
+
+    fun genericTypedRuleValue(ruleId: String, scope: RuleScope = RuleScope.session()): RuleValue? = runCatching {
+        session.genericTypedRuleValue(scope, ruleId)
+    }.getOrNull()
+
+    fun genericRuleActive(ruleId: String, scope: RuleScope = RuleScope.session()): Boolean? = runCatching {
+        session.genericRuleActive(scope, ruleId)
+    }.getOrNull()
+
+    fun setGenericRuleActive(
+        ruleId: String,
+        active: Boolean,
+        scope: RuleScope = RuleScope.session(),
+    ): Boolean {
+        val before = state.revision()
+        command { session.setGenericRuleActive(scope, ruleId, active) }
+        return state.revision() != before
+    }
+
+    fun setGenericRuleValue(
+        ruleId: String,
+        type: RuleValue.Type,
+        rawValue: String,
+        scope: RuleScope = RuleScope.session(),
+    ): Boolean {
+        val before = state.revision()
+        command { session.setGenericRuleValue(scope, ruleId, RuleValue(type, rawValue)) }
+        return state.revision() != before
+    }
+
+    fun setGenericNumericRuleValue(
+        ruleId: String,
+        rawValue: String,
+        scope: RuleScope = RuleScope.session(),
+    ): Boolean {
+        val before = state.revision()
+        command { session.setGenericNumericRuleValue(scope, ruleId, rawValue.toBigDecimal()) }
+        return state.revision() != before
+    }
+
+    fun setGenericResource(
+        resourceId: String,
+        current: String,
+        maximum: String,
+        scope: RuleScope = RuleScope.session(),
+    ): Boolean {
+        val before = state.revision()
+        command { session.setGenericResource(scope, resourceId, current.toBigDecimal(), maximum.toBigDecimal()) }
+        return state.revision() != before
+    }
+
+    fun setGenericConditionStacks(
+        conditionId: String,
+        stacks: Int,
+        scope: RuleScope = RuleScope.session(),
+    ): Boolean {
+        val before = state.revision()
+        command { session.setGenericConditionStacks(scope, conditionId, stacks) }
+        return state.revision() != before
+    }
+
+    fun setGenericTurnResource(
+        resourceId: String,
+        current: java.math.BigDecimal,
+        scope: RuleScope = RuleScope.session(),
+    ): Boolean {
+        val before = state.revision()
+        command { session.setGenericTurnResource(scope, resourceId, current) }
+        return state.revision() != before
+    }
+
+    /** Esegue un'azione dichiarata dal regolamento e sincronizza subito log e stato. */
+    fun executeGenericRuleAction(
+        ruleId: String,
+        sourceScope: RuleScope = RuleScope.session(),
+        targetScope: RuleScope = sourceScope,
+    ): Boolean {
+        val before = state.revision()
+        command { session.executeRuleAction(sourceScope, targetScope, ruleId) }
+        return state.revision() != before
+    }
+
+    /** Invia un evento arbitrario a risorse e trigger della revisione attiva. */
+    fun fireGenericRuleEvent(
+        event: String,
+        sourceScope: RuleScope = RuleScope.session(),
+        targetScope: RuleScope = sourceScope,
+    ): Boolean {
+        val before = state.revision()
+        command { session.fireRuleEvent(sourceScope, targetScope, event) }
+        return state.revision() != before
+    }
+
+    /** Usa l'RNG persistente della sessione; il testo restituito e' solo presentazione. */
+    fun rollGenericRandomizer(ruleId: String, scope: RuleScope = RuleScope.session()): String? {
+        var presentation: String? = null
+        command {
+            val result = session.rollRuleRandomizer(scope, ruleId)
+            presentation = buildString {
+                append(result.draws().joinToString(", "))
+                append(" → ").append(result.value().toPlainString())
+                result.tableValue()?.let { append(" · ").append(it.canonicalValue()) }
+            }
+        }
+        return presentation
+    }
 
     fun resolve(outcome: String = AppLocale.current.battle.resolvedByTable) = command { session.resolve(outcome) }
 

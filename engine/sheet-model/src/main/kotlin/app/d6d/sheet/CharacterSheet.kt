@@ -17,11 +17,15 @@ import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import app.d6d.rules.character.CharacterProgression
+import app.d6d.rules.character.CharacterSkillDefinition
+import app.d6d.rules.character.CharacterStatDefinition
 import app.d6d.rules.character.EffectCondition
 import app.d6d.rules.character.EffectTarget
 import app.d6d.rules.character.ExperienceProgression
 import app.d6d.rules.character.RuleEffect
+import app.d6d.rules.model.RuleFormula
 import kotlinx.serialization.Serializable
+import java.math.BigDecimal
 
 /** Quanto il modificatore di Destrezza contribuisce a un calcolo della CA base. */
 @Serializable
@@ -524,9 +528,9 @@ data class CharacterSheet(
     val money: Money = Money(),
 ) {
 
-    /** Livello totale SRD; sulle schede legacy conserva il vecchio campo manuale. */
+    /** Livello totale del regolamento; sulle schede legacy conserva il campo manuale. */
     val effectiveLevel: Int
-        get() = progression.totalLevel.takeIf { it > 0 } ?: level.coerceIn(1, 20)
+        get() = progression.totalLevel.takeIf { it > 0 } ?: level.coerceAtLeast(1)
 
     /**
      * Riferimenti strutturati attivi dopo le personalizzazioni della scheda.
@@ -540,27 +544,56 @@ data class CharacterSheet(
             .distinct()
             .filterNot { it in excludedTraitIds }
 
-    val proficiencyBonus: Int get() = proficiencyBonusForLevel(effectiveLevel)
+    val proficiencyBonus: Int
+        get() = if (progression.configured) {
+            progression.proficiencyProgression.bonus(effectiveLevel)
+        } else {
+            proficiencyBonusForLevel(effectiveLevel)
+        }
 
     /** Livello massimo già raggiungibile con i PE annotati. */
     val experienceEligibleLevel: Int
-        get() = ExperienceProgression.levelForExperience(experiencePoints)
+        get() {
+            if (!progression.configured) return ExperienceProgression.levelForExperience(experiencePoints)
+            if (progression.experienceThresholds.isEmpty()) return effectiveLevel
+            return (progression.experienceThresholds.indexOfLast {
+                experiencePoints.coerceAtLeast(0) >= it
+            } + 1).coerceAtLeast(1)
+        }
 
     /** Il passaggio di livello è sempre una scelta esplicita, mai automatico. */
     val canLevelUp: Boolean
         get() = progression.configured &&
-            effectiveLevel < 20 &&
-            experienceEligibleLevel > effectiveLevel
+            effectiveLevel < progression.maximumCharacterLevel &&
+            (
+                !progression.enforceExperienceThresholds ||
+                    nextLevelExperienceThreshold == null ||
+                    experienceEligibleLevel > effectiveLevel
+                )
 
     val nextLevelExperienceThreshold: Int?
-        get() = ExperienceProgression.nextThreshold(effectiveLevel)
+        get() = if (progression.configured) {
+            progression.experienceThresholds.getOrNull(effectiveLevel)
+        } else {
+            ExperienceProgression.nextThreshold(effectiveLevel)
+        }
 
     val experienceToNextLevel: Int?
         get() = nextLevelExperienceThreshold?.let { (it - experiencePoints).coerceAtLeast(0) }
 
-    fun score(ability: Ability): Int = abilityScores[ability] ?: 10
+    fun score(ability: Ability): Int = abilityScores[ability]
+        ?: statDefinition(ability)?.defaultScore
+        ?: 10
 
-    fun modifier(ability: Ability): Int = abilityModifier(score(ability))
+    fun modifier(ability: Ability): Int {
+        val definition = statDefinition(ability) ?: return abilityModifier(score(ability))
+        return evaluateRuleNumber(
+            source = definition.modifierFormula,
+            ownerStat = definition,
+            proficiency = proficiencyBonus,
+            path = linkedSetOf(definition.ruleEntityId),
+        ).intValueExact()
+    }
 
     /** Risultato del solo metodo di CA scelto, prima di scudo e aggiustamenti. */
     val baseArmorClass: Int
@@ -659,8 +692,82 @@ data class CharacterSheet(
         modifier(ability) + proficiencyBonus * (saveProficiencies[ability] ?: Proficiency.NONE).multiplier
 
     /** Prova di abilita': la Maestria raddoppia il bonus di competenza. */
-    fun skillBonus(skill: Skill): Int =
-        modifier(skill.ability) + proficiencyBonus * (skillProficiencies[skill] ?: Proficiency.NONE).multiplier
+    fun skillBonus(skill: Skill): Int {
+        val definition = skillDefinition(skill)
+        val governingStat = definition?.statId ?: skill.ability
+        val base = definition?.formula
+            ?.takeIf(String::isNotBlank)
+            ?.let {
+                evaluateRuleNumber(
+                    source = it,
+                    ownerStat = statDefinition(governingStat),
+                    proficiency = proficiencyBonus,
+                ).intValueExact()
+            }
+            ?: modifier(governingStat)
+        val proficiency = skillProficiencies[skill] ?: Proficiency.NONE
+        val trained = if (proficiency == Proficiency.NONE) {
+            0
+        } else {
+            definition?.trainedBonusFormula
+                ?.let {
+                    evaluateRuleNumber(
+                        source = it,
+                        ownerStat = statDefinition(governingStat),
+                        proficiency = proficiencyBonus,
+                    ).intValueExact()
+                }
+                ?: proficiencyBonus
+        }
+        return base + trained * proficiency.multiplier
+    }
+
+    private fun statDefinition(ability: Ability): CharacterStatDefinition? =
+        progression.statDefinitions.firstOrNull { it.id == ability }
+
+    private fun skillDefinition(skill: Skill): CharacterSkillDefinition? =
+        progression.skillDefinitions.firstOrNull { it.id == skill }
+
+    /** Valuta soltanto il DSL deterministico pubblicato; nessun testo descrittivo viene interpretato. */
+    private fun evaluateRuleNumber(
+        source: String,
+        ownerStat: CharacterStatDefinition?,
+        proficiency: Int,
+        path: MutableSet<String> = linkedSetOf(),
+    ): BigDecimal = RuleFormula.compile(source).evaluate(object : RuleFormula.Context {
+        override fun value(rawId: String): BigDecimal? {
+            return when (rawId) {
+                "score", "current" -> BigDecimal.valueOf(score(ownerStat?.id ?: Ability.STRENGTH).toLong())
+                "proficiency" -> BigDecimal.valueOf(proficiency.toLong())
+                "level", "characterLevel", "classLevel" -> BigDecimal.valueOf(effectiveLevel.toLong())
+                "experience" -> BigDecimal.valueOf(experiencePoints.toLong())
+                else -> referencedStatValue(rawId, proficiency, path)
+            }
+        }
+
+        override fun lookup(tableId: String, key: BigDecimal): BigDecimal =
+            throw IllegalArgumentException("Table $tableId is not part of this character snapshot")
+    })
+
+    private fun referencedStatValue(
+        rawId: String,
+        proficiency: Int,
+        path: MutableSet<String>,
+    ): BigDecimal? {
+        val modifierReference = rawId.endsWith(":modifier")
+        val bareId = rawId.removeSuffix(":modifier")
+        val definition = progression.statDefinitions.firstOrNull {
+            it.ruleEntityId == bareId || it.id.value == bareId ||
+                it.id.value.substringAfterLast(':').equals(bareId.substringAfterLast(':'), ignoreCase = true)
+        } ?: return null
+        if (!modifierReference) return BigDecimal.valueOf(score(definition.id).toLong())
+        check(path.add(definition.ruleEntityId)) { "Cyclic character formula at ${definition.ruleEntityId}" }
+        return try {
+            evaluateRuleNumber(definition.modifierFormula, definition, proficiency, path)
+        } finally {
+            path.remove(definition.ruleEntityId)
+        }
+    }
 
     /** L'iniziativa e' una prova di Destrezza. */
     val initiativeModifier: Int get() = modifier(Ability.DEXTERITY)
@@ -1017,4 +1124,5 @@ val DamageType.italianLabel: String
         DamageType.SLASHING -> "tagliente"
         DamageType.THUNDER -> "tuono"
         DamageType.UNTYPED -> "non tipizzato"
+        else -> name().substringAfterLast(':').replace('-', ' ').replace('_', ' ').lowercase()
     }

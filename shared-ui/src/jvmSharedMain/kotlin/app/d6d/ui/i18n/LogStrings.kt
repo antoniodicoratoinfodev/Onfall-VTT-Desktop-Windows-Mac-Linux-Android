@@ -28,6 +28,15 @@ interface LogStrings {
     fun partyDeclared(names: String): String
     fun initiativeOrder(order: String): String
     fun encounterResolved(outcome: String): String
+    fun rulesetChanged(name: String): String
+    fun genericRuleAction(ruleId: String, eventCount: String): String
+    fun genericRuleEvent(event: String, eventCount: String): String
+    fun genericRandomizer(ruleId: String, draws: String, value: String, tableValue: String): String
+    fun genericValueSet(ruleId: String, before: String, after: String): String
+    fun genericRuleActivation(ruleId: String, active: Boolean): String
+    fun genericResourceSet(resourceId: String, current: String, maximum: String): String
+    fun genericConditionSet(conditionId: String, before: String, after: String): String
+    fun genericTurnResourceSet(resourceId: String, before: String, after: String): String
 
     // --- turni e iniziativa ---------------------------------------------------
 

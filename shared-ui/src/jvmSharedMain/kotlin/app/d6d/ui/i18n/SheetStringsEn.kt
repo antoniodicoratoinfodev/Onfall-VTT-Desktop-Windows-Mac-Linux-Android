@@ -205,12 +205,12 @@ internal object SheetStringsEn : SheetStrings {
 
     // --- progressione SRD ------------------------------------------------------------
 
-    override val srdCreationTitle = "SRD 5.2.1 creation and levels"
+    override val srdCreationTitle = "Guided creation and levels"
     override val srdCreationBody = "Guided mode offers class, proficiencies, features, feats, " +
-        "cantrips, spells and resources in the amounts the SRD calls for. Existing manual " +
+        "cantrips, spells and resources supplied by the selected ruleset. Existing manual " +
         "sheets stay as they are until you turn it on."
     override val startGuidedCreation = "Start guided creation"
-    override val srdProgressionTitle = "SRD 5.2.1 progression"
+    override val srdProgressionTitle = "Character progression"
     override val classResourcesCaps = "CLASS RESOURCES"
     override val shortRest = "Short rest"
     override val longRest = "Long rest"
@@ -239,8 +239,8 @@ internal object SheetStringsEn : SheetStrings {
 
     // --- procedura guidata --------------------------------------------------------------
 
-    override val guidedCreationTitle = "SRD guided creation"
-    override val srdLevelUpTitle = "SRD level up"
+    override val guidedCreationTitle = "Guided creation"
+    override val srdLevelUpTitle = "Level up"
     override val chooseExactlyForFirstLevel = "Pick exactly the options 1st level calls for."
     override val multiclassNote = "Multiclass: the minimum scores of both the current and the " +
         "new class will be checked."
@@ -330,7 +330,7 @@ internal object SheetStringsEn : SheetStrings {
     override val longRestResourcesRecovered = "Long rest resources recovered."
     override val shortRestResourcesRecovered = "Short rest resources recovered."
     override val cannotSwapKnownForm = "Could not swap the known form."
-    override val srdCharacterCreated = "SRD character created: fill in the story details and save."
+    override val srdCharacterCreated = "Character created: fill in the story details and save."
     override val abilitySaved = "Ability saved."
     override val automaticAbilityMustStayActive =
         "An ability with an automatic effect has to stay active."

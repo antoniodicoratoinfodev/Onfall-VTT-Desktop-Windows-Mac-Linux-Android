@@ -587,8 +587,15 @@ public final class ActorCatalogJsonCodec {
         }
     }
 
-    private static List<String> enumNames(Set<? extends Enum<?>> values) {
-        return values.stream().map(Enum::name).sorted().toList();
+    private static List<String> enumNames(Set<?> values) {
+        return values.stream().map(ActorCatalogJsonCodec::stableName).sorted().toList();
+    }
+
+    private static String stableName(Object value) {
+        if (value instanceof Enum<?> enumValue) return enumValue.name();
+        if (value instanceof DamageType damageType) return damageType.name();
+        if (value instanceof ConditionType conditionType) return conditionType.name();
+        throw new IllegalArgumentException("Unsupported named value " + value);
     }
 
     private static Set<DamageType> damageTypes(Object value, String path) {
@@ -731,11 +738,8 @@ public final class ActorCatalogJsonCodec {
 
     private static DamageType damageType(Object value, String path) {
         String name = text(value, path);
-        try {
-            return DamageType.valueOf(name);
-        } catch (IllegalArgumentException exception) {
-            throw unknownEnum(path, "DamageType", name, DamageType.values());
-        }
+        try { return DamageType.of(name); }
+        catch (IllegalArgumentException exception) { throw formatError(path, exception.getMessage()); }
     }
 
     private static HealingTarget healingTarget(Object value, String path) {
@@ -749,11 +753,8 @@ public final class ActorCatalogJsonCodec {
 
     private static ConditionType conditionType(Object value, String path) {
         String name = text(value, path);
-        try {
-            return ConditionType.valueOf(name);
-        } catch (IllegalArgumentException exception) {
-            throw unknownEnum(path, "ConditionType", name, ConditionType.values());
-        }
+        try { return ConditionType.of(name); }
+        catch (IllegalArgumentException exception) { throw formatError(path, exception.getMessage()); }
     }
 
     private static ActivationCost activationCost(Object value, String path) {

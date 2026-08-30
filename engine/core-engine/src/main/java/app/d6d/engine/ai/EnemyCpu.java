@@ -13,6 +13,7 @@ import app.d6d.domain.combat.CombatState;
 import app.d6d.domain.combat.CombatStatus;
 import app.d6d.domain.combat.CombatResourceState;
 import app.d6d.domain.combat.CombatantState;
+import app.d6d.domain.combat.ConditionType;
 import app.d6d.domain.combat.D20Mode;
 import app.d6d.domain.combat.DamageFormula;
 import app.d6d.domain.combat.DiceExpression;
@@ -1299,10 +1300,12 @@ public final class EnemyCpu {
     }
 
     private static boolean incapacitates(CombatantState combatant) {
-        return combatant.conditions().stream().anyMatch(condition -> switch (condition.type()) {
-            case INCAPACITATED, PARALYZED, PETRIFIED, STUNNED, UNCONSCIOUS -> true;
-            default -> false;
-        });
+        return combatant.conditions().stream().anyMatch(condition ->
+                condition.type().equals(ConditionType.INCAPACITATED)
+                        || condition.type().equals(ConditionType.PARALYZED)
+                        || condition.type().equals(ConditionType.PETRIFIED)
+                        || condition.type().equals(ConditionType.STUNNED)
+                        || condition.type().equals(ConditionType.UNCONSCIOUS));
     }
 
     private boolean hasAutomatedMeleeAttack(

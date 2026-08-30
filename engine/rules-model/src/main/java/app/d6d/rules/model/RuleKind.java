@@ -1,0 +1,36 @@
+package app.d6d.rules.model;
+
+/** Famiglie aperte agli ID dinamici; l'enum descrive il payload, non le voci disponibili. */
+public enum RuleKind {
+    CORE_MECHANIC,
+    ROLL,
+    RANDOMIZER,
+    STAT,
+    SKILL,
+    SAVE,
+    DEFENSE,
+    VALUE,
+    MODIFIER,
+    TRIGGER,
+    RESOURCE,
+    TRACK,
+    ACTION,
+    ACTION_ECONOMY,
+    CONDITION,
+    DAMAGE_TYPE,
+    HEALTH_MODEL,
+    MOVEMENT,
+    PROGRESSION,
+    CLASS,
+    SUBCLASS,
+    BACKGROUND,
+    FEATURE,
+    FEAT,
+    SPELL,
+    ITEM,
+    TABLE,
+    SCENE_PROCEDURE,
+    SHEET_SECTION,
+    TEXT_RULE,
+    CUSTOM
+}

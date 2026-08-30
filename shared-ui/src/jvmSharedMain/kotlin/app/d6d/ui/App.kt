@@ -60,6 +60,8 @@ import app.d6d.sheet.SheetStore
 import app.d6d.ui.roster.RosterScreen
 import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
+import app.d6d.ui.rules.RulesScreen
+import app.d6d.ui.rules.RulesViewModel
 import app.d6d.sheet.ImageStore
 import app.d6d.ui.images.FilePicker
 import app.d6d.ui.images.PortraitRepository
@@ -102,6 +104,7 @@ enum class Destination(val icon: AppGlyph) {
     BATTAGLIA(AppGlyph.SWORDS),
     INCONTRO(AppGlyph.D20),
     COMPENDIO(AppGlyph.TOME),
+    REGOLE(AppGlyph.TOME),
     IMPOSTAZIONI(AppGlyph.GEAR),
 }
 
@@ -110,6 +113,7 @@ fun Destination.label(strings: Strings): String = when (this) {
     Destination.BATTAGLIA -> strings.nav.battle
     Destination.INCONTRO -> strings.nav.game
     Destination.COMPENDIO -> strings.nav.compendium
+    Destination.REGOLE -> strings.nav.rules
     Destination.IMPOSTAZIONI -> strings.nav.settings
 }
 
@@ -180,9 +184,11 @@ fun AppRoot(
             preferencesReady = true
         }
 
+        val rules = remember { RulesViewModel(dataDirectory) }
         // Il roster unifica schede e compendio: le schede sono la fonte, il catalogo
-        // da combattimento ne discende.
-        val roster = remember {
+        // da combattimento ne discende. La stessa sorgente di revisioni alimenta
+        // incontro, sessione e creazione guidata del personaggio.
+        val roster = remember(rules) {
             RosterViewModel(
                 // Il catalogo e' una proiezione rigenerabile delle schede: copie
                 // versionate a ogni uso di risorsa raddoppiavano l'I/O sincrono,
@@ -190,6 +196,7 @@ fun AppRoot(
                 ActorCatalogStore(dataDirectory, ActorCatalogStore.DEFAULT_BASE_NAME, 0),
                 SheetStore(dataDirectory.resolve("schede.json")),
                 loadOnCreate = false,
+                rulesetProvider = { rules.publishedRevisions },
             )
         }
         // Ogni scheda aperta riceve un BattleViewModel distinto. La taglia iniziale
@@ -209,7 +216,12 @@ fun AppRoot(
                     // Fuori dalla composizione il vocabolario si legge da
                     // `AppLocale`: qui non arriva alcun `LocalStrings`.
                     resourceSink = CombatResourceSink { definitionId, resources ->
-                        if (!roster.applyCombatResources(definitionId, resources)) {
+                        if (
+                            !roster.combatRulesetCompatible(
+                                definitionId,
+                                session.currentState().rulesetBinding(),
+                            ) || !roster.applyCombatResources(definitionId, resources)
+                        ) {
                             error(
                                 roster.sheets.status
                                     ?: AppLocale.current.nav.sheetResourcesNotSaved,
@@ -217,7 +229,12 @@ fun AppRoot(
                         }
                     },
                     editSink = CombatantEditSink { definitionId, snapshot ->
-                        if (!roster.applyCombatEdit(definitionId, snapshot)) {
+                        if (
+                            !roster.combatRulesetCompatible(
+                                definitionId,
+                                session.currentState().rulesetBinding(),
+                            ) || !roster.applyCombatEdit(definitionId, snapshot)
+                        ) {
                             error(
                                 roster.sheets.status
                                     ?: AppLocale.current.nav.sheetEditNotSaved,
@@ -227,7 +244,7 @@ fun AppRoot(
                 )
             }
         }
-        val encounterBuilder = remember { EncounterBuilderViewModel(roster) }
+        val encounterBuilder = remember { EncounterBuilderViewModel(roster, rulesetProvider = { rules.publishedRevisions }) }
         val portraits = remember {
             PortraitRepository(ImageStore(dataDirectory), filePicker, uiScope, loadOnCreate = false)
         }
@@ -485,6 +502,14 @@ fun AppRoot(
                         onRequestedItemHandled = { requestedCompendiumItemId = null },
                         requestedNewKind = requestedCompendiumNewKind,
                         onRequestedNewHandled = { requestedCompendiumNewKind = null },
+                        modifier = contentModifier,
+                    )
+
+                Destination.REGOLE ->
+                    RulesScreen(
+                        viewModel = rules,
+                        compact = compact,
+                        activeBattle = activeSession?.battle,
                         modifier = contentModifier,
                     )
 

@@ -10,6 +10,7 @@ import app.d6d.rules.character.ResourcePoolState
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.CharacterProgression
 import app.d6d.rules.character.ClassLevelState
+import app.d6d.rules.model.RulesetBinding
 import app.d6d.sheet.Ability
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
@@ -153,6 +154,42 @@ class RosterViewModelTest {
         roster.items.forEach { item ->
             assertNotNull(catalogEntry(item.id), "manca l'entrata di catalogo per ${item.id}")
         }
+    }
+
+    @Test
+    fun `una sessione non sincronizza una scheda legata a una revisione diversa`() {
+        val sheets = sheetStore()
+        val library = sheets.load()
+        sheets.save(
+            library.copy(
+                characters = library.characters + CharacterSheet(
+                    id = "pg-regole-a",
+                    characterName = "Aion",
+                    progression = CharacterProgression(
+                        rulesetProjectId = "rules:a",
+                        rulesetRevisionId = "revision:a",
+                        rulesetCanonicalHash = "hash:a",
+                        rulesetRuntimeHash = "runtime:a",
+                        runtimeSemanticsVersion = "1",
+                        classLevels = listOf(ClassLevelState(CharacterClassId.FIGHTER, 1)),
+                    ),
+                ),
+            ),
+        )
+        val roster = RosterViewModel(catalogStore(), sheets)
+        fun binding(hash: String) = RulesetBinding(
+            "rules:a",
+            "revision:$hash",
+            hash,
+            "runtime:$hash",
+            "1",
+            "Test",
+            false,
+        )
+
+        assertTrue(roster.combatRulesetCompatible("pg-regole-a", binding("hash:a")))
+        assertFalse(roster.combatRulesetCompatible("pg-regole-a", binding("hash:b")))
+        assertTrue(roster.combatRulesetCompatible("id-inesistente", binding("hash:b")))
     }
 
     @Test

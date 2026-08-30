@@ -1,12 +1,12 @@
 package app.d6d.ui.content
 
 import app.d6d.rules.character.Ability
-import app.d6d.rules.character.Ability.CHARISMA
-import app.d6d.rules.character.Ability.CONSTITUTION
-import app.d6d.rules.character.Ability.DEXTERITY
-import app.d6d.rules.character.Ability.INTELLIGENCE
-import app.d6d.rules.character.Ability.STRENGTH
-import app.d6d.rules.character.Ability.WISDOM
+import app.d6d.rules.character.Ability.Companion.CHARISMA
+import app.d6d.rules.character.Ability.Companion.CONSTITUTION
+import app.d6d.rules.character.Ability.Companion.DEXTERITY
+import app.d6d.rules.character.Ability.Companion.INTELLIGENCE
+import app.d6d.rules.character.Ability.Companion.STRENGTH
+import app.d6d.rules.character.Ability.Companion.WISDOM
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.i18n.AppLanguage

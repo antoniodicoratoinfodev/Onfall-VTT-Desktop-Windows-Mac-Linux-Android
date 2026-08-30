@@ -6,6 +6,7 @@ internal object EncounterStringsEn : EncounterStrings {
     override fun step(current: Int, total: Int, description: String) =
         "$current of $total · $description"
     override val stepSource = "Start from a bundled game, from your templates, or from scratch."
+    override val stepRules = "Choose the rules revision to snapshot into this game."
     override val stepParticipants = "Pick characters, mobs, how many, and which side."
     override val stepGrid = "Set the size and the scale of the grid."
     override val stepMode = "Choose the experience you want to begin with."

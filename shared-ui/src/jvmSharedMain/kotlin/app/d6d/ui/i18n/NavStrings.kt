@@ -10,6 +10,7 @@ interface NavStrings {
     val battle: String
     val game: String
     val compendium: String
+    val rules: String
     val settings: String
 
     val collapseRail: String
@@ -43,6 +44,7 @@ internal object NavStringsIt : NavStrings {
     override val battle = "Battaglia"
     override val game = "Partita"
     override val compendium = "Compendio"
+    override val rules = "Regole"
     override val settings = "Impostazioni"
 
     override val collapseRail = "Chiudi la barra di navigazione"
@@ -89,6 +91,7 @@ internal object NavStringsEn : NavStrings {
     override val battle = "Battle"
     override val game = "Game"
     override val compendium = "Compendium"
+    override val rules = "Rules"
     override val settings = "Settings"
 
     override val collapseRail = "Collapse the navigation bar"

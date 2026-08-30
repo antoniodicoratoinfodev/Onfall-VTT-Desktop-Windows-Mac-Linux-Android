@@ -36,6 +36,7 @@ val ConditionType.glyph: String
         ConditionType.STUNNED -> "✷"
         ConditionType.UNCONSCIOUS -> "z"
         ConditionType.CUSTOM -> "•"
+        else -> "•"
     }
 
 /** Le condizioni che tolgono il turno meritano risalto visivo maggiore. */

@@ -30,6 +30,7 @@ import app.d6d.sheet.isPactSlotMirrorResourceId
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.i18n.label
+import app.d6d.i18n.pick
 import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
@@ -68,13 +69,24 @@ internal fun ProgressionOverview(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             sheet.progression.classLevels.forEach {
-                Chip(words.classAndLevel(it.classId.label(language), it.level), Palette.Party)
+                Chip(words.classAndLevel(viewModel.displayedClassLabel(it.classId, sheet), it.level), Palette.Party)
             }
             Chip(words.proficiencyBonusIs(signed(sheet.proficiencyBonus)), Palette.Gold)
             Chip(words.experiencePoints(sheet.experiencePoints), Palette.Temporary)
         }
 
-        if (sheet.canLevelUp) {
+        if (!viewModel.characterRulesetAvailable) {
+            Text(
+                language.pick(
+                    "La revisione esatta del regolamento non è installata. La scheda resta leggibile, " +
+                        "ma progressione e modificatori sono bloccati per evitare di applicare lo SRD per errore.",
+                    "The exact ruleset revision is not installed. The sheet remains readable, but progression " +
+                        "and modifiers are locked so SRD rules cannot be applied by mistake.",
+                ),
+                color = Palette.Critical,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        } else if (sheet.canLevelUp) {
             Column(
                 Modifier
                     .fillMaxWidth()

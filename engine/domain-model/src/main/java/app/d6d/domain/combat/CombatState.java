@@ -1,6 +1,9 @@
 package app.d6d.domain.combat;
 
 import app.d6d.domain.space.BattleMap;
+import app.d6d.rules.model.RulesetBinding;
+import app.d6d.rules.model.RuleSessionSnapshot;
+import app.d6d.rules.model.RulesetRuntimeConfig;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -59,7 +62,16 @@ public record CombatState(
          * agiscono. Il risveglio e' definitivo, perche' una creatura che ha visto
          * il gruppo non torna a non saperlo.</p>
          */
-        Set<String> dormantCombatantIds) {
+        Set<String> dormantCombatantIds,
+
+        /** Revisione esatta scelta per questa sessione, distinta dal solo nome legacy. */
+        RulesetBinding rulesetBinding,
+
+        /** Snapshot eseguibile: la sessione continua a funzionare anche se la libreria cambia o manca. */
+        RulesetRuntimeConfig rulesetRuntime,
+
+        /** Entità e stato del runtime generico, fotografati insieme alla sessione. */
+        RuleSessionSnapshot ruleSession) {
 
     /** Valore dei salvataggi creati prima che il raggio d'allarme fosse persistito. */
     public static final int DEFAULT_ALARM_RADIUS_FEET = 60;
@@ -81,6 +93,12 @@ public record CombatState(
         partyCombatantIds = Set.copyOf(Objects.requireNonNull(partyCombatantIds, "partyCombatantIds"));
         battleMap = battleMap == null ? BattleMap.none() : battleMap;
         dormantCombatantIds = dormantCombatantIds == null ? Set.of() : Set.copyOf(dormantCombatantIds);
+        rulesetBinding = rulesetBinding == null ? RulesetBinding.legacySrd(rulesetVersion) : rulesetBinding;
+        rulesetRuntime = rulesetRuntime == null ? RulesetRuntimeConfig.standardSrd521() : rulesetRuntime;
+        ruleSession = ruleSession == null ? RuleSessionSnapshot.empty() : ruleSession;
+        if (!rulesetBinding.runtimeSemanticsVersion().equals(rulesetRuntime.semanticsVersion())) {
+            throw new IllegalArgumentException("Ruleset binding and runtime semantics differ");
+        }
         if (!combatants.keySet().containsAll(rosterOrder) || !combatants.keySet().containsAll(initiativeOrder)
                 || !combatants.keySet().containsAll(initiativeScores.keySet())
                 || !combatants.keySet().containsAll(turnBudgets.keySet())
@@ -118,6 +136,13 @@ public record CombatState(
                     throw new IllegalArgumentException("Condition owner is not concentrating");
                 }
             }
+            CombatantState combatant = entry.getValue();
+            if (combatant.maximumExhaustion() != rulesetRuntime.maximumExhaustion()
+                    || combatant.exhaustionD20PenaltyPerLevel() != rulesetRuntime.exhaustionD20PenaltyPerLevel()
+                    || combatant.exhaustionSpeedPenaltyFeetPerLevel()
+                    != rulesetRuntime.exhaustionSpeedPenaltyFeetPerLevel()) {
+                throw new IllegalArgumentException("Combatant Exhaustion settings differ from the session ruleset");
+            }
         }
         if (!initiativeScores.keySet().containsAll(initiativeOrder)) {
             throw new IllegalArgumentException("Initiative order contains a combatant without a score");
@@ -139,6 +164,35 @@ public record CombatState(
         if (!liveOrResolved && (round != 0 || turnIndex != -1)) {
             throw new IllegalArgumentException("An encounter that has not started cannot have a current turn");
         }
+    }
+
+    /** Compatibilità sorgente con lo snapshot precedente, privo delle entità generiche incorporate. */
+    public CombatState(
+            String encounterId,
+            String rulesetVersion,
+            String contentVersion,
+            CombatStatus status,
+            long revision,
+            long randomSeed,
+            long randomState,
+            List<String> rosterOrder,
+            Map<String, CombatantState> combatants,
+            Map<String, Integer> initiativeScores,
+            List<String> initiativeOrder,
+            int round,
+            int turnIndex,
+            Map<String, TurnBudget> turnBudgets,
+            Set<String> partyCombatantIds,
+            boolean simultaneousTies,
+            BattleMap battleMap,
+            int alarmRadiusFeet,
+            Set<String> dormantCombatantIds,
+            RulesetBinding rulesetBinding,
+            RulesetRuntimeConfig rulesetRuntime) {
+        this(encounterId, rulesetVersion, contentVersion, status, revision, randomSeed, randomState,
+                rosterOrder, combatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
+                partyCombatantIds, simultaneousTies, battleMap, alarmRadiusFeet, dormantCombatantIds,
+                rulesetBinding, rulesetRuntime, RuleSessionSnapshot.empty());
     }
 
     /**
@@ -218,7 +272,8 @@ public record CombatState(
             BattleMap battleMap) {
         this(encounterId, rulesetVersion, contentVersion, status, revision, randomSeed, randomState,
                 rosterOrder, combatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
-                partyCombatantIds, simultaneousTies, battleMap, DEFAULT_ALARM_RADIUS_FEET, Set.of());
+                partyCombatantIds, simultaneousTies, battleMap, DEFAULT_ALARM_RADIUS_FEET, Set.of(),
+                RulesetBinding.legacySrd(rulesetVersion), RulesetRuntimeConfig.standardSrd521());
     }
 
     /** Costruttore di compatibilita' per lo stato con dormienza ma senza raggio persistito. */
@@ -243,7 +298,35 @@ public record CombatState(
             Set<String> dormantCombatantIds) {
         this(encounterId, rulesetVersion, contentVersion, status, revision, randomSeed, randomState,
                 rosterOrder, combatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
-                partyCombatantIds, simultaneousTies, battleMap, DEFAULT_ALARM_RADIUS_FEET, dormantCombatantIds);
+                partyCombatantIds, simultaneousTies, battleMap, DEFAULT_ALARM_RADIUS_FEET, dormantCombatantIds,
+                RulesetBinding.legacySrd(rulesetVersion), RulesetRuntimeConfig.standardSrd521());
+    }
+
+    /** Costruttore dello schema precedente, prima del binding eseguibile del regolamento. */
+    public CombatState(
+            String encounterId,
+            String rulesetVersion,
+            String contentVersion,
+            CombatStatus status,
+            long revision,
+            long randomSeed,
+            long randomState,
+            List<String> rosterOrder,
+            Map<String, CombatantState> combatants,
+            Map<String, Integer> initiativeScores,
+            List<String> initiativeOrder,
+            int round,
+            int turnIndex,
+            Map<String, TurnBudget> turnBudgets,
+            Set<String> partyCombatantIds,
+            boolean simultaneousTies,
+            BattleMap battleMap,
+            int alarmRadiusFeet,
+            Set<String> dormantCombatantIds) {
+        this(encounterId, rulesetVersion, contentVersion, status, revision, randomSeed, randomState,
+                rosterOrder, combatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
+                partyCombatantIds, simultaneousTies, battleMap, alarmRadiusFeet, dormantCombatantIds,
+                RulesetBinding.legacySrd(rulesetVersion), RulesetRuntimeConfig.standardSrd521());
     }
 
     /** Vero se la creatura e' nell'incontro ma non si e' ancora accorta del gruppo. */

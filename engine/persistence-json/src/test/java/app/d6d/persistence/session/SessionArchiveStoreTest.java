@@ -9,6 +9,8 @@ import app.d6d.domain.space.GridPosition;
 import app.d6d.domain.space.MapGrid;
 import app.d6d.engine.CombatSession;
 import app.d6d.persistence.json.Json;
+import app.d6d.rules.model.RulesetBinding;
+import app.d6d.rules.model.RulesetRuntimeConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -153,6 +155,27 @@ class SessionArchiveStoreTest {
         String slug = store.save("registro", original, Map.of());
 
         assertEquals(events, store.load(slug).session().auditTrail().size());
+    }
+
+    @Test
+    void ilRiepilogoELArchivioConservanoLaRevisioneEsattaDelRegolamento() throws IOException {
+        SessionArchiveStore store = store();
+        CombatSession original = session(71L);
+        RulesetBinding binding = new RulesetBinding(
+                "campaign:rules", "revision:7", "canonical:7", "runtime:7", "1",
+                "Regole della campagna", false);
+        RulesetRuntimeConfig runtime = RulesetRuntimeConfig.standardSrd521()
+                .withCriticalHitMinimumNatural(18);
+        original.changeRuleset(binding, runtime);
+
+        String slug = store.save("homebrew", original, Map.of());
+        SessionArchive loaded = store.load(slug);
+
+        assertEquals("Regole della campagna", loaded.summary().rulesetName());
+        assertEquals("revision:7", loaded.summary().rulesetRevisionId());
+        assertEquals("canonical:7", loaded.summary().rulesetCanonicalHash());
+        assertEquals(binding, loaded.session().currentState().rulesetBinding());
+        assertEquals(runtime, loaded.session().currentState().rulesetRuntime());
     }
 
     @Test

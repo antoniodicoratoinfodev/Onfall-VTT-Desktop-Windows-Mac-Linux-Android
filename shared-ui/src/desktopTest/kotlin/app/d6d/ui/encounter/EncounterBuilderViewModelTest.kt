@@ -10,6 +10,9 @@ import app.d6d.sheet.NpcDisposition
 import app.d6d.sheet.SheetStore
 import app.d6d.sheet.StatBlockActorKind
 import app.d6d.rules.character.CharacterClassId
+import app.d6d.content.srd521it.Srd521Ruleset
+import app.d6d.rules.model.RulesetOrigin
+import app.d6d.rules.model.RulesetRevision
 import app.d6d.ui.roster.RosterKind
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.sheet.SheetKind
@@ -320,6 +323,8 @@ class EncounterBuilderViewModelTest {
         assertEquals(EnemyCpuDifficulty.MEDIUM, builder.enemyCpuDifficulty)
         builder.useExistingTemplates()
         assertEquals(TemplateSource.ESISTENTI, builder.templateSource)
+        assertEquals(NewGameStep.REGOLAMENTO, builder.step)
+        builder.continueFromRuleset()
         assertEquals(NewGameStep.PARTECIPANTI, builder.step)
 
         builder.continueFromParticipants()
@@ -349,6 +354,63 @@ class EncounterBuilderViewModelTest {
         assertEquals(15, builder.gridRows)
         assertEquals(5, builder.feetPerSquare)
         assertEquals(EnemyCpuDifficulty.MEDIUM, builder.enemyCpuDifficulty)
+    }
+
+    @Test
+    fun `la nuova partita fotografa esattamente la revisione homebrew selezionata`() {
+        val standard = Srd521Ruleset.revision
+        val homebrew = RulesetRevision.create(
+            "test:campaign-rules",
+            "revision:18-critical",
+            "1.0.0",
+            "Regole della campagna",
+            "",
+            RulesetOrigin.HOMEBREW,
+            standard.canonicalHash(),
+            standard.runtime().withCriticalHitMinimumNatural(18).withMaximumExhaustion(9),
+            standard.entities(),
+            "now",
+        )
+        val builder = EncounterBuilderViewModel(
+            roster(),
+            seedProvider = { 81L },
+            rulesetProvider = { listOf(standard, homebrew) },
+        )
+
+        builder.selectRuleset(homebrew.canonicalHash())
+        val state = builder.startedSession().currentState()
+
+        assertEquals(homebrew.binding(), state.rulesetBinding())
+        assertEquals(homebrew.runtime(), state.rulesetRuntime())
+        assertEquals(9, state.combatants().values.first().maximumExhaustion())
+    }
+
+    @Test
+    fun `una revisione strutturale resta selezionabile ma forza il controllo manuale`() {
+        val standard = Srd521Ruleset.revision
+        val structural = RulesetRevision.create(
+            "test:manual-rules",
+            "revision:manual",
+            "1.0.0",
+            "Regole strutturali",
+            "",
+            RulesetOrigin.HOMEBREW,
+            standard.canonicalHash(),
+            standard.runtime(),
+            standard.entities().dropLast(1),
+            "now",
+        )
+        val builder = EncounterBuilderViewModel(
+            roster(),
+            seedProvider = { 82L },
+            rulesetProvider = { listOf(standard, structural) },
+        )
+
+        builder.selectRuleset(structural.canonicalHash())
+
+        assertFalse(builder.selectedRulesetSupportsEnemyCpu)
+        assertNull(builder.enemyCpuDifficulty)
+        assertEquals(structural.binding(), builder.startedSession().currentState().rulesetBinding())
     }
 
     @Test
@@ -408,7 +470,7 @@ class EncounterBuilderViewModelTest {
 
         builder.useIncludedTemplate(template)
 
-        assertEquals(NewGameStep.PARTECIPANTI, builder.step)
+        assertEquals(NewGameStep.REGOLAMENTO, builder.step)
         assertEquals(template.name, builder.encounterName)
         assertEquals(template.gridColumns, builder.gridColumns)
         assertEquals(template.gridRows, builder.gridRows)

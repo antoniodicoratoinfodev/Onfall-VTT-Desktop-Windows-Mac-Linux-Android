@@ -74,7 +74,7 @@ class GuidedCharacterService(
             .filter { it.kind == ChoiceKind.EXPERTISE }
             .flatMap { byId[it.id]?.optionIds.orEmpty() }
             .filter { id ->
-                val skill = id.toSkillOrNull() ?: return@filter true
+                val skill = id.toSkillOrNull(pack) ?: return@filter true
                 sheet.skillProficiencies[skill] != Proficiency.PROFICIENT &&
                     id !in newlyProficientSkillIds
             }
@@ -84,7 +84,7 @@ class GuidedCharacterService(
                     it.kind == ChoiceKind.SKILL_OR_TOOL_PROFICIENCY
             }
             .flatMap { byId[it.id]?.optionIds.orEmpty() }
-            .mapNotNull { id -> id.toSkillOrNull()?.let { id to it } }
+            .mapNotNull { id -> id.toSkillOrNull(pack)?.let { id to it } }
             .filter { (_, skill) ->
                 sheet.skillProficiencies[skill].let {
                     it != null && it != Proficiency.NONE
@@ -97,7 +97,7 @@ class GuidedCharacterService(
                     it.kind == ChoiceKind.SKILL_OR_TOOL_PROFICIENCY
             }
             .flatMap { byId[it.id]?.optionIds.orEmpty() }
-            .filter { it.toSkillOrNull() == null }
+            .filter { it.toSkillOrNull(pack) == null }
             .filter { id -> optionLabels(id).any(sheet.toolProficiencies::containsListedEntry) }
         val duplicateLanguages = requirements
             .filter { it.kind == ChoiceKind.LANGUAGE_PROFICIENCY }
@@ -286,10 +286,11 @@ class GuidedCharacterService(
         }
         val oldClassLevel = sheet.progression.levelIn(request.classId)
         val oldConstitutionModifier = sheet.modifier(Ability.CONSTITUTION)
+        val scoresBeforeAdvancement = pack.stats.associate { it.id to it.defaultScore } + sheet.abilityScores
         val progressed = progressionEngine.applyLevelUp(
             progression = sheet.progression,
             experiencePoints = sheet.experiencePoints,
-            abilityScores = sheet.abilityScores,
+            abilityScores = scoresBeforeAdvancement,
             request = request,
         )
         val selectedBackground = progressed.backgroundId.takeIf { it.isNotBlank() }?.let(pack::background)
@@ -300,22 +301,28 @@ class GuidedCharacterService(
                 .filterValues { it != 0 }
                 .ifEmpty { selectedBackground?.abilityOptions?.associateWith { 1 }.orEmpty() }
         }
-        val abilityCap = if (
+        val absoluteIncrease = if (
             request.selections
                 .flatMap { it.optionIds }
                 .mapNotNull(pack::element)
                 .any { it.kind == RuleElementKind.EPIC_BOON_FEAT }
         ) {
-            30
+            true
         } else {
-            20
+            false
         }
-        val abilityScores = sheet.abilityScores.toMutableMap().apply {
+        fun cap(ability: Ability, absolute: Boolean = false): Int = pack.stat(ability)?.let {
+            if (absolute) it.maximumScore else it.advancementMaximum
+        } ?: 20
+        fun defaultScore(ability: Ability): Int = pack.stat(ability)?.defaultScore ?: 10
+        val abilityScores = scoresBeforeAdvancement.toMutableMap().apply {
             backgroundIncreases.forEach { (ability, increase) ->
-                this[ability] = (getOrDefault(ability, 10) + increase).coerceAtMost(20)
+                this[ability] = (getOrDefault(ability, defaultScore(ability)) + increase)
+                    .coerceAtMost(cap(ability))
             }
             request.abilityScoreIncreases.forEach { (ability, increase) ->
-                this[ability] = (getOrDefault(ability, 10) + increase).coerceAtMost(abilityCap)
+                this[ability] = (getOrDefault(ability, defaultScore(ability)) + increase)
+                    .coerceAtMost(cap(ability, absoluteIncrease))
             }
         }
         val newConstitutionModifier = abilityModifier(abilityScores[Ability.CONSTITUTION] ?: 10)
@@ -346,13 +353,13 @@ class GuidedCharacterService(
                 ChoiceKind.STARTING_EQUIPMENT ->
                     selectedEquipment += selection.optionIds.mapNotNull(pack::equipmentPackage)
                 ChoiceKind.SKILL_PROFICIENCY -> selection.optionIds.forEach { id ->
-                    id.toSkillOrNull()?.let { skills[it] = Proficiency.PROFICIENT }
+                    id.toSkillOrNull(pack)?.let { skills[it] = Proficiency.PROFICIENT }
                 }
                 ChoiceKind.EXPERTISE -> selection.optionIds.forEach { id ->
-                    id.toSkillOrNull()?.let { skills[it] = Proficiency.EXPERTISE }
+                    id.toSkillOrNull(pack)?.let { skills[it] = Proficiency.EXPERTISE }
                 }
                 ChoiceKind.SKILL_OR_TOOL_PROFICIENCY -> selection.optionIds.forEach { id ->
-                    val skill = id.toSkillOrNull()
+                    val skill = id.toSkillOrNull(pack)
                     if (skill != null) {
                         skills[skill] = Proficiency.PROFICIENT
                     } else {
@@ -438,7 +445,7 @@ class GuidedCharacterService(
         val weaponRows = selectedWeapons.map {
             it.toWeaponEntry(
                 abilityScores = abilityScores,
-                proficiencyBonus = proficiencyBonusForLevel(progressed.totalLevel),
+                proficiencyBonus = pack.proficiencyProgression.bonus(progressed.totalLevel),
                 language = language,
             )
         }
@@ -680,7 +687,12 @@ class GuidedCharacterService(
             ?.optionIds
             ?.singleOrNull()
             ?.substringAfterLast(':')
-            ?.let { slug -> Ability.entries.firstOrNull { it.name.lowercase() == slug } }
+            ?.let { slug ->
+                pack.stats.map { it.id }.firstOrNull {
+                    it.name.lowercase() == slug ||
+                        it.value.substringAfterLast(':').replace('-', '_').lowercase() == slug
+                }
+            }
         val spellIds = (
             progression.knownCantripIds +
                 progression.preparedSpellIds +
@@ -841,12 +853,12 @@ private const val MAGIC_ACTION_ID = "srd521-it:action:magia"
 
 private fun List<Int>.padSlots(): List<Int> = (this + List(9) { 0 }).take(9)
 
-private fun String.toSkillOrNull(): Skill? {
+private fun String.toSkillOrNull(pack: RulesContentPack): Skill? {
     val slug = substringAfterLast(':').replace('-', '_')
-    return Skill.entries.firstOrNull {
-        it.name.lowercase() == slug ||
-            it.italianLabel.toRulesSlug().replace('-', '_') == slug
-    }
+    return pack.skills.firstOrNull { definition ->
+        definition.id.name.lowercase().substringAfterLast(':').replace('-', '_') == slug ||
+            definition.name.toRulesSlug().replace('-', '_') == slug
+    }?.id
 }
 
 private fun defaultOptionLabel(id: String): String =

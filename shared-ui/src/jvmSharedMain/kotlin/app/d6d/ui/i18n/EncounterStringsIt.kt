@@ -6,6 +6,7 @@ internal object EncounterStringsIt : EncounterStrings {
     override fun step(current: Int, total: Int, description: String) =
         "$current di $total · $description"
     override val stepSource = "Parti da una partita inclusa, dai tuoi template o da zero."
+    override val stepRules = "Scegli la revisione di regole da fotografare nella partita."
     override val stepParticipants = "Scegli personaggi, mob, quantità e schieramenti."
     override val stepGrid = "Imposta dimensioni e scala metrica della griglia."
     override val stepMode = "Scegli l'esperienza con cui iniziare."

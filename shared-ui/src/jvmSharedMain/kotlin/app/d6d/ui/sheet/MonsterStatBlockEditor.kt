@@ -78,6 +78,9 @@ fun MonsterStatBlockEditor(
     val language = currentLanguage
     val scope = rememberCoroutineScope()
     val block = viewModel.monster
+    val damageTypes = (viewModel.damageTypesFor() +
+        block.resistances + block.vulnerabilities + block.damageImmunities).distinct()
+    val conditionTypes = (viewModel.conditionTypesFor() + block.conditionImmunities).distinct()
     val update: (MonsterStatBlock) -> Unit = { viewModel.monster = it }
     var deleteId by remember(viewModel.selectedId) { mutableStateOf<String?>(null) }
 
@@ -115,7 +118,11 @@ fun MonsterStatBlockEditor(
                                 language.pick("PNG", "NPC"),
                                 block.npcDisposition.visibleLabel(language),
                                 block.characterClassId?.let { classId ->
-                                    "${classId.label(language)} ${block.classLevel.coerceIn(1, 20)}"
+                                    val className = viewModel.availableCharacterClasses
+                                        .firstOrNull { it.id == classId }
+                                        ?.name
+                                        ?: classId.label(language)
+                                    "$className ${block.classLevel.coerceAtLeast(1)}"
                                 },
                             ).joinToString(" · "),
                             color = Palette.Gold,
@@ -202,18 +209,18 @@ fun MonsterStatBlockEditor(
                         language.pick("Senza classe", "No class"),
                         block.characterClassId == null,
                     ) { if (it) update(block.copy(characterClassId = null)) }
-                    CharacterClassId.entries.forEach { classId ->
-                        SheetCheck(classId.label(language), block.characterClassId == classId) {
-                            if (it) update(block.copy(characterClassId = classId))
+                    viewModel.availableCharacterClasses.forEach { definition ->
+                        SheetCheck(definition.name, block.characterClassId == definition.id) {
+                            if (it) update(block.copy(characterClassId = definition.id))
                         }
                     }
                 }
                 block.characterClassId?.let {
                     SheetNumberField(
                         language.pick("Livello di classe", "Class level"),
-                        block.classLevel.coerceIn(1, 20),
+                        block.classLevel.coerceAtLeast(1),
                         Modifier.width(150.dp),
-                    ) { update(block.copy(classLevel = it.coerceIn(1, 20))) }
+                    ) { update(block.copy(classLevel = it.coerceAtLeast(1))) }
                 }
             }
             AdaptiveFormRow(
@@ -428,11 +435,13 @@ fun MonsterStatBlockEditor(
         }
 
         SheetBox(words.typedDefences) {
-            DamageToggleRow(language.pick("Resistenze", "Resistances"), block.resistances) {
+            DamageToggleRow(language.pick("Resistenze", "Resistances"), block.resistances, damageTypes) {
                 update(block.copy(resistances = it))
             }
-            DamageToggleRow(words.vulnerabilities, block.vulnerabilities) { update(block.copy(vulnerabilities = it)) }
-            DamageToggleRow(words.damageImmunities, block.damageImmunities) {
+            DamageToggleRow(words.vulnerabilities, block.vulnerabilities, damageTypes) {
+                update(block.copy(vulnerabilities = it))
+            }
+            DamageToggleRow(words.damageImmunities, block.damageImmunities, damageTypes) {
                 update(block.copy(damageImmunities = it))
             }
             val language = currentLanguage
@@ -442,7 +451,7 @@ fun MonsterStatBlockEditor(
                 style = MaterialTheme.typography.labelSmall,
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                ConditionType.entries.forEach { condition ->
+                conditionTypes.forEach { condition ->
                     val on = condition in block.conditionImmunities
                     Box(
                         Modifier.clickable {
@@ -603,13 +612,14 @@ private fun NpcDisposition.visibleLabel(language: app.d6d.i18n.AppLanguage): Str
 private fun DamageToggleRow(
     label: String,
     selected: Set<DamageType>,
+    available: List<DamageType>,
     onChange: (Set<DamageType>) -> Unit,
 ) {
     val language = currentLanguage
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            DamageType.entries.forEach { type ->
+            available.forEach { type ->
                 val on = type in selected
                 Box(Modifier.clickable { onChange(if (on) selected - type else selected + type) }) {
                     Chip(type.label(language), if (on) Palette.Bloodied else Palette.TextFaint)

@@ -33,7 +33,7 @@ import java.util.Objects;
  */
 public final class SessionArchiveStore {
 
-    public static final int SCHEMA_VERSION = 2;
+    public static final int SCHEMA_VERSION = 3;
     private static final int MAX_BACKUPS = 5;
 
     private final Path directory;
@@ -130,6 +130,9 @@ public final class SessionArchiveStore {
         document.put("round", state.round());
         document.put("combatantCount", state.combatants().size());
         document.put("status", state.status().name());
+        document.put("rulesetName", state.rulesetBinding().displayName());
+        document.put("rulesetRevisionId", state.rulesetBinding().revisionId());
+        document.put("rulesetCanonicalHash", state.rulesetBinding().canonicalHash());
         document.put("presentation", new LinkedHashMap<String, Object>(
                 presentation == null ? Map.of() : presentation));
         document.put("board", boardCodec.encode(board));
@@ -144,7 +147,7 @@ public final class SessionArchiveStore {
     public synchronized SessionArchive load(String slug) throws IOException {
         Map<String, Object> document = store(slug).loadObject();
         int schemaVersion = intValue(document.get("schemaVersion"));
-        if (schemaVersion != 1 && schemaVersion != SCHEMA_VERSION) {
+        if (schemaVersion < 1 || schemaVersion > SCHEMA_VERSION) {
             throw new IOException("Versione dell'archivio non supportata: " + schemaVersion);
         }
 
@@ -194,7 +197,10 @@ public final class SessionArchiveStore {
                 stringValue(document.get("savedAt"), ""),
                 intValue(document.get("round")),
                 intValue(document.get("combatantCount")),
-                stringValue(document.get("status"), ""));
+                stringValue(document.get("status"), ""),
+                stringValue(document.get("rulesetName"), ""),
+                stringValue(document.get("rulesetRevisionId"), ""),
+                stringValue(document.get("rulesetCanonicalHash"), ""));
     }
 
     private AtomicJsonStore store(String slug) {

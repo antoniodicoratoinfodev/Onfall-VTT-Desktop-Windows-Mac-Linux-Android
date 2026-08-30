@@ -42,17 +42,18 @@ import app.d6d.sheet.i18n.label as sheetLabel
 import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.i18n.strings
 import app.d6d.domain.combat.ActivationCost
+import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.character.CharacterSkillDefinition
+import app.d6d.rules.character.CharacterStatDefinition
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.sheet.Ability
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.CreatureSize
 import app.d6d.sheet.Proficiency
-import app.d6d.sheet.Skill
 import app.d6d.sheet.SpellSlot
 import app.d6d.sheet.Spellcasting
 import app.d6d.sheet.WeaponEntry
-import app.d6d.sheet.abilityModifier
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.battle.label
 import app.d6d.ui.components.Chip
@@ -83,6 +84,8 @@ fun CharacterSheetEditor(
     val words = strings.sheet
     val scope = rememberCoroutineScope()
     val sheet = viewModel.character
+    val statDefinitions = viewModel.statDefinitionsFor(sheet)
+    val skillDefinitions = viewModel.skillDefinitionsFor(sheet)
     val displayedClassName = viewModel.displayedClassName(sheet)
     val displayedSubclassName = viewModel.displayedSubclassName(sheet)
     val update: (CharacterSheet) -> Unit = { viewModel.character = it }
@@ -115,30 +118,32 @@ fun CharacterSheetEditor(
             ArmorClassSection(sheet, compact, update)
 
             if (compact) {
-                AbilitiesColumn(sheet, update, Modifier.fillMaxWidth())
+                AbilitiesColumn(sheet, statDefinitions, skillDefinitions, update, Modifier.fillMaxWidth())
                 CombatColumn(
                     viewModel,
                     sheet,
                     update,
                     availableAbilities = viewModel.abilityCatalog,
+                    statDefinitions = statDefinitions,
                     compact = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-                    AbilitiesColumn(sheet, update, Modifier.width(292.dp))
+                    AbilitiesColumn(sheet, statDefinitions, skillDefinitions, update, Modifier.width(292.dp))
                     CombatColumn(
                         viewModel,
                         sheet,
                         update,
                         availableAbilities = viewModel.abilityCatalog,
+                        statDefinitions = statDefinitions,
                         compact = false,
                         modifier = Modifier.weight(1f),
                     )
                 }
             }
 
-            SpellcastingSection(sheet, compact, update)
+            SpellcastingSection(viewModel, sheet, compact, update)
             CharacterNotesSection(sheet, compact, update)
         }
 
@@ -279,7 +284,7 @@ private fun HeaderSection(
                     DerivedValue(strings.common.level, sheet.effectiveLevel.toString(), Modifier.weight(1f))
                 } else {
                     SheetNumberField(strings.common.level, sheet.level, Modifier.weight(1f)) {
-                        update(sheet.copy(level = it.coerceIn(1, 20)))
+                        update(sheet.copy(level = it.coerceAtLeast(1)))
                     }
                 }
                 SheetNumberField(language.pick("PE", "XP"), sheet.experiencePoints, Modifier.weight(1f)) {
@@ -411,7 +416,7 @@ private fun CompactHeaderSection(
                             DerivedValue(strings.common.level, sheet.effectiveLevel.toString(), fieldModifier)
                         } else {
                             SheetNumberField(strings.common.level, sheet.level, fieldModifier) {
-                                update(sheet.copy(level = it.coerceIn(1, 20)))
+                                update(sheet.copy(level = it.coerceAtLeast(1)))
                             }
                         }
                     },
@@ -498,6 +503,8 @@ private fun CompactHeaderSection(
 @Composable
 private fun AbilitiesColumn(
     sheet: CharacterSheet,
+    statDefinitions: List<CharacterStatDefinition>,
+    skillDefinitions: List<CharacterSkillDefinition>,
     update: (CharacterSheet) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -511,8 +518,8 @@ private fun AbilitiesColumn(
             Modifier.fillMaxWidth(),
         )
 
-        Ability.entries.forEach { ability ->
-            AbilityBlock(ability, sheet, update)
+        statDefinitions.forEach { definition ->
+            AbilityBlock(definition, skillDefinitions, sheet, update)
         }
 
         SheetBox(words.heroicInspiration) {
@@ -560,24 +567,30 @@ private fun AbilitiesColumn(
  */
 @Composable
 private fun AbilityBlock(
-    ability: Ability,
+    definition: CharacterStatDefinition,
+    skillDefinitions: List<CharacterSkillDefinition>,
     sheet: CharacterSheet,
     update: (CharacterSheet) -> Unit,
 ) {
     val strings = strings
     val words = strings.sheet
-    val language = strings.language
-    val skills = Skill.of(ability)
+    val ability = definition.id
+    val skills = skillDefinitions.filter { it.statId == ability }
 
-    SheetBox(ability.label(language)) {
+    SheetBox(definition.name) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SheetNumberField(strings.sheet.score, sheet.score(ability), Modifier.weight(1f)) { score ->
-                update(sheet.copy(abilityScores = sheet.abilityScores + (ability to score.coerceIn(1, 30))))
+                update(
+                    sheet.copy(
+                        abilityScores = sheet.abilityScores +
+                            (ability to score.coerceIn(definition.minimumScore, definition.maximumScore)),
+                    ),
+                )
             }
-            DerivedValue(words.modifier, signed(abilityModifier(sheet.score(ability))))
+            DerivedValue(words.modifier, signed(sheet.modifier(ability)))
         }
 
         ProficiencyLine(
@@ -590,9 +603,10 @@ private fun AbilityBlock(
             update(sheet.copy(saveProficiencies = sheet.saveProficiencies + (ability to next)))
         }
 
-        skills.forEach { skill ->
+        skills.forEach { skillDefinition ->
+            val skill = skillDefinition.id
             ProficiencyLine(
-                label = skill.label(language),
+                label = skillDefinition.name,
                 bonus = sheet.skillBonus(skill),
                 level = sheet.skillProficiencies[skill] ?: Proficiency.NONE,
                 disadvantage = sheet.hasDisadvantageOnSkill(skill),
@@ -665,6 +679,7 @@ private fun CombatColumn(
     sheet: CharacterSheet,
     update: (CharacterSheet) -> Unit,
     availableAbilities: List<CatalogAbility>,
+    statDefinitions: List<CharacterStatDefinition>,
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -730,7 +745,7 @@ private fun CombatColumn(
                 }
             }
             sheet.weapons.forEachIndexed { index, weapon ->
-                WeaponRow(weapon, compact) { updated ->
+                WeaponRow(weapon, compact, statDefinitions) { updated ->
                     update(
                         sheet.copy(
                             weapons = sheet.weapons.toMutableList().also { it[index] = updated },
@@ -761,7 +776,9 @@ private fun CombatColumn(
                 GameButton(words.addWeapon, accent = Palette.Party, onClick = {
                     update(
                         sheet.copy(
-                            weapons = sheet.weapons + WeaponEntry(attackAbility = Ability.STRENGTH),
+                            weapons = sheet.weapons + WeaponEntry(
+                                attackAbility = statDefinitions.firstOrNull()?.id ?: Ability.STRENGTH,
+                            ),
                         ),
                     )
                 })
@@ -857,6 +874,7 @@ private fun CombatColumn(
             abilities = viewModel.characterTraitCandidates(section),
             selectedIds = viewModel.characterTraitIds(section).toSet(),
             isCompatible = viewModel::characterTraitIsCompatible,
+            classLabel = { viewModel.displayedClassLabel(it, sheet) },
             onToggle = { ability, selected ->
                 viewModel.setCharacterTraitSelected(section, ability.id, selected)
             },
@@ -876,7 +894,12 @@ private fun ColumnHeader(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEntry) -> Unit) {
+private fun WeaponRow(
+    weapon: WeaponEntry,
+    compact: Boolean,
+    statDefinitions: List<CharacterStatDefinition>,
+    onChange: (WeaponEntry) -> Unit,
+) {
     val strings = strings
     val words = strings.sheet
     val language = strings.language
@@ -933,12 +956,12 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
                 onChange(weapon.copy(bonusAction = it))
             }
             if (!weapon.isArea) {
-                WeaponAttackAbilitySelector(weapon, onChange)
+                WeaponAttackAbilitySelector(weapon, statDefinitions, onChange)
             }
             SheetCheck(words.spellOrCantrip, weapon.isSpellOrCantrip) {
-                onChange(weapon.withSpellClassification(it))
+                onChange(weapon.withSpellClassification(it, statDefinitions.firstOrNull()?.id ?: Ability.STRENGTH))
             }
-            WeaponAreaSection(weapon, onChange)
+            WeaponAreaSection(weapon, statDefinitions, onChange)
         }
         return
     }
@@ -977,12 +1000,12 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
             onChange(weapon.copy(bonusAction = it))
         }
         if (!weapon.isArea) {
-            WeaponAttackAbilitySelector(weapon, onChange)
+            WeaponAttackAbilitySelector(weapon, statDefinitions, onChange)
         }
         SheetCheck(words.spellOrCantrip, weapon.isSpellOrCantrip) {
-            onChange(weapon.withSpellClassification(it))
+            onChange(weapon.withSpellClassification(it, statDefinitions.firstOrNull()?.id ?: Ability.STRENGTH))
         }
-        WeaponAreaSection(weapon, onChange)
+        WeaponAreaSection(weapon, statDefinitions, onChange)
     }
 }
 
@@ -990,6 +1013,7 @@ private fun WeaponRow(weapon: WeaponEntry, compact: Boolean, onChange: (WeaponEn
 @Composable
 private fun WeaponAttackAbilitySelector(
     weapon: WeaponEntry,
+    statDefinitions: List<CharacterStatDefinition>,
     onChange: (WeaponEntry) -> Unit,
 ) {
     val strings = strings
@@ -1017,9 +1041,10 @@ private fun WeaponAttackAbilitySelector(
                 )
             },
         )
-        Ability.entries.forEach { ability ->
+        statDefinitions.forEach { definition ->
+            val ability = definition.id
             GameButton(
-                label = ability.abbreviation,
+                label = definition.abbreviation,
                 accent = if (weapon.attackAbility == ability) Palette.Gold else Palette.TextMuted,
                 selected = weapon.attackAbility == ability,
                 dense = true,
@@ -1049,11 +1074,14 @@ private fun LegacyWeaponClassificationWarning(weapon: WeaponEntry) {
     )
 }
 
-private fun WeaponEntry.withSpellClassification(isSpellOrCantrip: Boolean): WeaponEntry =
+private fun WeaponEntry.withSpellClassification(
+    isSpellOrCantrip: Boolean,
+    defaultAbility: Ability,
+): WeaponEntry =
     copy(
         spellOrCantrip = isSpellOrCantrip,
         attackAbility = if (!isSpellOrCantrip && attackAbility == null) {
-            Ability.STRENGTH
+            defaultAbility
         } else {
             attackAbility
         },
@@ -1066,14 +1094,18 @@ private fun WeaponEntry.withSpellClassification(isSpellOrCantrip: Boolean): Weap
  * si spunta la casella, così le armi ordinarie restano compatte.
  */
 @Composable
-private fun WeaponAreaSection(weapon: WeaponEntry, onChange: (WeaponEntry) -> Unit) {
+private fun WeaponAreaSection(
+    weapon: WeaponEntry,
+    statDefinitions: List<CharacterStatDefinition>,
+    onChange: (WeaponEntry) -> Unit,
+) {
     val strings = strings
     val words = strings.sheet
     SheetCheck(words.areaDamageWithSave, weapon.isArea) { on ->
         onChange(
             weapon.copy(
                 areaRadiusFeet = if (on) weapon.areaRadiusFeet.takeIf { it > 0 } ?: 20 else 0,
-                saveAbility = if (on) weapon.saveAbility ?: Ability.DEXTERITY else null,
+                saveAbility = if (on) weapon.saveAbility ?: statDefinitions.firstOrNull()?.id else null,
                 spellOrCantrip = weapon.spellOrCantrip || on,
                 legacyClassificationRequired = if (on) false else weapon.legacyClassificationRequired,
             ),
@@ -1091,9 +1123,10 @@ private fun WeaponAreaSection(weapon: WeaponEntry, onChange: (WeaponEntry) -> Un
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(words.savingThrowCaps, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Ability.entries.forEach { ability ->
+            statDefinitions.forEach { definition ->
+                val ability = definition.id
                 GameButton(
-                    label = ability.abbreviation,
+                    label = definition.abbreviation,
                     accent = if (weapon.saveAbility == ability) Palette.Gold else Palette.TextMuted,
                     selected = weapon.saveAbility == ability,
                     dense = true,
@@ -1270,6 +1303,7 @@ private fun TraitPickerDialog(
     abilities: List<CatalogAbility>,
     selectedIds: Set<String>,
     isCompatible: (CatalogAbility) -> Boolean,
+    classLabel: (CharacterClassId) -> String,
     onToggle: (CatalogAbility, Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1421,7 +1455,7 @@ private fun TraitPickerDialog(
                                 if (ability.classEligibility.isNotEmpty()) {
                                     Text(
                                         ability.classEligibility.joinToString(" · ") {
-                                            words.classAndMinimumLevel(it.classId.label(language), it.minimumLevel)
+                                            words.classAndMinimumLevel(classLabel(it.classId), it.minimumLevel)
                                         },
                                         color = Palette.TextMuted,
                                         style = MaterialTheme.typography.labelSmall,
@@ -1460,6 +1494,7 @@ private fun TraitPickerDialog(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SpellcastingSection(
+    viewModel: SheetViewModel,
     sheet: CharacterSheet,
     compact: Boolean,
     update: (CharacterSheet) -> Unit,
@@ -1505,13 +1540,20 @@ private fun SpellcastingSection(
                         if (sheet.progression.configured && casting.abilitiesByClass.isNotEmpty()) {
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 casting.abilitiesByClass.forEach { (classId, ability) ->
-                                    Chip(words.spellcastingAbilityOf(classId.label(language), ability.abbreviationIn(language)), Palette.Party)
+                                    Chip(
+                                        words.spellcastingAbilityOf(
+                                            viewModel.displayedClassLabel(classId, sheet),
+                                            ability.abbreviationIn(language),
+                                        ),
+                                        Palette.Party,
+                                    )
                                 }
                             }
                         } else {
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Ability.entries.forEach { ability ->
-                                    SheetCheck(ability.abbreviation, casting.ability == ability) {
+                                viewModel.statDefinitionsFor(sheet).forEach { definition ->
+                                    val ability = definition.id
+                                    SheetCheck(definition.abbreviation, casting.ability == ability) {
                                         if (it) update(sheet.copy(spellcasting = casting.copy(ability = ability)))
                                     }
                                 }

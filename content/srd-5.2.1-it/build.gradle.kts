@@ -15,6 +15,7 @@ java {
 }
 
 dependencies {
+    api(project(":engine:rules-model"))
     api(project(":engine:character-rules"))
     api(project(":engine:sheet-model"))
     implementation(libs.kotlinx.serialization.json)

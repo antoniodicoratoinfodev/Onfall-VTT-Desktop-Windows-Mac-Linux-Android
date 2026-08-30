@@ -22,6 +22,9 @@ import app.d6d.ui.sheet.SheetViewModel
 import app.d6d.ui.i18n.AppLocale
 import app.d6d.ui.i18n.Strings
 import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.model.RulesetBinding
+import app.d6d.rules.model.RulesetRevision
+import app.d6d.content.srd521it.Srd521Ruleset
 import app.d6d.i18n.label
 import app.d6d.i18n.pick
 
@@ -72,13 +75,14 @@ class RosterViewModel(
     private val catalogStore: ActorCatalogStore,
     sheetStore: SheetStore,
     loadOnCreate: Boolean = true,
+    rulesetProvider: () -> List<RulesetRevision> = { listOf(Srd521Ruleset.revision) },
 ) {
 
     /** Vocabolario in uso: qui non arriva `LocalStrings`, siamo fuori da Compose. */
     private val words get() = AppLocale.current.compendium
 
     /** Editor delle schede, passato agli editor esistenti senza modificarli. */
-    val sheets = SheetViewModel(sheetStore, loadOnCreate)
+    val sheets = SheetViewModel(sheetStore, loadOnCreate, rulesetProvider)
 
     var status by mutableStateOf<String?>(null)
 
@@ -122,7 +126,11 @@ class RosterViewModel(
         val creatures = sheets.library.monsters.map {
             val isNpc = it.actorKind == StatBlockActorKind.NPC
             val classSummary = it.characterClassId?.let { classId ->
-                words.classAndLevel(classId.label(AppLocale.language), it.classLevel.coerceIn(1, 20))
+                val className = sheets.availableCharacterClasses
+                    .firstOrNull { definition -> definition.id == classId }
+                    ?.name
+                    ?: classId.label(AppLocale.language)
+                words.classAndLevel(className, it.classLevel.coerceAtLeast(1))
             }
             val disposition = if (isNpc) it.npcDisposition.label(AppLocale.language) else null
             RosterItem(
@@ -196,7 +204,7 @@ class RosterViewModel(
         sheets.library.characters.firstOrNull { it.id == id }
             ?.let {
                 return it.toActorDefinition(
-                    abilityCatalog = sheets.abilityCatalog,
+                    abilityCatalog = sheets.abilityCatalogFor(it),
                     language = language,
                 )
             }
@@ -319,6 +327,23 @@ class RosterViewModel(
     }
 
     /**
+     * Impedisce che una sessione costruita con una revisione aggiorni in silenzio
+     * una scheda guidata costruita con un'altra. Le schede manuali e gli stat
+     * block non dipendono dal motore di progressione e restano interoperabili.
+     */
+    fun combatRulesetCompatible(definitionId: String, binding: RulesetBinding): Boolean {
+        val progression = sheets.library.characters
+            .firstOrNull { it.id == definitionId }
+            ?.progression
+            ?: return true
+        if (!progression.configured) return true
+        return progression.rulesetCanonicalHash
+            .takeIf(String::isNotBlank)
+            ?.let { it == binding.canonicalHash() }
+            ?: (binding.legacy() || binding.projectId() == Srd521Ruleset.revision.projectId())
+    }
+
+    /**
      * Recepisce una correzione fatta durante il combattimento.
      *
      * La scheda resta la fonte: la modifica confluisce nella scheda del personaggio
@@ -436,7 +461,9 @@ class RosterViewModel(
      */
     private fun reconcileCatalog() {
         status = try {
-            val entries = sheets.library.characters.map { it.toCatalogEntry(sheets.abilityCatalog) } +
+            val entries = sheets.library.characters.map {
+                it.toCatalogEntry(sheets.abilityCatalogFor(it))
+            } +
                 sheets.library.monsters.map { it.toCatalogEntry() }
             catalogStore.save(entries)
             null

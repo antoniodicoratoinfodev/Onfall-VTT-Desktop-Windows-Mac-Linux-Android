@@ -42,6 +42,17 @@ public enum EventType {
     ENCOUNTER_PAUSED,
     ENCOUNTER_RESUMED,
     ENCOUNTER_RESOLVED,
+    /** Cambio esplicito della revisione di regole usata da una sessione. */
+    RULESET_CHANGED,
+    /** Azione o evento risolto dal runtime di regole generico incorporato. */
+    RULE_ACTION_EXECUTED,
+    RULE_EVENT_FIRED,
+    RULE_RANDOMIZER_ROLLED,
+    RULE_VALUE_SET,
+    RULE_ACTIVATION_CHANGED,
+    RULE_RESOURCE_SET,
+    RULE_CONDITION_SET,
+    RULE_TURN_RESOURCE_SET,
     UNDO_PERFORMED,
 
     // Morte, stabilizzazione ed Exhaustion.

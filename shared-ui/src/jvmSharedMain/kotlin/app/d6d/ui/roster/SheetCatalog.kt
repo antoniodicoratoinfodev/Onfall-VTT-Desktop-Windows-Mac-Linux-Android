@@ -52,7 +52,7 @@ fun CharacterSheet.toCatalogEntry(abilityCatalog: List<CatalogAbility> = emptyLi
         language = AppLocale.language,
     )
     return ActorCatalogEntry(
-        ActorTemplate(id, definition.name, ActorKind.PLAYER_CHARACTER, level.coerceIn(1, 20)),
+        ActorTemplate(id, definition.name, ActorKind.PLAYER_CHARACTER, effectiveLevel),
         definition,
         // Un personaggio giocante appartiene per impostazione predefinita alla squadra.
         true,
@@ -72,7 +72,7 @@ fun MonsterStatBlock.toCatalogEntry(): ActorCatalogEntry {
             id,
             definition.name,
             if (actorKind == StatBlockActorKind.NPC) ActorKind.NON_PLAYER_CHARACTER else ActorKind.CREATURE,
-            if (actorKind == StatBlockActorKind.NPC) classLevel.coerceIn(1, 20) else 0,
+            if (actorKind == StatBlockActorKind.NPC) classLevel.coerceAtLeast(1) else 0,
         ),
         definition,
         false,

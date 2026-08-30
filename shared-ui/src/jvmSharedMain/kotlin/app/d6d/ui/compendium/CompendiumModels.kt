@@ -164,7 +164,7 @@ data class ActorDraft(
             id.ifBlank { "attore-senza-id" },
             name.ifBlank { AppLocale.current.compendium.unnamed },
             kind,
-            if (kind == ActorKind.PLAYER_CHARACTER) level.coerceIn(1, 20) else level.coerceIn(0, 20),
+            if (kind == ActorKind.PLAYER_CHARACTER) level.coerceAtLeast(1) else level.coerceAtLeast(0),
         ),
         toDefinition(),
         activePartyMember,

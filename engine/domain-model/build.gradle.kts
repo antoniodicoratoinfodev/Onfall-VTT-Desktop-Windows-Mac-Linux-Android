@@ -5,6 +5,7 @@ plugins {
 // Nessuna dipendenza esterna: il dominio deve restare consumabile
 // tanto dalla JVM desktop quanto da Android.
 dependencies {
+    api(project(":engine:rules-model"))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

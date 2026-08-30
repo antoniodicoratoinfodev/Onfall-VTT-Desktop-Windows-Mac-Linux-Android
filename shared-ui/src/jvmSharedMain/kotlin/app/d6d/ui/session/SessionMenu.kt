@@ -585,6 +585,9 @@ private fun SessionSummaryContent(
                     Chip(words.round(summary.round), Palette.Gold)
                     Chip(words.combatants(summary.combatantCount), Palette.TextMuted)
                     Chip(summary.status, Palette.Party)
+                    if (summary.rulesetName.isNotBlank()) {
+                        Chip(summary.rulesetName, Palette.Heal)
+                    }
                 }
             }
             if (summary.savedAt.isNotBlank()) {

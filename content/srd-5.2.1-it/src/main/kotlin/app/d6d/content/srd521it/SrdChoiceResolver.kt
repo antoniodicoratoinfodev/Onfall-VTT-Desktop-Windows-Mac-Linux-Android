@@ -11,6 +11,7 @@ import app.d6d.rules.character.ChoiceSelection
 import app.d6d.rules.character.RuleEffect
 import app.d6d.rules.character.RuleElementDefinition
 import app.d6d.rules.character.RuleElementKind
+import app.d6d.rules.character.RulesContentPack
 import app.d6d.rules.character.Skill
 import app.d6d.rules.character.WeaponDefinition
 import app.d6d.sheet.CharacterSheet
@@ -32,7 +33,7 @@ object SrdChoiceResolver {
         (listOf(language) + AppLanguage.entries.filterNot { it == language })
             .map { targetLanguage ->
                 val targetPack = Srd521ItContent.packFor(targetLanguage)
-                optionForId(id, targetPack.element(id), targetLanguage).label
+                optionForId(id, targetPack.element(id), targetLanguage, targetPack).label
             }
             .filter(String::isNotBlank)
             .distinct()
@@ -44,8 +45,8 @@ object SrdChoiceResolver {
         sheet: CharacterSheet,
         provisionalSelections: List<ChoiceSelection> = emptyList(),
         language: AppLanguage = AppLanguage.ITALIAN,
+        pack: RulesContentPack = Srd521ItContent.packFor(language),
     ): List<SrdChoiceOption> {
-        val pack = Srd521ItContent.packFor(language)
         val provisionalBackground = provisionalSelections
             .asSequence()
             .flatMap { it.optionIds.asSequence() }
@@ -55,7 +56,7 @@ object SrdChoiceResolver {
             provisionalSelections
                 .filterNot { it.choiceId == choice.id }
                 .forEach { addAll(it.optionIds) }
-            provisionalBackground?.skillProficiencies?.forEach { add(skillId(it)) }
+            provisionalBackground?.skillProficiencies?.forEach { add(skillId(it, pack)) }
             provisionalBackground?.toolChoice?.optionIds?.let(::addAll)
             provisionalBackground?.featId?.let(::add)
         }
@@ -64,16 +65,16 @@ object SrdChoiceResolver {
                 .filter { id ->
                     when (choice.kind) {
                         ChoiceKind.SKILL_PROFICIENCY ->
-                            id.toSkillOrNull()?.let {
+                            id.toSkillOrNull(pack)?.let {
                                 sheet.skillProficiencies[it].let { proficiency ->
                                     proficiency == null || proficiency == Proficiency.NONE
                                 }
                             } != false && id !in otherProvisionalIds
                         ChoiceKind.EXPERTISE ->
-                            id.toSkillOrNull()?.let {
+                            id.toSkillOrNull(pack)?.let {
                                 (
                                     sheet.skillProficiencies[it] == Proficiency.PROFICIENT ||
-                                        skillId(it) in otherProvisionalIds
+                                        skillId(it, pack) in otherProvisionalIds
                                     ) &&
                                     sheet.skillProficiencies[it] != Proficiency.EXPERTISE
                             } != false
@@ -93,7 +94,7 @@ object SrdChoiceResolver {
                         else -> true
                     }
                 }
-                .map { id -> optionForId(id, pack.element(id), language) }
+                .map { id -> optionForId(id, pack.element(id), language, pack) }
         }
         val semantic = choice.poolId.orEmpty().removePrefix("${pack.manifest.id}:pool:")
         val elements = pack.elements
@@ -104,38 +105,39 @@ object SrdChoiceResolver {
                         sheet.skillProficiencies
                             .filterValues { it == Proficiency.PROFICIENT }
                             .keys +
-                            otherProvisionalIds.mapNotNull { it.toSkillOrNull() }
+                            otherProvisionalIds.mapNotNull { it.toSkillOrNull(pack) }
                         )
                         .filter { sheet.skillProficiencies[it] != Proficiency.EXPERTISE }
                         .distinct()
                 } else {
-                    Skill.entries.filter {
+                    pack.skills.map { it.id }.filter {
                         sheet.skillProficiencies[it].let { proficiency ->
                             proficiency == null || proficiency == Proficiency.NONE
-                        } && skillId(it) !in otherProvisionalIds
+                        } && skillId(it, pack) !in otherProvisionalIds
                     }
                 }
                 return skills.map {
                     SrdChoiceOption(
-                        id = skillId(it),
-                        label = it.label(language),
-                        secondaryLabel = it.ability.label(language),
+                        id = skillId(it, pack),
+                        label = pack.skill(it)?.name ?: it.label(language),
+                        secondaryLabel = pack.stat(pack.skill(it)?.statId ?: it.ability)?.name
+                            ?: it.ability.label(language),
                     )
                 }
             }
             semantic.startsWith("skills-or-tools:") -> {
-                val skillOptions = Skill.entries
+                val skillOptions = pack.skills.map { it.id }
                     .filter {
                         sheet.skillProficiencies[it].let { proficiency ->
                             proficiency == null || proficiency == Proficiency.NONE
-                        } && skillId(it) !in otherProvisionalIds
+                        } && skillId(it, pack) !in otherProvisionalIds
                     }
                     .map {
                         SrdChoiceOption(
-                            id = skillId(it),
-                            label = it.label(language),
+                            id = skillId(it, pack),
+                            label = pack.skill(it)?.name ?: it.label(language),
                             secondaryLabel = language.pick("Abilità", "Skill") +
-                                " · ${it.ability.label(language)}",
+                                " · ${pack.stat(pack.skill(it)?.statId ?: it.ability)?.name ?: it.ability.label(language)}",
                         )
                     }
                 return skillOptions + toolOptions(
@@ -390,7 +392,7 @@ object SrdChoiceResolver {
             .filter { it.id !in previousAncientKnowledgeFeats }
             .distinctBy { it.id }
             .sortedWith(compareBy({ it.spell?.level ?: -1 }, { it.name.lowercase() }))
-            .map { optionForId(it.id, it, language) }
+            .map { optionForId(it.id, it, language, pack) }
     }
 
     private fun maximumSpellLevel(
@@ -410,8 +412,8 @@ object SrdChoiceResolver {
         id: String,
         element: RuleElementDefinition?,
         language: AppLanguage,
+        pack: RulesContentPack,
     ): SrdChoiceOption {
-        val pack = Srd521ItContent.packFor(language)
         pack.background(id)?.let { background ->
             return SrdChoiceOption(
                 id = id,
@@ -447,12 +449,13 @@ object SrdChoiceResolver {
                 effects = element.effects,
             )
         }
-        val skill = Skill.entries.firstOrNull { skillId(it) == id }
+        val skill = pack.skills.map { it.id }.firstOrNull { skillId(it, pack) == id }
         if (skill != null) {
             return SrdChoiceOption(
                 id = id,
-                label = skill.label(language),
-                secondaryLabel = skill.ability.label(language),
+                label = pack.skill(skill)?.name ?: skill.label(language),
+                secondaryLabel = pack.stat(pack.skill(skill)?.statId ?: skill.ability)?.name
+                    ?: skill.ability.label(language),
             )
         }
         SrdWeapons.byId(id, language)?.let { weapon ->
@@ -475,10 +478,18 @@ object SrdChoiceResolver {
             return SrdChoiceOption(id = id, label = damageType.label(language))
         }
         if (id.startsWith("srd521-it:ability:")) {
-            val ability = app.d6d.rules.character.Ability.entries.firstOrNull {
-                it.name.lowercase() == id.substringAfterLast(':')
+            val ability = pack.stats.map { it.id }.firstOrNull {
+                it.name.lowercase() == id.substringAfterLast(':') ||
+                    it.value.substringAfterLast(':').replace('-', '_').lowercase() == id.substringAfterLast(':')
             }
-            if (ability != null) return SrdChoiceOption(id, ability.label(language), ability.abbreviation)
+            if (ability != null) {
+                val definition = pack.stat(ability)
+                return SrdChoiceOption(
+                    id,
+                    definition?.name ?: ability.label(language),
+                    definition?.abbreviation ?: ability.abbreviation,
+                )
+            }
         }
         if (id.startsWith("srd521-it:spell-list:")) {
             val classId = CharacterClassId.entries.firstOrNull {
@@ -533,12 +544,16 @@ private fun provisionalAcquisitionBucket(
     }
 }
 
-private fun skillId(skill: Skill): String =
-    "srd521-it:skill:${skill.name.lowercase().replace('_', '-')}"
+private fun skillId(skill: Skill, pack: RulesContentPack): String =
+    skill.value.takeIf { ':' in it }
+        ?: "${pack.manifest.id}:skill:${skill.name.lowercase().replace('_', '-')}"
 
-private fun String.toSkillOrNull(): Skill? {
+private fun String.toSkillOrNull(pack: RulesContentPack): Skill? {
     val slug = substringAfterLast(':').replace('-', '_')
-    return Skill.entries.firstOrNull { it.name.lowercase() == slug }
+    return pack.skills.firstOrNull { definition ->
+        definition.id.name.lowercase().substringAfterLast(':').replace('-', '_') == slug ||
+            definition.name.toContentSlug().replace('-', '_') == slug
+    }?.id
 }
 
 private fun invocationPrerequisitesMet(

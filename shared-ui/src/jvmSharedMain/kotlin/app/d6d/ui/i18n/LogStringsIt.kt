@@ -9,6 +9,7 @@ internal object LogStringsIt : LogStrings {
     override val encounterReady = "Incontro pronto"
     override val encounterStarted = "L'incontro comincia"
     override val encounterPaused = "Incontro in pausa"
+    override fun rulesetChanged(name: String) = "Regolamento della partita cambiato in $name"
     override val encounterResumed = "Incontro ripreso"
     override val sidesDeclared = "Schieramenti dichiarati"
     override val initiativeOrderSet = "Ordine d'iniziativa fissato"
@@ -18,6 +19,25 @@ internal object LogStringsIt : LogStrings {
     override fun partyDeclared(names: String) = "Squadra dichiarata: $names"
     override fun initiativeOrder(order: String) = "Ordine d'iniziativa: $order"
     override fun encounterResolved(outcome: String) = "Incontro risolto: $outcome"
+    override fun genericRuleAction(ruleId: String, eventCount: String) =
+        "Regola «$ruleId» eseguita · $eventCount effetti"
+    override fun genericRuleEvent(event: String, eventCount: String) =
+        "Evento regolamentare «$event» · $eventCount effetti"
+    override fun genericRandomizer(ruleId: String, draws: String, value: String, tableValue: String) =
+        buildString {
+            append("Tiro «$ruleId»: $draws → $value")
+            if (tableValue.isNotBlank()) append(" · $tableValue")
+        }
+    override fun genericValueSet(ruleId: String, before: String, after: String) =
+        "Valore «$ruleId»: $before → $after"
+    override fun genericRuleActivation(ruleId: String, active: Boolean) =
+        "Regola «$ruleId» ${if (active) "attivata" else "disattivata"}"
+    override fun genericResourceSet(resourceId: String, current: String, maximum: String) =
+        "Risorsa «$resourceId»: $current / $maximum"
+    override fun genericConditionSet(conditionId: String, before: String, after: String) =
+        "Condizione «$conditionId»: $before → $after accumuli"
+    override fun genericTurnResourceSet(resourceId: String, before: String, after: String) =
+        "Budget «$resourceId»: $before → $after"
 
     // --- turni e iniziativa ---------------------------------------------------
 

@@ -3,27 +3,34 @@ package app.d6d.ui.sheet
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.d6d.ui.content.guidedCharacterService
 import app.d6d.ui.content.guidedCharacterServiceFor
-import app.d6d.ui.content.srdCatalog
-import app.d6d.ui.content.srdCatalogFor
+import app.d6d.ui.content.rulesCatalogFor
+import app.d6d.ui.content.rulesPackFor
 import app.d6d.ui.content.regeneratedIn
 import app.d6d.ui.content.retranslatedTo
-import app.d6d.ui.content.srdPack
 import app.d6d.content.srd521it.SrdBeastForm
 import app.d6d.content.srd521it.SrdBeasts
+import app.d6d.content.srd521it.Srd521Ruleset
 import app.d6d.content.srd521it.SrdChoiceOption
 import app.d6d.content.srd521it.SrdChoiceResolver
 import app.d6d.domain.combat.AbilityEffect
+import app.d6d.domain.combat.ConditionType
+import app.d6d.domain.combat.DamageType
 import app.d6d.i18n.AppLanguage
+import app.d6d.i18n.label
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.BackgroundDefinition
 import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.character.CharacterSkillDefinition
+import app.d6d.rules.character.CharacterStatDefinition
 import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.LevelUpRequest
 import app.d6d.rules.character.RecoveryPeriod
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.SpellcastingKind
+import app.d6d.rules.model.RulesetOrigin
+import app.d6d.rules.model.RulesetRevision
+import app.d6d.rules.model.RuleKind
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.ui.i18n.AppLocale
@@ -95,22 +102,86 @@ enum class SheetNavigationResult {
 class SheetViewModel(
     private val store: SheetStore,
     loadOnCreate: Boolean = true,
+    private val rulesetProvider: () -> List<RulesetRevision> = { listOf(Srd521Ruleset.revision) },
 ) {
-    private val guidedCharacters: GuidedCharacterService get() = guidedCharacterService
+    val availableRulesets: List<RulesetRevision>
+        get() = rulesetProvider()
+            .distinctBy { it.canonicalHash() }
+            // Una revisione può essere perfettamente valida per una sessione
+            // manuale ma non descrivere classi/personaggi. Non deve far
+            // crollare il dialogo guidato: qui compaiono solo quelle proiettabili.
+            .filter { revision ->
+                runCatching { rulesPackFor(revision, AppLocale.language) }.isSuccess
+            }
+            .ifEmpty { listOf(Srd521Ruleset.revision) }
 
-    val srdClasses get() = srdPack.classes
+    private val standardRuleset: RulesetRevision
+        get() = availableRulesets.firstOrNull { it.origin() == RulesetOrigin.BUNDLED_STANDARD }
+            ?: Srd521Ruleset.revision
+
+    var selectedCharacterRulesetHash by mutableStateOf(Srd521Ruleset.revision.canonicalHash())
+        private set
+
+    val selectedCharacterRuleset: RulesetRevision
+        get() = availableRulesets.firstOrNull { it.canonicalHash() == selectedCharacterRulesetHash }
+            ?: standardRuleset
+
+    /**
+     * Una scheda già configurata può riferirsi a una revisione rimossa dalla
+     * libreria. In quel caso resta leggibile, ma non deve mai essere ricalcolata
+     * silenziosamente con lo SRD.
+     */
+    val characterRulesetAvailable: Boolean
+        get() = !character.progression.configured || revisionFor(character) != null
+
+    private val activePack get() = rulesPackFor(selectedCharacterRuleset, AppLocale.language)
+
+    private val guidedCharacters: GuidedCharacterService
+        get() = guidedCharacterServiceFor(selectedCharacterRuleset, AppLocale.language)
+
+    /** Nome mantenuto per compatibilità UI; ora contiene le classi della revisione selezionata. */
+    val srdClasses
+        get() = if (characterRulesetAvailable) activePack.classes else emptyList()
+
+    /** Classi indirizzabili presenti in tutte le revisioni installate, per editor trasversali. */
+    val availableCharacterClasses
+        get() = availableRulesets
+            .flatMap { rulesPackFor(it, AppLocale.language).classes }
+            .distinctBy { it.id }
+            .sortedWith(compareBy({ it.id.ordinal }, { it.name.lowercase() }))
+
+    fun selectCharacterRuleset(canonicalHash: String): Boolean {
+        if (character.progression.configured) return false
+        val revision = availableRulesets.firstOrNull { it.canonicalHash() == canonicalHash } ?: return false
+        selectedCharacterRulesetHash = revision.canonicalHash()
+        say(null)
+        return true
+    }
 
     fun backgroundDefinition(id: String): BackgroundDefinition? =
-        srdPack.background(id)
+        if (characterRulesetAvailable) activePack.background(id) else null
 
     /** Nome delle classi guidate derivato dagli ID, quindi sempre nella lingua corrente. */
     fun displayedClassName(sheet: CharacterSheet = character): String {
         if (!sheet.progression.configured) return sheet.className
+        // Se la revisione esatta non è più installata, il nome fotografato nella
+        // scheda è più fedele di un'etichetta SRD ricavata per errore dallo stesso ID.
+        val revision = revisionFor(sheet) ?: return sheet.className
+        val pack = rulesPackFor(revision, AppLocale.language)
         return sheet.progression.classLevels.joinToString(" / ") { classLevel ->
-            val name = srdPack.classes.firstOrNull { it.id == classLevel.classId }?.name
+            val name = pack.classes.firstOrNull { it.id == classLevel.classId }?.name
                 ?: classLevel.classId.name
             "$name ${classLevel.level}"
         }.ifBlank { sheet.className }
+    }
+
+    /** Etichetta di una singola classe, presa dalla revisione e non dallo slug dell'ID. */
+    fun displayedClassLabel(classId: CharacterClassId, sheet: CharacterSheet = character): String {
+        val revision = revisionFor(sheet) ?: return classId.label(AppLocale.language)
+        return rulesPackFor(revision, AppLocale.language).classes
+            .firstOrNull { it.id == classId }
+            ?.name
+            ?: classId.label(AppLocale.language)
     }
 
     /** Come la classe, una sottoclasse guidata è contenuto SRD e non testo libero. */
@@ -118,9 +189,11 @@ class SheetViewModel(
         if (!sheet.progression.configured || sheet.progression.subclasses.isEmpty()) {
             return sheet.subclass
         }
+        val revision = revisionFor(sheet) ?: return sheet.subclass
+        val pack = rulesPackFor(revision, AppLocale.language)
         val savedNames = sheet.subclass.split(" / ")
         return sheet.progression.subclasses.mapIndexed { index, subclass ->
-            srdPack.element(subclass.subclassId)?.name
+            pack.element(subclass.subclassId)?.name
                 ?: savedNames.getOrNull(index)
                 ?: subclass.subclassId
         }.joinToString(" / ")
@@ -134,7 +207,16 @@ class SheetViewModel(
      * file dell'utente persistono soltanto capacità private e riferimenti scelti.
      */
     val abilityCatalog: List<CatalogAbility>
-        get() = (library.abilities + bundledSrdAbilities)
+        get() = abilityCatalogFor(character)
+
+    /** Catalogo effettivo della specifica scheda, anche se non è quella aperta. */
+    fun abilityCatalogFor(sheet: CharacterSheet): List<CatalogAbility> {
+        val revision = if (!sheet.progression.configured && sheet == character) {
+            selectedCharacterRuleset
+        } else {
+            revisionFor(sheet)
+        }
+        return (revision?.let { rulesCatalogFor(it, AppLocale.language) }.orEmpty() + library.abilities)
             .distinctBy { it.id }
             .map { ability ->
                 // La riclassificazione del tavolo vince sul pacchetto, che resta
@@ -145,6 +227,73 @@ class SheetViewModel(
                     ?.let { ability.copy(passive = it) }
                     ?: ability
             }
+    }
+
+    /** Contenuto immutabile del regolamento attivo nell'editor. */
+    private val bundledSrdAbilities: List<CatalogAbility>
+        get() = if (!character.progression.configured) {
+            rulesCatalogFor(selectedCharacterRuleset, AppLocale.language)
+        } else {
+            revisionFor(character)?.let { rulesCatalogFor(it, AppLocale.language) }.orEmpty()
+        }
+
+    private fun revisionFor(sheet: CharacterSheet): RulesetRevision? {
+        val exactHash = sheet.progression.rulesetCanonicalHash
+        if (exactHash.isNotBlank()) {
+            return availableRulesets.firstOrNull { it.canonicalHash() == exactHash }
+        }
+        // Le schede precedenti al binding appartengono al pacchetto SRD incluso.
+        return standardRuleset
+    }
+
+    /** Definizioni fotografate dalla revisione della scheda; per una bozza nuova usa la revisione selezionata. */
+    fun statDefinitionsFor(sheet: CharacterSheet = character): List<CharacterStatDefinition> {
+        if (sheet.progression.statDefinitions.isNotEmpty()) return sheet.progression.statDefinitions
+        val revision = if (!sheet.progression.configured && sheet == character) {
+            selectedCharacterRuleset
+        } else {
+            revisionFor(sheet)
+        }
+        return revision?.let { rulesPackFor(it, AppLocale.language).stats }.orEmpty()
+    }
+
+    fun skillDefinitionsFor(sheet: CharacterSheet = character): List<CharacterSkillDefinition> {
+        if (sheet.progression.skillDefinitions.isNotEmpty()) return sheet.progression.skillDefinitions
+        val revision = if (!sheet.progression.configured && sheet == character) {
+            selectedCharacterRuleset
+        } else {
+            revisionFor(sheet)
+        }
+        return revision?.let { rulesPackFor(it, AppLocale.language).skills }.orEmpty()
+    }
+
+    /** Tassonomie aperte della stessa revisione usata dalla scheda/editor corrente. */
+    fun damageTypesFor(sheet: CharacterSheet = character): List<DamageType> {
+        val revision = if (!sheet.progression.configured && sheet == character) {
+            selectedCharacterRuleset
+        } else {
+            revisionFor(sheet)
+        } ?: return emptyList()
+        return revision.entities()
+            .filter { it.enabled() && it.kind() == RuleKind.DAMAGE_TYPE }
+            .map { DamageType.of(it.attributes()["damageTypeId"].orEmpty().ifBlank { it.id() }) }
+            .distinct()
+            .ifEmpty { DamageType.values().toList() }
+    }
+
+    fun conditionTypesFor(sheet: CharacterSheet = character): List<ConditionType> {
+        val revision = if (!sheet.progression.configured && sheet == character) {
+            selectedCharacterRuleset
+        } else {
+            revisionFor(sheet)
+        } ?: return emptyList()
+        return revision.entities()
+            .filter { it.enabled() && it.kind() == RuleKind.CONDITION }
+            .map { ConditionType.of(it.attributes()["conditionId"].orEmpty().ifBlank { it.id() }) }
+            .filterNot { it == ConditionType.CUSTOM }
+            .distinct()
+            .ifEmpty { ConditionType.values().filterNot { it == ConditionType.CUSTOM } }
+    }
 
     private var currentKind by mutableStateOf(SheetKind.PERSONAGGIO)
 
@@ -178,6 +327,21 @@ class SheetViewModel(
 
     private fun say(text: LocalizedText?) {
         statusText = text
+    }
+
+    private fun reportMissingCharacterRuleset() {
+        val hash = character.progression.rulesetCanonicalHash.take(12)
+        say(
+            literalText(
+                if (AppLocale.language == AppLanguage.ITALIAN) {
+                    "La revisione del regolamento di questa scheda non è installata ($hash). " +
+                        "Reinstallala prima di ricalcolare progressione o modificatori."
+                } else {
+                    "This sheet's ruleset revision is not installed ($hash). " +
+                        "Reinstall it before recalculating progression or modifiers."
+                },
+            ),
+        )
     }
 
     /**
@@ -225,13 +389,22 @@ class SheetViewModel(
      */
     private fun alignSheetLanguage() {
         val target = AppLocale.language
+        fun alignedCharacter(sheet: CharacterSheet): CharacterSheet {
+            val translated = sheet.retranslatedTo(target)
+            val revision = revisionFor(translated) ?: return translated
+            val service = guidedCharacterServiceFor(revision, target)
+            val catalog = (rulesCatalogFor(revision, target) + library.abilities).distinctBy { it.id }
+            return service.withoutGeneratedFeatureText(
+                service.withRefreshedEffects(translated, catalog),
+            )
+        }
         // Si traduce prima e si confronta poi. Guardare il solo marcatore non
         // basta: una creatura che l'utente ha modificato non si rigenera *e*
         // conserva il proprio marcatore, quindi resterebbe «da allineare» per
         // sempre, facendo riscrivere l'archivio a ogni avvio — e ruotare il
         // backup su una modifica che non c'e'.
         val aligned = library.copy(
-            characters = library.characters.map { it.retranslatedTo(target) },
+            characters = library.characters.map(::alignedCharacter),
             monsters = library.monsters.map { it.regeneratedIn(target) },
         )
         if (aligned != library) {
@@ -243,9 +416,9 @@ class SheetViewModel(
         }
         pristineNewMonster = pristineNewMonster?.regeneratedIn(target)
         if (character.contentLanguage != target) {
-            character = character.retranslatedTo(target)
+            character = alignedCharacter(character)
         }
-        pristineNewCharacter = pristineNewCharacter?.retranslatedTo(target)
+        pristineNewCharacter = pristineNewCharacter?.let(::alignedCharacter)
     }
 
     private var pristineNewCharacter: CharacterSheet? = null
@@ -315,15 +488,18 @@ class SheetViewModel(
             // sorgente. Restavano entrambi; l'allineamento poi traduceva il primo
             // nel secondo e li rendeva identici, ma ormai erano due. Da li' ogni
             // riapertura riscriveva l'archivio, e un privilegio contava due volte.
-            val refreshCatalogs = HashMap<AppLanguage, List<CatalogAbility>>()
-            fun refreshCatalogFor(language: AppLanguage) = refreshCatalogs.getOrPut(language) {
-                (fromDisk.abilities + srdCatalogFor(language)).distinctBy { it.id }
-            }
+            val refreshCatalogs = HashMap<Pair<String, AppLanguage>, List<CatalogAbility>>()
             val refreshed = fromDisk.copy(
                 characters = fromDisk.characters.map { sheet ->
-                    val service = guidedCharacterServiceFor(sheet.contentLanguage)
+                    val revision = revisionFor(sheet) ?: return@map sheet
+                    val key = revision.canonicalHash() to sheet.contentLanguage
+                    val catalog = refreshCatalogs.getOrPut(key) {
+                        (rulesCatalogFor(revision, sheet.contentLanguage) + fromDisk.abilities)
+                            .distinctBy { it.id }
+                    }
+                    val service = guidedCharacterServiceFor(revision, sheet.contentLanguage)
                     service.withoutGeneratedFeatureText(
-                        service.withRefreshedEffects(sheet, refreshCatalogFor(sheet.contentLanguage)),
+                        service.withRefreshedEffects(sheet, catalog),
                     )
                 },
             )
@@ -640,7 +816,10 @@ class SheetViewModel(
      * non recupera silenziosamente le risorse.
      */
     fun longRestAndReplaceWildShapeForm(oldFormId: String, newFormId: String): Boolean =
-        runCatching {
+        if (!characterRulesetAvailable) {
+            reportMissingCharacterRuleset()
+            false
+        } else runCatching {
             val legalIds = SrdBeasts
                 .availableAt(
                     character.progression.levelIn(CharacterClassId.DRUID),
@@ -698,14 +877,17 @@ class SheetViewModel(
     fun progressionRequirements(
         classId: CharacterClassId,
         provisionalSelections: List<app.d6d.rules.character.ChoiceSelection> = emptyList(),
-    ): List<ChoiceDefinition> =
+    ): List<ChoiceDefinition> = if (characterRulesetAvailable) {
         guidedCharacters.requirements(character, classId, provisionalSelections)
+    } else {
+        emptyList()
+    }
 
     fun progressionOptions(
         choice: ChoiceDefinition,
         classId: CharacterClassId,
         provisionalSelections: List<app.d6d.rules.character.ChoiceSelection> = emptyList(),
-    ): List<SrdChoiceOption> =
+    ): List<SrdChoiceOption> = if (characterRulesetAvailable) {
         SrdChoiceResolver.options(
             choice = choice,
             classId = classId,
@@ -713,12 +895,20 @@ class SheetViewModel(
             sheet = character,
             provisionalSelections = provisionalSelections,
             language = AppLocale.language,
+            pack = activePack,
         )
+    } else {
+        emptyList()
+    }
 
     fun fixedHitPointIncrease(classId: CharacterClassId): Int =
-        guidedCharacters.fixedHitPointIncrease(character, classId)
+        if (characterRulesetAvailable) guidedCharacters.fixedHitPointIncrease(character, classId) else 0
 
     fun advanceCharacter(request: LevelUpRequest): Boolean {
+        if (!characterRulesetAvailable) {
+            reportMissingCharacterRuleset()
+            return false
+        }
         // Il livello si applica sempre col pacchetto della lingua a schermo, ed e'
         // in quella lingua che il servizio scrive. La scheda va portata li' prima,
         // altrimenti ne esce una meta' italiana e meta' inglese: il servizio lo
@@ -844,6 +1034,10 @@ class SheetViewModel(
         abilityId: String,
         selected: Boolean,
     ): Boolean {
+        if (!characterRulesetAvailable) {
+            reportMissingCharacterRuleset()
+            return false
+        }
         val ability = abilityCatalog.firstOrNull { it.id == abilityId }
         if (ability == null || ability.category !in section.catalogKinds) {
             say { it.sheet.entryNotInSection(section.label(it)) }
@@ -999,6 +1193,9 @@ class SheetViewModel(
 
     private fun selectCharacterInternal(sheet: CharacterSheet) {
         character = sheet
+        selectedCharacterRulesetHash = sheet.progression.rulesetCanonicalHash
+            .takeIf(String::isNotBlank)
+            ?: standardRuleset.canonicalHash()
         selectedId = sheet.id
         pristineNewCharacter = null
     }
@@ -1014,6 +1211,7 @@ class SheetViewModel(
         val stamp = System.currentTimeMillis()
         when (kind) {
             SheetKind.PERSONAGGIO -> {
+                selectedCharacterRulesetHash = standardRuleset.canonicalHash()
                 character = CharacterSheet(
                     id = "pg-$stamp",
                     armorClassMethod = ArmorClassMethod.UNARMORED,
@@ -1074,8 +1272,6 @@ class SheetViewModel(
         return succeeded
     }
 }
-
-private val bundledSrdAbilities: List<CatalogAbility> get() = srdCatalog
 
 /**
  * Nome della sezione, per le frasi che la nominano.

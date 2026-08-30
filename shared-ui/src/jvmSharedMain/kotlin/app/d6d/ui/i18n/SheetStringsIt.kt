@@ -206,12 +206,12 @@ internal object SheetStringsIt : SheetStrings {
 
     // --- progressione SRD ------------------------------------------------------------
 
-    override val srdCreationTitle = "Creazione e livelli SRD 5.2.1"
+    override val srdCreationTitle = "Creazione e livelli guidati"
     override val srdCreationBody = "La modalità guidata propone classe, competenze, privilegi, " +
-        "talenti, trucchetti, incantesimi e risorse nelle quantità previste dallo SRD. " +
+        "talenti, trucchetti, incantesimi e risorse previsti dal regolamento scelto. " +
         "Le schede manuali esistenti restano invariate finché non la attivi."
     override val startGuidedCreation = "Avvia creazione guidata"
-    override val srdProgressionTitle = "Progressione SRD 5.2.1"
+    override val srdProgressionTitle = "Progressione del personaggio"
     override val classResourcesCaps = "RISORSE DI CLASSE"
     override val shortRest = "Riposo breve"
     override val longRest = "Riposo lungo"
@@ -241,8 +241,8 @@ internal object SheetStringsIt : SheetStrings {
 
     // --- procedura guidata --------------------------------------------------------------
 
-    override val guidedCreationTitle = "Creazione guidata SRD"
-    override val srdLevelUpTitle = "Passaggio di livello SRD"
+    override val guidedCreationTitle = "Creazione guidata"
+    override val srdLevelUpTitle = "Passaggio di livello"
     override val chooseExactlyForFirstLevel =
         "Scegli esattamente le opzioni richieste per il 1º livello."
     override val multiclassNote = "Multiclasse: verranno verificati i punteggi minimi della " +
@@ -336,7 +336,7 @@ internal object SheetStringsIt : SheetStrings {
     override val shortRestResourcesRecovered = "Risorse da riposo breve recuperate."
     override val cannotSwapKnownForm = "Impossibile sostituire la forma conosciuta."
     override val srdCharacterCreated =
-        "Personaggio SRD creato: completa i dettagli narrativi e salva."
+        "Personaggio creato: completa i dettagli narrativi e salva."
     override val abilitySaved = "Abilità salvata."
     override val automaticAbilityMustStayActive =
         "Una capacità con effetto automatico deve restare attiva."

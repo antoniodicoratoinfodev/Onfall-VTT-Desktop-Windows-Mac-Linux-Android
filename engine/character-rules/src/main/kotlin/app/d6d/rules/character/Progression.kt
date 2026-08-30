@@ -12,7 +12,7 @@ data class ClassLevelState(
     val level: Int,
 ) {
     init {
-        require(level in 1..20)
+        require(level >= 1)
     }
 }
 
@@ -91,6 +91,19 @@ data class LevelAdvancementRecord(
 data class CharacterProgression(
     val contentPackId: String = "",
     val contentPackVersion: String = "",
+    val rulesetProjectId: String = "",
+    val rulesetRevisionId: String = "",
+    val rulesetCanonicalHash: String = "",
+    val rulesetRuntimeHash: String = "",
+    val runtimeSemanticsVersion: String = "",
+    val proficiencyProgression: ProficiencyProgressionDefinition = ProficiencyProgressionDefinition(),
+    val maximumCharacterLevel: Int = 20,
+    /** Se false, il regolamento consente avanzamenti senza soglie PE. */
+    val enforceExperienceThresholds: Boolean = true,
+    /** Snapshot della curva usata dalla scheda; non viene risolta dall'ultima revisione. */
+    val experienceThresholds: List<Int> = ExperienceProgression.thresholds,
+    val statDefinitions: List<CharacterStatDefinition> = emptyList(),
+    val skillDefinitions: List<CharacterSkillDefinition> = emptyList(),
     val backgroundId: String = "",
     val classLevels: List<ClassLevelState> = emptyList(),
     val subclasses: List<SubclassSelection> = emptyList(),
@@ -112,6 +125,17 @@ data class CharacterProgression(
     val effects: List<RuleEffect> = emptyList(),
     val advancementHistory: List<LevelAdvancementRecord> = emptyList(),
 ) {
+    init {
+        require(maximumCharacterLevel >= 1)
+        require(experienceThresholds.zipWithNext().all { (first, second) -> second > first })
+        // Una fotografia deve restare apribile anche se il relativo ruleset non
+        // è installato o se una vecchia curva PE copriva meno livelli del limite
+        // attuale. È il confine di pubblicazione del ruleset a rifiutare nuove
+        // configurazioni incomplete; il documento salvato non viene corrotto.
+        require(statDefinitions.map { it.id }.distinct().size == statDefinitions.size)
+        require(skillDefinitions.map { it.id }.distinct().size == skillDefinitions.size)
+    }
+
     val configured: Boolean get() = classLevels.isNotEmpty()
     val totalLevel: Int get() = classLevels.sumOf { it.level }
 
@@ -202,6 +226,20 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
 
     private fun say(italian: String, english: String): String = language.pick(italian, english)
 
+    private fun defaultScore(ability: Ability): Int = pack.stat(ability)?.defaultScore ?: 10
+
+    private fun advancementCap(ability: Ability, absolute: Boolean = false): Int =
+        pack.stat(ability)?.let { if (absolute) it.maximumScore else it.advancementMaximum } ?: 20
+
+    private fun eligibleLevel(experiencePoints: Int): Int {
+        if (pack.experienceThresholds.isEmpty()) return 0
+        val xp = experiencePoints.coerceAtLeast(0)
+        return (pack.experienceThresholds.indexOfLast { xp >= it } + 1).coerceAtLeast(1)
+    }
+
+    private fun nextExperienceThreshold(currentLevel: Int): Int? =
+        pack.experienceThresholds.getOrNull(currentLevel.coerceAtLeast(0))
+
     fun requirementsFor(
         progression: CharacterProgression,
         classId: CharacterClassId,
@@ -209,10 +247,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
     ): List<ChoiceDefinition> {
         val definition = pack.classDefinition(classId)
         val nextClassLevel = progression.levelIn(classId) + 1
-        require(nextClassLevel in 1..20) {
+        require(nextClassLevel in 1..definition.maximumLevel) {
             say(
-                "${definition.name} è già al 20º livello.",
-                "${definition.name} is already level 20.",
+                "${definition.name} è già al livello massimo (${definition.maximumLevel}).",
+                "${definition.name} is already at its maximum level (${definition.maximumLevel}).",
             )
         }
         val level = definition.level(nextClassLevel)
@@ -281,7 +319,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                     definition.multiclassSkillChoice?.let(::add)
                     definition.multiclassToolChoice?.let { add(replaceDuplicateFixedTool(it)) }
                 } else {
-                    add(definition.skillChoice)
+                    if (definition.skillChoice.count > 0) add(definition.skillChoice)
                     definition.toolChoice?.let { add(replaceDuplicateFixedTool(it)) }
                     definition.startingEquipmentChoice?.let(::add)
                         ?: definition.startingWeaponChoice?.let(::add)
@@ -377,7 +415,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                             listOf(Ability.STRENGTH, Ability.DEXTERITY)
                         feat.id.endsWith(":dono-richiamo-incantesimi") ->
                             listOf(Ability.INTELLIGENCE, Ability.WISDOM, Ability.CHARISMA)
-                        else -> Ability.entries
+                        else -> pack.stats.map { it.id }
                     }
                     add(
                         featAbilityIncreaseRequirement(
@@ -499,25 +537,37 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
     ): LevelUpValidation {
         val issues = mutableListOf<ProgressionIssue>()
         val totalLevel = progression.totalLevel
-        if (totalLevel >= 20) {
+        if (totalLevel >= pack.maximumCharacterLevel) {
             issues += ProgressionIssue(
                 "MAX_LEVEL",
-                say("Il personaggio ha già raggiunto il 20º livello.", "The character has already reached level 20."),
+                say(
+                    "Il personaggio ha già raggiunto il livello massimo (${pack.maximumCharacterLevel}).",
+                    "The character has already reached the maximum level (${pack.maximumCharacterLevel}).",
+                ),
             )
-        } else if (totalLevel > 0 && ExperienceProgression.levelForExperience(experiencePoints) <= totalLevel) {
-            val next = ExperienceProgression.nextThreshold(totalLevel)
+        } else if (
+            pack.enforceExperienceThresholds &&
+            totalLevel > 0 &&
+            nextExperienceThreshold(totalLevel) != null &&
+            eligibleLevel(experiencePoints) <= totalLevel
+        ) {
+            val next = requireNotNull(nextExperienceThreshold(totalLevel))
             issues += ProgressionIssue(
                 "INSUFFICIENT_XP",
                 say(
-                    "Servono ${next ?: 0} PE per raggiungere il livello ${totalLevel + 1}.",
-                    "${next ?: 0} XP are required to reach level ${totalLevel + 1}.",
+                    "Servono $next PE per raggiungere il livello ${totalLevel + 1}.",
+                    "$next XP are required to reach level ${totalLevel + 1}.",
                 ),
             )
         }
-        if (progression.levelIn(request.classId) >= 20) {
+        val requestedClassMaximum = pack.classDefinition(request.classId).maximumLevel
+        if (progression.levelIn(request.classId) >= requestedClassMaximum) {
             issues += ProgressionIssue(
                 "CLASS_MAX_LEVEL",
-                say("La classe scelta è già al 20º livello.", "The selected class is already level 20."),
+                say(
+                    "La classe scelta è già al livello massimo ($requestedClassMaximum).",
+                    "The selected class is already at its maximum level ($requestedClassMaximum).",
+                ),
             )
         }
         if (request.hitPointIncrease < 1) {
@@ -534,7 +584,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 } + pack.classDefinition(request.classId).multiclassPrerequisiteGroups
                 ).distinct()
             requiredGroups.forEach { alternatives ->
-                if (alternatives.none { (abilityScores[it] ?: 10) >= 13 }) {
+                if (alternatives.none { (abilityScores[it] ?: defaultScore(it)) >= 13 }) {
                     val names = alternatives.joinToString(say(" o ", " or ")) { it.label(language) }
                     issues += ProgressionIssue(
                         "MULTICLASS_PREREQUISITE",
@@ -672,7 +722,8 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 !validDistribution ||
                 backgroundIncreases.keys.any { it !in selectedBackground.abilityOptions } ||
                 backgroundIncreases.any { (ability, amount) ->
-                    amount < 1 || (abilityScores[ability] ?: 10) + amount > 20
+                    amount < 1 ||
+                        (abilityScores[ability] ?: defaultScore(ability)) + amount > advancementCap(ability)
                 }
             ) {
                 issues += ProgressionIssue(
@@ -828,7 +879,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                     )
                 element.id.endsWith(":lottatore") &&
                     listOf(Ability.STRENGTH, Ability.DEXTERITY)
-                        .none { (abilityScores[it] ?: 10) >= 13 } ->
+                        .none { (abilityScores[it] ?: defaultScore(it)) >= 13 } ->
                     issues += ProgressionIssue(
                         "FEAT_ABILITY_PREREQUISITE",
                         say(
@@ -875,19 +926,19 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             .mapNotNull(pack::element)
             .any { it.kind == RuleElementKind.EPIC_BOON_FEAT }
         if (conditionalAbilityChoices.isNotEmpty()) {
-            val cap = if (selectedEpicBoon) 30 else 20
             if (
                 actualIncreases != conditionalIncreases ||
                 actualIncreases.any { (ability, amount) ->
-                    (abilityScores[ability] ?: 10) + amount > cap
+                    (abilityScores[ability] ?: defaultScore(ability)) + amount >
+                        advancementCap(ability, absolute = selectedEpicBoon)
                 }
             ) {
                 issues += ProgressionIssue(
                     "ABILITY_SCORE_INCREASE",
                     say(
                         "L'incremento del talento deve applicare +1 alla caratteristica scelta, " +
-                            "senza superare $cap.",
-                        "The feat increase must add +1 to the selected ability without exceeding $cap.",
+                            "senza superare il limite della caratteristica.",
+                        "The feat increase must add +1 without exceeding that stat's configured limit.",
                     ),
                 )
             }
@@ -895,7 +946,9 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             if (
                 actualIncreases.values.any { it !in 1..2 } ||
                 actualIncreases.values.sum() != 2 ||
-                actualIncreases.any { (ability, amount) -> (abilityScores[ability] ?: 10) + amount > 20 }
+                actualIncreases.any { (ability, amount) ->
+                    (abilityScores[ability] ?: defaultScore(ability)) + amount > advancementCap(ability)
+                }
             ) {
                 issues += ProgressionIssue(
                     "ABILITY_SCORE_INCREASE",
@@ -987,8 +1040,21 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         val updated = progression.copy(
             contentPackId = pack.manifest.id,
             contentPackVersion = pack.manifest.version,
+            rulesetProjectId = pack.manifest.rulesetProjectId,
+            rulesetRevisionId = pack.manifest.rulesetRevisionId,
+            rulesetCanonicalHash = pack.manifest.rulesetCanonicalHash,
+            rulesetRuntimeHash = pack.manifest.rulesetRuntimeHash,
+            runtimeSemanticsVersion = pack.manifest.runtimeSemanticsVersion,
+            proficiencyProgression = pack.proficiencyProgression,
+            maximumCharacterLevel = pack.maximumCharacterLevel,
+            enforceExperienceThresholds = pack.enforceExperienceThresholds,
+            experienceThresholds = pack.experienceThresholds,
+            statDefinitions = pack.stats,
+            skillDefinitions = pack.skills,
             backgroundId = selectedBackgroundId ?: progression.backgroundId,
-            classLevels = newClassLevels.sortedBy { it.classId.ordinal },
+            classLevels = newClassLevels.sortedWith(
+                compareBy<ClassLevelState> { it.classId.ordinal }.thenBy { it.classId.value },
+            ),
             subclasses = subclasses,
             selections = allSelections,
             selectedFeatureIds = (
@@ -1044,22 +1110,24 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 backgroundAbilityScoreIncreases = backgroundIncreases,
             ),
         )
-        val abilityCap = if (
+        val absoluteIncrease = if (
             request.selections
                 .flatMap { it.optionIds }
                 .mapNotNull(pack::element)
                 .any { it.kind == RuleElementKind.EPIC_BOON_FEAT }
         ) {
-            30
+            true
         } else {
-            20
+            false
         }
         val scoresAfterAdvancement = abilityScores.toMutableMap().apply {
             backgroundIncreases.forEach { (ability, increase) ->
-                this[ability] = (getOrDefault(ability, 10) + increase).coerceAtMost(20)
+                this[ability] = (getOrDefault(ability, defaultScore(ability)) + increase)
+                    .coerceAtMost(advancementCap(ability))
             }
             request.abilityScoreIncreases.forEach { (ability, increase) ->
-                this[ability] = (getOrDefault(ability, 10) + increase).coerceAtMost(abilityCap)
+                this[ability] = (getOrDefault(ability, defaultScore(ability)) + increase)
+                    .coerceAtMost(advancementCap(ability, absoluteIncrease))
             }
         }
         return updated.copy(
@@ -1128,7 +1196,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                     ResourceFormula.CLASS_LEVEL_TIMES_MULTIPLIER -> classLevel.level * resource.multiplier
                     ResourceFormula.ABILITY_MODIFIER -> abilityModifier(abilityScores[resource.ability] ?: 10)
                     ResourceFormula.PROFICIENCY_BONUS ->
-                        ExperienceProgression.proficiencyBonus(progression.totalLevel)
+                        pack.proficiencyProgression.bonus(progression.totalLevel)
                 }.coerceAtLeast(resource.minimum)
                 val previous = existing[resource.id]
                 ResourcePoolState(
@@ -1194,7 +1262,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         if (semanticPool.startsWith("skills:")) {
             val slug = optionId.substringAfterLast(':').replace('-', '_')
             return optionId.startsWith("${pack.manifest.id}:skill:") &&
-                Skill.entries.any { it.name.lowercase() == slug }
+                pack.skills.any {
+                    it.id.name.lowercase() == slug ||
+                        it.id.value.substringAfterLast(':').replace('-', '_').lowercase() == slug
+                }
         }
         if (semanticPool.startsWith("tools:")) {
             return optionId.startsWith("${pack.manifest.id}:tool:")
@@ -1488,7 +1559,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
 
     private fun abilityFromOptionId(optionId: String): Ability? {
         val slug = optionId.substringAfterLast(':')
-        return Ability.entries.firstOrNull { it.name.lowercase() == slug }
+        return pack.stats.map { it.id }.firstOrNull {
+            it.name.lowercase() == slug ||
+                it.value.substringAfterLast(':').replace('-', '_').lowercase() == slug
+        }
     }
 
     private companion object {

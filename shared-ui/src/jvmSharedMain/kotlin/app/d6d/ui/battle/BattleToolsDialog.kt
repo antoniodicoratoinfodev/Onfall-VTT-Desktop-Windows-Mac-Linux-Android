@@ -82,8 +82,14 @@ fun BattleToolsDialog(
     var durationText by remember { mutableStateOf("0") }
     var abilityCheckModifierText by remember { mutableStateOf("0") }
     var abilityCheckAbility by remember { mutableStateOf(SaveAbility.STRENGTH) }
-    var damageType by remember { mutableStateOf(DamageType.SLASHING) }
-    var conditionType by remember { mutableStateOf(ConditionType.PRONE) }
+    val damageTypes = viewModel.availableDamageTypes
+    val conditionTypes = viewModel.availableConditionTypes
+    var damageType by remember(viewModel.sessionGeneration, damageTypes) {
+        mutableStateOf(damageTypes.firstOrNull() ?: DamageType.UNTYPED)
+    }
+    var conditionType by remember(viewModel.sessionGeneration, conditionTypes) {
+        mutableStateOf(conditionTypes.firstOrNull() ?: ConditionType.CUSTOM)
+    }
 
     val target = targetId?.let(viewModel::combatant)
     val amount = amountText.toIntOrNull()?.coerceAtLeast(0) ?: 0
@@ -283,7 +289,7 @@ fun BattleToolsDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    DamageType.entries.forEach { type ->
+                    damageTypes.forEach { type ->
                         GameButton(
                             label = type.label(language),
                             accent = if (type == damageType) Palette.Gold else Palette.TextFaint,
@@ -298,9 +304,7 @@ fun BattleToolsDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    ConditionType.entries
-                        .filterNot { it == ConditionType.EXHAUSTION || it == ConditionType.CUSTOM }
-                        .forEach { type ->
+                    conditionTypes.forEach { type ->
                             GameButton(
                                 label = type.label(language),
                                 accent = if (type == conditionType) Palette.Gold else Palette.TextFaint,

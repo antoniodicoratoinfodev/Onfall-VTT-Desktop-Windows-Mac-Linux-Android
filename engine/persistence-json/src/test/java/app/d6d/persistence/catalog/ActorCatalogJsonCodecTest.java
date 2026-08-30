@@ -339,18 +339,17 @@ class ActorCatalogJsonCodecTest {
     }
 
     @Test
-    void rejectsUnknownEnumsWithTheExactJsonPathAndAcceptedType() {
+    void acceptsOpenDamageTypeIdentifiersAndPreservesThem() {
         Map<String, Object> document = mutableDocument(singleSimpleCreature());
         Map<String, Object> entry = object(array(document.get("entries")).get(0));
         Map<String, Object> definition = object(entry.get("combatDefinition"));
-        definition.put("resistances", List.of("MAGIC"));
+        definition.put("resistances", List.of("homebrew:arcane-surge"));
 
-        ActorCatalogJsonCodec.CatalogFormatException exception = assertThrows(
-                ActorCatalogJsonCodec.CatalogFormatException.class,
-                () -> ActorCatalogJsonCodec.decode(document));
+        ActorCatalogEntry decoded = ActorCatalogJsonCodec.decode(document).get(0);
 
-        assertTrue(exception.getMessage().contains("$.entries[0].combatDefinition.resistances[0]"));
-        assertTrue(exception.getMessage().contains("unknown DamageType value 'MAGIC'"));
+        assertEquals(
+                Set.of(DamageType.of("homebrew:arcane-surge")),
+                decoded.combatDefinition().resistances());
     }
 
     @Test

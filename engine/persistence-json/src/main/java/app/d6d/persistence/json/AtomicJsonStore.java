@@ -12,7 +12,9 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -47,6 +49,14 @@ public final class AtomicJsonStore {
     private final Path backupDirectory;
     private final String fileStem;
     private final int maxBackups;
+
+    /** Documento JSON candidato al recupero, con precedenza al file corrente. */
+    public record ObjectCandidate(Map<String, Object> document, boolean current) {
+        public ObjectCandidate {
+            document = Collections.unmodifiableMap(
+                    new LinkedHashMap<>(Objects.requireNonNull(document, "document")));
+        }
+    }
 
     /**
      * Creates a store configuration without touching the filesystem.
@@ -111,6 +121,45 @@ public final class AtomicJsonStore {
     public synchronized Map<String, Object> loadObject() throws IOException {
         String json = Files.readString(dataFile, StandardCharsets.UTF_8);
         return Json.parseObject(json);
+    }
+
+    /**
+     * Legge il file corrente e poi i backup dal più recente al più vecchio.
+     * I documenti JSON sintatticamente danneggiati vengono saltati; la validazione
+     * dello schema resta al repository, che può quindi scegliere il primo candidato valido.
+     */
+    public synchronized List<ObjectCandidate> loadObjectCandidatesNewestFirst() throws IOException {
+        ArrayList<ObjectCandidate> candidates = new ArrayList<>();
+        IOException firstFailure = null;
+        ArrayList<Path> paths = new ArrayList<>();
+        ArrayList<Boolean> currentFlags = new ArrayList<>();
+        if (Files.isRegularFile(dataFile)) {
+            paths.add(dataFile);
+            currentFlags.add(true);
+        }
+        for (Path backup : backupFilesNewestFirst()) {
+            paths.add(backup);
+            currentFlags.add(false);
+        }
+        for (int index = 0; index < paths.size(); index++) {
+            Path path = paths.get(index);
+            try {
+                Map<String, Object> document = Json.parseObject(
+                        Files.readString(path, StandardCharsets.UTF_8));
+                candidates.add(new ObjectCandidate(document, currentFlags.get(index)));
+            } catch (IOException | IllegalArgumentException failure) {
+                if (firstFailure == null) {
+                    firstFailure = failure instanceof IOException io
+                            ? io
+                            : new IOException("Invalid JSON document: " + path, failure);
+                }
+            }
+        }
+        if (candidates.isEmpty()) {
+            if (firstFailure != null) throw firstFailure;
+            throw new IOException("No current file or backup is available for " + dataFile);
+        }
+        return List.copyOf(candidates);
     }
 
     /**
@@ -191,6 +240,18 @@ public final class AtomicJsonStore {
             throw new IOException("Backup path is not a directory: " + backupDirectory);
         }
 
+        List<Path> backups = backupFilesNewestFirst();
+        for (int index = maxBackups; index < backups.size(); index++) {
+            Files.deleteIfExists(backups.get(index));
+        }
+        AtomicFiles.forceDirectoryBestEffort(backupDirectory);
+    }
+
+    private List<Path> backupFilesNewestFirst() throws IOException {
+        if (!Files.exists(backupDirectory)) return List.of();
+        if (!Files.isDirectory(backupDirectory)) {
+            throw new IOException("Backup path is not a directory: " + backupDirectory);
+        }
         String prefix = fileStem + '-';
         List<Path> backups = new ArrayList<>();
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(backupDirectory)) {
@@ -203,14 +264,10 @@ public final class AtomicJsonStore {
                 }
             }
         }
-
         backups.sort(Comparator.comparing(
                 path -> path.getFileName().toString(),
                 Comparator.reverseOrder()));
-        for (int index = maxBackups; index < backups.size(); index++) {
-            Files.deleteIfExists(backups.get(index));
-        }
-        AtomicFiles.forceDirectoryBestEffort(backupDirectory);
+        return List.copyOf(backups);
     }
 
     private static void validateBaseName(String baseName) {

@@ -1,67 +1,376 @@
 package app.d6d.rules.character
 
 import app.d6d.domain.combat.DamageType
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 
-/** Le sei caratteristiche usate dalle regole di creazione e avanzamento. */
-@Serializable
-enum class Ability(val italianLabel: String, val abbreviation: String) {
-    STRENGTH("Forza", "FOR"),
-    DEXTERITY("Destrezza", "DES"),
-    CONSTITUTION("Costituzione", "COS"),
-    INTELLIGENCE("Intelligenza", "INT"),
-    WISDOM("Saggezza", "SAG"),
-    CHARISMA("Carisma", "CAR"),
-}
+/**
+ * Identificatore aperto di caratteristica.
+ *
+ * Le sei costanti mantengono byte per byte i salvataggi legacy; un regolamento
+ * può aggiungere `SANITY`, `user:stat:honor` o qualunque altro ID senza una
+ * nuova build dell'app.
+ */
+@Serializable(with = AbilitySerializer::class)
+data class Ability(val value: String) {
+    init {
+        require(value.isNotBlank()) { "Ability id cannot be blank" }
+    }
 
-/** Le diciotto abilità della scheda SRD 5.2.1. */
-@Serializable
-enum class Skill(val ability: Ability, val italianLabel: String) {
-    ATLETICA(Ability.STRENGTH, "Atletica"),
-
-    ACROBAZIA(Ability.DEXTERITY, "Acrobazia"),
-    FURTIVITA(Ability.DEXTERITY, "Furtività"),
-    RAPIDITA_DI_MANO(Ability.DEXTERITY, "Rapidità di mano"),
-
-    ARCANO(Ability.INTELLIGENCE, "Arcano"),
-    INDAGARE(Ability.INTELLIGENCE, "Indagare"),
-    NATURA(Ability.INTELLIGENCE, "Natura"),
-    RELIGIONE(Ability.INTELLIGENCE, "Religione"),
-    STORIA(Ability.INTELLIGENCE, "Storia"),
-
-    ADDESTRARE_ANIMALI(Ability.WISDOM, "Addestrare animali"),
-    INTUIZIONE(Ability.WISDOM, "Intuizione"),
-    MEDICINA(Ability.WISDOM, "Medicina"),
-    PERCEZIONE(Ability.WISDOM, "Percezione"),
-    SOPRAVVIVENZA(Ability.WISDOM, "Sopravvivenza"),
-
-    INGANNO(Ability.CHARISMA, "Inganno"),
-    INTIMIDIRE(Ability.CHARISMA, "Intimidire"),
-    INTRATTENERE(Ability.CHARISMA, "Intrattenere"),
-    PERSUASIONE(Ability.CHARISMA, "Persuasione"),
-    ;
+    val name: String get() = value
+    val italianLabel: String
+        get() = standardAbilityItalianLabels[this] ?: value.substringAfterLast(':').humanizedRuleId()
+    val abbreviation: String
+        get() = standardAbbreviations[this]
+            ?: value.substringAfterLast(':').filter(Char::isLetter).take(3).uppercase().ifBlank { "—" }
+    val ordinal: Int get() = entries.indexOf(this).takeIf { it >= 0 } ?: Int.MAX_VALUE
 
     companion object {
-        fun of(ability: Ability): List<Skill> = entries.filter { it.ability == ability }
+        val STRENGTH = Ability("STRENGTH")
+        val DEXTERITY = Ability("DEXTERITY")
+        val CONSTITUTION = Ability("CONSTITUTION")
+        val INTELLIGENCE = Ability("INTELLIGENCE")
+        val WISDOM = Ability("WISDOM")
+        val CHARISMA = Ability("CHARISMA")
+
+        val entries: List<Ability> = listOf(
+            STRENGTH,
+            DEXTERITY,
+            CONSTITUTION,
+            INTELLIGENCE,
+            WISDOM,
+            CHARISMA,
+        )
+
+        fun of(raw: String): Ability {
+            val normalized = raw.trim()
+            require(normalized.isNotEmpty()) { "Ability id cannot be blank" }
+            return entries.firstOrNull {
+                it.value.equals(normalized, ignoreCase = true)
+            } ?: Ability(normalized)
+        }
+
+        fun valueOf(raw: String): Ability = of(raw)
     }
 }
 
-/** Le dodici classi presenti nel System Reference Document 5.2.1. */
-@Serializable
-enum class CharacterClassId(val contentId: String, val italianLabel: String) {
-    BARBARIAN("barbaro", "Barbaro"),
-    BARD("bardo", "Bardo"),
-    CLERIC("chierico", "Chierico"),
-    DRUID("druido", "Druido"),
-    FIGHTER("guerriero", "Guerriero"),
-    ROGUE("ladro", "Ladro"),
-    WIZARD("mago", "Mago"),
-    MONK("monaco", "Monaco"),
-    PALADIN("paladino", "Paladino"),
-    RANGER("ranger", "Ranger"),
-    SORCERER("stregone", "Stregone"),
-    WARLOCK("warlock", "Warlock"),
+object AbilitySerializer : KSerializer<Ability> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("app.d6d.rules.character.Ability", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: Ability) = encoder.encodeString(value.value)
+    override fun deserialize(decoder: Decoder): Ability = Ability.of(decoder.decodeString())
 }
+
+private val standardAbilityItalianLabels = mapOf(
+    Ability.STRENGTH to "Forza",
+    Ability.DEXTERITY to "Destrezza",
+    Ability.CONSTITUTION to "Costituzione",
+    Ability.INTELLIGENCE to "Intelligenza",
+    Ability.WISDOM to "Saggezza",
+    Ability.CHARISMA to "Carisma",
+)
+
+private val standardAbbreviations = mapOf(
+    Ability.STRENGTH to "FOR",
+    Ability.DEXTERITY to "DES",
+    Ability.CONSTITUTION to "COS",
+    Ability.INTELLIGENCE to "INT",
+    Ability.WISDOM to "SAG",
+    Ability.CHARISMA to "CAR",
+)
+
+/** Identificatore aperto di skill; l'associazione dinamica vive nel content pack. */
+@Serializable(with = SkillSerializer::class)
+data class Skill(val value: String) {
+    init {
+        require(value.isNotBlank()) { "Skill id cannot be blank" }
+    }
+
+    val name: String get() = value
+    val ability: Ability get() = standardSkillAbilities[this] ?: Ability.STRENGTH
+    val italianLabel: String get() = standardSkillLabels[this] ?: value.substringAfterLast(':').humanizedRuleId()
+    val ordinal: Int get() = entries.indexOf(this).takeIf { it >= 0 } ?: Int.MAX_VALUE
+
+    companion object {
+        val ATLETICA = Skill("ATLETICA")
+        val ACROBAZIA = Skill("ACROBAZIA")
+        val FURTIVITA = Skill("FURTIVITA")
+        val RAPIDITA_DI_MANO = Skill("RAPIDITA_DI_MANO")
+        val ARCANO = Skill("ARCANO")
+        val INDAGARE = Skill("INDAGARE")
+        val NATURA = Skill("NATURA")
+        val RELIGIONE = Skill("RELIGIONE")
+        val STORIA = Skill("STORIA")
+        val ADDESTRARE_ANIMALI = Skill("ADDESTRARE_ANIMALI")
+        val INTUIZIONE = Skill("INTUIZIONE")
+        val MEDICINA = Skill("MEDICINA")
+        val PERCEZIONE = Skill("PERCEZIONE")
+        val SOPRAVVIVENZA = Skill("SOPRAVVIVENZA")
+        val INGANNO = Skill("INGANNO")
+        val INTIMIDIRE = Skill("INTIMIDIRE")
+        val INTRATTENERE = Skill("INTRATTENERE")
+        val PERSUASIONE = Skill("PERSUASIONE")
+
+        val entries: List<Skill> = listOf(
+            ATLETICA,
+            ACROBAZIA,
+            FURTIVITA,
+            RAPIDITA_DI_MANO,
+            ARCANO,
+            INDAGARE,
+            NATURA,
+            RELIGIONE,
+            STORIA,
+            ADDESTRARE_ANIMALI,
+            INTUIZIONE,
+            MEDICINA,
+            PERCEZIONE,
+            SOPRAVVIVENZA,
+            INGANNO,
+            INTIMIDIRE,
+            INTRATTENERE,
+            PERSUASIONE,
+        )
+
+        fun of(raw: String): Skill {
+            val normalized = raw.trim()
+            require(normalized.isNotEmpty()) { "Skill id cannot be blank" }
+            return entries.firstOrNull {
+                it.value.equals(normalized, ignoreCase = true)
+            } ?: Skill(normalized)
+        }
+
+        fun of(ability: Ability): List<Skill> = entries.filter { it.ability == ability }
+        fun valueOf(raw: String): Skill = of(raw)
+    }
+}
+
+object SkillSerializer : KSerializer<Skill> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("app.d6d.rules.character.Skill", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: Skill) = encoder.encodeString(value.value)
+    override fun deserialize(decoder: Decoder): Skill = Skill.of(decoder.decodeString())
+}
+
+private val standardSkillAbilities = mapOf(
+    Skill.ATLETICA to Ability.STRENGTH,
+    Skill.ACROBAZIA to Ability.DEXTERITY,
+    Skill.FURTIVITA to Ability.DEXTERITY,
+    Skill.RAPIDITA_DI_MANO to Ability.DEXTERITY,
+    Skill.ARCANO to Ability.INTELLIGENCE,
+    Skill.INDAGARE to Ability.INTELLIGENCE,
+    Skill.NATURA to Ability.INTELLIGENCE,
+    Skill.RELIGIONE to Ability.INTELLIGENCE,
+    Skill.STORIA to Ability.INTELLIGENCE,
+    Skill.ADDESTRARE_ANIMALI to Ability.WISDOM,
+    Skill.INTUIZIONE to Ability.WISDOM,
+    Skill.MEDICINA to Ability.WISDOM,
+    Skill.PERCEZIONE to Ability.WISDOM,
+    Skill.SOPRAVVIVENZA to Ability.WISDOM,
+    Skill.INGANNO to Ability.CHARISMA,
+    Skill.INTIMIDIRE to Ability.CHARISMA,
+    Skill.INTRATTENERE to Ability.CHARISMA,
+    Skill.PERSUASIONE to Ability.CHARISMA,
+)
+
+private val standardSkillLabels = mapOf(
+    Skill.ATLETICA to "Atletica",
+    Skill.ACROBAZIA to "Acrobazia",
+    Skill.FURTIVITA to "Furtività",
+    Skill.RAPIDITA_DI_MANO to "Rapidità di mano",
+    Skill.ARCANO to "Arcano",
+    Skill.INDAGARE to "Indagare",
+    Skill.NATURA to "Natura",
+    Skill.RELIGIONE to "Religione",
+    Skill.STORIA to "Storia",
+    Skill.ADDESTRARE_ANIMALI to "Addestrare animali",
+    Skill.INTUIZIONE to "Intuizione",
+    Skill.MEDICINA to "Medicina",
+    Skill.PERCEZIONE to "Percezione",
+    Skill.SOPRAVVIVENZA to "Sopravvivenza",
+    Skill.INGANNO to "Inganno",
+    Skill.INTIMIDIRE to "Intimidire",
+    Skill.INTRATTENERE to "Intrattenere",
+    Skill.PERSUASIONE to "Persuasione",
+)
+
+private fun String.humanizedRuleId(): String =
+    replace('-', ' ').replace('_', ' ').trim().lowercase().replaceFirstChar(Char::uppercase)
+
+/** Metadati versionati di una caratteristica aperta consumati dalla scheda. */
+@Serializable
+data class CharacterStatDefinition(
+    val id: Ability,
+    val name: String,
+    val abbreviation: String,
+    val defaultScore: Int = 10,
+    val minimumScore: Int = 1,
+    val maximumScore: Int = 30,
+    /** Limite ordinario degli aumenti; può differire dal massimo assoluto. */
+    val advancementMaximum: Int = maximumScore,
+    /** Formula generica; `${score}` è il valore inserito nella scheda. */
+    val modifierFormula: String = "floor((\${score} - 10) / 2)",
+    /** ID della RuleEntity: permette alle formule di referenziare la caratteristica senza dedurla dal nome. */
+    val ruleEntityId: String = id.value,
+    val rounding: CharacterStatRounding = CharacterStatRounding.NONE,
+) {
+    init {
+        require(name.isNotBlank())
+        require(abbreviation.isNotBlank())
+        require(minimumScore <= defaultScore)
+        require(defaultScore <= maximumScore)
+        require(advancementMaximum in minimumScore..maximumScore)
+        require(modifierFormula.isNotBlank())
+        require(ruleEntityId.isNotBlank())
+    }
+}
+
+@Serializable
+enum class CharacterStatRounding { NONE, FLOOR, CEILING, HALF_UP }
+
+/** Associazione versionata fra una skill aperta e la sua caratteristica. */
+@Serializable
+data class CharacterSkillDefinition(
+    val id: Skill,
+    val name: String,
+    val statId: Ability,
+    val formula: String = "",
+    val trainedBonusFormula: String = "\${proficiency}",
+    val ruleEntityId: String = id.value,
+) {
+    init {
+        require(name.isNotBlank())
+        require(trainedBonusFormula.isNotBlank())
+        require(ruleEntityId.isNotBlank())
+    }
+}
+
+private fun standardCharacterStats(): List<CharacterStatDefinition> = Ability.entries.map { ability ->
+    CharacterStatDefinition(ability, ability.italianLabel, ability.abbreviation, advancementMaximum = 20)
+}
+
+private fun standardCharacterSkills(): List<CharacterSkillDefinition> = Skill.entries.map { skill ->
+    CharacterSkillDefinition(skill, skill.italianLabel, skill.ability)
+}
+
+/**
+ * Identificatore aperto di classe.
+ *
+ * Le dodici costanti conservano esattamente i nomi serializzati dal vecchio enum,
+ * quindi le schede esistenti continuano a leggere `FIGHTER`, `WIZARD` e simili.
+ * Un regolamento può però coniare un ID namespaced nuovo senza ricompilare l'app,
+ * per esempio `user:campaign:class:chronomancer`.
+ */
+@Serializable(with = CharacterClassIdSerializer::class)
+data class CharacterClassId(val value: String) {
+    init {
+        require(value.isNotBlank()) { "Character class id cannot be blank" }
+    }
+
+    /** Nome compatibile con l'API del vecchio enum. */
+    val name: String get() = value
+
+    /** Slug usato dai contenuti e dai pool di scelta. */
+    val contentId: String
+        get() = standardContentIds[this] ?: value.substringAfterLast(':').lowercase()
+
+    /** Etichetta legacy; le revisioni usano invece il testo localizzato della RuleEntity. */
+    val italianLabel: String
+        get() = standardItalianLabels[this] ?: contentId.humanizedClassId()
+
+    /** Ordine stabile delle classi incluse; le classi esterne seguono in ordine lessicografico. */
+    val ordinal: Int get() = entries.indexOf(this).takeIf { it >= 0 } ?: Int.MAX_VALUE
+
+    companion object {
+        val BARBARIAN = CharacterClassId("BARBARIAN")
+        val BARD = CharacterClassId("BARD")
+        val CLERIC = CharacterClassId("CLERIC")
+        val DRUID = CharacterClassId("DRUID")
+        val FIGHTER = CharacterClassId("FIGHTER")
+        val ROGUE = CharacterClassId("ROGUE")
+        val WIZARD = CharacterClassId("WIZARD")
+        val MONK = CharacterClassId("MONK")
+        val PALADIN = CharacterClassId("PALADIN")
+        val RANGER = CharacterClassId("RANGER")
+        val SORCERER = CharacterClassId("SORCERER")
+        val WARLOCK = CharacterClassId("WARLOCK")
+
+        /** Compatibilità sorgente con `Enum.entries`: contiene soltanto lo SRD incluso. */
+        val entries: List<CharacterClassId> = listOf(
+            BARBARIAN,
+            BARD,
+            CLERIC,
+            DRUID,
+            FIGHTER,
+            ROGUE,
+            WIZARD,
+            MONK,
+            PALADIN,
+            RANGER,
+            SORCERER,
+            WARLOCK,
+        )
+
+        /** Accetta nome enum legacy, slug SRD o un nuovo ID namespaced. */
+        fun of(raw: String): CharacterClassId {
+            val normalized = raw.trim()
+            require(normalized.isNotEmpty()) { "Character class id cannot be blank" }
+            return entries.firstOrNull {
+                it.value.equals(normalized, ignoreCase = true) ||
+                    it.contentId.equals(normalized, ignoreCase = true)
+            } ?: CharacterClassId(normalized)
+        }
+    }
+}
+
+object CharacterClassIdSerializer : KSerializer<CharacterClassId> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("app.d6d.rules.character.CharacterClassId", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: CharacterClassId) = encoder.encodeString(value.value)
+
+    override fun deserialize(decoder: Decoder): CharacterClassId = CharacterClassId.of(decoder.decodeString())
+}
+
+private val standardContentIds = mapOf(
+    CharacterClassId.BARBARIAN to "barbaro",
+    CharacterClassId.BARD to "bardo",
+    CharacterClassId.CLERIC to "chierico",
+    CharacterClassId.DRUID to "druido",
+    CharacterClassId.FIGHTER to "guerriero",
+    CharacterClassId.ROGUE to "ladro",
+    CharacterClassId.WIZARD to "mago",
+    CharacterClassId.MONK to "monaco",
+    CharacterClassId.PALADIN to "paladino",
+    CharacterClassId.RANGER to "ranger",
+    CharacterClassId.SORCERER to "stregone",
+    CharacterClassId.WARLOCK to "warlock",
+)
+
+private val standardItalianLabels = mapOf(
+    CharacterClassId.BARBARIAN to "Barbaro",
+    CharacterClassId.BARD to "Bardo",
+    CharacterClassId.CLERIC to "Chierico",
+    CharacterClassId.DRUID to "Druido",
+    CharacterClassId.FIGHTER to "Guerriero",
+    CharacterClassId.ROGUE to "Ladro",
+    CharacterClassId.WIZARD to "Mago",
+    CharacterClassId.MONK to "Monaco",
+    CharacterClassId.PALADIN to "Paladino",
+    CharacterClassId.RANGER to "Ranger",
+    CharacterClassId.SORCERER to "Stregone",
+    CharacterClassId.WARLOCK to "Warlock",
+)
+
+private fun String.humanizedClassId(): String =
+    replace('-', ' ').replace('_', ' ').trim().replaceFirstChar { it.uppercase() }
 
 /** Tassonomia del Compendio e dei requisiti di scelta. */
 @Serializable
@@ -138,6 +447,27 @@ enum class ResourceFormula {
     FIXED,
 }
 
+/**
+ * Formula di competenza fotografata dal regolamento scelto.
+ *
+ * È intenzionalmente una prima primitiva semplice: sostituisce i due calcoli SRD
+ * duplicati senza introdurre ancora l'interprete completo delle formule.
+ */
+@Serializable
+data class ProficiencyProgressionDefinition(
+    val base: Int = 2,
+    val levelsPerIncrease: Int = 4,
+    val maximum: Int = 6,
+) {
+    init {
+        require(levelsPerIncrease > 0)
+        require(maximum >= base)
+    }
+
+    fun bonus(level: Int): Int =
+        minOf(maximum, base + (level.coerceAtLeast(1) - 1) / levelsPerIncrease)
+}
+
 /** Le due categorie d'arma dello SRD; l'addestramento di classe parte da qui. */
 @Serializable
 enum class WeaponCategory(val italianLabel: String) {
@@ -201,6 +531,7 @@ data class WeaponDefinition(
     val reach: WeaponReach,
     val diceCount: Int,
     val diceSides: Int,
+    @Serializable(with = CharacterDamageTypeSerializer::class)
     val damageType: DamageType,
     val mastery: String,
     val properties: Set<WeaponProperty> = emptySet(),
@@ -237,6 +568,14 @@ data class WeaponDefinition(
     /** Vero quando è la Destrezza a poter reggere l'attacco al posto della Forza. */
     val usesDexterity: Boolean
         get() = reach == WeaponReach.RANGED || WeaponProperty.FINESSE in properties
+}
+
+object CharacterDamageTypeSerializer : KSerializer<DamageType> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("app.d6d.domain.combat.DamageType", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: DamageType) = encoder.encodeString(value.name())
+    override fun deserialize(decoder: Decoder): DamageType = DamageType.of(decoder.decodeString())
 }
 
 @Serializable
@@ -425,7 +764,7 @@ data class ClassLevelDefinition(
     val effects: List<RuleEffect> = emptyList(),
 ) {
     init {
-        require(level in 1..20)
+        require(level >= 1)
         require(cantripsKnown >= 0)
         require(preparedSpellLimit >= 0)
         require(preparedSpellPoolId == null || preparedSpellPoolId.isNotBlank())
@@ -464,12 +803,12 @@ data class ResourceDefinition(
         require(id.isNotBlank())
         require(name.isNotBlank())
         require(fixedMaximum >= 0)
-        require(availableFromClassLevel in 1..20)
+        require(availableFromClassLevel >= 1)
         require(requiredOptionId == null || requiredOptionId.isNotBlank())
         require(multiplier >= 1)
         require(minimum >= 0)
         require(shortRestRecovery >= 0)
-        require(fullShortRestRecoveryFromLevel in 0..20)
+        require(fullShortRestRecoveryFromLevel >= 0)
         require(formula != ResourceFormula.ABILITY_MODIFIER || ability != null)
     }
 }
@@ -519,14 +858,16 @@ data class ClassDefinition(
         require(primaryAbilities.isNotEmpty())
         require(multiclassPrerequisiteGroups.isNotEmpty())
         require(multiclassPrerequisiteGroups.all { it.isNotEmpty() })
-        require(hitDieSides in setOf(6, 8, 10, 12))
-        require(fixedHitPointsPerLevel == hitDieSides / 2 + 1)
-        require(levels.map { it.level } == (1..20).toList())
-        require(subclassIds.isNotEmpty())
+        require(hitDieSides >= 2)
+        require(fixedHitPointsPerLevel >= 1)
+        require(levels.isNotEmpty())
+        require(levels.map { it.level } == (1..levels.size).toList())
         require(spellcastingKind == SpellcastingKind.NONE || spellcastingAbility != null)
     }
 
     fun level(level: Int): ClassLevelDefinition = levels.first { it.level == level }
+
+    val maximumLevel: Int get() = levels.last().level
 }
 
 @Serializable
@@ -598,6 +939,12 @@ data class ContentPackManifest(
     val sourceUrl: String,
     val license: String,
     val attribution: String,
+    /** Binding esatto del regolamento che ha prodotto questa proiezione. */
+    val rulesetProjectId: String = "",
+    val rulesetRevisionId: String = "",
+    val rulesetCanonicalHash: String = "",
+    val rulesetRuntimeHash: String = "",
+    val runtimeSemanticsVersion: String = "",
 )
 
 @Serializable
@@ -609,6 +956,17 @@ data class RulesContentPack(
     val weapons: List<WeaponDefinition> = emptyList(),
     val backgrounds: List<BackgroundDefinition> = emptyList(),
     val equipmentPackages: List<EquipmentPackageDefinition> = emptyList(),
+    val proficiencyProgression: ProficiencyProgressionDefinition = ProficiencyProgressionDefinition(),
+    val maximumCharacterLevel: Int = 20,
+    val enforceExperienceThresholds: Boolean = true,
+    /** Caratteristiche e skill aperte della revisione, non un elenco globale dell'app. */
+    val stats: List<CharacterStatDefinition> = standardCharacterStats(),
+    val skills: List<CharacterSkillDefinition> = standardCharacterSkills(),
+    /**
+     * Soglie cumulative. Le costruzioni legacy ereditano la curva standard;
+     * passare esplicitamente una lista vuota abilita l'avanzamento manuale/milestone.
+     */
+    val experienceThresholds: List<Int> = ExperienceProgression.thresholds,
 ) {
     init {
         require(classes.map { it.id }.distinct().size == classes.size)
@@ -616,6 +974,13 @@ data class RulesContentPack(
         require(weapons.map { it.id }.distinct().size == weapons.size)
         require(backgrounds.map { it.id }.distinct().size == backgrounds.size)
         require(equipmentPackages.map { it.id }.distinct().size == equipmentPackages.size)
+        require(stats.map { it.id }.distinct().size == stats.size)
+        require(skills.map { it.id }.distinct().size == skills.size)
+        require(skills.all { skill -> stats.any { it.id == skill.statId } })
+        require(experienceThresholds.zipWithNext().all { (first, second) -> second > first })
+        require(experienceThresholds.firstOrNull()?.let { it >= 0 } != false)
+        require(maximumCharacterLevel >= 1)
+        require(classes.all { it.maximumLevel <= maximumCharacterLevel })
     }
 
     fun classDefinition(id: CharacterClassId): ClassDefinition =
@@ -632,4 +997,8 @@ data class RulesContentPack(
 
     fun equipmentPackage(id: String): EquipmentPackageDefinition? =
         equipmentPackages.firstOrNull { it.id == id }
+
+    fun stat(id: Ability): CharacterStatDefinition? = stats.firstOrNull { it.id == id }
+
+    fun skill(id: Skill): CharacterSkillDefinition? = skills.firstOrNull { it.id == id }
 }

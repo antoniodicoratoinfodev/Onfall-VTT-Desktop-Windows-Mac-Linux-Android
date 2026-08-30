@@ -32,6 +32,17 @@ import app.d6d.domain.space.GridPosition;
 import app.d6d.domain.space.MapGrid;
 import app.d6d.domain.space.TokenPlacement;
 import app.d6d.engine.CombatSession;
+import app.d6d.rules.model.RulesetBinding;
+import app.d6d.rules.model.LocalizedRuleText;
+import app.d6d.rules.model.RuleAutomationLevel;
+import app.d6d.rules.model.RuleEntity;
+import app.d6d.rules.model.RuleKind;
+import app.d6d.rules.model.RuleRuntimeState;
+import app.d6d.rules.model.RuleScope;
+import app.d6d.rules.model.RuleSessionSnapshot;
+import app.d6d.rules.model.RuleValue;
+import app.d6d.rules.model.RulesetOrigin;
+import app.d6d.rules.model.RulesetRuntimeConfig;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -52,7 +63,7 @@ import java.util.function.Function;
  * independent from Java implementation details.</p>
  */
 public final class CombatSessionJsonCodec {
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 4;
 
     /** Converts a consistent state-and-audit snapshot into a JSON object. */
     public Map<String, Object> encode(CombatSession session) {
@@ -78,11 +89,12 @@ public final class CombatSessionJsonCodec {
     public CombatSession decode(Map<String, ?> document) {
         Objects.requireNonNull(document, "document");
         int schemaVersion = integer(document, "schemaVersion", "$");
-        if (schemaVersion != SCHEMA_VERSION) {
+        if (schemaVersion < 1 || schemaVersion > SCHEMA_VERSION) {
             throw invalid("$.schemaVersion", "unsupported schema version " + schemaVersion);
         }
 
-        CombatState state = decodeState(objectValue(document, "currentState", "$"), "$.currentState");
+        CombatState state = decodeState(
+                objectValue(document, "currentState", "$"), "$.currentState", schemaVersion);
         List<?> auditValues = list(document, "auditTrail", "$" );
         List<CombatEvent> audit = new ArrayList<>(auditValues.size());
         for (int index = 0; index < auditValues.size(); index++) {
@@ -126,16 +138,35 @@ public final class CombatSessionJsonCodec {
                 "simultaneousTies", state.simultaneousTies(),
                 "battleMap", encodeBattleMap(state.battleMap()),
                 "alarmRadiusFeet", state.alarmRadiusFeet(),
-                "dormantCombatantIds", state.dormantCombatantIds().stream().sorted().toList());
+                "dormantCombatantIds", state.dormantCombatantIds().stream().sorted().toList(),
+                "rulesetBinding", encodeRulesetBinding(state.rulesetBinding()),
+                "rulesetRuntime", encodeRulesetRuntime(state.rulesetRuntime()),
+                "ruleSession", encodeRuleSession(state.ruleSession()));
     }
 
-    private CombatState decodeState(Map<?, ?> value, String path) {
+    private CombatState decodeState(Map<?, ?> value, String path, int schemaVersion) {
+        String rulesetVersion = string(value, "rulesetVersion", path);
+        if (schemaVersion >= 2
+                && (!value.containsKey("rulesetBinding") || !value.containsKey("rulesetRuntime"))) {
+            throw invalid(path, "schema 2 requires rulesetBinding and rulesetRuntime");
+        }
+        RulesetBinding rulesetBinding = value.containsKey("rulesetBinding")
+                ? decodeRulesetBinding(objectValue(value, "rulesetBinding", path), path + ".rulesetBinding")
+                : RulesetBinding.legacySrd(rulesetVersion);
+        RulesetRuntimeConfig rulesetRuntime = value.containsKey("rulesetRuntime")
+                ? decodeRulesetRuntime(objectValue(value, "rulesetRuntime", path), path + ".rulesetRuntime")
+                : RulesetRuntimeConfig.standardSrd521();
+        RuleSessionSnapshot ruleSession = value.containsKey("ruleSession")
+                ? decodeRuleSession(objectValue(value, "ruleSession", path), path + ".ruleSession")
+                : RuleSessionSnapshot.empty();
+
         Map<?, ?> combatantValues = objectValue(value, "combatants", path);
         Map<String, CombatantState> combatants = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : combatantValues.entrySet()) {
             String id = mapKey(entry.getKey(), path + ".combatants");
             String combatantPath = member(path + ".combatants", id);
-            combatants.put(id, decodeCombatant(asObject(entry.getValue(), combatantPath), combatantPath));
+            combatants.put(id, decodeCombatant(
+                    asObject(entry.getValue(), combatantPath), combatantPath, rulesetRuntime));
         }
 
         Map<?, ?> initiativeValues = objectValue(value, "initiativeScores", path);
@@ -155,7 +186,7 @@ public final class CombatSessionJsonCodec {
 
         return new CombatState(
                 string(value, "encounterId", path),
-                string(value, "rulesetVersion", path),
+                rulesetVersion,
                 string(value, "contentVersion", path),
                 enumeration(value, "status", path, CombatStatus::valueOf),
                 longInteger(value, "revision", path),
@@ -183,7 +214,222 @@ public final class CombatSessionJsonCodec {
                         : CombatState.DEFAULT_ALARM_RADIUS_FEET,
                 // Aggiunta dopo: un salvataggio precedente non sa dell'attivazione e
                 // va riaperto con tutti svegli, che era il solo comportamento possibile.
-                optionalStringSet(value, "dormantCombatantIds", path));
+                optionalStringSet(value, "dormantCombatantIds", path),
+                rulesetBinding,
+                rulesetRuntime,
+                ruleSession);
+    }
+
+    private Map<String, Object> encodeRulesetBinding(RulesetBinding value) {
+        return object(
+                "projectId", value.projectId(),
+                "revisionId", value.revisionId(),
+                "canonicalHash", value.canonicalHash(),
+                "runtimeHash", value.runtimeHash(),
+                "runtimeSemanticsVersion", value.runtimeSemanticsVersion(),
+                "displayName", value.displayName(),
+                "legacy", value.legacy());
+    }
+
+    private RulesetBinding decodeRulesetBinding(Map<?, ?> value, String path) {
+        return new RulesetBinding(
+                string(value, "projectId", path),
+                string(value, "revisionId", path),
+                string(value, "canonicalHash", path),
+                string(value, "runtimeHash", path),
+                string(value, "runtimeSemanticsVersion", path),
+                string(value, "displayName", path),
+                bool(value, "legacy", path));
+    }
+
+    private Map<String, Object> encodeRulesetRuntime(RulesetRuntimeConfig value) {
+        return object(
+                "semanticsVersion", value.semanticsVersion(),
+                "criticalHitMinimumNatural", value.criticalHitMinimumNatural(),
+                "naturalOneAlwaysMisses", value.naturalOneAlwaysMisses(),
+                "maximumExhaustion", value.maximumExhaustion(),
+                "exhaustionD20PenaltyPerLevel", value.exhaustionD20PenaltyPerLevel(),
+                "exhaustionSpeedPenaltyFeetPerLevel", value.exhaustionSpeedPenaltyFeetPerLevel(),
+                "proficiencyBonusBase", value.proficiencyBonusBase(),
+                "proficiencyLevelsPerIncrease", value.proficiencyLevelsPerIncrease(),
+                "proficiencyBonusMaximum", value.proficiencyBonusMaximum());
+    }
+
+    private RulesetRuntimeConfig decodeRulesetRuntime(Map<?, ?> value, String path) {
+        return new RulesetRuntimeConfig(
+                string(value, "semanticsVersion", path),
+                integer(value, "criticalHitMinimumNatural", path),
+                bool(value, "naturalOneAlwaysMisses", path),
+                integer(value, "maximumExhaustion", path),
+                integer(value, "exhaustionD20PenaltyPerLevel", path),
+                integer(value, "exhaustionSpeedPenaltyFeetPerLevel", path),
+                integer(value, "proficiencyBonusBase", path),
+                integer(value, "proficiencyLevelsPerIncrease", path),
+                integer(value, "proficiencyBonusMaximum", path));
+    }
+
+    private Map<String, Object> encodeRuleSession(RuleSessionSnapshot snapshot) {
+        List<Map<String, Object>> scopedStates = snapshot.scopedStates().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> object(
+                        "kind", entry.getKey().kind().name(),
+                        "id", entry.getKey().id(),
+                        "state", encodeRuleRuntimeState(entry.getValue())))
+                .toList();
+        return object(
+                "entities", snapshot.entities().stream().map(this::encodeRuleEntity).toList(),
+                "state", encodeRuleRuntimeState(snapshot.state()),
+                "scopedStates", scopedStates);
+    }
+
+    private Map<String, Object> encodeRuleRuntimeState(RuleRuntimeState state) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        state.values().forEach((id, value) -> values.put(id, object(
+                "type", value.type().name(), "value", value.canonicalValue())));
+        Map<String, Object> resources = new LinkedHashMap<>();
+        state.resources().forEach((id, resource) -> resources.put(id, object(
+                "current", resource.current().toPlainString(),
+                "maximum", resource.maximum().toPlainString())));
+        Map<String, Object> conditions = new LinkedHashMap<>();
+        state.conditionStacks().forEach(conditions::put);
+        Map<String, Object> turnBudget = new LinkedHashMap<>();
+        state.turnBudget().forEach((id, amount) -> turnBudget.put(id, amount.toPlainString()));
+        return object(
+                "values", values,
+                "resources", resources,
+                "conditionStacks", conditions,
+                "turnBudget", turnBudget,
+                "activeRuleIds", state.activeRuleIds().stream().sorted().toList(),
+                "revision", state.revision());
+    }
+
+    private RuleSessionSnapshot decodeRuleSession(Map<?, ?> value, String path) {
+        List<?> rawEntities = list(value, "entities", path);
+        List<RuleEntity> entities = new ArrayList<>(rawEntities.size());
+        for (int index = 0; index < rawEntities.size(); index++) {
+            String itemPath = path + ".entities[" + index + ']';
+            entities.add(decodeRuleEntity(asObject(rawEntities.get(index), itemPath), itemPath));
+        }
+        RuleRuntimeState state = decodeRuleRuntimeState(objectValue(value, "state", path), path + ".state");
+        Map<RuleScope, RuleRuntimeState> scopedStates = new LinkedHashMap<>();
+        if (value.containsKey("scopedStates")) {
+            List<?> encodedScopes = list(value, "scopedStates", path);
+            for (int index = 0; index < encodedScopes.size(); index++) {
+                String scopePath = path + ".scopedStates[" + index + ']';
+                Map<?, ?> encodedScope = asObject(encodedScopes.get(index), scopePath);
+                RuleScope scope = new RuleScope(
+                        enumeration(encodedScope, "kind", scopePath, RuleScope.Kind::valueOf),
+                        string(encodedScope, "id", scopePath));
+                if (scope.isSession()) throw invalid(scopePath, "SESSION must use the root state");
+                RuleRuntimeState previous = scopedStates.put(scope, decodeRuleRuntimeState(
+                        objectValue(encodedScope, "state", scopePath), scopePath + ".state"));
+                if (previous != null) throw invalid(scopePath, "duplicate rule scope " + scope.canonicalKey());
+            }
+        }
+        return new RuleSessionSnapshot(entities, state, scopedStates);
+    }
+
+    private RuleRuntimeState decodeRuleRuntimeState(Map<?, ?> encodedState, String path) {
+        Map<String, RuleValue> values = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : objectValue(encodedState, "values", path).entrySet()) {
+            String id = mapKey(entry.getKey(), path + ".values");
+            Map<?, ?> encoded = asObject(entry.getValue(), member(path + ".values", id));
+            values.put(id, new RuleValue(
+                    enumeration(encoded, "type", member(path + ".values", id), RuleValue.Type::valueOf),
+                    string(encoded, "value", member(path + ".values", id))));
+        }
+        Map<String, RuleRuntimeState.ResourceState> resources = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : objectValue(encodedState, "resources", path).entrySet()) {
+            String id = mapKey(entry.getKey(), path + ".resources");
+            String resourcePath = member(path + ".resources", id);
+            Map<?, ?> encoded = asObject(entry.getValue(), resourcePath);
+            resources.put(id, new RuleRuntimeState.ResourceState(
+                    id,
+                    decimalString(encoded, "current", resourcePath),
+                    decimalString(encoded, "maximum", resourcePath)));
+        }
+        Map<String, Integer> conditions = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : objectValue(encodedState, "conditionStacks", path).entrySet()) {
+            String id = mapKey(entry.getKey(), path + ".conditionStacks");
+            conditions.put(id, asInteger(entry.getValue(), member(path + ".conditionStacks", id)));
+        }
+        Map<String, BigDecimal> turnBudget = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : objectValue(encodedState, "turnBudget", path).entrySet()) {
+            String id = mapKey(entry.getKey(), path + ".turnBudget");
+            Object raw = entry.getValue();
+            if (!(raw instanceof String encoded)) throw invalid(member(path + ".turnBudget", id), "expected decimal text");
+            turnBudget.put(id, parseDecimal(encoded, member(path + ".turnBudget", id)));
+        }
+        return new RuleRuntimeState(
+                values,
+                resources,
+                conditions,
+                turnBudget,
+                new LinkedHashSet<>(stringList(encodedState, "activeRuleIds", path)),
+                longInteger(encodedState, "revision", path));
+    }
+
+    private Map<String, Object> encodeRuleEntity(RuleEntity entity) {
+        return object(
+                "id", entity.id(),
+                "kind", entity.kind().name(),
+                "origin", entity.origin().name(),
+                "name", encodeLocalizedRuleText(entity.name()),
+                "description", encodeLocalizedRuleText(entity.description()),
+                "derivedFrom", entity.derivedFrom(),
+                "enabled", entity.enabled(),
+                "automationLevel", entity.automationLevel().name(),
+                "attributes", new LinkedHashMap<>(entity.attributes()),
+                "tags", entity.tags(),
+                "source", entity.source(),
+                "license", entity.license(),
+                "sourcePage", entity.sourcePage());
+    }
+
+    private RuleEntity decodeRuleEntity(Map<?, ?> value, String path) {
+        return new RuleEntity(
+                string(value, "id", path),
+                enumeration(value, "kind", path, RuleKind::valueOf),
+                enumeration(value, "origin", path, RulesetOrigin::valueOf),
+                decodeLocalizedRuleText(objectValue(value, "name", path), path + ".name"),
+                decodeLocalizedRuleText(objectValue(value, "description", path), path + ".description"),
+                string(value, "derivedFrom", path),
+                bool(value, "enabled", path),
+                enumeration(value, "automationLevel", path, RuleAutomationLevel::valueOf),
+                decodeStringMap(objectValue(value, "attributes", path), path + ".attributes"),
+                stringList(value, "tags", path),
+                string(value, "source", path),
+                string(value, "license", path),
+                integer(value, "sourcePage", path));
+    }
+
+    private Map<String, Object> encodeLocalizedRuleText(LocalizedRuleText text) {
+        return object("primaryLanguage", text.primaryLanguage(), "values", new LinkedHashMap<>(text.values()));
+    }
+
+    private LocalizedRuleText decodeLocalizedRuleText(Map<?, ?> value, String path) {
+        return new LocalizedRuleText(
+                decodeStringMap(objectValue(value, "values", path), path + ".values"),
+                string(value, "primaryLanguage", path));
+    }
+
+    private Map<String, String> decodeStringMap(Map<?, ?> value, String path) {
+        Map<String, String> result = new LinkedHashMap<>();
+        value.forEach((rawKey, rawValue) -> {
+            String key = mapKey(rawKey, path);
+            if (!(rawValue instanceof String text)) throw invalid(member(path, key), "expected a string");
+            result.put(key, text);
+        });
+        return result;
+    }
+
+    private BigDecimal decimalString(Map<?, ?> value, String key, String path) {
+        return parseDecimal(string(value, key, path), member(path, key));
+    }
+
+    private BigDecimal parseDecimal(String value, String path) {
+        try { return new BigDecimal(value); }
+        catch (NumberFormatException failure) { throw invalid(path, "invalid exact decimal"); }
     }
 
     /** Backward-compatible with early schema-v1 saves created before sides were embedded. */
@@ -270,7 +516,10 @@ public final class CombatSessionJsonCodec {
                 "stable", deathSaves.stable());
     }
 
-    private CombatantState decodeCombatant(Map<?, ?> value, String path) {
+    private CombatantState decodeCombatant(
+            Map<?, ?> value,
+            String path,
+            RulesetRuntimeConfig rulesetRuntime) {
         List<?> conditionValues = list(value, "conditions", path);
         List<ConditionInstance> conditions = new ArrayList<>(conditionValues.size());
         for (int index = 0; index < conditionValues.size(); index++) {
@@ -303,7 +552,10 @@ public final class CombatSessionJsonCodec {
                 concentration,
                 deathSaves,
                 exhaustionLevel,
-                resources);
+                resources,
+                rulesetRuntime.maximumExhaustion(),
+                rulesetRuntime.exhaustionD20PenaltyPerLevel(),
+                rulesetRuntime.exhaustionSpeedPenaltyFeetPerLevel());
     }
 
     private DeathSaveState decodeDeathSaves(Map<?, ?> value, String path) {
@@ -662,8 +914,13 @@ public final class CombatSessionJsonCodec {
                 details);
     }
 
-    private static List<String> enumNames(Set<? extends Enum<?>> values) {
-        return values.stream().map(Enum::name).sorted().toList();
+    private static List<String> enumNames(Set<?> values) {
+        return values.stream().map(value -> {
+            if (value instanceof Enum<?> enumValue) return enumValue.name();
+            if (value instanceof DamageType damageType) return damageType.name();
+            if (value instanceof ConditionType conditionType) return conditionType.name();
+            throw new IllegalArgumentException("Unsupported named value " + value);
+        }).sorted().toList();
     }
 
     private static Object required(Map<?, ?> object, String key, String path) {

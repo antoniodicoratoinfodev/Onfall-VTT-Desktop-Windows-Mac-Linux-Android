@@ -46,6 +46,18 @@ import app.d6d.domain.space.GridPosition;
 import app.d6d.domain.space.GridLineTraversal;
 import app.d6d.domain.space.BattleMap;
 import app.d6d.domain.space.MapBackground;
+import app.d6d.rules.model.RulesetBinding;
+import app.d6d.rules.model.CompiledRuleset;
+import app.d6d.rules.model.RuleExecutionResult;
+import app.d6d.rules.model.RuleRuntimeEvent;
+import app.d6d.rules.model.RuleRuntimeState;
+import app.d6d.rules.model.RuleScope;
+import app.d6d.rules.model.RuleSessionSnapshot;
+import app.d6d.rules.model.RuleValue;
+import app.d6d.rules.model.ScopedRuleExecutionResult;
+import app.d6d.rules.model.RulesetCanonicalizer;
+import app.d6d.rules.model.RulesetRevision;
+import app.d6d.rules.model.RulesetRuntimeConfig;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -60,6 +72,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.math.BigDecimal;
 import java.util.stream.Collectors;
 
 /**
@@ -87,9 +100,20 @@ public final class CombatSession {
     private Set<GridPosition> blockedCells = Set.of();
     private long nextEventSequence;
     private long revisionCounter;
+    private List<app.d6d.rules.model.RuleEntity> compiledEntitiesCache;
+    private String compiledRulesHashCache;
+    private CompiledRuleset compiledRulesCache;
 
-    private CombatSession(String encounterId, long seed, String rulesetVersion, String contentVersion) {
-        this.state = MutableState.empty(encounterId, rulesetVersion, contentVersion);
+    private CombatSession(
+            String encounterId,
+            long seed,
+            String rulesetVersion,
+            String contentVersion,
+            RulesetBinding rulesetBinding,
+            RulesetRuntimeConfig rulesetRuntime,
+            RuleSessionSnapshot ruleSession) {
+        this.state = MutableState.empty(
+                encounterId, rulesetVersion, contentVersion, rulesetBinding, rulesetRuntime, ruleSession);
         this.dice = new DeterministicDice(seed);
         this.audit = new ArrayList<>();
         this.nextEventSequence = 0;
@@ -97,10 +121,15 @@ public final class CombatSession {
         append(EventType.ENCOUNTER_CREATED, "", "", details(
                 "seed", seed,
                 "rulesetVersion", rulesetVersion,
+                "rulesetRevision", rulesetBinding.revisionId(),
+                "rulesetHash", rulesetBinding.canonicalHash(),
+                "rulesetRuntimeHash", rulesetBinding.runtimeHash(),
+                "runtimeSemantics", rulesetBinding.runtimeSemanticsVersion(),
                 "contentVersion", contentVersion));
     }
 
     private CombatSession(CombatState savedState, List<CombatEvent> savedAudit) {
+        validateRuleSnapshot(savedState.rulesetBinding(), savedState.rulesetRuntime(), savedState.ruleSession());
         this.state = MutableState.from(savedState);
         this.dice = DeterministicDice.fromState(savedState.randomSeed(), savedState.randomState());
         this.audit = new ArrayList<>(List.copyOf(savedAudit));
@@ -118,7 +147,40 @@ public final class CombatSession {
         requireText(encounterId, "encounterId");
         requireText(rulesetVersion, "rulesetVersion");
         requireText(contentVersion, "contentVersion");
-        return new CombatSession(encounterId, seed, rulesetVersion, contentVersion);
+        return new CombatSession(encounterId, seed, rulesetVersion, contentVersion,
+                RulesetBinding.legacySrd(rulesetVersion), RulesetRuntimeConfig.standardSrd521(),
+                RuleSessionSnapshot.empty());
+    }
+
+    /** Crea una sessione vincolata a una revisione pubblicata e al suo snapshot eseguibile. */
+    public static CombatSession create(
+            String encounterId,
+            long seed,
+            RulesetBinding rulesetBinding,
+            RulesetRuntimeConfig rulesetRuntime,
+            String contentVersion) {
+        requireText(encounterId, "encounterId");
+        Objects.requireNonNull(rulesetBinding, "rulesetBinding");
+        Objects.requireNonNull(rulesetRuntime, "rulesetRuntime");
+        requireText(contentVersion, "contentVersion");
+        validateSupportedRuntime(rulesetBinding, rulesetRuntime);
+        return new CombatSession(encounterId, seed, rulesetBinding.revisionId(), contentVersion,
+                rulesetBinding, rulesetRuntime, RuleSessionSnapshot.empty());
+    }
+
+    /** Crea una sessione autosufficiente con l'intera revisione e lo stato generico iniziale. */
+    public static CombatSession create(
+            String encounterId,
+            long seed,
+            RulesetRevision revision,
+            String contentVersion) {
+        Objects.requireNonNull(revision, "revision");
+        requireText(encounterId, "encounterId");
+        requireText(contentVersion, "contentVersion");
+        RuleSessionSnapshot snapshot = RuleSessionSnapshot.fromRevision(revision);
+        validateRuleSnapshot(revision.binding(), revision.runtime(), snapshot);
+        return new CombatSession(encounterId, seed, revision.revisionId(), contentVersion,
+                revision.binding(), revision.runtime(), snapshot);
     }
 
     /** Uses actor ids as encounter instance ids; duplicate definitions should use fromCombatants instead. */
@@ -140,6 +202,36 @@ public final class CombatSession {
         return result;
     }
 
+    /** Crea l'incontro usando la revisione selezionata nel wizard. */
+    public static CombatSession fromCombatants(
+            String encounterId,
+            long seed,
+            List<CombatantSetup> combatants,
+            RulesetBinding rulesetBinding,
+            RulesetRuntimeConfig rulesetRuntime,
+            String contentVersion) {
+        Objects.requireNonNull(combatants, "combatants");
+        CombatSession result = create(encounterId, seed, rulesetBinding, rulesetRuntime, contentVersion);
+        for (CombatantSetup setup : combatants) {
+            result.addCombatant(setup.instanceId(), setup.actor());
+        }
+        return result;
+    }
+
+    public static CombatSession fromCombatants(
+            String encounterId,
+            long seed,
+            List<CombatantSetup> combatants,
+            RulesetRevision revision,
+            String contentVersion) {
+        Objects.requireNonNull(combatants, "combatants");
+        CombatSession result = create(encounterId, seed, revision, contentVersion);
+        for (CombatantSetup setup : combatants) {
+            result.addCombatant(setup.instanceId(), setup.actor());
+        }
+        return result;
+    }
+
     /** Restores a persistence snapshot. Undo history starts empty; the supplied audit remains append-only. */
     public static CombatSession restore(CombatState savedState, List<CombatEvent> savedAudit) {
         Objects.requireNonNull(savedState, "savedState");
@@ -153,6 +245,570 @@ public final class CombatSession {
 
     public synchronized List<CombatEvent> auditTrail() {
         return List.copyOf(audit);
+    }
+
+    /**
+     * Sostituisce in modo atomico il regolamento di una sessione esistente.
+     * Una sessione attiva viene messa in pausa nello stesso comando; una revisione conclusa resta storica.
+     */
+    public synchronized void changeRuleset(
+            RulesetBinding rulesetBinding,
+            RulesetRuntimeConfig rulesetRuntime) {
+        changeRuleset(rulesetBinding, rulesetRuntime, RuleSessionSnapshot.empty());
+    }
+
+    public synchronized void changeRuleset(RulesetRevision revision) {
+        Objects.requireNonNull(revision, "revision");
+        changeRuleset(revision.binding(), revision.runtime(), RuleSessionSnapshot.fromRevision(revision));
+    }
+
+    private void changeRuleset(
+            RulesetBinding rulesetBinding,
+            RulesetRuntimeConfig rulesetRuntime,
+            RuleSessionSnapshot ruleSession) {
+        Objects.requireNonNull(rulesetBinding, "rulesetBinding");
+        Objects.requireNonNull(rulesetRuntime, "rulesetRuntime");
+        Objects.requireNonNull(ruleSession, "ruleSession");
+        validateSupportedRuntime(rulesetBinding, rulesetRuntime);
+        validateRuleSnapshot(rulesetBinding, rulesetRuntime, ruleSession);
+        if (state.status == CombatStatus.RESOLVED) {
+            throw rule("A resolved encounter keeps its historical ruleset");
+        }
+        for (Map.Entry<String, MutableCombatant> entry : state.combatants.entrySet()) {
+            if (entry.getValue().exhaustionLevel > rulesetRuntime.maximumExhaustion()) {
+                throw rule("Combatant " + entry.getKey() + " has more Exhaustion than the new ruleset allows");
+            }
+        }
+        // Riapplicare la stessa revisione non deve azzerare risorse e condizioni correnti.
+        if (state.rulesetBinding.equals(rulesetBinding) && state.rulesetRuntime.equals(rulesetRuntime)
+                && state.ruleSession.entities().equals(ruleSession.entities())) return;
+
+        RuleSessionSnapshot migratedRuleSession = migrateRuleSession(ruleSession, rulesetBinding);
+
+        RulesetBinding before = state.rulesetBinding;
+        boolean pausedByChange = state.status == CombatStatus.ACTIVE;
+        beginCommand();
+        if (pausedByChange) {
+            state.status = CombatStatus.PAUSED;
+            append(EventType.ENCOUNTER_PAUSED, "", "", details("cause", "ruleset change"));
+        }
+        state.rulesetBinding = rulesetBinding;
+        state.rulesetRuntime = rulesetRuntime;
+        state.ruleSession = migratedRuleSession;
+        state.rulesetVersion = rulesetBinding.revisionId();
+        state.turnBudgets.replaceAll((combatantId, budget) ->
+                budget.withMovementAllowance(effectiveSpeed(state.combatants.get(combatantId))));
+        append(EventType.RULESET_CHANGED, "", "", details(
+                "beforeProjectId", before.projectId(),
+                "beforeRevisionId", before.revisionId(),
+                "beforeHash", before.canonicalHash(),
+                "beforeRuntimeHash", before.runtimeHash(),
+                "afterProjectId", rulesetBinding.projectId(),
+                "afterRevisionId", rulesetBinding.revisionId(),
+                "afterHash", rulesetBinding.canonicalHash(),
+                "afterRuntimeHash", rulesetBinding.runtimeHash(),
+                "runtimeSemantics", rulesetBinding.runtimeSemanticsVersion(),
+                "displayName", rulesetBinding.displayName(),
+                "migratedValues", migratedRuleSession.state().values().size(),
+                "migratedResources", migratedRuleSession.state().resources().size(),
+                "migratedConditions", migratedRuleSession.state().conditionStacks().size(),
+                "migratedScopes", migratedRuleSession.scopedStates().size(),
+                "paused", pausedByChange));
+    }
+
+    /**
+     * Porta nella nuova revisione soltanto lo stato che ha ancora un significato.
+     * I massimi vengono sempre ricalcolati dalle nuove formule; per risorse e budget
+     * si conserva quanto e' gia' stato speso, così una modifica live non ricarica il turno.
+     */
+    private RuleSessionSnapshot migrateRuleSession(
+            RuleSessionSnapshot requested,
+            RulesetBinding nextBinding) {
+        if (!requested.executable() || !state.ruleSession.executable()) return requested;
+
+        CompiledRuleset nextRules = requested.compile(nextBinding.canonicalHash());
+        CompiledRuleset previousRules = null;
+        try {
+            previousRules = state.ruleSession.compile(state.rulesetBinding.canonicalHash());
+        } catch (RuntimeException ignored) {
+            // Una vecchia revisione corrotta non deve impedire di migrare verso una valida.
+        }
+        RuleRuntimeState migrated = migrateRuleRuntimeState(
+                nextRules, previousRules, state.ruleSession.state());
+        LinkedHashMap<RuleScope, RuleRuntimeState> migratedScopes = new LinkedHashMap<>();
+        for (Map.Entry<RuleScope, RuleRuntimeState> entry : state.ruleSession.scopedStates().entrySet()) {
+            migratedScopes.put(entry.getKey(), migrateRuleRuntimeState(
+                    nextRules, previousRules, entry.getValue()));
+        }
+        return new RuleSessionSnapshot(requested.entities(), migrated, migratedScopes);
+    }
+
+    private RuleRuntimeState migrateRuleRuntimeState(
+            CompiledRuleset nextRules,
+            CompiledRuleset previousRules,
+            RuleRuntimeState previous) {
+        Set<String> survivingIds = nextRules.entities().keySet();
+
+        LinkedHashMap<String, RuleValue> values = new LinkedHashMap<>();
+        previous.values().forEach((id, value) -> {
+            if (id.startsWith("context:") || id.startsWith("level:")) {
+                if (value.type() == RuleValue.Type.NUMBER || value.type() == RuleValue.Type.BOOLEAN) {
+                    values.put(id, value);
+                }
+                return;
+            }
+            String resolved = nextRules.resolveId(id);
+            CompiledRuleset.ValueDefinition definition = nextRules.valueDefinitions().get(resolved);
+            if (definition != null && definition.accepts(value)) {
+                if (value.type() != RuleValue.Type.REFERENCE
+                        || survivingIds.contains(nextRules.resolveId(value.canonicalValue()))) {
+                    values.put(resolved, value);
+                }
+            } else if (value.type() == RuleValue.Type.NUMBER
+                    && (nextRules.stats().containsKey(resolved) || nextRules.skills().containsKey(resolved))) {
+                values.put(resolved, value);
+            }
+        });
+        LinkedHashSet<String> activeRules = new LinkedHashSet<>();
+        previous.activeRuleIds().forEach(id -> {
+            if (id.startsWith("trained:")) {
+                String skill = nextRules.resolveId(id.substring("trained:".length()));
+                if (nextRules.skills().containsKey(skill)) activeRules.add("trained:" + skill);
+                return;
+            }
+            String resolved = nextRules.resolveId(id);
+            if (survivingIds.contains(resolved)) activeRules.add(resolved);
+        });
+
+        RuleRuntimeState fresh = nextRules.initialState(values, activeRules);
+        LinkedHashMap<String, RuleRuntimeState.ResourceState> resources =
+                new LinkedHashMap<>(fresh.resources());
+        LinkedHashMap<String, RuleRuntimeState.ResourceState> previousResources = new LinkedHashMap<>();
+        previous.resources().forEach((id, resource) -> {
+            String resolved = nextRules.resolveId(id);
+            if (nextRules.resources().containsKey(resolved)) previousResources.putIfAbsent(resolved, resource);
+        });
+        resources.replaceAll((id, next) -> {
+            RuleRuntimeState.ResourceState old = previousResources.get(id);
+            if (old == null) return next;
+            BigDecimal spent = old.maximum().subtract(old.current()).max(BigDecimal.ZERO);
+            return new RuleRuntimeState.ResourceState(
+                    id,
+                    next.maximum().subtract(spent).max(BigDecimal.ZERO),
+                    next.maximum());
+        });
+
+        LinkedHashMap<String, Integer> conditions = new LinkedHashMap<>();
+        previous.conditionStacks().forEach((id, stacks) -> {
+            String resolved = nextRules.resolveId(id);
+            if (nextRules.conditions().contains(resolved)) {
+                int maximum = Integer.parseInt(nextRules.entities().get(resolved)
+                        .attributes().getOrDefault("maximumStacks", "1"));
+                conditions.put(resolved, Math.min(stacks, maximum));
+            }
+        });
+
+        LinkedHashMap<String, BigDecimal> turnBudget = new LinkedHashMap<>(fresh.turnBudget());
+        if (previousRules != null) {
+            try {
+                Map<String, BigDecimal> previousMaximums = previousRules.beginTurn(previous).turnBudget();
+                turnBudget.replaceAll((id, nextMaximum) -> {
+                    BigDecimal oldMaximum = previousMaximums.get(id);
+                    BigDecimal oldCurrent = previous.turnBudget().get(id);
+                    if (oldMaximum == null || oldCurrent == null) return nextMaximum;
+                    BigDecimal spent = oldMaximum.subtract(oldCurrent).max(BigDecimal.ZERO);
+                    return nextMaximum.subtract(spent).max(BigDecimal.ZERO);
+                });
+            } catch (RuntimeException ignored) {
+                // Il resto dello stato resta migrabile anche se il vecchio budget era invalido.
+            }
+        }
+
+        return new RuleRuntimeState(
+                fresh.values(),
+                resources,
+                conditions,
+                turnBudget,
+                fresh.activeRuleIds(),
+                Math.max(previous.revision(), fresh.revision()) + 1);
+    }
+
+    public synchronized RuleSessionSnapshot genericRuleSession() {
+        return state.ruleSession;
+    }
+
+    public synchronized BigDecimal genericRuleValue(String ruleId) {
+        return genericRuleValue(RuleScope.session(), ruleId);
+    }
+
+    public synchronized BigDecimal genericRuleValue(RuleScope scope, String ruleId) {
+        return genericRules().value(ruleId, genericRuleState(scope));
+    }
+
+    public synchronized RuleValue genericTypedRuleValue(String ruleId) {
+        return genericTypedRuleValue(RuleScope.session(), ruleId);
+    }
+
+    public synchronized RuleValue genericTypedRuleValue(RuleScope scope, String ruleId) {
+        return genericRules().ruleValue(ruleId, genericRuleState(scope));
+    }
+
+    public synchronized boolean genericRuleActive(String ruleId) {
+        return genericRuleActive(RuleScope.session(), ruleId);
+    }
+
+    public synchronized boolean genericRuleActive(RuleScope scope, String ruleId) {
+        return genericRules().isRuleActive(ruleId, genericRuleState(scope));
+    }
+
+    /** Stato effettivo dello scope; uno scope mai usato espone i default senza materializzarsi. */
+    public synchronized RuleRuntimeState genericRuleState(RuleScope scope) {
+        RuleScope checked = validateRuleScope(scope);
+        return state.ruleSession.findState(checked)
+                .orElseGet(() -> genericRules().initialState(Map.of(), Set.of()));
+    }
+
+    /** Attiva un owner di modificatori/azioni come comando atomico, auditabile e annullabile. */
+    public synchronized void setGenericRuleActive(String ruleId, boolean active) {
+        setGenericRuleActive(RuleScope.session(), ruleId, active);
+    }
+
+    public synchronized void setGenericRuleActive(RuleScope scope, String ruleId, boolean active) {
+        if (state.status == CombatStatus.RESOLVED) throw rule("A resolved encounter is immutable");
+        RuleScope checked = validateRuleScope(scope);
+        CompiledRuleset rules = genericRules();
+        RuleRuntimeState scopedState = genericRuleState(checked);
+        boolean before = rules.isRuleActive(ruleId, scopedState);
+        if (before == active) return;
+        beginCommand();
+        try {
+            state.ruleSession = state.ruleSession.withState(checked,
+                    rules.setRuleActive(ruleId, active, scopedState));
+            append(EventType.RULE_ACTIVATION_CHANGED, "", "", details(
+                    "ruleId", ruleId,
+                    "before", before,
+                    "after", active,
+                    "scopeKind", checked.kind(),
+                    "scopeId", checked.id()));
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    /** Correzione tipizzata e atomica di un valore aperto dichiarato dal regolamento. */
+    public synchronized void setGenericRuleValue(String ruleId, RuleValue value) {
+        setGenericRuleValue(RuleScope.session(), ruleId, value);
+    }
+
+    public synchronized void setGenericRuleValue(RuleScope scope, String ruleId, RuleValue value) {
+        if (state.status == CombatStatus.RESOLVED) throw rule("A resolved encounter is immutable");
+        Objects.requireNonNull(value, "value");
+        RuleScope checked = validateRuleScope(scope);
+        CompiledRuleset rules = genericRules();
+        RuleRuntimeState scopedState = genericRuleState(checked);
+        RuleValue before = rules.ruleValue(ruleId, scopedState);
+        RuleRuntimeState changed = rules.setRuleValue(ruleId, value, scopedState);
+        if (changed.equals(scopedState)) return;
+        beginCommand();
+        try {
+            state.ruleSession = state.ruleSession.withState(checked, changed);
+            append(EventType.RULE_VALUE_SET, "", "", details(
+                    "ruleId", ruleId,
+                    "beforeType", before.type(),
+                    "before", before.canonicalValue(),
+                    "afterType", value.type(),
+                    "after", value.canonicalValue(),
+                    "scopeKind", checked.kind(),
+                    "scopeId", checked.id()));
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    public synchronized void setGenericNumericRuleValue(String ruleId, BigDecimal value) {
+        setGenericNumericRuleValue(RuleScope.session(), ruleId, value);
+    }
+
+    public synchronized void setGenericNumericRuleValue(RuleScope scope, String ruleId, BigDecimal value) {
+        if (state.status == CombatStatus.RESOLVED) throw rule("A resolved encounter is immutable");
+        RuleScope checked = validateRuleScope(scope);
+        CompiledRuleset rules = genericRules();
+        RuleRuntimeState scopedState = genericRuleState(checked);
+        BigDecimal before = rules.value(ruleId, scopedState);
+        RuleRuntimeState changed = rules.setNumericValue(ruleId, value, scopedState);
+        if (changed.equals(scopedState)) return;
+        BigDecimal after = rules.value(ruleId, changed);
+        beginCommand();
+        try {
+            state.ruleSession = state.ruleSession.withState(checked, changed);
+            append(EventType.RULE_VALUE_SET, "", "", details(
+                    "ruleId", ruleId, "beforeType", RuleValue.Type.NUMBER,
+                    "before", before, "afterType", RuleValue.Type.NUMBER, "after", after,
+                    "scopeKind", checked.kind(), "scopeId", checked.id()));
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    public synchronized void setGenericResource(String resourceId, BigDecimal current, BigDecimal maximum) {
+        setGenericResource(RuleScope.session(), resourceId, current, maximum);
+    }
+
+    public synchronized void setGenericResource(
+            RuleScope scope,
+            String resourceId,
+            BigDecimal current,
+            BigDecimal maximum) {
+        if (state.status == CombatStatus.RESOLVED) throw rule("A resolved encounter is immutable");
+        RuleScope checked = validateRuleScope(scope);
+        RuleRuntimeState scopedState = genericRuleState(checked);
+        RuleRuntimeState.ResourceState before = scopedState.resources()
+                .get(genericRules().resolveId(resourceId));
+        if (before == null) throw rule("Unknown generic resource " + resourceId);
+        RuleRuntimeState changed = genericRules().setResource(
+                resourceId, current, maximum, scopedState);
+        if (changed.equals(scopedState)) return;
+        beginCommand();
+        try {
+            state.ruleSession = state.ruleSession.withState(checked, changed);
+            append(EventType.RULE_RESOURCE_SET, "", "", details(
+                    "resourceId", resourceId,
+                    "beforeCurrent", before.current(), "beforeMaximum", before.maximum(),
+                    "afterCurrent", current, "afterMaximum", maximum,
+                    "scopeKind", checked.kind(), "scopeId", checked.id()));
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    public synchronized void setGenericConditionStacks(String conditionId, int stacks) {
+        setGenericConditionStacks(RuleScope.session(), conditionId, stacks);
+    }
+
+    public synchronized void setGenericConditionStacks(RuleScope scope, String conditionId, int stacks) {
+        if (state.status == CombatStatus.RESOLVED) throw rule("A resolved encounter is immutable");
+        RuleScope checked = validateRuleScope(scope);
+        String resolved = genericRules().resolveId(conditionId);
+        RuleRuntimeState scopedState = genericRuleState(checked);
+        int before = scopedState.conditionStacks().getOrDefault(resolved, 0);
+        RuleRuntimeState changed = genericRules().setConditionStacks(
+                conditionId, stacks, scopedState);
+        if (changed.equals(scopedState)) return;
+        beginCommand();
+        try {
+            state.ruleSession = state.ruleSession.withState(checked, changed);
+            append(EventType.RULE_CONDITION_SET, "", "", details(
+                    "conditionId", conditionId, "before", before, "after", stacks,
+                    "scopeKind", checked.kind(), "scopeId", checked.id()));
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    public synchronized void setGenericTurnResource(String resourceId, BigDecimal current) {
+        setGenericTurnResource(RuleScope.session(), resourceId, current);
+    }
+
+    public synchronized void setGenericTurnResource(RuleScope scope, String resourceId, BigDecimal current) {
+        if (state.status == CombatStatus.RESOLVED) throw rule("A resolved encounter is immutable");
+        RuleScope checked = validateRuleScope(scope);
+        RuleRuntimeState scopedState = genericRuleState(checked);
+        BigDecimal before = scopedState.turnBudget().get(resourceId);
+        if (before == null) throw rule("Unknown generic turn resource " + resourceId);
+        RuleRuntimeState changed = genericRules().setTurnResource(
+                resourceId, current, scopedState);
+        if (changed.equals(scopedState)) return;
+        beginCommand();
+        try {
+            state.ruleSession = state.ruleSession.withState(checked, changed);
+            append(EventType.RULE_TURN_RESOURCE_SET, "", "", details(
+                    "resourceId", resourceId, "before", before, "after", current,
+                    "scopeKind", checked.kind(), "scopeId", checked.id()));
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    /** Esegue costi ed effetti atomici dell'action economy generica ed entra nell'Undo/audit. */
+    public synchronized RuleExecutionResult executeRuleAction(String actionId) {
+        return executeRuleAction(RuleScope.session(), actionId);
+    }
+
+    public synchronized RuleExecutionResult executeRuleAction(RuleScope scope, String actionId) {
+        ScopedRuleExecutionResult result = executeRuleAction(scope, scope, actionId);
+        return new RuleExecutionResult(result.state(scope), result.events());
+    }
+
+    public synchronized ScopedRuleExecutionResult executeRuleAction(
+            RuleScope sourceScope,
+            RuleScope targetScope,
+            String actionId) {
+        requireStatus(CombatStatus.ACTIVE);
+        RuleScope source = validateRuleScope(sourceScope);
+        RuleScope target = validateRuleScope(targetScope);
+        LinkedHashMap<RuleScope, RuleRuntimeState> frame = genericRuleFrame(source, target);
+        beginCommand();
+        try {
+            ScopedRuleExecutionResult result = genericRules().executeScopedAction(
+                    actionId, source, target, frame);
+            result.states().forEach((scope, changed) ->
+                    state.ruleSession = state.ruleSession.withState(scope, changed));
+            append(EventType.RULE_ACTION_EXECUTED,
+                    source.kind() == RuleScope.Kind.ACTOR ? source.id() : "",
+                    target.kind() == RuleScope.Kind.ACTOR ? target.id() : "",
+                    genericEventDetails(actionId, result.events(), source, target));
+            return result;
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    /** Invia un trigger arbitrario (riposo, cambio scena, evento homebrew) al runtime della sessione. */
+    public synchronized RuleExecutionResult fireRuleEvent(String eventType) {
+        return fireRuleEvent(RuleScope.session(), eventType);
+    }
+
+    public synchronized RuleExecutionResult fireRuleEvent(RuleScope scope, String eventType) {
+        ScopedRuleExecutionResult result = fireRuleEvent(scope, scope, eventType);
+        return new RuleExecutionResult(result.state(scope), result.events());
+    }
+
+    public synchronized ScopedRuleExecutionResult fireRuleEvent(
+            RuleScope sourceScope,
+            RuleScope targetScope,
+            String eventType) {
+        if (state.status == CombatStatus.RESOLVED) throw rule("A resolved encounter is immutable");
+        RuleScope source = validateRuleScope(sourceScope);
+        RuleScope target = validateRuleScope(targetScope);
+        LinkedHashMap<RuleScope, RuleRuntimeState> frame = genericRuleFrame(source, target);
+        beginCommand();
+        try {
+            ScopedRuleExecutionResult result = genericRules().fireScopedEvent(
+                    eventType, source, target, frame);
+            result.states().forEach((scope, changed) ->
+                    state.ruleSession = state.ruleSession.withState(scope, changed));
+            append(EventType.RULE_EVENT_FIRED,
+                    source.kind() == RuleScope.Kind.ACTOR ? source.id() : "",
+                    target.kind() == RuleScope.Kind.ACTOR ? target.id() : "",
+                    genericEventDetails(eventType, result.events(), source, target));
+            return result;
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    public synchronized CompiledRuleset.RandomizerResult rollRuleRandomizer(String randomizerId) {
+        return rollRuleRandomizer(RuleScope.session(), randomizerId);
+    }
+
+    public synchronized CompiledRuleset.RandomizerResult rollRuleRandomizer(
+            RuleScope scope,
+            String randomizerId) {
+        if (state.status == CombatStatus.RESOLVED) throw rule("A resolved encounter is immutable");
+        RuleScope checked = validateRuleScope(scope);
+        beginCommand();
+        try {
+            CompiledRuleset.RandomizerResult result = genericRules().roll(
+                    randomizerId, genericRuleState(checked), bound -> dice.roll(bound) - 1);
+            append(EventType.RULE_RANDOMIZER_ROLLED, "", "", details(
+                    "randomizer", result.randomizerId(),
+                    "draws", result.draws(),
+                    "value", result.value().toPlainString(),
+                    "tableValue", result.tableValue() == null ? "" : result.tableValue().canonicalValue(),
+                    "scopeKind", checked.kind(),
+                    "scopeId", checked.id()));
+            return result;
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
+    }
+
+    private CompiledRuleset genericRules() {
+        if (!state.ruleSession.executable()) {
+            throw rule("This session has no embedded executable generic rules");
+        }
+        if (!state.ruleSession.entities().equals(compiledEntitiesCache)
+                || !state.rulesetBinding.canonicalHash().equals(compiledRulesHashCache)) {
+            compiledRulesCache = state.ruleSession.compile(state.rulesetBinding.canonicalHash());
+            compiledEntitiesCache = state.ruleSession.entities();
+            compiledRulesHashCache = state.rulesetBinding.canonicalHash();
+        }
+        return compiledRulesCache;
+    }
+
+    private RuleScope validateRuleScope(RuleScope scope) {
+        RuleScope checked = Objects.requireNonNull(scope, "scope");
+        if (checked.kind() == RuleScope.Kind.ACTOR && !state.combatants.containsKey(checked.id())) {
+            throw rule("Unknown combatant rule scope " + checked.id());
+        }
+        return checked;
+    }
+
+    private LinkedHashMap<RuleScope, RuleRuntimeState> genericRuleFrame(
+            RuleScope source,
+            RuleScope target) {
+        LinkedHashMap<RuleScope, RuleRuntimeState> frame = new LinkedHashMap<>();
+        RuleScope sessionScope = RuleScope.session();
+        frame.put(sessionScope, genericRuleState(sessionScope));
+        frame.put(source, genericRuleState(source));
+        frame.put(target, genericRuleState(target));
+        return frame;
+    }
+
+    private void fireGenericEventInternal(String eventType) {
+        fireGenericEventInternal(eventType, RuleScope.session());
+    }
+
+    private void fireGenericEventInternal(String eventType, RuleScope scope) {
+        if (!state.ruleSession.executable()) return;
+        RuleScope checked = validateRuleScope(scope);
+        ScopedRuleExecutionResult result = genericRules().fireScopedEvent(
+                eventType, checked, checked, genericRuleFrame(checked, checked));
+        result.states().forEach((changedScope, changed) ->
+                state.ruleSession = state.ruleSession.withState(changedScope, changed));
+        if (!result.events().isEmpty()) {
+            append(EventType.RULE_EVENT_FIRED, "", "",
+                    genericEventDetails(eventType, result.events(), checked, checked));
+        }
+    }
+
+    private static Map<String, String> genericEventDetails(String source, List<RuleRuntimeEvent> events) {
+        return details(
+                "source", source,
+                "eventCount", events.size(),
+                "events", events.stream().map(RuleRuntimeEvent::type).collect(Collectors.joining(",")));
+    }
+
+    private static Map<String, String> genericEventDetails(
+            String source,
+            List<RuleRuntimeEvent> events,
+            RuleScope scope) {
+        LinkedHashMap<String, String> scoped = new LinkedHashMap<>(genericEventDetails(source, events));
+        scoped.put("scopeKind", scope.kind().name());
+        scoped.put("scopeId", scope.id());
+        return Map.copyOf(scoped);
+    }
+
+    private static Map<String, String> genericEventDetails(
+            String sourceRuleId,
+            List<RuleRuntimeEvent> events,
+            RuleScope source,
+            RuleScope target) {
+        LinkedHashMap<String, String> scoped = new LinkedHashMap<>(genericEventDetails(sourceRuleId, events));
+        scoped.put("scopeKind", source.kind().name());
+        scoped.put("scopeId", source.id());
+        scoped.put("targetScopeKind", target.kind().name());
+        scoped.put("targetScopeId", target.id());
+        return Map.copyOf(scoped);
     }
 
     public synchronized boolean canUndo() {
@@ -381,17 +1037,22 @@ public final class CombatSession {
             throw rule("Every combatant needs initiative before starting");
         }
         beginCommand();
-        if (state.initiativeOrder.size() != state.combatants.size()) {
-            rebuildInitiativeOrder();
-        }
-        state.status = CombatStatus.ACTIVE;
-        state.round = 1;
-        state.turnIndex = 0;
-        append(EventType.ENCOUNTER_STARTED, "", "", details(
-                "initiativeOrder", String.join(",", state.initiativeOrder)));
-        append(EventType.ROUND_STARTED, "", "", details("round", state.round));
-        if (seekFirstPlayableTurn()) {
-            startTurnInternal();
+        try {
+            if (state.initiativeOrder.size() != state.combatants.size()) {
+                rebuildInitiativeOrder();
+            }
+            state.status = CombatStatus.ACTIVE;
+            state.round = 1;
+            state.turnIndex = 0;
+            append(EventType.ENCOUNTER_STARTED, "", "", details(
+                    "initiativeOrder", String.join(",", state.initiativeOrder)));
+            append(EventType.ROUND_STARTED, "", "", details("round", state.round));
+            if (seekFirstPlayableTurn()) {
+                startTurnInternal();
+            }
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
         }
         // Setup is the immutable baseline of live play: Undo must never return the combat UI to READY/DRAFT.
         undoStack.clear();
@@ -777,7 +1438,7 @@ public final class CombatSession {
         }
         if (healer.currentHitPoints == 0
                 || healer.deathSaves.dead()
-                || healer.exhaustionLevel >= CombatantState.MAX_EXHAUSTION
+                || healer.exhaustionLevel >= state.rulesetRuntime.maximumExhaustion()
                 || healer.conditions.stream().anyMatch(condition -> incapacitates(condition.type()))) {
             throw rule("An incapacitated combatant cannot use a healing ability");
         }
@@ -788,7 +1449,7 @@ public final class CombatSession {
             throw rule("A healing ability can target only the healer's faction");
         }
         if (target.deathSaves.dead()
-                || target.exhaustionLevel >= CombatantState.MAX_EXHAUSTION) {
+                || target.exhaustionLevel >= state.rulesetRuntime.maximumExhaustion()) {
             throw rule("A dead combatant cannot be healed");
         }
         if (healing.target() == HealingTarget.SELF && !self) {
@@ -910,7 +1571,8 @@ public final class CombatSession {
         beginCommand();
         int before = target.currentHitPoints;
         int temporaryBefore = target.temporaryHitPoints;
-        boolean wasDead = target.deathSaves.dead() || target.exhaustionLevel >= CombatantState.MAX_EXHAUSTION;
+        boolean wasDead = target.deathSaves.dead()
+                || target.exhaustionLevel >= state.rulesetRuntime.maximumExhaustion();
         target.currentHitPoints = hitPoints;
         if (hitPoints == 0) {
             // L'azione e' una dichiarazione del tavolo, non danno: 0 significa
@@ -1129,18 +1791,21 @@ public final class CombatSession {
     public synchronized void setExhaustion(String combatantId, int level) {
         requireStatus(CombatStatus.ACTIVE);
         MutableCombatant target = combatant(combatantId);
-        if (level < 0 || level > CombatantState.MAX_EXHAUSTION) {
-            throw rule("Exhaustion must be between 0 and " + CombatantState.MAX_EXHAUSTION);
+        if (level < 0 || level > state.rulesetRuntime.maximumExhaustion()) {
+            throw rule("Exhaustion must be between 0 and " + state.rulesetRuntime.maximumExhaustion());
         }
         beginCommand();
         int before = target.exhaustionLevel;
         target.exhaustionLevel = level;
+        state.turnBudgets.computeIfPresent(
+                combatantId,
+                (ignored, budget) -> budget.withMovementAllowance(effectiveSpeed(target)));
         append(EventType.EXHAUSTION_CHANGED, combatantId, "", details(
                 "before", before,
                 "after", level,
-                "d20Penalty", -2 * level,
-                "speedPenaltyFeet", -5 * level));
-        if (level >= CombatantState.MAX_EXHAUSTION) {
+                "d20Penalty", -state.rulesetRuntime.exhaustionD20PenaltyPerLevel() * level,
+                "speedPenaltyFeet", -state.rulesetRuntime.exhaustionSpeedPenaltyFeetPerLevel() * level));
+        if (level >= state.rulesetRuntime.maximumExhaustion()) {
             append(EventType.DIED, combatantId, "", details("cause", "exhaustion"));
         }
     }
@@ -1148,7 +1813,8 @@ public final class CombatSession {
     /** Aggiunge livelli di Exhaustion, senza superare il massimo. */
     public synchronized void addExhaustion(String combatantId, int levels) {
         MutableCombatant target = combatant(combatantId);
-        setExhaustion(combatantId, Math.min(CombatantState.MAX_EXHAUSTION, target.exhaustionLevel + levels));
+        setExhaustion(combatantId,
+                Math.min(state.rulesetRuntime.maximumExhaustion(), target.exhaustionLevel + levels));
     }
 
     /**
@@ -1876,13 +2542,25 @@ public final class CombatSession {
     public synchronized void endTurn() {
         requireStatus(CombatStatus.ACTIVE);
         beginCommand();
-        endTurnInternal();
+        try {
+            endTurnInternal();
+        } catch (RuntimeException failure) {
+            rollbackFailedCommand();
+            throw failure;
+        }
     }
 
     /** Chiude il gruppo corrente; il chiamante ha gia' aperto il comando annullabile. */
     private void endTurnInternal() {
         List<String> ending = currentCombatantIds();
         List<String> endingGroup = currentTurnGroup();
+        fireGenericEventInternal("TURN_END");
+        for (String combatantId : ending) {
+            RuleScope scope = RuleScope.actor(combatantId);
+            if (state.ruleSession.findState(scope).isPresent()) {
+                fireGenericEventInternal("TURN_END", scope);
+            }
+        }
         // Il turno finisce per tutto il gruppo: in parita' i combattenti hanno
         // giocato insieme e chiudono insieme. Anche il membro a 0 PF attraversa
         // comunque la soglia temporale di fine turno, pur senza ricevere azioni.
@@ -1969,7 +2647,7 @@ public final class CombatSession {
         resetSpellSlotBudgetsForNewTurn();
         for (String id : livingCombatants(groups.get(target))) {
             MutableCombatant occupant = combatant(id);
-            int speed = Math.max(0, occupant.snapshot.speedFeet() - 5 * occupant.exhaustionLevel);
+            int speed = effectiveSpeed(occupant);
             state.turnBudgets.put(id, TurnBudget.fresh(speed, occupant.snapshot.attacksPerAction()));
             append(EventType.TURN_STARTED, id, "", details("round", state.round));
         }
@@ -2239,7 +2917,20 @@ public final class CombatSession {
         // turni dello stesso lanciatore. Azzerarlo per tutti consente quindi una
         // reazione a slot nel turno successivo senza ricaricare la reazione.
         resetSpellSlotBudgetsForNewTurn();
+        if (state.ruleSession.executable()) {
+            state.ruleSession = state.ruleSession.withState(genericRules().beginTurn(state.ruleSession.state()));
+            fireGenericEventInternal("TURN_START");
+        }
         List<String> active = currentCombatantIds();
+        if (state.ruleSession.executable()) {
+            for (String combatantId : active) {
+                RuleScope scope = RuleScope.actor(combatantId);
+                state.ruleSession.findState(scope).ifPresent(existing -> {
+                    state.ruleSession = state.ruleSession.withState(scope, genericRules().beginTurn(existing));
+                    fireGenericEventInternal("TURN_START", scope);
+                });
+            }
+        }
         for (String combatantId : currentTurnGroup()) {
             // Un membro a 0 PF non riceve budget ne' evento di turno, ma la soglia
             // d'inizio continua a far avanzare correttamente condizioni ed effetti.
@@ -2249,7 +2940,7 @@ public final class CombatSession {
             }
             MutableCombatant combatant = combatant(combatantId);
             // La velocita' e' ridotta da Exhaustion: il budget parte da quella effettiva.
-            int speed = Math.max(0, combatant.snapshot.speedFeet() - 5 * combatant.exhaustionLevel);
+            int speed = effectiveSpeed(combatant);
             state.turnBudgets.put(combatantId, TurnBudget.fresh(speed, combatant.snapshot.attacksPerAction()));
             processConditionBoundary(combatantId, true);
             append(EventType.TURN_STARTED, combatantId, "", details("round", state.round));
@@ -2484,7 +3175,7 @@ public final class CombatSession {
      * — prove, attacchi e tiri salvezza — nella misura di −2 per livello.</p>
      */
     private D20RollResult rollD20For(MutableCombatant roller, D20RollInput input, int modifier) {
-        int penalty = -2 * roller.exhaustionLevel;
+        int penalty = -state.rulesetRuntime.exhaustionD20PenaltyPerLevel() * roller.exhaustionLevel;
         return rollD20(input, checkedTotal(modifier, penalty, "D20 modifier"));
     }
 
@@ -2521,17 +3212,22 @@ public final class CombatSession {
                 || ability.attackAbility() == SaveAbility.DEXTERITY;
     }
 
-    private static AttackOutcome attackOutcome(D20RollResult roll, int armorClass) {
-        if (roll.naturalRoll() == 1) return AttackOutcome.MISS;
-        if (roll.naturalRoll() == 20) return AttackOutcome.CRITICAL_HIT;
+    private AttackOutcome attackOutcome(D20RollResult roll, int armorClass) {
+        if (state.rulesetRuntime.naturalOneAlwaysMisses() && roll.naturalRoll() == 1) {
+            return AttackOutcome.MISS;
+        }
+        if (roll.naturalRoll() >= state.rulesetRuntime.criticalHitMinimumNatural()) {
+            return AttackOutcome.CRITICAL_HIT;
+        }
         return roll.total() >= armorClass ? AttackOutcome.HIT : AttackOutcome.MISS;
     }
 
     private static boolean incapacitates(app.d6d.domain.combat.ConditionType type) {
-        return switch (type) {
-            case INCAPACITATED, PARALYZED, PETRIFIED, STUNNED, UNCONSCIOUS -> true;
-            default -> false;
-        };
+        return type.equals(app.d6d.domain.combat.ConditionType.INCAPACITATED)
+                || type.equals(app.d6d.domain.combat.ConditionType.PARALYZED)
+                || type.equals(app.d6d.domain.combat.ConditionType.PETRIFIED)
+                || type.equals(app.d6d.domain.combat.ConditionType.STUNNED)
+                || type.equals(app.d6d.domain.combat.ConditionType.UNCONSCIOUS);
     }
 
     private void beginCommand() {
@@ -2659,9 +3355,14 @@ public final class CombatSession {
     }
 
     /** La morte e' indipendente dai PF: Exhaustion 6 puo' lasciare un valore positivo. */
-    private static boolean isDead(MutableCombatant combatant) {
+    private boolean isDead(MutableCombatant combatant) {
         return combatant.deathSaves.dead()
-                || combatant.exhaustionLevel >= CombatantState.MAX_EXHAUSTION;
+                || combatant.exhaustionLevel >= state.rulesetRuntime.maximumExhaustion();
+    }
+
+    private int effectiveSpeed(MutableCombatant combatant) {
+        return Math.max(0, combatant.snapshot.speedFeet()
+                - state.rulesetRuntime.exhaustionSpeedPenaltyFeetPerLevel() * combatant.exhaustionLevel);
     }
 
     /** Primo attore vivo del gruppo, oppure il suo primo membro per le sole correzioni d'ordine. */
@@ -2738,6 +3439,30 @@ public final class CombatSession {
 
     private static CombatRuleException rule(String message) {
         return new CombatRuleException(message);
+    }
+
+    private static void validateSupportedRuntime(
+            RulesetBinding binding,
+            RulesetRuntimeConfig runtime) {
+        if (!binding.runtimeSemanticsVersion().equals(runtime.semanticsVersion())) {
+            throw new IllegalArgumentException("Ruleset binding and runtime semantics differ");
+        }
+        if (!RulesetRuntimeConfig.CURRENT_SEMANTICS.equals(runtime.semanticsVersion())) {
+            throw new IllegalArgumentException(
+                    "Unsupported ruleset runtime semantics: " + runtime.semanticsVersion());
+        }
+    }
+
+    private static void validateRuleSnapshot(
+            RulesetBinding binding,
+            RulesetRuntimeConfig runtime,
+            RuleSessionSnapshot snapshot) {
+        if (!snapshot.executable()) return; // Compatibilità con sessioni schema 1/2.
+        String runtimeHash = RulesetCanonicalizer.runtimeHash(runtime, snapshot.entities());
+        if (!runtimeHash.equals(binding.runtimeHash())) {
+            throw new IllegalArgumentException("Embedded rules do not match the bound runtime hash");
+        }
+        snapshot.compile(binding.canonicalHash());
     }
 
     private static String requireText(String value, String field) {
@@ -2827,16 +3552,21 @@ public final class CombatSession {
             return duplicate;
         }
 
-        private CombatantState toDomain() {
+        private CombatantState toDomain(RulesetRuntimeConfig runtime) {
             return new CombatantState(snapshot, currentHitPoints, temporaryHitPoints, conditions, concentration,
-                    deathSaves, exhaustionLevel, List.copyOf(resources.values()));
+                    deathSaves, exhaustionLevel, List.copyOf(resources.values()),
+                    runtime.maximumExhaustion(), runtime.exhaustionD20PenaltyPerLevel(),
+                    runtime.exhaustionSpeedPenaltyFeetPerLevel());
         }
     }
 
     private static final class MutableState {
         private final String encounterId;
-        private final String rulesetVersion;
+        private String rulesetVersion;
         private final String contentVersion;
+        private RulesetBinding rulesetBinding;
+        private RulesetRuntimeConfig rulesetRuntime;
+        private RuleSessionSnapshot ruleSession;
         private CombatStatus status;
         private long revision;
         private final List<String> rosterOrder;
@@ -2865,10 +3595,16 @@ public final class CombatSession {
                 int round,
                 int turnIndex,
                 Map<String, TurnBudget> turnBudgets,
-                Collection<String> partyCombatantIds) {
+                Collection<String> partyCombatantIds,
+                RulesetBinding rulesetBinding,
+                RulesetRuntimeConfig rulesetRuntime,
+                RuleSessionSnapshot ruleSession) {
             this.encounterId = encounterId;
             this.rulesetVersion = rulesetVersion;
             this.contentVersion = contentVersion;
+            this.rulesetBinding = Objects.requireNonNull(rulesetBinding, "rulesetBinding");
+            this.rulesetRuntime = Objects.requireNonNull(rulesetRuntime, "rulesetRuntime");
+            this.ruleSession = Objects.requireNonNull(ruleSession, "ruleSession");
             this.status = status;
             this.revision = revision;
             this.rosterOrder = new ArrayList<>(rosterOrder);
@@ -2881,9 +3617,16 @@ public final class CombatSession {
             this.partyCombatantIds = new LinkedHashSet<>(partyCombatantIds);
         }
 
-        private static MutableState empty(String encounterId, String rulesetVersion, String contentVersion) {
+        private static MutableState empty(
+                String encounterId,
+                String rulesetVersion,
+                String contentVersion,
+                RulesetBinding rulesetBinding,
+                RulesetRuntimeConfig rulesetRuntime,
+                RuleSessionSnapshot ruleSession) {
             return new MutableState(encounterId, rulesetVersion, contentVersion, CombatStatus.DRAFT, 0,
-                    List.of(), Map.of(), Map.of(), List.of(), 0, -1, Map.of(), Set.of());
+                    List.of(), Map.of(), Map.of(), List.of(), 0, -1, Map.of(), Set.of(),
+                    rulesetBinding, rulesetRuntime, ruleSession);
         }
 
         private static MutableState from(CombatState state) {
@@ -2892,7 +3635,8 @@ public final class CombatSession {
             MutableState restored = new MutableState(state.encounterId(), state.rulesetVersion(),
                     state.contentVersion(), state.status(), state.revision(), state.rosterOrder(), combatants,
                     state.initiativeScores(), state.initiativeOrder(), state.round(), state.turnIndex(),
-                    state.turnBudgets(), state.partyCombatantIds());
+                    state.turnBudgets(), state.partyCombatantIds(), state.rulesetBinding(), state.rulesetRuntime(),
+                    state.ruleSession());
             restored.simultaneousTies = state.simultaneousTies();
             restored.battleMap = state.battleMap();
             restored.alarmRadiusFeet = state.alarmRadiusFeet();
@@ -2905,7 +3649,7 @@ public final class CombatSession {
             combatants.forEach((id, combatant) -> copiedCombatants.put(id, combatant.copy()));
             MutableState duplicate = new MutableState(encounterId, rulesetVersion, contentVersion, status, revision,
                     rosterOrder, copiedCombatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
-                    partyCombatantIds);
+                    partyCombatantIds, rulesetBinding, rulesetRuntime, ruleSession);
             duplicate.simultaneousTies = simultaneousTies;
             duplicate.battleMap = battleMap;
             duplicate.alarmRadiusFeet = alarmRadiusFeet;
@@ -2915,10 +3659,11 @@ public final class CombatSession {
 
         private CombatState toDomain(long seed, long randomState) {
             Map<String, CombatantState> domainCombatants = new LinkedHashMap<>();
-            combatants.forEach((id, combatant) -> domainCombatants.put(id, combatant.toDomain()));
+            combatants.forEach((id, combatant) -> domainCombatants.put(id, combatant.toDomain(rulesetRuntime)));
             return new CombatState(encounterId, rulesetVersion, contentVersion, status, revision, seed, randomState,
                     rosterOrder, domainCombatants, initiativeScores, initiativeOrder, round, turnIndex, turnBudgets,
-                    partyCombatantIds, simultaneousTies, battleMap, alarmRadiusFeet, dormantCombatantIds);
+                    partyCombatantIds, simultaneousTies, battleMap, alarmRadiusFeet, dormantCombatantIds,
+                    rulesetBinding, rulesetRuntime, ruleSession);
         }
     }
 }

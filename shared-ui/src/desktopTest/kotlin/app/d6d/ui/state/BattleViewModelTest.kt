@@ -26,6 +26,9 @@ import app.d6d.engine.ai.EnemyCpuActionType
 import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.engine.ai.EnemyCpuReason
 import app.d6d.engine.ai.EnemyCpuTargetReport
+import app.d6d.content.srd521it.Srd521Ruleset
+import app.d6d.rules.model.RulesetOrigin
+import app.d6d.rules.model.RulesetRevision
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.ui.content.SampleEncounter
@@ -94,6 +97,36 @@ class BattleViewModelTest {
         unknown.adopt(unknownSession, mapOf("enemyCpuDifficulty" to "IMPOSSIBILE"))
         assertFalse(unknown.enemyCpuEnabled)
         assertEquals(EnemyCpuDifficulty.MEDIUM, unknown.enemyCpuDifficulty)
+    }
+
+    @Test
+    fun `applicare regole strutturali disattiva la cpu ma conserva la sessione giocabile`() {
+        val standard = Srd521Ruleset.revision
+        val structural = RulesetRevision.create(
+            "test:manual-rules",
+            "revision:manual",
+            "1.0.0",
+            "Regole manuali",
+            "",
+            RulesetOrigin.HOMEBREW,
+            standard.canonicalHash(),
+            standard.runtime(),
+            standard.entities().dropLast(1),
+            "now",
+        )
+        val model = viewModel()
+        model.adopt(
+            model.session,
+            mapOf("enemyCpuDifficulty" to EnemyCpuDifficulty.MEDIUM.name),
+        )
+        assertTrue(model.enemyCpuEnabled)
+
+        assertTrue(model.applyRuleset(structural))
+
+        assertFalse(model.enemyCpuEnabled)
+        assertEquals(CombatStatus.PAUSED, model.state.status())
+        assertEquals(structural.binding(), model.state.rulesetBinding())
+        assertFalse("enemyCpuDifficulty" in model.presentationState())
     }
 
     private fun guaranteedHitViewModel(

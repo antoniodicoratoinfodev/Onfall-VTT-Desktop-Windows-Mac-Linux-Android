@@ -27,6 +27,7 @@ import app.d6d.content.srd521it.SrdChoiceOption
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.BackgroundDefinition
 import app.d6d.rules.character.CharacterClassId
+import app.d6d.rules.character.CharacterStatDefinition
 import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.ChoiceKind
 import app.d6d.rules.character.ChoiceSelection
@@ -53,9 +54,15 @@ fun SrdProgressionDialog(
 ) {
     val words = strings.sheet
     val sheet = viewModel.character
+    val statDefinitions = viewModel.statDefinitionsFor(sheet)
     val initialClass = sheet.progression.classLevels.firstOrNull()?.classId
+        ?: viewModel.srdClasses.firstOrNull()?.id
         ?: CharacterClassId.BARBARIAN
-    var selectedClass by remember(sheet.id, sheet.effectiveLevel) { mutableStateOf(initialClass) }
+    var selectedClass by remember(
+        sheet.id,
+        sheet.effectiveLevel,
+        viewModel.selectedCharacterRulesetHash,
+    ) { mutableStateOf(initialClass) }
     var selected by remember(sheet.id, sheet.effectiveLevel, selectedClass) {
         mutableStateOf<Map<String, List<String>>>(emptyMap())
     }
@@ -92,7 +99,7 @@ fun SrdProgressionDialog(
     val conditionalAbilityIncreases = requirements
         .filter { it.kind == ChoiceKind.ABILITY_SCORE_INCREASE }
         .flatMap { activeSelections[it.id].orEmpty() }
-        .mapNotNull(::abilityFromChoiceOption)
+        .mapNotNull { abilityFromChoiceOption(it, statDefinitions) }
         .groupingBy { it }
         .eachCount()
     val abilityAllocationValid = !hasAbilityScoreIncrease || abilityIncreases.values.sum() == 2
@@ -101,7 +108,9 @@ fun SrdProgressionDialog(
         (distribution == listOf(1, 2) || distribution == listOf(1, 1, 1)) &&
             backgroundIncreases.keys.all { it in background.abilityOptions } &&
             backgroundIncreases.all { (ability, amount) ->
-                (sheet.abilityScores[ability] ?: 10) + amount <= 20
+                val definition = statDefinitions.firstOrNull { it.id == ability }
+                (sheet.abilityScores[ability] ?: definition?.defaultScore ?: 10) + amount <=
+                    (definition?.advancementMaximum ?: 20)
             }
     } == true
 
@@ -133,13 +142,41 @@ fun SrdProgressionDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                if (firstLevel) {
+                    Text(strings.rules.ruleset, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        viewModel.availableRulesets.forEach { revision ->
+                            val chosen = revision.canonicalHash() == viewModel.selectedCharacterRulesetHash
+                            GameButton(
+                                label = revision.name(),
+                                subtitle = revision.version(),
+                                accent = if (chosen) Palette.Heal else Palette.TextMuted,
+                                selected = chosen,
+                                dense = true,
+                                onClick = {
+                                    if (viewModel.selectCharacterRuleset(revision.canonicalHash())) {
+                                        selectedClass = viewModel.srdClasses.firstOrNull()?.id
+                                            ?: CharacterClassId.BARBARIAN
+                                        selected = emptyMap()
+                                        abilityIncreases = emptyMap()
+                                        backgroundIncreases = emptyMap()
+                                        rolledHitPoints = viewModel.fixedHitPointIncrease(selectedClass)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
                 Text(strings.abilities.classCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     viewModel.srdClasses
-                        .filter { sheet.progression.levelIn(it.id) < 20 }
+                        .filter { sheet.progression.levelIn(it.id) < it.maximumLevel }
                         .forEach { definition ->
                             val chosen = selectedClass == definition.id
                             GameButton(
@@ -196,6 +233,7 @@ fun SrdProgressionDialog(
                     BackgroundAbilityScorePicker(
                         background = background,
                         sheetScores = sheet.abilityScores,
+                        statDefinitions = statDefinitions,
                         increases = backgroundIncreases,
                         onChange = { backgroundIncreases = it },
                     )
@@ -204,6 +242,7 @@ fun SrdProgressionDialog(
                 if (hasAbilityScoreIncrease) {
                     AbilityScoreIncreasePicker(
                         sheetScores = sheet.abilityScores,
+                        statDefinitions = statDefinitions,
                         increases = abilityIncreases,
                         onChange = { abilityIncreases = it },
                     )
@@ -337,9 +376,15 @@ internal fun resolvedAbilityScoreIncreases(
 private fun Map<String, List<String>>.toChoiceSelections(): List<ChoiceSelection> =
     map { (choiceId, optionIds) -> ChoiceSelection(choiceId, optionIds) }
 
-private fun abilityFromChoiceOption(optionId: String): Ability? {
+private fun abilityFromChoiceOption(
+    optionId: String,
+    statDefinitions: List<CharacterStatDefinition>,
+): Ability? {
     val slug = optionId.substringAfterLast(':')
-    return Ability.entries.firstOrNull { it.name.lowercase() == slug }
+    return statDefinitions.map { it.id }.firstOrNull {
+        it.name.lowercase() == slug ||
+            it.value.substringAfterLast(':').replace('-', '_').lowercase() == slug
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -486,6 +531,7 @@ internal fun RuleEffect.readableText(strings: Strings): String {
 private fun BackgroundAbilityScorePicker(
     background: BackgroundDefinition,
     sheetScores: Map<Ability, Int>,
+    statDefinitions: List<CharacterStatDefinition>,
     increases: Map<Ability, Int>,
     onChange: (Map<Ability, Int>) -> Unit,
 ) {
@@ -502,18 +548,19 @@ private fun BackgroundAbilityScorePicker(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             background.abilityOptions.sortedBy { it.ordinal }.forEach { ability ->
-                val current = sheetScores[ability] ?: 10
+                val definition = statDefinitions.firstOrNull { it.id == ability }
+                val current = sheetScores[ability] ?: definition?.defaultScore ?: 10
                 val value = increases[ability] ?: 0
                 GameButton(
-                    "${ability.abbreviationIn(language)} $current${if (value > 0) " +$value" else ""}",
+                    "${definition?.abbreviation ?: ability.abbreviationIn(language)} $current${if (value > 0) " +$value" else ""}",
                     accent = if (value > 0) Palette.Gold else Palette.TextMuted,
                     selected = value > 0,
                     dense = true,
                     onClick = {
                         val totalWithout = increases.values.sum() - value
                         val next = when {
-                            value == 0 && totalWithout < 3 && current < 20 -> 1
-                            value == 1 && totalWithout <= 1 && current <= 18 -> 2
+                            value == 0 && totalWithout < 3 && current < (definition?.advancementMaximum ?: 20) -> 1
+                            value == 1 && totalWithout <= 1 && current <= (definition?.advancementMaximum ?: 20) - 2 -> 2
                             else -> 0
                         }
                         onChange((increases + (ability to next)).filterValues { it > 0 })
@@ -535,6 +582,7 @@ private fun BackgroundAbilityScorePicker(
 @Composable
 private fun AbilityScoreIncreasePicker(
     sheetScores: Map<Ability, Int>,
+    statDefinitions: List<CharacterStatDefinition>,
     increases: Map<Ability, Int>,
     onChange: (Map<Ability, Int>) -> Unit,
 ) {
@@ -550,19 +598,20 @@ private fun AbilityScoreIncreasePicker(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            Ability.entries.forEach { ability ->
-                val current = sheetScores[ability] ?: 10
+            statDefinitions.forEach { definition ->
+                val ability = definition.id
+                val current = sheetScores[ability] ?: definition.defaultScore
                 val value = increases[ability] ?: 0
                 GameButton(
-                    "${ability.abbreviationIn(language)} $current${if (value > 0) " +$value" else ""}",
+                    "${definition.abbreviation} $current${if (value > 0) " +$value" else ""}",
                     accent = if (value > 0) Palette.Gold else Palette.TextMuted,
                     selected = value > 0,
                     dense = true,
                     onClick = {
                         val totalWithout = increases.values.sum() - value
                         val next = when {
-                            value == 0 && totalWithout < 2 && current < 20 -> 1
-                            value == 1 && totalWithout == 0 && current <= 18 -> 2
+                            value == 0 && totalWithout < 2 && current < definition.advancementMaximum -> 1
+                            value == 1 && totalWithout == 0 && current <= definition.advancementMaximum - 2 -> 2
                             else -> 0
                         }
                         onChange((increases + (ability to next)).filterValues { it > 0 })

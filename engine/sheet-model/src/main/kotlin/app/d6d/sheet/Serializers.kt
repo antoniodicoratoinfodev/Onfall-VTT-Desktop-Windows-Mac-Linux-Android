@@ -25,7 +25,7 @@ object DamageTypeSerializer : KSerializer<DamageType> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("app.d6d.domain.combat.DamageType", PrimitiveKind.STRING)
 
-    override fun serialize(encoder: Encoder, value: DamageType) = encoder.encodeString(value.name)
+    override fun serialize(encoder: Encoder, value: DamageType) = encoder.encodeString(value.name())
 
     override fun deserialize(decoder: Decoder): DamageType = DamageType.valueOf(decoder.decodeString())
 }
@@ -34,7 +34,7 @@ object ConditionTypeSerializer : KSerializer<ConditionType> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("app.d6d.domain.combat.ConditionType", PrimitiveKind.STRING)
 
-    override fun serialize(encoder: Encoder, value: ConditionType) = encoder.encodeString(value.name)
+    override fun serialize(encoder: Encoder, value: ConditionType) = encoder.encodeString(value.name())
 
     override fun deserialize(decoder: Decoder): ConditionType = ConditionType.valueOf(decoder.decodeString())
 }
