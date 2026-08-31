@@ -3,6 +3,7 @@ package app.d6d.ui.rules
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -257,7 +258,11 @@ private fun RulesetCard(choice: RulesetChoice, selected: Boolean, onClick: () ->
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EntityBrowser(viewModel: RulesViewModel, modifier: Modifier = Modifier) {
+private fun EntityBrowser(
+    viewModel: RulesViewModel,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
     val words = strings.rules
     Column(modifier.background(Palette.Abyss.copy(alpha = .82f)).padding(10.dp)) {
         RuleTextField(
@@ -266,24 +271,20 @@ private fun EntityBrowser(viewModel: RulesViewModel, modifier: Modifier = Modifi
             placeholder = words.searchPlaceholder,
             modifier = Modifier.fillMaxWidth(),
         )
-        FlowRow(
-            Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            GameButton(
-                strings.common.all,
-                dense = true,
-                selected = viewModel.kindFilter == null,
-                onClick = { viewModel.kindFilter = null },
-            )
-            exposedKinds.forEach { kind ->
-                GameButton(
-                    kindLabel(kind),
-                    dense = true,
-                    selected = viewModel.kindFilter == kind,
-                    onClick = { viewModel.kindFilter = kind },
-                )
+        if (compact) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                RuleKindFilterButtons(viewModel)
+            }
+        } else {
+            FlowRow(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                RuleKindFilterButtons(viewModel)
             }
         }
         Eyebrow(words.automation)
@@ -337,6 +338,24 @@ private fun EntityBrowser(viewModel: RulesViewModel, modifier: Modifier = Modifi
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RuleKindFilterButtons(viewModel: RulesViewModel) {
+    GameButton(
+        strings.common.all,
+        dense = true,
+        selected = viewModel.kindFilter == null,
+        onClick = { viewModel.kindFilter = null },
+    )
+    exposedKinds.forEach { kind ->
+        GameButton(
+            kindLabel(kind),
+            dense = true,
+            selected = viewModel.kindFilter == kind,
+            onClick = { viewModel.kindFilter = kind },
+        )
     }
 }
 
@@ -1983,7 +2002,11 @@ private fun CompactRulesContent(
             }
         }
         GoldenRule()
-        EntityBrowser(viewModel, Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 300.dp))
+        EntityBrowser(
+            viewModel,
+            Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 300.dp),
+            compact = true,
+        )
         GoldenRule()
         RuleDetail(viewModel, activeBattle, onNotice, Modifier.fillMaxSize())
     }

@@ -17,6 +17,17 @@ engine, data and screens.
 > evaluation, but it may not be modified, forked, redistributed, or reused in other projects. See
 > [`LICENSE.md`](LICENSE.md).
 
+## Contents
+
+- [What it is](#what-it-is)
+- [Modular rulesets](#modular-rulesets)
+- [Starting a session](#starting-a-session)
+- [The battle](#the-battle) and [the enemy CPU](#the-enemy-cpu)
+- [The Compendium](#the-compendium) and [the SRD content pack](#srd-content-pack)
+- [Settings](#settings) and [Android or compact layouts](#android-and-compact-layouts)
+- [Architecture](#architecture), [versioning](#version), and [running the project](#run)
+- [License](#license)
+
 ## What it is
 
 Six parts living on the same engine:
@@ -31,10 +42,53 @@ Six parts living on the same engine:
 6. a **game interface** that presents the fight as a turn based battle.
 
 Five destinations hold them together: **Battle**, **Game**, **Compendium**, **Rules** and
-**Settings**. The
-navigation rail on the left collapses to icons, or disappears entirely, when the table needs the
-room. The screenshots below are taken in English; the whole interface, units included, switches to
-Italian at runtime and back.
+**Settings**. The navigation rail on the left collapses to icons, or disappears entirely, when the
+table needs the room. **Rules uses a scroll glyph**, while the tome remains exclusive to the
+Compendium, so the two destinations stay distinct even when their labels are hidden. The screenshots
+below are taken in English; the whole interface, units included, switches to Italian at runtime and
+back.
+
+## Modular rulesets
+
+The **Rules** destination lists bundled standards as read only and lets a table create an editable
+homebrew fork or a blank independent ruleset. Rules can be searched and filtered by origin, kind,
+automation level and enabled state. On narrow screens the complete type list scrolls horizontally,
+leaving the matching rule entries visible and selectable. Publishing freezes a revision and
+validates formulas, identifiers and reference links. Every new game embeds that exact revision; an
+existing game can switch revision with pause, conservative state migration, audit and Undo.
+
+Independent rulesets do not inherit undeclared SRD classes, stats, skills, equipment, damage types
+or conditions. Their generic runtime supports typed values, formulas, tables, resources, arbitrary
+events and triggers, named turn budgets, linked effects and scoped state for session, actor, object,
+scene or campaign. Rulesets can also declare state lifetime/ownership/sync, multi-target actions,
+health models, movement topology and units, scene procedures, and persisted data-generated sheet
+sections. Classes and progression are executable catalog data rather than labels: an added class is
+available to compatible character creation and contributes its linked progression, grants,
+resources and modifiers. The primary guided sheet remains deliberately D&D-shaped, while classless
+or radically different games use the generated sections and the general non-combat `GameSession`.
+Portable published homebrew revisions can be imported or exported from Rules. The detailed
+capability contract is in [`docs/piano-regole-modulari.md`](docs/piano-regole-modulari.md).
+
+Desktop and Android use the same rules repository, compiler, session binding, sheet projector and
+view model. The desktop presents them as three simultaneous panes; Android stacks the same panes and
+uses horizontally scrollable type filters so the matching rule list retains useful space. A ruleset
+created or imported on either platform therefore has the same identifiers, validation, runtime
+semantics and persisted format.
+
+<table>
+<tr>
+<td align="center">
+<img src="sample/desktop-rules-library.png" width="720"/><br/>
+<sub>Desktop Rules library: standards, blank foundation, homebrew drafts, filters and rule detail</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/desktop-rules-homebrew-editor.png" width="720"/><br/>
+<sub>Desktop homebrew editor: metadata, runtime parameters, rule kinds and immutable publication</sub>
+</td>
+</tr>
+</table>
 
 ## Starting a session
 
@@ -46,15 +100,15 @@ at different points of a campaign: *The Ruins of Deepvale* (level 1), *The Iron 
 SRD pack carries.
 
 The builder also asks for the exact published **ruleset revision** to snapshot into the new game,
-then walks through participants, grid, start mode and opposition. In the participants step each template gets a **faction**
-and a **quantity**, so the same stat block can enter the fight four times without being duplicated
-in the archive. The grid step sets columns, rows and the distance one square represents. Distances
-follow the selected language: metres in Italian, using the rules conversion (5 feet = 1.5 m), and
-feet in English. The mode step chooses between **Fight mode**, which lays allies and enemies out
-facing each other and ready to roll, and **Roleplay & Fight & Exploration**, which opens the same
-grid empty and leaves placement to the table. The last step picks the opposition: **Sandbox**, where
-the table moves the enemies exactly as it moves the allies, or one of the three CPU levels described
-below.
+then walks through participants, grid, start mode and opposition. In the participants step each
+template gets a **faction** and a **quantity**, so the same stat block can enter the fight four times
+without being duplicated in the archive. The grid step sets columns, rows and the distance one
+square represents. Distances follow the selected language: metres in Italian, using the rules
+conversion (5 feet = 1.5 m), and feet in English. The mode step chooses between **Fight mode**, which
+lays allies and enemies out facing each other and ready to roll, and **Roleplay & Fight &
+Exploration**, which opens the same grid empty and leaves placement to the table. The last step picks
+the opposition: **Sandbox**, where the table moves the enemies exactly as it moves the allies, or one
+of the three CPU levels described below.
 
 A combatant is **copied** into the session, so ordinary changes to HP, conditions, turns, and
 position never alter its Compendium template. Explicit stat corrections and spent resources, such as
@@ -68,6 +122,12 @@ order, dice state, event log and undo history.
 <td align="center">
 <img src="sample/session-start.png" width="720"/><br/>
 <sub>Starting a session: bundled encounters, saved templates, from scratch, or a saved session</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/desktop-session-ruleset.png" width="720"/><br/>
+<sub>Desktop ruleset snapshot: every new game chooses an exact published revision before its participants</sub>
 </td>
 </tr>
 <tr>
@@ -463,9 +523,22 @@ picked and remembered across runs.
 </tr>
 </table>
 
+## SRD content pack
+
+The Italian and English SRD 5.2.1 pack is a separate module, so the engine and the licensed content
+never mix. It carries 12 classes with their SRD subclasses, 408 class and subclass feature records
+(including 10 metamagics and 28 eldritch invocations), 4 complete backgrounds, 33
+starting-equipment packages, 17 feats, 339 spells, 38 weapons and 64 complete Beast stat blocks
+eligible for Wild Shape. It is distributed under CC BY 4.0; see [`NOTICE-SRD.md`](NOTICE-SRD.md).
+
+The two editions are two sets of texts over **one set of identifiers**: the English pack adopts the
+Italian ids rather than minting its own, and a generated crosswalk maps the names between them.
+Those ids are what a saved sheet stores, so switching language renames what a character shows
+without orphaning a single feature, spell or feat it had already chosen.
+
 ## Settings
 
-The fourth destination holds the preferences that outlive a single fight. They apply to every game,
+The fifth destination holds the preferences that outlive a single fight. They apply to every game,
 including the ones already open, and they are written to disk as soon as they change.
 
 **Language** switches the whole interface between Italian and English at once, with no restart, and
@@ -499,7 +572,7 @@ that section is simply not there.
 </tr>
 </table>
 
-## On the phone
+## Android and compact layouts
 
 The same screens run on Android from the same code. The battle keeps the map visible while Party
 slides in from the left and Enemies from the right; the event log opens from a small control above
@@ -529,42 +602,26 @@ its window is narrowed below the width three panels need.
 </td>
 </tr>
 <tr>
-<td align="center" colspan="2">
+<td align="center">
+<img src="sample/rules-library.png" width="320"/><br/>
+<sub>Rules remain searchable and selectable in the compact Android layout</sub>
+</td>
+<td align="center">
+<img src="sample/rules-homebrew-editor.png" width="320"/><br/>
+<sub>The same editable homebrew draft and runtime parameters on Android</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="sample/session-ruleset.png" width="320"/><br/>
+<sub>Choosing the exact rules revision for a new Android game</sub>
+</td>
+<td align="center">
 <img src="sample/android-phone/settings.png" width="320"/><br/>
 <sub>Application preferences on Android</sub>
 </td>
 </tr>
 </table>
-
-## SRD content pack
-
-The Italian and English SRD 5.2.1 pack is a separate module, so the engine and the licensed content
-never mix. It carries 12 classes with their SRD subclasses, 408 class and subclass feature records
-(including 10 metamagics and 28 eldritch invocations), 4 complete backgrounds, 33
-starting-equipment packages, 17 feats, 339 spells, 38 weapons and 64 complete Beast stat blocks
-eligible for Wild Shape. It is distributed under CC BY 4.0; see [`NOTICE-SRD.md`](NOTICE-SRD.md).
-
-The two editions are two sets of texts over **one set of identifiers**: the English pack adopts the
-Italian ids rather than minting its own, and a generated crosswalk maps the names between them.
-Those ids are what a saved sheet stores, so switching language renames what a character shows
-without orphaning a single feature, spell or feat it had already chosen.
-
-## Modular rulesets
-
-The **Rules** destination lists bundled standards as read only and lets a table create an editable
-homebrew fork or a blank independent ruleset. Publishing freezes a revision and validates all
-formula and reference links. Every new game embeds that exact revision; an existing game can switch
-revision with pause, conservative state migration, audit and Undo.
-
-Independent rulesets do not inherit undeclared SRD classes, stats, skills, equipment, damage types
-or conditions. Their generic runtime supports typed values, formulas, tables, resources, arbitrary
-events and triggers, named turn budgets, linked effects and scoped state for session, actor, object,
-scene or campaign. Rulesets can also declare state lifetime/ownership/sync, multi-target actions,
-health models, movement topology and units, scene procedures, and persisted data-generated sheet
-sections. The primary guided sheet remains deliberately D&D-shaped, while classless or radically
-different games use those generated sections and the general non-combat `GameSession`. Portable
-homebrew revisions can be imported or exported from Rules. The detailed capability contract is in
-[`docs/piano-regole-modulari.md`](docs/piano-regole-modulari.md).
 
 ## Architecture
 
@@ -577,7 +634,7 @@ homebrew revisions can be imported or exported from Rules. The detailed capabili
 | `engine/board-model` | Java 17 | board layer: ink, templates, stamps, labels, scene tokens, fog, floor, wall and explored masks, vision settings and the sight field |
 | `engine/persistence-json` | Java 17 | atomic saves, backups, import and export |
 | `engine/character-rules` | Kotlin | versioned class choices, XP progression and class resources |
-| `engine/sheet-model` | Kotlin | 2024 character sheet and 2025 monster stat block |
+| `engine/sheet-model` | Kotlin | D&D character/monster sheets plus persisted rules-generated sections and fields |
 | `content/srd-5.2.1-it` | Kotlin/JSON | Italian and English SRD classes, backgrounds, equipment, beasts, feats, actions and spells (CC BY 4.0) |
 | `shared-ui` | Kotlin + Compose MP | theme, components, screens, presentation state |
 | `desktop-app` | Kotlin | JVM window, dense shell |

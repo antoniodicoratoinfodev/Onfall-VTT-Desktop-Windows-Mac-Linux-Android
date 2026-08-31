@@ -23,11 +23,11 @@ import kotlin.math.sin
  *
  * Come i ritratti, niente immagini importate: le icone sono poche linee — spade
  * incrociate per la battaglia, un d20 per la nuova partita, un tomo per il
- * Compendio, un ingranaggio per le impostazioni — cosi' l'identita' visiva resta
- * originale e scala a ogni densita'.
+ * Compendio, una pergamena per le Regole e un ingranaggio per le impostazioni —
+ * cosi' l'identita' visiva resta originale e scala a ogni densita'.
  */
 enum class AppGlyph {
-    SWORDS, D20, TOME, GEAR,
+    SWORDS, D20, TOME, SCROLL, GEAR,
     TABLE, EDIT_BOARD, HAND, MEASURE, INK, TEMPLATE, LABEL, PING, FOG, FLOOR, WALL, LAYERS, ERASER, TOKEN,
 }
 
@@ -60,10 +60,31 @@ fun GlyphIcon(
             AppGlyph.SWORDS -> drawSwords(tint, stroke)
             AppGlyph.D20 -> drawD20(tint, stroke)
             AppGlyph.TOME -> drawTome(tint, stroke)
+            AppGlyph.SCROLL -> drawScroll(tint, stroke)
             AppGlyph.GEAR -> drawGear(tint, stroke)
             else -> drawBoardGlyph(glyph, tint, stroke)
         }
     }
+}
+
+/** Pergamena con righe di testo: distingue le regole dal tomo del Compendio. */
+private fun DrawScope.drawScroll(tint: Color, stroke: Stroke) {
+    val w = size.width
+    val h = size.height
+    val scroll = Path().apply {
+        moveTo(w * .28f, h * .18f)
+        lineTo(w * .71f, h * .18f)
+        cubicTo(w * .82f, h * .18f, w * .84f, h * .31f, w * .72f, h * .31f)
+        lineTo(w * .72f, h * .74f)
+        cubicTo(w * .72f, h * .84f, w * .61f, h * .86f, w * .61f, h * .76f)
+        lineTo(w * .28f, h * .76f)
+        lineTo(w * .28f, h * .30f)
+        cubicTo(w * .17f, h * .30f, w * .16f, h * .18f, w * .28f, h * .18f)
+    }
+    drawPath(scroll, tint, style = stroke)
+    drawLine(tint, Offset(w * .37f, h * .39f), Offset(w * .63f, h * .39f), stroke.width * .72f, StrokeCap.Round)
+    drawLine(tint, Offset(w * .37f, h * .51f), Offset(w * .63f, h * .51f), stroke.width * .72f, StrokeCap.Round)
+    drawLine(tint, Offset(w * .37f, h * .63f), Offset(w * .56f, h * .63f), stroke.width * .72f, StrokeCap.Round)
 }
 
 /** Famiglia dei glifi del Lucido, costruita con lo stesso tratto degli originali. */

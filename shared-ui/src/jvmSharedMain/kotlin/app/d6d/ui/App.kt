@@ -104,7 +104,7 @@ enum class Destination(val icon: AppGlyph) {
     BATTAGLIA(AppGlyph.SWORDS),
     INCONTRO(AppGlyph.D20),
     COMPENDIO(AppGlyph.TOME),
-    REGOLE(AppGlyph.TOME),
+    REGOLE(AppGlyph.SCROLL),
     IMPOSTAZIONI(AppGlyph.GEAR),
 }
 
