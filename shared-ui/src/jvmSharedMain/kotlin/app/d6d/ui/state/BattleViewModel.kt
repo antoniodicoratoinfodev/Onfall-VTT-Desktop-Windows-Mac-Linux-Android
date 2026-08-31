@@ -26,6 +26,7 @@ import app.d6d.domain.combat.SpellSlotResourceId
 import app.d6d.domain.combat.TurnBudget
 import app.d6d.domain.combat.TurnResource
 import app.d6d.domain.space.BattleMap
+import app.d6d.domain.space.BoardGeometry
 import app.d6d.domain.space.GridPosition
 import app.d6d.domain.space.MapGrid
 import app.d6d.domain.space.TokenPlacement
@@ -35,6 +36,8 @@ import app.d6d.board.WallMask
 import app.d6d.engine.CombatRuleException
 import app.d6d.engine.CombatSession
 import app.d6d.rules.model.RuleKind
+import app.d6d.rules.model.RuleAutomationLevel
+import app.d6d.rules.model.RuleEntity
 import app.d6d.rules.model.CoreRuleIds
 import app.d6d.rules.model.RuleRuntimeState
 import app.d6d.rules.model.RuleScope
@@ -45,6 +48,7 @@ import app.d6d.engine.ai.EnemyCpuActionReport
 import app.d6d.engine.ai.EnemyCpuActionType
 import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.engine.ai.EnemyCpuResult
+import app.d6d.engine.ai.EnemyCpuRulesSupport
 import app.d6d.sheet.i18n.distanceLabel
 import app.d6d.ui.components.FloatKind
 import app.d6d.ui.components.FloatingNumber
@@ -365,6 +369,23 @@ class BattleViewModel(
             }
         }
 
+    /** Primitive generiche consumabili direttamente dagli strumenti del tavolo. */
+    val genericRuleActions: List<RuleEntity>
+        get() = genericEntities(RuleKind.ACTION).filter {
+            it.automationLevel() != RuleAutomationLevel.MANUAL &&
+                (it.attributes().containsKey("conditionFormula") ||
+                    it.attributes()["costs"].orEmpty().isNotBlank() ||
+                    it.attributes()["effectRefs"].orEmpty().isNotBlank())
+        }
+    val genericRuleResources: List<RuleEntity> get() = genericEntities(RuleKind.RESOURCE, RuleKind.TRACK)
+    val genericRuleConditions: List<RuleEntity> get() = genericEntities(RuleKind.CONDITION)
+    val genericHealthModels: List<RuleEntity> get() = genericEntities(RuleKind.HEALTH_MODEL)
+
+    private fun genericEntities(vararg kinds: RuleKind): List<RuleEntity> =
+        if (!state.ruleSession().executable()) emptyList() else state.ruleSession().entities()
+            .filter { it.enabled() && it.kind() in kinds }
+            .sortedBy { it.name().text(AppLocale.language.tag).lowercase() }
+
     /** Quando e' attiva, un doppio clic su un campo lo rende modificabile. */
     private var editModeState by mutableStateOf(false)
 
@@ -404,6 +425,46 @@ class BattleViewModel(
      */
     var enemyCpuEnabled by mutableStateOf(false)
         private set
+
+    val enemyCpuRulesSupport: EnemyCpuRulesSupport
+        get() = if (!state.ruleSession().executable()) {
+            EnemyCpuRulesSupport.assess(Srd521Ruleset.revision, Srd521Ruleset.revision)
+        } else runCatching {
+            val embedded = RulesetRevision.create(
+                state.rulesetBinding().projectId(),
+                state.rulesetBinding().revisionId(),
+                "session",
+                state.rulesetBinding().displayName(),
+                "",
+                app.d6d.rules.model.RulesetOrigin.HOMEBREW,
+                "",
+                state.rulesetRuntime(),
+                state.ruleSession().entities(),
+                "",
+            )
+            EnemyCpuRulesSupport.assess(embedded, Srd521Ruleset.revision)
+        }.getOrElse {
+            EnemyCpuRulesSupport(
+                EnemyCpuRulesSupport.Mode.MANUAL_ONLY,
+                listOf("RULESET_SNAPSHOT_CANNOT_BE_ASSESSED"),
+            )
+        }
+
+    /** Geometria dichiarata dalla revisione; le partite SRD usano l'adattatore quadrato storico. */
+    val boardGeometry: BoardGeometry
+        get() = if (!state.ruleSession().executable()) {
+            BoardGeometry.legacySquare(state.battleMap().grid())
+        } else {
+            val movement = runCatching {
+                state.ruleSession().compile(state.rulesetBinding().canonicalHash())
+                    .movementModels().values.firstOrNull()
+            }.getOrNull()
+            movement?.let(BoardGeometry::from) ?: BoardGeometry.legacySquare(state.battleMap().grid())
+        }
+
+    val tacticalBoardAutomationAvailable: Boolean
+        get() = boardGeometry.topology() == app.d6d.rules.model.CompiledRuleset.BoardTopology.SQUARE &&
+            boardGeometry.diagonalRule() == app.d6d.rules.model.CompiledRuleset.DiagonalRule.UNIFORM
 
     var enemyCpuBusy by mutableStateOf(false)
         internal set
@@ -1661,7 +1722,7 @@ class BattleViewModel(
         settleEnemyCpuTurn()
         command { session.changeRuleset(revision) }
         val applied = state.rulesetBinding().canonicalHash() == revision.canonicalHash()
-        if (applied && !revision.legacyCombatAutomationCompatibleWith(Srd521Ruleset.revision)) {
+        if (applied && !EnemyCpuRulesSupport.assess(revision, Srd521Ruleset.revision).automated()) {
             enemyCpuEnabled = false
             suppressedEnemyCpuTurnSignature = null
             completedEnemyCpuTurnSignature = null
@@ -1756,6 +1817,16 @@ class BattleViewModel(
     ): Boolean {
         val before = state.revision()
         command { session.executeRuleAction(sourceScope, targetScope, ruleId) }
+        return state.revision() != before
+    }
+
+    fun executeGenericRuleAction(
+        ruleId: String,
+        sourceScope: RuleScope,
+        targetScopes: List<RuleScope>,
+    ): Boolean {
+        val before = state.revision()
+        command { session.executeRuleAction(sourceScope, targetScopes, ruleId) }
         return state.revision() != before
     }
 
@@ -2477,7 +2548,7 @@ class BattleViewModel(
             ?: EncounterMode.ROLEPLAY_FIGHT_EXPLORATION
         val restoredCpuDifficulty = presentation["enemyCpuDifficulty"]
             ?.let { name -> runCatching { EnemyCpuDifficulty.valueOf(name) }.getOrNull() }
-        enemyCpuEnabled = restoredCpuDifficulty != null
+        enemyCpuEnabled = restoredCpuDifficulty != null && enemyCpuRulesSupport.automated()
         enemyCpuDifficulty = restoredCpuDifficulty ?: EnemyCpuDifficulty.MEDIUM
         enemyCpuSpeed = presentation["enemyCpuSpeed"]
             ?.let { name -> runCatching { EnemyCpuSpeed.valueOf(name) }.getOrNull() }

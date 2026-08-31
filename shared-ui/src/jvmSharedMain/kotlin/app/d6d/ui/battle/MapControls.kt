@@ -65,6 +65,7 @@ fun MapControls(
     modifier: Modifier = Modifier,
 ) {
     val grid = viewModel.battleMap.grid()
+    val geometry = viewModel.boardGeometry
     val words = strings.battle
     val language = currentLanguage
     var expanded by remember { mutableStateOf(false) }
@@ -87,10 +88,20 @@ fun MapControls(
                     words.gridSummary(
                         grid.columns(),
                         grid.rows(),
-                        distanceLabel(grid.feetPerSquare(), language),
+                        if (geometry.canonicalUnit() == "ft") {
+                            distanceLabel(geometry.unitsPerCell().toInt(), language)
+                        } else {
+                            "${geometry.unitsPerCell().toPlainString()} ${geometry.canonicalUnit()}"
+                        },
                     ),
                     Palette.TextMuted,
                 )
+                if (!viewModel.tacticalBoardAutomationAvailable) {
+                    Chip(
+                        "${geometry.topology().name.lowercase().replace('_', ' ')} · ${geometry.diagonalRule().name.lowercase().replace('_', ' ')}",
+                        Palette.Party,
+                    )
+                }
             }
             GameButton("−", accent = Palette.TextMuted, dense = true, onClick = {
                 onCellSizeChange((cellSize - 6.dp).coerceIn(MIN_CELL, MAX_CELL))
@@ -201,6 +212,7 @@ fun MapControls(
                         accent = if (grid.feetPerSquare() == feet) Palette.GoldBright else Palette.TextFaint,
                         selected = grid.feetPerSquare() == feet,
                         dense = true,
+                        enabled = viewModel.tacticalBoardAutomationAvailable,
                         onClick = { viewModel.configureMap(grid.columns(), grid.rows(), feet) },
                     )
                 }

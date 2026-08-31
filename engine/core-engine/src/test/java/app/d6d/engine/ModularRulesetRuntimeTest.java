@@ -275,6 +275,28 @@ class ModularRulesetRuntimeTest {
     }
 
     @Test
+    void multiTargetActionPaysCostsOnceAndRemainsOneUndoableCommand() {
+        CombatSession session = active(executableRevision("revision:scoped-many:1", 10, 2));
+        RuleScope hero = RuleScope.actor("hero");
+        RuleScope goblin = RuleScope.actor("goblin");
+
+        session.executeRuleAction(hero, List.of(hero, goblin), "test:action:push");
+
+        assertEquals(new BigDecimal("4"), session.genericRuleState(hero).resources()
+                .get("test:resource:momentum").current());
+        assertEquals(new BigDecimal("1"), session.genericRuleState(hero).turnBudget().get("spotlight"));
+        assertEquals(1, session.genericRuleState(hero).conditionStacks().get("test:condition:exposed"));
+        assertEquals(1, session.genericRuleState(goblin).conditionStacks().get("test:condition:exposed"));
+        assertEquals("2", session.auditTrail().get(session.auditTrail().size() - 1).details().get("targetCount"));
+
+        assertTrue(session.undo());
+        assertEquals(new BigDecimal("6"), session.genericRuleState(hero).resources()
+                .get("test:resource:momentum").current());
+        assertFalse(session.genericRuleState(hero).conditionStacks().containsKey("test:condition:exposed"));
+        assertFalse(session.genericRuleState(goblin).conditionStacks().containsKey("test:condition:exposed"));
+    }
+
+    @Test
     void aLateTriggerBudgetFailureRollsBackCostsStateAuditAndUndo() {
         List<RuleEntity> entities = List.of(
                 entity("test:turn", RuleKind.ACTION_ECONOMY, Map.of("budgets", "action=1")),

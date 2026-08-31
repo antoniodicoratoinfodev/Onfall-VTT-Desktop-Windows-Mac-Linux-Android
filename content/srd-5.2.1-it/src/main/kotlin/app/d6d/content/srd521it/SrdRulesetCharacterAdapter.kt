@@ -108,7 +108,6 @@ object SrdRulesetCharacterAdapter {
             definition
         }.sortedWith(compareBy<ClassDefinition> { it.id.ordinal }.thenBy { it.id.value })
 
-        require(classes.isNotEmpty()) { "A playable ruleset must contain at least one enabled class" }
         val statIds = stats.mapTo(mutableSetOf()) { it.id }
         classes.forEach { definition ->
             val referenced = definition.primaryAbilities + definition.savingThrowProficiencies +
@@ -128,7 +127,10 @@ object SrdRulesetCharacterAdapter {
         val declaredMaximum = declaredMaximumRaw?.toIntOrNull()
             ?: if (declaredMaximumRaw == null) null else error("maximumCharacterLevel must be an integer")
         declaredMaximum?.let { require(it >= 1) { "maximumCharacterLevel must be at least 1" } }
-        val largestClassLevel = classes.maxOf { it.maximumLevel }
+        // Un regolamento classless resta proiettabile: la scheda generata e la
+        // GameSession non devono inventare una classe soltanto per attraversare
+        // questo adattatore D&D. Il servizio guidato vedrà semplicemente zero classi.
+        val largestClassLevel = classes.maxOfOrNull { it.maximumLevel } ?: 1
         // Una classe homebrew può estendere il limite ereditato dal regolamento
         // di base: i suoi livelli non devono diventare irraggiungibili perché
         // la progressione SRD fotografava ancora il livello 20.

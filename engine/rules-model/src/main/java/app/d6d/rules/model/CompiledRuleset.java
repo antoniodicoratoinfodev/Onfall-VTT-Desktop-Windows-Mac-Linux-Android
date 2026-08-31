@@ -40,6 +40,11 @@ public final class CompiledRuleset {
     public enum CostPool { TURN, RESOURCE }
     public enum RandomizerMode { DICE, DICE_POOL, PERCENTILE, TABLE, MANUAL }
     public enum KeepMode { SUM, HIGHEST, LOWEST, SUCCESSES }
+    public enum SheetLayout { LIST, GRID, CARDS, COMPACT }
+    public enum BoardTopology { SQUARE, HEX_POINTY, HEX_FLAT, GRIDLESS, THEATRE_OF_MIND }
+    public enum DiagonalRule { UNIFORM, FIVE_TEN_FIVE, EUCLIDEAN, MANUAL }
+    public enum ZeroState { NONE, DISABLED, UNCONSCIOUS, DYING, DEAD, MANUAL }
+    public enum ConditionStacking { REPLACE, STACK, HIGHEST, SEPARATE_BY_SOURCE }
 
     public interface RandomSource {
         /** Restituisce un intero uniforme nell'intervallo [0, bound). */
@@ -103,11 +108,15 @@ public final class CompiledRuleset {
             RuleValue.Type type,
             RuleValue defaultValue,
             Set<String> allowedValues,
-            boolean mutable) {
+            boolean mutable,
+            String dimension,
+            String canonicalUnit) {
         public ValueDefinition {
             id = requireId(id);
             type = Objects.requireNonNull(type, "type");
             defaultValue = Objects.requireNonNull(defaultValue, "defaultValue");
+            dimension = dimension == null || dimension.isBlank() ? "SCALAR" : requireId(dimension).toUpperCase(Locale.ROOT);
+            canonicalUnit = canonicalUnit == null ? "" : canonicalUnit.trim();
             if (defaultValue.type() != type) throw new IllegalArgumentException(id + " default value type differs");
             LinkedHashSet<String> normalized = new LinkedHashSet<>();
             Objects.requireNonNull(allowedValues, "allowedValues").forEach(value ->
@@ -121,6 +130,10 @@ public final class CompiledRuleset {
         public boolean accepts(RuleValue value) {
             return value != null && value.type() == type
                     && (allowedValues.isEmpty() || allowedValues.contains(value.canonicalValue()));
+        }
+
+        public boolean dimensional() {
+            return !"SCALAR".equals(dimension);
         }
     }
 
@@ -266,6 +279,99 @@ public final class CompiledRuleset {
         }
     }
 
+    /** Condizione generica; gli effetti meccanici restano normali MODIFIER collegati. */
+    public record ConditionDefinition(
+            String id,
+            int maximumStacks,
+            ConditionStacking stacking,
+            boolean sourceScoped,
+            String removalEvent) {
+        public ConditionDefinition {
+            id = requireId(id);
+            if (maximumStacks < 1 || maximumStacks > 1_000) {
+                throw new IllegalArgumentException(id + " maximumStacks is invalid");
+            }
+            stacking = Objects.requireNonNull(stacking, "stacking");
+            removalEvent = removalEvent == null ? "" : removalEvent.trim().toUpperCase(Locale.ROOT);
+        }
+    }
+
+    /** Modello salute composto da risorse aperte, non da campi PF obbligatori. */
+    public record HealthModelDefinition(
+            String id,
+            String primaryResourceRef,
+            List<String> bufferResourceRefs,
+            String zeroConditionRef,
+            String deathConditionRef,
+            boolean allowsNegative,
+            ZeroState zeroState) {
+        public HealthModelDefinition {
+            id = requireId(id);
+            primaryResourceRef = requireId(primaryResourceRef);
+            bufferResourceRefs = immutableIds(bufferResourceRefs);
+            zeroConditionRef = zeroConditionRef == null ? "" : zeroConditionRef.trim();
+            deathConditionRef = deathConditionRef == null ? "" : deathConditionRef.trim();
+            zeroState = Objects.requireNonNull(zeroState, "zeroState");
+        }
+    }
+
+    /** Geometria e unita' canonica richieste dal regolamento. */
+    public record MovementDefinition(
+            String id,
+            BoardTopology topology,
+            DiagonalRule diagonalRule,
+            BigDecimal unitsPerCell,
+            String canonicalUnit,
+            boolean elevation,
+            boolean occupancyRequired) {
+        public MovementDefinition {
+            id = requireId(id);
+            topology = Objects.requireNonNull(topology, "topology");
+            diagonalRule = Objects.requireNonNull(diagonalRule, "diagonalRule");
+            unitsPerCell = normalize(Objects.requireNonNull(unitsPerCell, "unitsPerCell"));
+            if (unitsPerCell.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException(id + " unitsPerCell must be positive");
+            }
+            canonicalUnit = canonicalUnit == null || canonicalUnit.isBlank()
+                    ? "unit" : canonicalUnit.trim();
+        }
+    }
+
+    /** Sezione della scheda composta da riferimenti a campi del medesimo snapshot. */
+    public record SheetSectionDefinition(
+            String id,
+            int order,
+            int columns,
+            SheetLayout layout,
+            List<String> fieldRefs,
+            RuleFormula visibilityFormula) {
+        public SheetSectionDefinition {
+            id = requireId(id);
+            if (columns < 1 || columns > 12) throw new IllegalArgumentException(id + " columns is invalid");
+            layout = Objects.requireNonNull(layout, "layout");
+            fieldRefs = immutableIds(fieldRefs);
+            if (fieldRefs.isEmpty()) throw new IllegalArgumentException(id + " sheet section needs fields");
+            visibilityFormula = Objects.requireNonNull(visibilityFormula, "visibilityFormula");
+        }
+    }
+
+    /** Workflow di scena generico; azioni e tracker sono entita' gia' validate. */
+    public record SceneProcedureDefinition(
+            String id,
+            List<String> phases,
+            List<String> actionRefs,
+            List<String> trackerRefs,
+            boolean initiativeRequired,
+            boolean boardRequired) {
+        public SceneProcedureDefinition {
+            id = requireId(id);
+            phases = immutableIds(phases);
+            actionRefs = immutableIds(actionRefs);
+            trackerRefs = immutableIds(trackerRefs);
+            if (phases.isEmpty()) throw new IllegalArgumentException(id + " scene procedure needs phases");
+        }
+    }
+
     public record CapabilityProfile(
             boolean dynamicStats,
             boolean dynamicSkills,
@@ -278,6 +384,11 @@ public final class CompiledRuleset {
             boolean dynamicDamageTypes,
             boolean dynamicConditions,
             boolean typedValues,
+            boolean healthModels,
+            boolean movementModels,
+            boolean sheetSections,
+            boolean sceneProcedures,
+            boolean statePolicies,
             long manualRuleCount) { }
 
     private final String canonicalHash;
@@ -293,6 +404,12 @@ public final class CompiledRuleset {
     private final Map<String, ActionDefinition> actions;
     private final Map<String, ModifierDefinition> modifiers;
     private final Map<String, TriggerDefinition> triggers;
+    private final Map<String, ConditionDefinition> conditionDefinitions;
+    private final Map<String, HealthModelDefinition> healthModels;
+    private final Map<String, MovementDefinition> movementModels;
+    private final Map<String, SheetSectionDefinition> sheetSections;
+    private final Map<String, SceneProcedureDefinition> sceneProcedures;
+    private final Map<String, StatePersistencePolicy> persistencePolicies;
     private final Set<String> damageTypes;
     private final Set<String> conditions;
     private final ProgressionDefinition progression;
@@ -312,6 +429,12 @@ public final class CompiledRuleset {
             Map<String, ActionDefinition> actions,
             Map<String, ModifierDefinition> modifiers,
             Map<String, TriggerDefinition> triggers,
+            Map<String, ConditionDefinition> conditionDefinitions,
+            Map<String, HealthModelDefinition> healthModels,
+            Map<String, MovementDefinition> movementModels,
+            Map<String, SheetSectionDefinition> sheetSections,
+            Map<String, SceneProcedureDefinition> sceneProcedures,
+            Map<String, StatePersistencePolicy> persistencePolicies,
             Set<String> damageTypes,
             Set<String> conditions,
             ProgressionDefinition progression,
@@ -329,6 +452,12 @@ public final class CompiledRuleset {
         this.actions = Map.copyOf(actions);
         this.modifiers = Map.copyOf(modifiers);
         this.triggers = Map.copyOf(triggers);
+        this.conditionDefinitions = Map.copyOf(conditionDefinitions);
+        this.healthModels = Map.copyOf(healthModels);
+        this.movementModels = Map.copyOf(movementModels);
+        this.sheetSections = Map.copyOf(sheetSections);
+        this.sceneProcedures = Map.copyOf(sceneProcedures);
+        this.persistencePolicies = Map.copyOf(persistencePolicies);
         this.damageTypes = Set.copyOf(damageTypes);
         this.conditions = Set.copyOf(conditions);
         this.progression = progression;
@@ -347,6 +476,12 @@ public final class CompiledRuleset {
     public Map<String, ActionDefinition> actions() { return actions; }
     public Map<String, ModifierDefinition> modifiers() { return modifiers; }
     public Map<String, TriggerDefinition> triggers() { return triggers; }
+    public Map<String, ConditionDefinition> conditionDefinitions() { return conditionDefinitions; }
+    public Map<String, HealthModelDefinition> healthModels() { return healthModels; }
+    public Map<String, MovementDefinition> movementModels() { return movementModels; }
+    public Map<String, SheetSectionDefinition> sheetSections() { return sheetSections; }
+    public Map<String, SceneProcedureDefinition> sceneProcedures() { return sceneProcedures; }
+    public Map<String, StatePersistencePolicy> persistencePolicies() { return persistencePolicies; }
     public Set<String> damageTypes() { return damageTypes; }
     public Set<String> conditions() { return conditions; }
     public ProgressionDefinition progression() { return progression; }
@@ -794,6 +929,85 @@ public final class CompiledRuleset {
         return new ScopedRuleExecutionResult(triggered.states(), combined);
     }
 
+    /**
+     * Variante atomica multi-bersaglio: i costi si pagano una sola volta, gli
+     * effetti TARGET raggiungono ogni scope scelto e SELF/SESSION si applicano
+     * una sola volta. L'ordine dei bersagli fornito dal comando determina
+     * soltanto l'ordine degli eventi, non il risultato finale.
+     */
+    public ScopedRuleExecutionResult executeScopedActionToTargets(
+            String actionId,
+            RuleScope sourceScope,
+            List<RuleScope> targetScopes,
+            Map<RuleScope, RuleRuntimeState> originalStates) {
+        RuleScope source = Objects.requireNonNull(sourceScope, "sourceScope");
+        List<RuleScope> targets = List.copyOf(new LinkedHashSet<>(
+                Objects.requireNonNull(targetScopes, "targetScopes")));
+        if (targets.isEmpty()) throw new IllegalArgumentException("A rule action needs at least one target scope");
+        if (targets.stream().anyMatch(Objects::isNull)) throw new NullPointerException("targetScopes contains null");
+        if (targets.size() == 1) return executeScopedAction(actionId, source, targets.get(0), originalStates);
+
+        LinkedHashMap<RuleScope, RuleRuntimeState> states = scopedFrameForTargets(originalStates, source, targets);
+        ActionDefinition action = actions.get(resolveId(actionId));
+        if (action == null) throw new IllegalArgumentException("Unknown executable action " + actionId);
+        RuleRuntimeState sourceState = states.get(source);
+        if (!action.ownerRef.isEmpty() && !sourceState.activeRuleIds().contains(resolveId(action.ownerRef))) {
+            throw new IllegalStateException("Action " + action.id + " is not active for this state");
+        }
+        RuntimeContext initialContext = new RuntimeContext(sourceState, Map.of(), new LinkedHashSet<>());
+        if (!truth(action.conditionFormula.evaluate(initialContext))) {
+            throw new IllegalStateException("Action " + action.id + " prerequisites are not satisfied");
+        }
+        List<BigDecimal> amounts = action.costs.stream()
+                .map(cost -> cost.amountFormula.evaluate(initialContext)).toList();
+        validateActionCosts(action, sourceState, amounts);
+
+        ArrayList<RuleRuntimeEvent> events = new ArrayList<>();
+        long sequence = 0;
+        for (int index = 0; index < action.costs.size(); index++) {
+            ActionCost cost = action.costs.get(index);
+            String costTarget = cost.pool == CostPool.TURN ? cost.targetRef : resolveId(cost.targetRef);
+            BigDecimal amount = amounts.get(index);
+            if (cost.pool == CostPool.TURN) {
+                LinkedHashMap<String, BigDecimal> budget = new LinkedHashMap<>(sourceState.turnBudget());
+                BigDecimal before = budget.getOrDefault(costTarget, BigDecimal.ZERO);
+                budget.put(costTarget, before.subtract(amount));
+                sourceState = sourceState.withTurnBudget(budget);
+                events.add(scopedEvent(
+                        event(sequence++, "TURN_RESOURCE_SPENT", action.id, costTarget, before, budget.get(costTarget)),
+                        source));
+            } else {
+                RuleRuntimeState.ResourceState before = sourceState.resources().get(costTarget);
+                RuleRuntimeState.ResourceState after = before.withCurrent(before.current().subtract(amount));
+                sourceState = sourceState.withResource(after);
+                events.add(scopedEvent(
+                        event(sequence++, "RESOURCE_CHANGED", action.id, costTarget, before.current(), after.current()),
+                        source));
+            }
+        }
+        states.put(source, sourceState);
+        for (String effectRef : action.effectRefs) {
+            ModifierDefinition effect = modifiers.get(resolveId(effectRef));
+            if (effect == null) throw new IllegalArgumentException("Action references a missing effect " + effectRef);
+            List<RuleScope> recipients = effect.recipient == EffectRecipient.TARGET ? targets : List.of(targets.get(0));
+            for (RuleScope target : recipients) {
+                ScopedApplied applied = applyScopedEffect(states, effect, action.id, sequence, source, target);
+                states = applied.states;
+                sequence += applied.events.size();
+                events.addAll(applied.events);
+            }
+        }
+        String targetKeys = targets.stream().map(RuleScope::canonicalKey)
+                .collect(java.util.stream.Collectors.joining(","));
+        events.add(new RuleRuntimeEvent(sequence++, "ACTION_EXECUTED", action.id, "", Map.of(
+                "sourceScope", source.canonicalKey(), "targetScopes", targetKeys)));
+        ScopedRuleExecutionResult triggered = fireScopedEventsToTargets(
+                states, events.stream().map(RuleRuntimeEvent::type).toList(), sequence, source, targets);
+        ArrayList<RuleRuntimeEvent> combined = new ArrayList<>(events);
+        combined.addAll(triggered.events());
+        return new ScopedRuleExecutionResult(triggered.states(), combined);
+    }
+
     public RuleExecutionResult fireEvent(String eventType, RuleRuntimeState state) {
         String event = requireId(eventType).toUpperCase(Locale.ROOT);
         ArrayList<RuleRuntimeEvent> events = new ArrayList<>();
@@ -801,7 +1015,8 @@ public final class CompiledRuleset {
         RuleExecutionResult triggered = fireEvents(recovered, events, List.of(event), events.size());
         ArrayList<RuleRuntimeEvent> combined = new ArrayList<>(events);
         combined.addAll(triggered.events());
-        return new RuleExecutionResult(triggered.state(), combined);
+        RuleRuntimeState expired = expireState(event, triggered.state(), combined);
+        return new RuleExecutionResult(expired, combined);
     }
 
     public ScopedRuleExecutionResult fireScopedEvent(
@@ -825,7 +1040,117 @@ public final class CompiledRuleset {
         ScopedRuleExecutionResult triggered = fireScopedEvents(
                 states, emittedTypes, events.size(), source, target);
         scopedRecovery.addAll(triggered.events());
-        return new ScopedRuleExecutionResult(triggered.states(), scopedRecovery);
+        LinkedHashMap<RuleScope, RuleRuntimeState> expiredStates = new LinkedHashMap<>(triggered.states());
+        RuleRuntimeState expired = expireState(event, expiredStates.get(source), scopedRecovery);
+        expiredStates.put(source, expired);
+        return new ScopedRuleExecutionResult(expiredStates, scopedRecovery);
+    }
+
+    /** Policy effettiva; le entita' senza dichiarazione restano permanenti e locali. */
+    public StatePersistencePolicy persistencePolicy(String ruleId) {
+        String resolved = resolveId(ruleId);
+        if (!entities.containsKey(resolved)) throw new IllegalArgumentException("Unknown rule " + ruleId);
+        return persistencePolicies.getOrDefault(resolved, StatePersistencePolicy.persistentLocal());
+    }
+
+    public boolean isSheetSectionVisible(String sectionId, RuleRuntimeState state) {
+        SheetSectionDefinition section = sheetSections.get(resolveId(sectionId));
+        if (section == null) throw new IllegalArgumentException("Unknown executable sheet section " + sectionId);
+        return truth(section.visibilityFormula().evaluate(
+                new RuntimeContext(Objects.requireNonNull(state, "state"), Map.of(), new LinkedHashSet<>())));
+    }
+
+    /**
+     * Applica le scadenze dopo recuperi e trigger del medesimo evento.
+     *
+     * <p>Il reset e' costruito in memoria e pubblicato come un solo nuovo stato:
+     * nessun osservatore puo' vedere meta' delle risorse gia' ripristinate e
+     * meta' ancora appartenenti alla scena precedente.</p>
+     */
+    private RuleRuntimeState expireState(
+            String event,
+            RuleRuntimeState original,
+            List<RuleRuntimeEvent> events) {
+        List<String> expiring = persistencePolicies.entrySet().stream()
+                .filter(entry -> entry.getValue().expiresOn(event))
+                .map(Map.Entry::getKey)
+                .sorted()
+                .toList();
+        if (expiring.isEmpty()) return original;
+
+        LinkedHashMap<String, RuleValue> values = new LinkedHashMap<>(original.values());
+        LinkedHashMap<String, RuleRuntimeState.ResourceState> pools = new LinkedHashMap<>(original.resources());
+        LinkedHashMap<String, Integer> stacks = new LinkedHashMap<>(original.conditionStacks());
+        LinkedHashMap<String, BigDecimal> budget = new LinkedHashMap<>(original.turnBudget());
+        RuleRuntimeState fresh = null;
+        boolean resetTurn = false;
+        boolean changed = false;
+
+        for (String id : expiring) {
+            RuleEntity entity = entities.get(id);
+            if (entity == null) continue;
+            switch (entity.kind()) {
+                case VALUE -> {
+                    ValueDefinition definition = valueDefinitions.get(id);
+                    if (definition == null) continue;
+                    RuleValue before = values.get(id);
+                    RuleValue after = definition.defaultValue();
+                    if (!Objects.equals(before, after)) {
+                        values.put(id, after);
+                        changed = true;
+                        events.add(new RuleRuntimeEvent(events.size(), "STATE_EXPIRED", id, id, Map.of(
+                                "event", event, "before", before == null ? "" : before.canonicalValue(),
+                                "after", after.canonicalValue())));
+                    }
+                }
+                case STAT, SKILL, SAVE, DEFENSE -> {
+                    RuleValue before = values.remove(id);
+                    if (before != null) {
+                        changed = true;
+                        events.add(new RuleRuntimeEvent(events.size(), "STATE_EXPIRED", id, id,
+                                Map.of("event", event, "before", before.canonicalValue(), "after", "derived")));
+                    }
+                }
+                case RESOURCE, TRACK -> {
+                    if (fresh == null) fresh = initialState(values, original.activeRuleIds());
+                    RuleRuntimeState.ResourceState before = pools.get(id);
+                    RuleRuntimeState.ResourceState after = fresh.resources().get(id);
+                    if (after != null && !Objects.equals(before, after)) {
+                        pools.put(id, after);
+                        changed = true;
+                        events.add(new RuleRuntimeEvent(events.size(), "STATE_EXPIRED", id, id, Map.of(
+                                "event", event,
+                                "before", before == null ? "" : before.current().toPlainString(),
+                                "after", after.current().toPlainString())));
+                    }
+                }
+                case CONDITION -> {
+                    Integer before = stacks.remove(id);
+                    if (before != null) {
+                        changed = true;
+                        events.add(new RuleRuntimeEvent(events.size(), "STATE_EXPIRED", id, id,
+                                Map.of("event", event, "before", before.toString(), "after", "0")));
+                    }
+                }
+                case ACTION_ECONOMY -> resetTurn = true;
+                default -> { }
+            }
+        }
+        if (resetTurn) {
+            RuleRuntimeState frame = new RuleRuntimeState(
+                    values, pools, stacks, budget, original.activeRuleIds(), original.revision());
+            Map<String, BigDecimal> reset = beginTurn(frame).turnBudget();
+            if (!reset.equals(budget)) {
+                budget.clear();
+                budget.putAll(reset);
+                changed = true;
+                events.add(new RuleRuntimeEvent(events.size(), "STATE_EXPIRED", "action-economy", "", Map.of(
+                        "event", event, "after", "reset")));
+            }
+        }
+        if (!changed) return original;
+        return new RuleRuntimeState(
+                values, pools, stacks, budget, original.activeRuleIds(), original.revision() + 1);
     }
 
     public int levelForExperience(BigDecimal experience) {
@@ -958,6 +1283,59 @@ public final class CompiledRuleset {
         return new ScopedRuleExecutionResult(states, emitted);
     }
 
+    private ScopedRuleExecutionResult fireScopedEventsToTargets(
+            Map<RuleScope, RuleRuntimeState> originalStates,
+            List<String> initialEvents,
+            long initialSequence,
+            RuleScope source,
+            List<RuleScope> targets) {
+        LinkedHashMap<RuleScope, RuleRuntimeState> states = scopedFrameForTargets(originalStates, source, targets);
+        ArrayList<RuleRuntimeEvent> emitted = new ArrayList<>();
+        Deque<String> queue = new ArrayDeque<>();
+        initialEvents.forEach(value -> queue.add(value.toUpperCase(Locale.ROOT)));
+        LinkedHashMap<String, Integer> executions = new LinkedHashMap<>();
+        long sequence = initialSequence;
+        int processed = 0;
+        while (!queue.isEmpty()) {
+            if (++processed > MAX_TRIGGER_EVENTS) throw new IllegalStateException("Trigger event budget exceeded");
+            String event = queue.removeFirst();
+            List<TriggerDefinition> matching = triggers.values().stream()
+                    .filter(trigger -> trigger.event.equals(event))
+                    .sorted(Comparator.comparingInt(TriggerDefinition::priority).reversed()
+                            .thenComparing(TriggerDefinition::id))
+                    .toList();
+            for (TriggerDefinition trigger : matching) {
+                int used = executions.getOrDefault(trigger.id, 0);
+                if (used >= trigger.maximumExecutions) continue;
+                RuntimeContext context = new RuntimeContext(states.get(source),
+                        Map.of("eventCount", BigDecimal.valueOf(processed)), new LinkedHashSet<>());
+                if (!truth(trigger.conditionFormula.evaluate(context))) continue;
+                executions.put(trigger.id, used + 1);
+                for (String effectRef : trigger.effectRefs) {
+                    ModifierDefinition effect = modifiers.get(resolveId(effectRef));
+                    if (effect == null) throw new IllegalArgumentException("Trigger references a missing effect " + effectRef);
+                    List<RuleScope> recipients = effect.recipient == EffectRecipient.TARGET
+                            ? targets : List.of(targets.get(0));
+                    for (RuleScope target : recipients) {
+                        ScopedApplied applied = applyScopedEffect(
+                                states, effect, trigger.id, sequence, source, target);
+                        states = applied.states;
+                        sequence += applied.events.size();
+                        emitted.addAll(applied.events);
+                        applied.events.forEach(produced -> queue.addLast(produced.type()));
+                    }
+                }
+                emitted.add(new RuleRuntimeEvent(sequence++, "TRIGGER_FIRED", trigger.id, "", Map.of(
+                        "event", event,
+                        "execution", Integer.toString(used + 1),
+                        "sourceScope", source.canonicalKey(),
+                        "targetScopes", targets.stream().map(RuleScope::canonicalKey)
+                                .collect(java.util.stream.Collectors.joining(",")))));
+            }
+        }
+        return new ScopedRuleExecutionResult(states, emitted);
+    }
+
     private ScopedApplied applyScopedEffect(
             Map<RuleScope, RuleRuntimeState> originalStates,
             ModifierDefinition effect,
@@ -995,6 +1373,26 @@ public final class CompiledRuleset {
         for (RuleScope required : requiredScopes) {
             if (!states.containsKey(required)) {
                 throw new IllegalArgumentException("Missing scoped action state " + required.canonicalKey());
+            }
+        }
+        return states;
+    }
+
+    private static LinkedHashMap<RuleScope, RuleRuntimeState> scopedFrameForTargets(
+            Map<RuleScope, RuleRuntimeState> original,
+            RuleScope source,
+            List<RuleScope> targets) {
+        Objects.requireNonNull(original, "states");
+        LinkedHashMap<RuleScope, RuleRuntimeState> states = new LinkedHashMap<>();
+        original.forEach((scope, state) -> states.put(
+                Objects.requireNonNull(scope, "scope"), Objects.requireNonNull(state, "state")));
+        LinkedHashSet<RuleScope> required = new LinkedHashSet<>();
+        required.add(RuleScope.session());
+        required.add(source);
+        required.addAll(targets);
+        for (RuleScope scope : required) {
+            if (!states.containsKey(scope)) {
+                throw new IllegalArgumentException("Missing scoped action state " + scope.canonicalKey());
             }
         }
         return states;
@@ -1081,6 +1479,8 @@ public final class CompiledRuleset {
     }
 
     private int conditionMaximumStacks(String id) {
+        ConditionDefinition definition = conditionDefinitions.get(id);
+        if (definition != null) return definition.maximumStacks();
         RuleEntity entity = entities.get(id);
         if (entity == null) return 1;
         String raw = entity.attributes().getOrDefault("maximumStacks", "1");

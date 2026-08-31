@@ -664,20 +664,33 @@ public final class CombatSession {
             RuleScope sourceScope,
             RuleScope targetScope,
             String actionId) {
+        return executeRuleAction(sourceScope, List.of(targetScope), actionId);
+    }
+
+    /** Costi una volta sola, effetti TARGET su ogni bersaglio selezionato. */
+    public synchronized ScopedRuleExecutionResult executeRuleAction(
+            RuleScope sourceScope,
+            List<RuleScope> targetScopes,
+            String actionId) {
         requireStatus(CombatStatus.ACTIVE);
         RuleScope source = validateRuleScope(sourceScope);
-        RuleScope target = validateRuleScope(targetScope);
-        LinkedHashMap<RuleScope, RuleRuntimeState> frame = genericRuleFrame(source, target);
+        if (targetScopes == null || targetScopes.isEmpty()) throw rule("A rule action needs at least one target scope");
+        List<RuleScope> targets = targetScopes.stream()
+                .map(this::validateRuleScope)
+                .distinct()
+                .toList();
+        LinkedHashMap<RuleScope, RuleRuntimeState> frame = genericRuleFrame(source, targets);
         beginCommand();
         try {
-            ScopedRuleExecutionResult result = genericRules().executeScopedAction(
-                    actionId, source, target, frame);
+            ScopedRuleExecutionResult result = genericRules().executeScopedActionToTargets(
+                    actionId, source, targets, frame);
             result.states().forEach((scope, changed) ->
                     state.ruleSession = state.ruleSession.withState(scope, changed));
+            RuleScope onlyTarget = targets.size() == 1 ? targets.get(0) : null;
             append(EventType.RULE_ACTION_EXECUTED,
                     source.kind() == RuleScope.Kind.ACTOR ? source.id() : "",
-                    target.kind() == RuleScope.Kind.ACTOR ? target.id() : "",
-                    genericEventDetails(actionId, result.events(), source, target));
+                    onlyTarget != null && onlyTarget.kind() == RuleScope.Kind.ACTOR ? onlyTarget.id() : "",
+                    genericEventDetails(actionId, result.events(), source, targets));
             return result;
         } catch (RuntimeException failure) {
             rollbackFailedCommand();
@@ -771,11 +784,17 @@ public final class CombatSession {
     private LinkedHashMap<RuleScope, RuleRuntimeState> genericRuleFrame(
             RuleScope source,
             RuleScope target) {
+        return genericRuleFrame(source, List.of(target));
+    }
+
+    private LinkedHashMap<RuleScope, RuleRuntimeState> genericRuleFrame(
+            RuleScope source,
+            List<RuleScope> targets) {
         LinkedHashMap<RuleScope, RuleRuntimeState> frame = new LinkedHashMap<>();
         RuleScope sessionScope = RuleScope.session();
         frame.put(sessionScope, genericRuleState(sessionScope));
         frame.put(source, genericRuleState(source));
-        frame.put(target, genericRuleState(target));
+        targets.forEach(target -> frame.put(target, genericRuleState(target)));
         return frame;
     }
 
@@ -810,6 +829,22 @@ public final class CombatSession {
         LinkedHashMap<String, String> scoped = new LinkedHashMap<>(genericEventDetails(source, events));
         scoped.put("scopeKind", scope.kind().name());
         scoped.put("scopeId", scope.id());
+        return Map.copyOf(scoped);
+    }
+
+    private static Map<String, String> genericEventDetails(
+            String sourceRuleId,
+            List<RuleRuntimeEvent> events,
+            RuleScope source,
+            List<RuleScope> targets) {
+        if (targets.size() == 1) return genericEventDetails(sourceRuleId, events, source, targets.get(0));
+        LinkedHashMap<String, String> scoped = new LinkedHashMap<>(genericEventDetails(sourceRuleId, events));
+        scoped.put("scopeKind", source.kind().name());
+        scoped.put("scopeId", source.id());
+        scoped.put("targetCount", Integer.toString(targets.size()));
+        scoped.put("targetScopes", targets.stream()
+                .map(target -> target.kind().name() + ":" + target.id())
+                .collect(Collectors.joining(",")));
         return Map.copyOf(scoped);
     }
 

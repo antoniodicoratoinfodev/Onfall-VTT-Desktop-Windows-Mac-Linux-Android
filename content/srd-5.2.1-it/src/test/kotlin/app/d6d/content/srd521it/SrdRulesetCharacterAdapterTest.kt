@@ -111,6 +111,43 @@ class SrdRulesetCharacterAdapterTest {
     }
 
     @Test
+    fun `un regolamento classless produce un pack vuoto senza ereditare una classe SRD`() {
+        val foundation = GenericRulesetFoundation.revision()
+        val revision = RulesetRevision.create(
+            "story:classless",
+            "story:classless:1",
+            "1.0.0",
+            "Storie senza classe",
+            "Usa soltanto stato e sezioni modulari.",
+            RulesetOrigin.HOMEBREW,
+            foundation.canonicalHash(),
+            foundation.runtime(),
+            listOf(
+                entity(
+                    id = "story:value:tension",
+                    kind = RuleKind.VALUE,
+                    name = "Tensione",
+                    attributes = mapOf("valueType" to "NUMBER", "defaultValue" to "0"),
+                ),
+                entity(
+                    id = "story:sheet:scene",
+                    kind = RuleKind.SHEET_SECTION,
+                    name = "Scena",
+                    attributes = mapOf("fieldRefs" to "story:value:tension"),
+                ),
+            ),
+            "2026-08-31T00:00:00Z",
+        )
+
+        val pack = SrdRulesetCharacterAdapter.project(revision, AppLanguage.ITALIAN)
+
+        assertTrue(pack.classes.isEmpty())
+        assertTrue(pack.stats.isEmpty())
+        assertTrue(pack.skills.isEmpty())
+        assertEquals(1, pack.maximumCharacterLevel)
+    }
+
+    @Test
     fun `classe e modificatore homebrew entrano nella creazione e nella progressione reali`() {
         val classEntityId = "local:class:chronomancer"
         val classId = CharacterClassId.of("homebrew:class:chronomancer")

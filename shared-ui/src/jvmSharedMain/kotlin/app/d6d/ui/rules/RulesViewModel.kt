@@ -473,6 +473,39 @@ class RulesViewModel(dataDirectory: Path) {
         status = null
     }
 
+    /** Esporta una revisione pubblicata nel formato portabile verificato dal repository. */
+    fun exportSelected(destination: String): Boolean {
+        val choice = selected ?: return false
+        if (choice.isDraft || choice.readOnly || destination.isBlank()) return false
+        val repo = repository ?: return false
+        return guardedResult {
+            repo.exportRevision(choice.revision.canonicalHash(), Path.of(destination.trim()))
+            status = if (AppLocale.language.tag == "it") {
+                "Regolamento esportato in ${destination.trim()}"
+            } else {
+                "Ruleset exported to ${destination.trim()}"
+            }
+        }
+    }
+
+    /** Importa e installa una revisione indipendente; hash identici sono idempotenti. */
+    fun importRevision(source: String): Boolean {
+        if (source.isBlank()) return false
+        val repo = repository ?: return false
+        return guardedResult {
+            val installed = repo.importRevision(Path.of(source.trim()))
+            reload()
+            originFilter = RulesetOriginFilter.HOMEBREW
+            selectedKey = installed.canonicalHash()
+            selectedEntityId = null
+            status = if (AppLocale.language.tag == "it") {
+                "Regolamento installato: ${installed.name()} ${installed.version()}"
+            } else {
+                "Ruleset installed: ${installed.name()} ${installed.version()}"
+            }
+        }
+    }
+
     private fun selectedDraft(): RulesetDraft? =
         storedDrafts.firstOrNull { it.id() == selected?.draftId }
 
@@ -489,7 +522,7 @@ class RulesViewModel(dataDirectory: Path) {
         val defaultStat = declaredStats.firstOrNull { it.equals("STRENGTH", ignoreCase = true) }
             ?: declaredStats.firstOrNull().orEmpty()
         val defaultMaximumLevel = if (srdDerived) "20" else "1"
-        return when (kind) {
+        val defaults = when (kind) {
         RuleKind.CLASS -> linkedMapOf(
             "classId" to entityId,
             "hitDieSides" to "8",
@@ -577,6 +610,8 @@ class RulesViewModel(dataDirectory: Path) {
             "defaultValue" to "",
             "allowedValues" to "",
             "mutable" to "true",
+            "dimension" to "SCALAR",
+            "canonicalUnit" to "",
         )
         RuleKind.SKILL -> linkedMapOf(
             "skillId" to entityId,
@@ -621,8 +656,54 @@ class RulesViewModel(dataDirectory: Path) {
             "tableRef" to "",
         )
         RuleKind.DAMAGE_TYPE -> linkedMapOf("damageTypeId" to entityId)
-        RuleKind.CONDITION -> linkedMapOf("conditionId" to entityId, "maximumStacks" to "1")
+        RuleKind.CONDITION -> linkedMapOf(
+            "conditionId" to entityId,
+            "maximumStacks" to "1",
+            "stacking" to "REPLACE",
+            "sourceScoped" to "false",
+            "removalEvent" to "",
+        )
+        RuleKind.HEALTH_MODEL -> linkedMapOf(
+            "primaryResourceRef" to "",
+            "bufferResourceRefs" to "",
+            "zeroConditionRef" to "",
+            "deathConditionRef" to "",
+            "allowsNegative" to "false",
+            "zeroState" to "MANUAL",
+        )
+        RuleKind.MOVEMENT -> linkedMapOf(
+            "topology" to "SQUARE",
+            "diagonalRule" to "UNIFORM",
+            "unitsPerCell" to if (srdDerived) "5" else "1",
+            "canonicalUnit" to if (srdDerived) "ft" else "unit",
+            "elevation" to "false",
+            "occupancyRequired" to "true",
+        )
+        RuleKind.SHEET_SECTION -> linkedMapOf(
+            "fieldRefs" to "",
+            "order" to "0",
+            "columns" to "1",
+            "layout" to "LIST",
+            "visibilityFormula" to "1",
+        )
+        RuleKind.SCENE_PROCEDURE -> linkedMapOf(
+            "phases" to "SCENE",
+            "actionRefs" to "",
+            "trackerRefs" to "",
+            "initiativeRequired" to "false",
+            "boardRequired" to "false",
+        )
         else -> emptyMap()
+        }
+        return if (kind in statefulKinds) {
+            defaults + linkedMapOf(
+                "lifetime" to "PERMANENT",
+                "owner" to "SCOPE",
+                "syncPolicy" to "LOCAL_ONLY",
+                "resetEvent" to "",
+            )
+        } else {
+            defaults
         }
     }
 
@@ -689,6 +770,14 @@ class RulesViewModel(dataDirectory: Path) {
         }
     }
 
+    private inline fun guardedResult(block: () -> Unit): Boolean = try {
+        block()
+        true
+    } catch (failure: Exception) {
+        status = failure.message ?: failure::class.simpleName
+        false
+    }
+
     private companion object {
         val modifierOwnerKinds = setOf(
             RuleKind.CLASS,
@@ -704,6 +793,11 @@ class RulesViewModel(dataDirectory: Path) {
             RuleKind.SAVE, RuleKind.DEFENSE, RuleKind.VALUE, RuleKind.TABLE, RuleKind.RESOURCE, RuleKind.TRACK,
             RuleKind.ACTION, RuleKind.ACTION_ECONOMY, RuleKind.TRIGGER, RuleKind.ROLL,
             RuleKind.RANDOMIZER, RuleKind.PROGRESSION, RuleKind.DAMAGE_TYPE, RuleKind.CONDITION,
+            RuleKind.HEALTH_MODEL, RuleKind.MOVEMENT, RuleKind.SHEET_SECTION, RuleKind.SCENE_PROCEDURE,
+        )
+        val statefulKinds = setOf(
+            RuleKind.STAT, RuleKind.SKILL, RuleKind.SAVE, RuleKind.DEFENSE, RuleKind.VALUE,
+            RuleKind.RESOURCE, RuleKind.TRACK, RuleKind.CONDITION, RuleKind.ACTION_ECONOMY,
         )
         val legacyRuntimeEntityIds = setOf(
             CoreRuleIds.CRITICAL_HIT,

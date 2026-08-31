@@ -54,37 +54,77 @@ internal val guidedCharacterService: GuidedCharacterService
 
 private val services = HashMap<AppLanguage, GuidedCharacterService>()
 
-/** Proiezione eseguibile di una revisione, indicizzata per hash e lingua. */
-internal fun rulesPackFor(revision: RulesetRevision, language: AppLanguage): RulesContentPack =
-    synchronized(rulesPacks) {
-        rulesPacks.getOrPut(revision.canonicalHash() to language) {
-            SrdRulesetCharacterAdapter.project(revision, language)
+/**
+ * Adattatore registrabile fra una revisione universale e il modello guidato.
+ * Il profilo SRD è il primo installato; altri profili D&D-like possono essere
+ * aggiunti senza introdurre nuovi `when` nei ViewModel o nelle schede.
+ */
+internal interface RulesCharacterContentAdapter {
+    fun supports(revision: RulesetRevision): Boolean
+    fun project(revision: RulesetRevision, language: AppLanguage): RulesContentPack
+    fun labelsForId(id: String, language: AppLanguage): List<String> = emptyList()
+}
+
+internal class RulesContentRegistry(
+    adapters: List<RulesCharacterContentAdapter>,
+) {
+    private val adapters = adapters.toList().also {
+        require(it.isNotEmpty()) { "At least one character content adapter is required" }
+    }
+    private val packs = HashMap<Pair<String, AppLanguage>, RulesContentPack>()
+    private val catalogs = HashMap<Pair<String, AppLanguage>, List<CatalogAbility>>()
+    private val guidedServices = HashMap<Pair<String, AppLanguage>, GuidedCharacterService>()
+
+    fun pack(revision: RulesetRevision, language: AppLanguage): RulesContentPack = synchronized(this) {
+        packs.getOrPut(revision.canonicalHash() to language) {
+            adapter(revision).project(revision, language)
         }
     }
 
-internal fun rulesCatalogFor(revision: RulesetRevision, language: AppLanguage): List<CatalogAbility> =
-    synchronized(rulesCatalogs) {
-        rulesCatalogs.getOrPut(revision.canonicalHash() to language) {
-            val pack = rulesPackFor(revision, language)
+    fun catalog(revision: RulesetRevision, language: AppLanguage): List<CatalogAbility> = synchronized(this) {
+        catalogs.getOrPut(revision.canonicalHash() to language) {
+            val pack = pack(revision, language)
             pack.elements.map { it.toCatalogAbility(pack) }
         }
     }
 
+    fun guided(revision: RulesetRevision, language: AppLanguage): GuidedCharacterService = synchronized(this) {
+        guidedServices.getOrPut(revision.canonicalHash() to language) {
+            val adapter = adapter(revision)
+            GuidedCharacterService(pack(revision, language)) { id ->
+                val localizedNames = AppLanguage.entries.mapNotNull { candidate ->
+                    runCatching { pack(revision, candidate).element(id)?.name }.getOrNull()
+                }
+                (localizedNames + adapter.labelsForId(id, language)).distinct()
+            }
+        }
+    }
+
+    private fun adapter(revision: RulesetRevision): RulesCharacterContentAdapter =
+        adapters.firstOrNull { it.supports(revision) }
+            ?: error("No installed character content adapter supports ${revision.name()}")
+}
+
+private object DefaultDndCharacterAdapter : RulesCharacterContentAdapter {
+    override fun supports(revision: RulesetRevision): Boolean = true
+
+    override fun project(revision: RulesetRevision, language: AppLanguage): RulesContentPack =
+        SrdRulesetCharacterAdapter.project(revision, language)
+
+    override fun labelsForId(id: String, language: AppLanguage): List<String> =
+        SrdChoiceResolver.labelsForId(id, language)
+}
+
+private val contentRegistry = RulesContentRegistry(listOf(DefaultDndCharacterAdapter))
+
+/** Proiezione eseguibile di una revisione, indicizzata per hash e lingua. */
+internal fun rulesPackFor(revision: RulesetRevision, language: AppLanguage): RulesContentPack =
+    contentRegistry.pack(revision, language)
+
+internal fun rulesCatalogFor(revision: RulesetRevision, language: AppLanguage): List<CatalogAbility> =
+    contentRegistry.catalog(revision, language)
+
 internal fun guidedCharacterServiceFor(
     revision: RulesetRevision,
     language: AppLanguage,
-): GuidedCharacterService = synchronized(rulesServices) {
-    rulesServices.getOrPut(revision.canonicalHash() to language) {
-        val pack = rulesPackFor(revision, language)
-        GuidedCharacterService(pack) { id ->
-            val localizedNames = AppLanguage.entries.mapNotNull { candidate ->
-                rulesPackFor(revision, candidate).element(id)?.name
-            }
-            (localizedNames + SrdChoiceResolver.labelsForId(id, language)).distinct()
-        }
-    }
-}
-
-private val rulesPacks = HashMap<Pair<String, AppLanguage>, RulesContentPack>()
-private val rulesCatalogs = HashMap<Pair<String, AppLanguage>, List<CatalogAbility>>()
-private val rulesServices = HashMap<Pair<String, AppLanguage>, GuidedCharacterService>()
+): GuidedCharacterService = contentRegistry.guided(revision, language)

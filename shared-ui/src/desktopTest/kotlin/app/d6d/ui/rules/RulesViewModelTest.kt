@@ -112,6 +112,79 @@ class RulesViewModelTest {
         assertFalse(published.isDraft)
         assertTrue(published.revision.entities().isEmpty())
         assertFalse(SrdRulesetCharacterAdapter.inheritsSrdContent(published.revision))
+
+        val sheets = SheetViewModel(
+            SheetStore(directory.resolve("classless-sheets.json")),
+            loadOnCreate = false,
+            rulesetProvider = { rules.publishedRevisions },
+        )
+        assertTrue(sheets.selectCharacterRuleset(published.key))
+        assertTrue(sheets.character.modularSheet.configured)
+        assertTrue(sheets.srdClasses.isEmpty())
+    }
+
+    @Test
+    fun `le primitive modulari nascono con uno schema esplicito e modificabile`() {
+        val rules = RulesViewModel(directory)
+        rules.createBlankRuleset()
+
+        rules.addRule(RuleKind.VALUE)
+        val value = requireNotNull(rules.selectedEntity)
+        assertEquals("SCALAR", value.attributes()["dimension"])
+        assertEquals("PERMANENT", value.attributes()["lifetime"])
+        assertEquals("SCOPE", value.attributes()["owner"])
+        assertEquals("LOCAL_ONLY", value.attributes()["syncPolicy"])
+
+        rules.addRule(RuleKind.CONDITION)
+        val condition = requireNotNull(rules.selectedEntity)
+        assertEquals("REPLACE", condition.attributes()["stacking"])
+        assertEquals("false", condition.attributes()["sourceScoped"])
+
+        rules.addRule(RuleKind.HEALTH_MODEL)
+        val health = requireNotNull(rules.selectedEntity)
+        assertEquals("MANUAL", health.attributes()["zeroState"])
+        assertTrue(health.attributes().containsKey("primaryResourceRef"))
+
+        rules.addRule(RuleKind.MOVEMENT)
+        val movement = requireNotNull(rules.selectedEntity)
+        assertEquals("SQUARE", movement.attributes()["topology"])
+        assertEquals("1", movement.attributes()["unitsPerCell"])
+        assertEquals("unit", movement.attributes()["canonicalUnit"])
+
+        rules.addRule(RuleKind.SHEET_SECTION)
+        val section = requireNotNull(rules.selectedEntity)
+        assertEquals("LIST", section.attributes()["layout"])
+        assertEquals("1", section.attributes()["columns"])
+
+        rules.addRule(RuleKind.SCENE_PROCEDURE)
+        val scene = requireNotNull(rules.selectedEntity)
+        assertEquals("SCENE", scene.attributes()["phases"])
+        assertEquals("false", scene.attributes()["initiativeRequired"])
+        assertEquals(RuleAutomationLevel.ASSISTED, scene.automationLevel())
+    }
+
+    @Test
+    fun `una revisione pubblicata si esporta e si reinstalla in una libreria indipendente`() {
+        val first = RulesViewModel(directory.resolve("first"))
+        first.forkSelected()
+        first.addRule(RuleKind.VALUE)
+        val valueId = requireNotNull(first.selectedEntityId)
+        first.updateEntity(
+            valueId, "Tensione", "Tensione della scena.", RuleKind.VALUE,
+            RuleAutomationLevel.ASSISTED, true,
+            mapOf("valueType" to "NUMBER", "defaultValue" to "2"),
+            listOf("test"),
+        )
+        first.publishSelected("1.0.0")
+        val exportedHash = requireNotNull(first.selected).revision.canonicalHash()
+        val portable = directory.resolve("tensione.ruleset.json")
+
+        assertTrue(first.exportSelected(portable.toString()))
+        val second = RulesViewModel(directory.resolve("second"))
+        assertTrue(second.importRevision(portable.toString()))
+
+        assertEquals(exportedHash, requireNotNull(second.selected).revision.canonicalHash())
+        assertNotNull(second.selected?.revision?.entity(valueId))
     }
 
     @Test

@@ -50,6 +50,12 @@ public final class RulesetCompiler {
         LinkedHashMap<String, CompiledRuleset.ActionDefinition> actions = new LinkedHashMap<>();
         LinkedHashMap<String, CompiledRuleset.ModifierDefinition> modifiers = new LinkedHashMap<>();
         LinkedHashMap<String, CompiledRuleset.TriggerDefinition> triggers = new LinkedHashMap<>();
+        LinkedHashMap<String, CompiledRuleset.ConditionDefinition> conditionDefinitions = new LinkedHashMap<>();
+        LinkedHashMap<String, CompiledRuleset.HealthModelDefinition> healthModels = new LinkedHashMap<>();
+        LinkedHashMap<String, CompiledRuleset.MovementDefinition> movementModels = new LinkedHashMap<>();
+        LinkedHashMap<String, CompiledRuleset.SheetSectionDefinition> sheetSections = new LinkedHashMap<>();
+        LinkedHashMap<String, CompiledRuleset.SceneProcedureDefinition> sceneProcedures = new LinkedHashMap<>();
+        LinkedHashMap<String, StatePersistencePolicy> persistencePolicies = new LinkedHashMap<>();
         LinkedHashSet<String> damageTypes = new LinkedHashSet<>();
         LinkedHashSet<String> conditions = new LinkedHashSet<>();
         ArrayList<CompiledRuleset.ProgressionDefinition> progressions = new ArrayList<>();
@@ -62,6 +68,9 @@ public final class RulesetCompiler {
             if (entity.kind() == RuleKind.CONDITION) {
                 conditions.add(entity.id());
                 integer(attributes, "maximumStacks", entity, 1, 1, 1_000);
+            }
+            if (stateful(entity.kind()) && declaresStatePolicy(attributes)) {
+                persistencePolicies.put(entity.id(), statePolicy(entity));
             }
             if (entity.automationLevel() == RuleAutomationLevel.MANUAL) continue;
             switch (entity.kind()) {
@@ -84,15 +93,29 @@ public final class RulesetCompiler {
                     if (modifier != null) modifiers.put(entity.id(), modifier);
                 }
                 case TRIGGER -> triggers.put(entity.id(), trigger(entity));
+                case CONDITION -> conditionDefinitions.put(entity.id(), condition(entity));
+                case HEALTH_MODEL -> {
+                    CompiledRuleset.HealthModelDefinition model = healthModel(entity);
+                    if (model != null) healthModels.put(entity.id(), model);
+                }
+                case MOVEMENT -> movementModels.put(entity.id(), movement(entity));
+                case SHEET_SECTION -> {
+                    CompiledRuleset.SheetSectionDefinition section = sheetSection(entity);
+                    if (section != null) sheetSections.put(entity.id(), section);
+                }
+                case SCENE_PROCEDURE -> {
+                    CompiledRuleset.SceneProcedureDefinition procedure = sceneProcedure(entity);
+                    if (procedure != null) sceneProcedures.put(entity.id(), procedure);
+                }
                 case PROGRESSION -> progressions.add(progression(entity));
                 default -> { /* Rappresentabile/manuale, nessuna primitiva da compilare qui. */ }
             }
         }
 
         validateDefinitions(entities, aliases, stats, skills, valueDefinitions, randomizers, tables, resources, turnStructures,
-                actions, modifiers, triggers, conditions, progressions);
+                actions, modifiers, triggers, conditions, healthModels, sheetSections, sceneProcedures, progressions);
         validateFormulaReferences(stats, skills, valueDefinitions, randomizers, tables, resources, turnStructures,
-                actions, modifiers, triggers, conditions, aliases);
+                actions, modifiers, triggers, conditions, sheetSections, aliases);
         validateFormulaCycles(stats, skills, valueDefinitions, modifiers, aliases);
         validateRuntimeStateCycles(resources, turnStructures, aliases);
 
@@ -104,9 +127,12 @@ public final class RulesetCompiler {
                 !stats.isEmpty(), !skills.isEmpty(), !randomizers.isEmpty(),
                 hasFormulas(stats, skills, resources, modifiers),
                 !tables.isEmpty(), !resources.isEmpty(), !triggers.isEmpty(), !turnStructures.isEmpty(),
-                !damageTypes.isEmpty(), !conditions.isEmpty(), !valueDefinitions.isEmpty(), manualCount);
+                !damageTypes.isEmpty(), !conditions.isEmpty(), !valueDefinitions.isEmpty(),
+                !healthModels.isEmpty(), !movementModels.isEmpty(), !sheetSections.isEmpty(),
+                !sceneProcedures.isEmpty(), !persistencePolicies.isEmpty(), manualCount);
         return new CompiledRuleset(canonicalHash, entities, aliases, stats, skills, valueDefinitions, randomizers, tables,
-                resources, turnStructures, actions, modifiers, triggers, damageTypes, conditions,
+                resources, turnStructures, actions, modifiers, triggers, conditionDefinitions, healthModels,
+                movementModels, sheetSections, sceneProcedures, persistencePolicies, damageTypes, conditions,
                 progression, profile);
     }
 
@@ -182,7 +208,9 @@ public final class RulesetCompiler {
         }
         return new CompiledRuleset.ValueDefinition(
                 entity.id(), type, defaultValue, allowed,
-                bool(attributes, "mutable", entity, true));
+                bool(attributes, "mutable", entity, true),
+                attributes.getOrDefault("dimension", "SCALAR"),
+                attributes.getOrDefault("canonicalUnit", ""));
     }
 
     private static CompiledRuleset.TableDefinition table(RuleEntity entity) {
@@ -225,6 +253,104 @@ public final class RulesetCompiler {
                 formula(attributes, "initialFormula", "${maximum}", entity),
                 attributes.getOrDefault("recoveryEvent", "MANUAL"),
                 formula(attributes, "recoveryFormula", "${maximum}", entity));
+    }
+
+    private static CompiledRuleset.ConditionDefinition condition(RuleEntity entity) {
+        Map<String, String> attributes = entity.attributes();
+        return new CompiledRuleset.ConditionDefinition(
+                entity.id(),
+                integer(attributes, "maximumStacks", entity, 1, 1, 1_000),
+                enumeration(attributes, "stacking", CompiledRuleset.ConditionStacking.class,
+                        CompiledRuleset.ConditionStacking.REPLACE, entity),
+                bool(attributes, "sourceScoped", entity, false),
+                attributes.getOrDefault("removalEvent", ""));
+    }
+
+    /** I modelli legacy senza riferimenti restano gestiti dall'adattatore SRD. */
+    private static CompiledRuleset.HealthModelDefinition healthModel(RuleEntity entity) {
+        Map<String, String> attributes = entity.attributes();
+        String primary = attributes.get("primaryResourceRef");
+        if (primary == null || primary.isBlank()) return null;
+        return new CompiledRuleset.HealthModelDefinition(
+                entity.id(),
+                primary,
+                csv(attributes.get("bufferResourceRefs")),
+                attributes.getOrDefault("zeroConditionRef", ""),
+                attributes.getOrDefault("deathConditionRef", ""),
+                bool(attributes, "allowsNegative", entity, false),
+                enumeration(attributes, "zeroState", CompiledRuleset.ZeroState.class,
+                        CompiledRuleset.ZeroState.MANUAL, entity));
+    }
+
+    private static CompiledRuleset.MovementDefinition movement(RuleEntity entity) {
+        Map<String, String> attributes = entity.attributes();
+        String rawUnits = attributes.getOrDefault(
+                "unitsPerCell",
+                attributes.getOrDefault("defaultCellFeet", "1"));
+        String unit = attributes.getOrDefault(
+                "canonicalUnit",
+                attributes.containsKey("defaultCellFeet") ? "ft" : "unit");
+        return new CompiledRuleset.MovementDefinition(
+                entity.id(),
+                enumeration(attributes, "topology", CompiledRuleset.BoardTopology.class,
+                        CompiledRuleset.BoardTopology.SQUARE, entity),
+                enumeration(attributes, "diagonalRule", CompiledRuleset.DiagonalRule.class,
+                        CompiledRuleset.DiagonalRule.UNIFORM, entity),
+                decimal(rawUnits, entity, "unitsPerCell"),
+                unit,
+                bool(attributes, "elevation", entity, false),
+                bool(attributes, "occupancyRequired", entity, true));
+    }
+
+    private static CompiledRuleset.SheetSectionDefinition sheetSection(RuleEntity entity) {
+        Map<String, String> attributes = entity.attributes();
+        List<String> fieldRefs = csv(attributes.get("fieldRefs"));
+        if (fieldRefs.isEmpty()) return null;
+        return new CompiledRuleset.SheetSectionDefinition(
+                entity.id(),
+                integer(attributes, "order", entity, 0, -1_000_000, 1_000_000),
+                integer(attributes, "columns", entity, 1, 1, 12),
+                enumeration(attributes, "layout", CompiledRuleset.SheetLayout.class,
+                        CompiledRuleset.SheetLayout.LIST, entity),
+                fieldRefs,
+                formula(attributes, "visibilityFormula", "1", entity));
+    }
+
+    private static CompiledRuleset.SceneProcedureDefinition sceneProcedure(RuleEntity entity) {
+        Map<String, String> attributes = entity.attributes();
+        List<String> phases = csv(attributes.get("phases"));
+        if (phases.isEmpty()) return null;
+        return new CompiledRuleset.SceneProcedureDefinition(
+                entity.id(),
+                phases,
+                csv(attributes.get("actionRefs")),
+                csv(attributes.get("trackerRefs")),
+                bool(attributes, "initiativeRequired", entity, false),
+                bool(attributes, "boardRequired", entity, false));
+    }
+
+    private static boolean stateful(RuleKind kind) {
+        return switch (kind) {
+            case STAT, SKILL, SAVE, DEFENSE, VALUE, RESOURCE, TRACK, CONDITION, ACTION_ECONOMY -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean declaresStatePolicy(Map<String, String> attributes) {
+        return attributes.containsKey("lifetime") || attributes.containsKey("owner")
+                || attributes.containsKey("syncPolicy") || attributes.containsKey("resetEvent");
+    }
+
+    private static StatePersistencePolicy statePolicy(RuleEntity entity) {
+        Map<String, String> attributes = entity.attributes();
+        return new StatePersistencePolicy(
+                enumeration(attributes, "lifetime", StatePersistencePolicy.Lifetime.class,
+                        StatePersistencePolicy.Lifetime.PERMANENT, entity),
+                enumeration(attributes, "owner", StatePersistencePolicy.Owner.class,
+                        StatePersistencePolicy.Owner.SCOPE, entity),
+                enumeration(attributes, "syncPolicy", StatePersistencePolicy.SyncPolicy.class,
+                        StatePersistencePolicy.SyncPolicy.LOCAL_ONLY, entity),
+                attributes.getOrDefault("resetEvent", ""));
     }
 
     private static CompiledRuleset.TurnStructureDefinition turnStructure(RuleEntity entity) {
@@ -351,6 +477,9 @@ public final class RulesetCompiler {
             Map<String, CompiledRuleset.ModifierDefinition> modifiers,
             Map<String, CompiledRuleset.TriggerDefinition> triggers,
             Set<String> conditions,
+            Map<String, CompiledRuleset.HealthModelDefinition> healthModels,
+            Map<String, CompiledRuleset.SheetSectionDefinition> sheetSections,
+            Map<String, CompiledRuleset.SceneProcedureDefinition> sceneProcedures,
             List<CompiledRuleset.ProgressionDefinition> progressions) {
         skills.values().forEach(skill -> requireKind(skill.id(), "statRef", resolve(skill.statRef(), aliases),
                 stats.keySet(), "an executable stat"));
@@ -422,6 +551,33 @@ public final class RulesetCompiler {
         });
         triggers.values().forEach(trigger -> trigger.effectRefs()
                 .forEach(ref -> requireEffect(trigger.id(), ref, modifiers, aliases, true)));
+        healthModels.values().forEach(model -> {
+            requireKind(model.id(), "primaryResourceRef", resolve(model.primaryResourceRef(), aliases),
+                    resources.keySet(), "a resource or track");
+            model.bufferResourceRefs().forEach(ref -> requireKind(model.id(), "bufferResourceRefs",
+                    resolve(ref, aliases), resources.keySet(), "a resource or track"));
+            if (!model.zeroConditionRef().isEmpty()) requireKind(model.id(), "zeroConditionRef",
+                    resolve(model.zeroConditionRef(), aliases), conditions, "a condition");
+            if (!model.deathConditionRef().isEmpty()) requireKind(model.id(), "deathConditionRef",
+                    resolve(model.deathConditionRef(), aliases), conditions, "a condition");
+        });
+        sheetSections.values().forEach(section -> section.fieldRefs().forEach(ref ->
+                requireEntity(section.id(), "fieldRefs", ref, entities, aliases)));
+        sceneProcedures.values().forEach(procedure -> {
+            procedure.actionRefs().forEach(ref -> requireKind(procedure.id(), "actionRefs",
+                    resolve(ref, aliases), actions.keySet(), "an executable action"));
+            procedure.trackerRefs().forEach(ref -> {
+                String resolved = resolve(ref, aliases);
+                RuleEntity target = entities.get(resolved);
+                if (target == null || target.kind() != RuleKind.RESOURCE && target.kind() != RuleKind.TRACK
+                        && target.kind() != RuleKind.VALUE && target.kind() != RuleKind.STAT
+                        && target.kind() != RuleKind.SKILL && target.kind() != RuleKind.SAVE
+                        && target.kind() != RuleKind.DEFENSE && target.kind() != RuleKind.CONDITION) {
+                    throw new IllegalArgumentException(procedure.id()
+                            + ".trackerRefs must reference stateful rules: " + ref);
+                }
+            });
+        });
         List<CompiledRuleset.ProgressionDefinition> experienceProgressions = progressions.stream()
                 .filter(candidate -> !candidate.experienceTableRef().isEmpty()).toList();
         if (experienceProgressions.size() > 1) {
@@ -493,6 +649,7 @@ public final class RulesetCompiler {
             Map<String, CompiledRuleset.ModifierDefinition> modifiers,
             Map<String, CompiledRuleset.TriggerDefinition> triggers,
             Set<String> conditions,
+            Map<String, CompiledRuleset.SheetSectionDefinition> sheetSections,
             Map<String, String> aliases) {
         ArrayList<OwnedFormula> formulas = new ArrayList<>();
         stats.values().forEach(value -> {
@@ -527,6 +684,8 @@ public final class RulesetCompiler {
             add(formulas, value.id(), "conditionFormula", value.conditionFormula());
         });
         triggers.values().forEach(value -> add(formulas, value.id(), "conditionFormula", value.conditionFormula()));
+        sheetSections.values().forEach(value ->
+                add(formulas, value.id(), "visibilityFormula", value.visibilityFormula()));
 
         Set<String> numericIds = union(union(stats.keySet(), skills.keySet()), numericValueIds(valueDefinitions));
         LinkedHashSet<String> turnResourceIds = new LinkedHashSet<>();

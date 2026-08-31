@@ -40,6 +40,7 @@ import app.d6d.ui.i18n.literalText
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.GuidedCharacterService
 import app.d6d.sheet.MonsterStatBlock
+import app.d6d.sheet.RuleDrivenSheetProjector
 import app.d6d.sheet.SheetLibrary
 import app.d6d.sheet.SheetStore
 import app.d6d.sheet.i18n.localizedSheetError
@@ -107,9 +108,9 @@ class SheetViewModel(
     val availableRulesets: List<RulesetRevision>
         get() = rulesetProvider()
             .distinctBy { it.canonicalHash() }
-            // Una revisione può essere perfettamente valida per una sessione
-            // manuale ma non descrivere classi/personaggi. Non deve far
-            // crollare il dialogo guidato: qui compaiono solo quelle proiettabili.
+            // Anche un regolamento classless è proiettabile: il pack guidato ha
+            // zero classi, mentre SHEET_SECTION costruisce le parti data-driven.
+            // Si escludono soltanto revisioni davvero invalide.
             .filter { revision ->
                 runCatching { rulesPackFor(revision, AppLocale.language) }.isSuccess
             }
@@ -154,6 +155,13 @@ class SheetViewModel(
         if (character.progression.configured) return false
         val revision = availableRulesets.firstOrNull { it.canonicalHash() == canonicalHash } ?: return false
         selectedCharacterRulesetHash = revision.canonicalHash()
+        character = character.copy(
+            modularSheet = RuleDrivenSheetProjector.project(
+                revision,
+                AppLocale.language.tag,
+                character.modularSheet,
+            ),
+        )
         say(null)
         return true
     }
@@ -239,6 +247,7 @@ class SheetViewModel(
 
     private fun revisionFor(sheet: CharacterSheet): RulesetRevision? {
         val exactHash = sheet.progression.rulesetCanonicalHash
+            .ifBlank { sheet.modularSheet.rulesetCanonicalHash }
         if (exactHash.isNotBlank()) {
             return availableRulesets.firstOrNull { it.canonicalHash() == exactHash }
         }
@@ -290,6 +299,39 @@ class SheetViewModel(
             .filter { it.enabled() && it.kind() == RuleKind.CONDITION }
             .map { ConditionType.of(it.attributes()["conditionId"].orEmpty().ifBlank { it.id() }) }
             .distinct()
+    }
+
+    /**
+     * Modifica un campo generato dalla revisione esatta della scheda.
+     *
+     * Non esiste fallback allo SRD: se il regolamento non e' più installato la
+     * fotografia resta leggibile, ma non viene reinterpretata con altre regole.
+     */
+    fun updateModularField(fieldId: String, current: String, maximum: String = ""): Boolean {
+        val revision = revisionFor(character)
+        if (revision == null || character.modularSheet.rulesetCanonicalHash != revision.canonicalHash()) {
+            reportMissingCharacterRuleset()
+            return false
+        }
+        return runCatching {
+            RuleDrivenSheetProjector.update(
+                revision = revision,
+                state = character.modularSheet,
+                fieldId = fieldId,
+                current = current,
+                maximum = maximum,
+            )
+        }.fold(
+            onSuccess = { updated ->
+                character = character.copy(modularSheet = updated)
+                say(null)
+                true
+            },
+            onFailure = { failure ->
+                say(literalText(failure.message ?: "Invalid modular sheet value"))
+                false
+            },
+        )
     }
 
     private var currentKind by mutableStateOf(SheetKind.PERSONAGGIO)
@@ -391,9 +433,22 @@ class SheetViewModel(
             val revision = revisionFor(translated) ?: return translated
             val service = guidedCharacterServiceFor(revision, target)
             val catalog = (rulesCatalogFor(revision, target) + library.abilities).distinctBy { it.id }
-            return service.withoutGeneratedFeatureText(
+            val refreshed = service.withoutGeneratedFeatureText(
                 service.withRefreshedEffects(translated, catalog),
             )
+            val hasRuleDrivenSheet = refreshed.modularSheet.configured ||
+                revision.compile().sheetSections().isNotEmpty()
+            return if (hasRuleDrivenSheet) {
+                refreshed.copy(
+                    modularSheet = RuleDrivenSheetProjector.project(
+                        revision,
+                        target.tag,
+                        refreshed.modularSheet,
+                    ),
+                )
+            } else {
+                refreshed
+            }
         }
         // Si traduce prima e si confronta poi. Guardare il solo marcatore non
         // basta: una creatura che l'utente ha modificato non si rigenera *e*
@@ -919,9 +974,16 @@ class SheetViewModel(
             say(literalText(validation.issues.joinToString("\n") { it.message }))
             return false
         }
-        character = guidedCharacters.withRefreshedEffects(
+        val advanced = guidedCharacters.withRefreshedEffects(
             guidedCharacters.advance(character, request),
             abilityCatalog,
+        )
+        character = advanced.copy(
+            modularSheet = RuleDrivenSheetProjector.project(
+                selectedCharacterRuleset,
+                AppLocale.language.tag,
+                advanced.modularSheet,
+            ),
         )
         val level = character.effectiveLevel
         say(
@@ -1191,6 +1253,7 @@ class SheetViewModel(
     private fun selectCharacterInternal(sheet: CharacterSheet) {
         character = sheet
         selectedCharacterRulesetHash = sheet.progression.rulesetCanonicalHash
+            .ifBlank { sheet.modularSheet.rulesetCanonicalHash }
             .takeIf(String::isNotBlank)
             ?: standardRuleset.canonicalHash()
         selectedId = sheet.id
@@ -1218,6 +1281,10 @@ class SheetViewModel(
                     // un personaggio creato in inglese veniva salvato come testo
                     // inglese marcato italiano, e al riavvio non si traduceva.
                     contentLanguage = AppLocale.language,
+                    modularSheet = RuleDrivenSheetProjector.project(
+                        standardRuleset,
+                        AppLocale.language.tag,
+                    ),
                 )
                 pristineNewCharacter = character
             }

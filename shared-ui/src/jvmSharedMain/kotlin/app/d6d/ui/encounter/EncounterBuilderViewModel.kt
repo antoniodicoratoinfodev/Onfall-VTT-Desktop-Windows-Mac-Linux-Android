@@ -8,6 +8,7 @@ import app.d6d.domain.combat.CombatantSetup
 import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
 import app.d6d.engine.ai.EnemyCpuDifficulty
+import app.d6d.engine.ai.EnemyCpuRulesSupport
 import app.d6d.ui.state.EnemyCpuSpeed
 import app.d6d.ui.content.SessionTemplate
 import app.d6d.ui.content.SessionTemplates
@@ -143,7 +144,10 @@ class EncounterBuilderViewModel(
             ?: availableRulesets.first().also { selectedRulesetHash = it.canonicalHash() }
 
     val selectedRulesetSupportsEnemyCpu: Boolean
-        get() = selectedRuleset.legacyCombatAutomationCompatibleWith(Srd521Ruleset.revision)
+        get() = selectedRulesetCpuSupport.automated()
+
+    val selectedRulesetCpuSupport: EnemyCpuRulesSupport
+        get() = EnemyCpuRulesSupport.assess(selectedRuleset, Srd521Ruleset.revision)
 
     fun selectRuleset(canonicalHash: String) {
         if (availableRulesets.any { it.canonicalHash() == canonicalHash }) {

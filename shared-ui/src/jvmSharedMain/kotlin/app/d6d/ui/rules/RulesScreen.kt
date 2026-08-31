@@ -63,6 +63,25 @@ private val modifierOwnerKinds = setOf(
     RuleKind.SPELL,
     RuleKind.ACTION,
 )
+private val modularRuntimeKinds = setOf(
+    RuleKind.VALUE,
+    RuleKind.CONDITION,
+    RuleKind.HEALTH_MODEL,
+    RuleKind.MOVEMENT,
+    RuleKind.SHEET_SECTION,
+    RuleKind.SCENE_PROCEDURE,
+)
+private val statefulKinds = setOf(
+    RuleKind.STAT,
+    RuleKind.SKILL,
+    RuleKind.SAVE,
+    RuleKind.DEFENSE,
+    RuleKind.VALUE,
+    RuleKind.RESOURCE,
+    RuleKind.TRACK,
+    RuleKind.CONDITION,
+    RuleKind.ACTION_ECONOMY,
+)
 
 /** Catalogo affiancato al Compendio: standard read-only, fork e revisioni homebrew. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -150,6 +169,7 @@ private fun OriginFilters(viewModel: RulesViewModel, modifier: Modifier = Modifi
 @Composable
 private fun RulesetList(viewModel: RulesViewModel, modifier: Modifier = Modifier) {
     val words = strings.rules
+    var portablePath by remember { mutableStateOf("") }
     LazyColumn(
         modifier.background(Palette.Surface.copy(alpha = .88f)).padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
@@ -162,6 +182,39 @@ private fun RulesetList(viewModel: RulesViewModel, modifier: Modifier = Modifier
                 accent = Palette.Heal,
                 onClick = viewModel::createBlankRuleset,
             )
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                RuleTextField(
+                    portablePath,
+                    { portablePath = it },
+                    if (strings.language.tag == "it") {
+                        "Percorso file regolamento (.json)"
+                    } else {
+                        "Ruleset file path (.json)"
+                    },
+                    Modifier.fillMaxWidth(),
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    GameButton(
+                        if (strings.language.tag == "it") "Importa" else "Import",
+                        dense = true,
+                        enabled = portablePath.isNotBlank(),
+                        onClick = { viewModel.importRevision(portablePath) },
+                    )
+                    GameButton(
+                        if (strings.language.tag == "it") "Esporta selezionato" else "Export selected",
+                        dense = true,
+                        enabled = portablePath.isNotBlank() && viewModel.selected?.let {
+                            !it.isDraft && !it.readOnly
+                        } == true,
+                        onClick = { viewModel.exportSelected(portablePath) },
+                    )
+                }
+            }
         }
         items(viewModel.choices, key = { it.key }) { choice ->
             RulesetCard(choice, choice.key == viewModel.selectedKey) { viewModel.selectRuleset(choice.key) }
@@ -572,6 +625,12 @@ private fun EntityDetail(
         }
         if (kind == RuleKind.VALUE) {
             ValueSchemaEditor(attributes.toMap(), ::setAttribute)
+        }
+        if (kind in modularRuntimeKinds) {
+            ModularRuntimeSchemaEditor(kind, attributes.toMap(), ::setAttribute)
+        }
+        if (kind in statefulKinds) {
+            StatePolicySchemaEditor(attributes.toMap(), ::setAttribute)
         }
         RuleReferenceEditor(viewModel, entity.id(), kind, attributes.toMap(), ::setAttribute)
         Eyebrow(words.attributes)
@@ -1285,6 +1344,144 @@ private fun ValueSchemaEditor(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
+private fun ModularRuntimeSchemaEditor(
+    kind: RuleKind,
+    attributes: Map<String, String>,
+    onAttribute: (String, String) -> Unit,
+) {
+    val italian = strings.language.tag == "it"
+    Column(
+        Modifier.fillMaxWidth().background(Palette.Abyss.copy(alpha = .7f), RoundedCornerShape(8.dp))
+            .border(1.dp, Palette.Line, RoundedCornerShape(8.dp)).padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Eyebrow(if (italian) "Comportamento modulare" else "Modular behavior", Palette.Party)
+        when (kind) {
+            RuleKind.VALUE -> {
+                AttributeTextField(attributes, "dimension", if (italian) "Dimensione semantica" else "Semantic dimension", onAttribute)
+                AttributeTextField(attributes, "canonicalUnit", if (italian) "Unità canonica" else "Canonical unit", onAttribute)
+            }
+            RuleKind.CONDITION -> {
+                AttributeTextField(attributes, "maximumStacks", if (italian) "Accumuli massimi" else "Maximum stacks", onAttribute)
+                AttributeChoices(if (italian) "Combinazione" else "Stacking", "stacking",
+                    listOf("REPLACE", "STACK", "HIGHEST", "SEPARATE_BY_SOURCE"), attributes, onAttribute)
+                AttributeCheckBox(attributes, "sourceScoped",
+                    if (italian) "Distingui la fonte" else "Track each source", onAttribute)
+                AttributeTextField(attributes, "removalEvent", if (italian) "Evento di rimozione" else "Removal event", onAttribute)
+            }
+            RuleKind.HEALTH_MODEL -> {
+                AttributeChoices(if (italian) "Stato a zero" else "Zero state", "zeroState",
+                    listOf("NONE", "DISABLED", "UNCONSCIOUS", "DYING", "DEAD", "MANUAL"), attributes, onAttribute)
+                AttributeCheckBox(attributes, "allowsNegative",
+                    if (italian) "Consenti valori negativi" else "Allow negative values", onAttribute)
+            }
+            RuleKind.MOVEMENT -> {
+                AttributeChoices(if (italian) "Topologia" else "Topology", "topology",
+                    listOf("SQUARE", "HEX_POINTY", "HEX_FLAT", "GRIDLESS", "THEATRE_OF_MIND"), attributes, onAttribute)
+                AttributeChoices(if (italian) "Diagonali" else "Diagonals", "diagonalRule",
+                    listOf("UNIFORM", "FIVE_TEN_FIVE", "EUCLIDEAN", "MANUAL"), attributes, onAttribute)
+                AttributeTextField(attributes, "unitsPerCell", if (italian) "Unità per cella" else "Units per cell", onAttribute)
+                AttributeTextField(attributes, "canonicalUnit", if (italian) "Unità canonica" else "Canonical unit", onAttribute)
+                AttributeCheckBox(attributes, "elevation", if (italian) "Usa elevazione" else "Use elevation", onAttribute)
+                AttributeCheckBox(attributes, "occupancyRequired",
+                    if (italian) "Occupa spazio sulla mappa" else "Requires map occupancy", onAttribute)
+            }
+            RuleKind.SHEET_SECTION -> {
+                AttributeChoices(if (italian) "Disposizione" else "Layout", "layout",
+                    listOf("LIST", "GRID", "CARDS", "COMPACT"), attributes, onAttribute)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    AttributeTextField(attributes, "order", if (italian) "Ordine" else "Order", onAttribute, Modifier.weight(1f))
+                    AttributeTextField(attributes, "columns", if (italian) "Colonne" else "Columns", onAttribute, Modifier.weight(1f))
+                }
+                AttributeTextField(attributes, "visibilityFormula",
+                    if (italian) "Formula di visibilità" else "Visibility formula", onAttribute)
+            }
+            RuleKind.SCENE_PROCEDURE -> {
+                AttributeTextField(attributes, "phases",
+                    if (italian) "Fasi, separate da virgola" else "Phases, comma-separated", onAttribute)
+                AttributeCheckBox(attributes, "initiativeRequired",
+                    if (italian) "Richiede iniziativa" else "Requires initiative", onAttribute)
+                AttributeCheckBox(attributes, "boardRequired",
+                    if (italian) "Richiede mappa" else "Requires board", onAttribute)
+            }
+            else -> Unit
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StatePolicySchemaEditor(
+    attributes: Map<String, String>,
+    onAttribute: (String, String) -> Unit,
+) {
+    val italian = strings.language.tag == "it"
+    Column(
+        Modifier.fillMaxWidth().background(Palette.Night.copy(alpha = .65f), RoundedCornerShape(8.dp))
+            .border(1.dp, Palette.Line, RoundedCornerShape(8.dp)).padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Eyebrow(if (italian) "Durata, proprietario e sincronizzazione" else "Lifetime, owner, and sync", Palette.Heal)
+        AttributeChoices(if (italian) "Durata" else "Lifetime", "lifetime",
+            listOf("ACTION", "TURN", "SCENE", "ENCOUNTER", "SESSION", "CAMPAIGN", "PERMANENT"), attributes, onAttribute)
+        AttributeChoices(if (italian) "Proprietario" else "Owner", "owner",
+            listOf("SCOPE", "ACTOR", "PARTY", "SESSION", "CAMPAIGN", "GM"), attributes, onAttribute)
+        AttributeChoices(if (italian) "Sincronizzazione" else "Synchronization", "syncPolicy",
+            listOf("LOCAL_ONLY", "PROPOSE", "AUTO_IF_COMPATIBLE", "NEVER"), attributes, onAttribute)
+        AttributeTextField(attributes, "resetEvent",
+            if (italian) "Evento di reset personalizzato" else "Custom reset event", onAttribute)
+    }
+}
+
+@Composable
+private fun AttributeTextField(
+    attributes: Map<String, String>,
+    key: String,
+    label: String,
+    onAttribute: (String, String) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+) {
+    RuleTextField(attributes[key].orEmpty(), { onAttribute(key, it) }, label, modifier)
+}
+
+@Composable
+private fun AttributeCheckBox(
+    attributes: Map<String, String>,
+    key: String,
+    label: String,
+    onAttribute: (String, String) -> Unit,
+) {
+    val checked = attributes[key].orEmpty().toBooleanStrictOrNull() == true
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = checked, onCheckedChange = { onAttribute(key, it.toString()) })
+        Text(label, color = Palette.Text, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AttributeChoices(
+    label: String,
+    key: String,
+    choices: List<String>,
+    attributes: Map<String, String>,
+    onAttribute: (String, String) -> Unit,
+) {
+    Text(label, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        choices.forEach { choice ->
+            GameButton(
+                choice.lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase),
+                dense = true,
+                selected = attributes[key].orEmpty().ifBlank { choices.first() } == choice,
+                onClick = { onAttribute(key, choice) },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
 private fun ModifierSchemaEditor(
     viewModel: RulesViewModel,
     entityId: String,
@@ -1576,6 +1773,19 @@ private fun RuleReferenceEditor(
             ReferenceField("effectRefs", setOf(RuleKind.MODIFIER), multiple = true),
         )
         RuleKind.TRIGGER -> listOf(ReferenceField("effectRefs", setOf(RuleKind.MODIFIER), multiple = true))
+        RuleKind.HEALTH_MODEL -> listOf(
+            ReferenceField("primaryResourceRef", setOf(RuleKind.RESOURCE, RuleKind.TRACK)),
+            ReferenceField("bufferResourceRefs", setOf(RuleKind.RESOURCE, RuleKind.TRACK), multiple = true),
+            ReferenceField("zeroConditionRef", setOf(RuleKind.CONDITION)),
+            ReferenceField("deathConditionRef", setOf(RuleKind.CONDITION)),
+        )
+        RuleKind.SHEET_SECTION -> listOf(
+            ReferenceField("fieldRefs", RuleKind.entries.toSet() - RuleKind.SHEET_SECTION, multiple = true),
+        )
+        RuleKind.SCENE_PROCEDURE -> listOf(
+            ReferenceField("actionRefs", setOf(RuleKind.ACTION), multiple = true),
+            ReferenceField("trackerRefs", setOf(RuleKind.RESOURCE, RuleKind.TRACK), multiple = true),
+        )
         RuleKind.VALUE -> if (attributes["valueType"] == "REFERENCE") {
             listOf(
                 ReferenceField("defaultValue", RuleKind.entries.toSet()),

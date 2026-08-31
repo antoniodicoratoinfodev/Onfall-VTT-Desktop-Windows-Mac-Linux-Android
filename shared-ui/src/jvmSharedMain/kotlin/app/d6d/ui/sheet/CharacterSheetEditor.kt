@@ -50,6 +50,9 @@ import app.d6d.sheet.Ability
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.CreatureSize
+import app.d6d.sheet.ModularSheetField
+import app.d6d.sheet.ModularSheetFieldKind
+import app.d6d.sheet.ModularSheetValue
 import app.d6d.sheet.Proficiency
 import app.d6d.sheet.SpellSlot
 import app.d6d.sheet.Spellcasting
@@ -145,6 +148,7 @@ fun CharacterSheetEditor(
 
             SpellcastingSection(viewModel, sheet, compact, update)
             CharacterNotesSection(sheet, compact, update)
+            ModularSheetSections(viewModel, sheet, compact)
         }
 
         FlowRow(
@@ -1778,6 +1782,150 @@ private fun ProgressionEntries(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             masteries.forEach { Chip(it.replaceFirstChar { first -> first.uppercase() }, Palette.Party) }
+        }
+    }
+}
+
+// --- sezioni generate dal regolamento ------------------------------------------------
+
+@Composable
+private fun ModularSheetSections(
+    viewModel: SheetViewModel,
+    sheet: CharacterSheet,
+    compact: Boolean,
+) {
+    val language = currentLanguage
+    sheet.modularSheet.sections.forEach { section ->
+        SheetBox(section.title, Modifier.fillMaxWidth()) {
+            if (section.description.isNotBlank()) {
+                Text(
+                    section.description,
+                    color = Palette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                maxItemsInEachRow = if (compact) 1 else section.columns.coerceIn(1, 12),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                section.fields.forEach { field ->
+                    ModularSheetFieldEditor(
+                        field = field,
+                        value = sheet.modularSheet.values[field.id]
+                            ?: ModularSheetValue(field.kind),
+                        trueLabel = language.pick("Sì", "Yes"),
+                        falseLabel = language.pick("No", "No"),
+                        currentLabel = language.pick("Attuale", "Current"),
+                        maximumLabel = language.pick("Massimo", "Maximum"),
+                        modifier = Modifier.weight(1f),
+                        onCommit = { current, maximum ->
+                            viewModel.updateModularField(field.id, current, maximum)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModularSheetFieldEditor(
+    field: ModularSheetField,
+    value: ModularSheetValue,
+    trueLabel: String,
+    falseLabel: String,
+    currentLabel: String,
+    maximumLabel: String,
+    modifier: Modifier = Modifier,
+    onCommit: (String, String) -> Boolean,
+) {
+    val unit = field.canonicalUnit.takeIf(String::isNotBlank)?.let { " ($it)" }.orEmpty()
+    val label = field.label + unit
+    var currentDraft by remember(field.id, value.current) { mutableStateOf(value.current) }
+    var maximumDraft by remember(field.id, value.maximum) { mutableStateOf(value.maximum) }
+
+    fun normalized(text: String): String = text.trim().replace(',', '.')
+    fun commitNumberPair() {
+        val current = normalized(currentDraft)
+        val maximum = normalized(maximumDraft)
+        val valid = current.toBigDecimalOrNull() != null &&
+            (field.kind != ModularSheetFieldKind.RESOURCE || maximum.toBigDecimalOrNull() != null)
+        if (valid) {
+            onCommit(current, maximum)
+        } else {
+            currentDraft = value.current
+            maximumDraft = value.maximum
+        }
+    }
+
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        when (field.kind) {
+            ModularSheetFieldKind.RULE_TEXT -> Text(
+                value.current.ifBlank { field.description },
+                color = Palette.Text,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            ModularSheetFieldKind.BOOLEAN -> GameButton(
+                label = "$label: ${if (value.current.equals("true", true)) trueLabel else falseLabel}",
+                selected = value.current.equals("true", true),
+                enabled = field.mutable,
+                dense = true,
+                onClick = { onCommit((!value.current.equals("true", true)).toString(), "") },
+            )
+            ModularSheetFieldKind.RESOURCE -> {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    SheetField(
+                        label = "$label · $currentLabel",
+                        value = currentDraft,
+                        modifier = Modifier.weight(1f),
+                        decimal = true,
+                        onFocusLost = ::commitNumberPair,
+                        onChange = { currentDraft = it },
+                    )
+                    SheetField(
+                        label = maximumLabel,
+                        value = maximumDraft,
+                        modifier = Modifier.weight(1f),
+                        decimal = true,
+                        onFocusLost = ::commitNumberPair,
+                        onChange = { maximumDraft = it },
+                    )
+                }
+            }
+            ModularSheetFieldKind.NUMBER,
+            ModularSheetFieldKind.CONDITION,
+            -> if (field.mutable) {
+                SheetField(
+                    label = label,
+                    value = currentDraft,
+                    decimal = field.kind == ModularSheetFieldKind.NUMBER,
+                    numeric = field.kind == ModularSheetFieldKind.CONDITION,
+                    onFocusLost = ::commitNumberPair,
+                    onChange = { currentDraft = it },
+                )
+            } else {
+                DerivedValue(label, value.current, Modifier.fillMaxWidth())
+            }
+            ModularSheetFieldKind.TEXT,
+            ModularSheetFieldKind.REFERENCE,
+            -> if (field.mutable) {
+                SheetField(
+                    label = label,
+                    value = currentDraft,
+                    onFocusLost = { onCommit(currentDraft, "") },
+                    onChange = { currentDraft = it },
+                )
+            } else {
+                DerivedValue(label, value.current, Modifier.fillMaxWidth())
+            }
+        }
+        if (field.description.isNotBlank() && field.kind != ModularSheetFieldKind.RULE_TEXT) {
+            Text(field.description, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
         }
     }
 }

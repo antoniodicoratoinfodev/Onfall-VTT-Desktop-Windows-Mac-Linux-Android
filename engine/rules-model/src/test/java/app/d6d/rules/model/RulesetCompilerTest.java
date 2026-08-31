@@ -391,6 +391,114 @@ class RulesetCompilerTest {
         assertTrue(ambiguous.getMessage().contains("only one"));
     }
 
+    @Test
+    void compilesSheetHealthMovementSceneAndStatePoliciesAsExecutableContracts() {
+        List<RuleEntity> entities = List.of(
+                entity("open:value:stress", RuleKind.VALUE, Map.of(
+                        "valueType", "NUMBER", "defaultValue", "0", "dimension", "POINTS",
+                        "canonicalUnit", "stress", "lifetime", "SCENE", "owner", "ACTOR",
+                        "syncPolicy", "PROPOSE")),
+                entity("open:resource:health", RuleKind.RESOURCE, Map.of(
+                        "maximumFormula", "10", "initialFormula", "10")),
+                entity("open:resource:guard", RuleKind.TRACK, Map.of(
+                        "maximumFormula", "3", "initialFormula", "3")),
+                entity("open:condition:down", RuleKind.CONDITION, Map.of(
+                        "maximumStacks", "1", "stacking", "REPLACE")),
+                entity("open:health", RuleKind.HEALTH_MODEL, Map.of(
+                        "primaryResourceRef", "open:resource:health",
+                        "bufferResourceRefs", "open:resource:guard",
+                        "zeroConditionRef", "open:condition:down", "zeroState", "DISABLED")),
+                entity("open:movement", RuleKind.MOVEMENT, Map.of(
+                        "topology", "HEX_POINTY", "diagonalRule", "UNIFORM",
+                        "unitsPerCell", "2", "canonicalUnit", "m", "elevation", "true")),
+                entity("open:action:recover", RuleKind.ACTION, Map.of("conditionFormula", "1")),
+                entity("open:sheet:vitals", RuleKind.SHEET_SECTION, Map.of(
+                        "fieldRefs", "open:resource:health,open:value:stress",
+                        "layout", "GRID", "columns", "2", "order", "10")),
+                entity("open:scene:challenge", RuleKind.SCENE_PROCEDURE, Map.of(
+                        "phases", "SETUP,PLAY,AFTERMATH",
+                        "actionRefs", "open:action:recover",
+                        "trackerRefs", "open:value:stress,open:resource:health")));
+
+        CompiledRuleset rules = revision("open:system", entities).compile();
+
+        assertTrue(rules.capabilities().healthModels());
+        assertTrue(rules.capabilities().movementModels());
+        assertTrue(rules.capabilities().sheetSections());
+        assertTrue(rules.capabilities().sceneProcedures());
+        assertTrue(rules.capabilities().statePolicies());
+        assertEquals(CompiledRuleset.BoardTopology.HEX_POINTY,
+                rules.movementModels().get("open:movement").topology());
+        assertEquals(List.of("open:resource:health", "open:value:stress"),
+                rules.sheetSections().get("open:sheet:vitals").fieldRefs());
+        assertEquals("POINTS", rules.valueDefinitions().get("open:value:stress").dimension());
+        assertEquals(StatePersistencePolicy.SyncPolicy.PROPOSE,
+                rules.persistencePolicy("open:value:stress").syncPolicy());
+    }
+
+    @Test
+    void lifecycleEventsExpireOnlyStateDeclaredForThatBoundary() {
+        List<RuleEntity> entities = List.of(
+                entity("life:value:scene", RuleKind.VALUE, Map.of(
+                        "valueType", "NUMBER", "defaultValue", "1", "lifetime", "SCENE")),
+                entity("life:resource:scene", RuleKind.RESOURCE, Map.of(
+                        "maximumFormula", "5", "initialFormula", "5", "lifetime", "SCENE")),
+                entity("life:condition:turn", RuleKind.CONDITION, Map.of(
+                        "maximumStacks", "3", "lifetime", "TURN")),
+                entity("life:value:permanent", RuleKind.VALUE, Map.of(
+                        "valueType", "TEXT", "defaultValue", "A", "allowedValues", "A,B")));
+        CompiledRuleset rules = revision("life:rules", entities).compile();
+        RuleRuntimeState state = rules.initialState(Map.of(), Set.of());
+        state = rules.setRuleValue("life:value:scene", RuleValue.number(9), state);
+        state = rules.setResource("life:resource:scene", new BigDecimal("2"), new BigDecimal("5"), state);
+        state = rules.setConditionStacks("life:condition:turn", 2, state);
+        state = rules.setRuleValue("life:value:permanent", RuleValue.text("B"), state);
+
+        RuleExecutionResult sceneEnded = rules.fireEvent("SCENE_ENDED", state);
+
+        assertEquals(RuleValue.number(1), rules.ruleValue("life:value:scene", sceneEnded.state()));
+        assertEquals(new BigDecimal("5"), sceneEnded.state().resources().get("life:resource:scene").current());
+        assertEquals(2, sceneEnded.state().conditionStacks().get("life:condition:turn"));
+        assertEquals(RuleValue.text("B"), rules.ruleValue("life:value:permanent", sceneEnded.state()));
+        assertEquals(2, sceneEnded.events().stream().filter(event -> event.type().equals("STATE_EXPIRED")).count());
+
+        RuleExecutionResult turnEnded = rules.fireEvent("TURN_ENDED", sceneEnded.state());
+        assertFalse(turnEnded.state().conditionStacks().containsKey("life:condition:turn"));
+    }
+
+    @Test
+    void multiTargetActionsPayOnceAndApplyTargetEffectsToEverySelectedScope() {
+        List<RuleEntity> entities = List.of(
+                entity("many:value:mark", RuleKind.VALUE, Map.of(
+                        "valueType", "NUMBER", "defaultValue", "0")),
+                entity("many:turn", RuleKind.ACTION_ECONOMY, Map.of("budgets", "action=1")),
+                entity("many:effect:mark", RuleKind.MODIFIER, Map.of(
+                        "ownerRef", "many:value:mark", "targetRef", "many:value:mark",
+                        "application", "CHANGE_VALUE", "recipient", "TARGET",
+                        "operation", "ADD", "valueFormula", "1")),
+                entity("many:action:mark", RuleKind.ACTION, Map.of(
+                        "costs", "turn:action=1", "effectRefs", "many:effect:mark")));
+        CompiledRuleset rules = revision("many:rules", entities).compile();
+        RuleRuntimeState initial = rules.initialState(Map.of(), Set.of());
+        RuleScope source = RuleScope.actor("source");
+        RuleScope first = RuleScope.actor("first");
+        RuleScope second = RuleScope.actor("second");
+        Map<RuleScope, RuleRuntimeState> frame = Map.of(
+                RuleScope.session(), initial,
+                source, initial,
+                first, initial,
+                second, initial);
+
+        ScopedRuleExecutionResult result = rules.executeScopedActionToTargets(
+                "many:action:mark", source, List.of(first, second), frame);
+
+        assertEquals(BigDecimal.ZERO, result.state(source).turnBudget().get("action"));
+        assertEquals(new BigDecimal("1"), rules.value("many:value:mark", result.state(first)));
+        assertEquals(new BigDecimal("1"), rules.value("many:value:mark", result.state(second)));
+        assertEquals(BigDecimal.ZERO, rules.value("many:value:mark", result.state(RuleScope.session())));
+        assertEquals(2, result.events().stream().filter(event -> event.type().equals("VALUE_CHANGED")).count());
+    }
+
     private static RulesetRevision revision(String projectId, List<RuleEntity> entities) {
         return RulesetRevision.create(projectId, projectId + ":revision:1", "1.0.0", projectId,
                 "Synthetic test ruleset", RulesetOrigin.HOMEBREW, "",

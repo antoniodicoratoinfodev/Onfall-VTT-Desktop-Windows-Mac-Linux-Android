@@ -78,6 +78,21 @@ nomi o formule specifiche dello SRD.
   transazioni source→target→sessione senza codice specifico dell'edizione; test di migrazione
   verificano anche alias di risorsa, speso conservato, stack ricondotti ai nuovi massimi e valori
   incompatibili riportati al nuovo default.
+- `StatePersistencePolicy` rende eseguibili durata, proprietario, evento di reset e politica di
+  sincronizzazione; i confini azione/turno/scena/incontro/sessione/campagna scadono lo stato in modo
+  atomico e il planner separa applicazioni automatiche, proposte, conflitti e modifiche locali;
+- `HEALTH_MODEL`, `MOVEMENT`, `SHEET_SECTION` e `SCENE_PROCEDURE` sono compilati, validati e
+  modificabili con editor strutturati; la scheda materializza sezioni e campi linkati, li persiste con
+  l'hash esatto e li ritraduce senza perdere i valori;
+- `GameSession` è un aggregate generale persistibile senza combattimento, PF, CA, iniziativa o d20
+  obbligatori: gestisce scene, partecipanti, fasi, azioni, trigger, RNG, audit, Undo e cambio revisione;
+- una singola azione può applicare effetti `TARGET` a più scope pagando i costi una sola volta; il
+  pannello di gioco espone azioni, risorse, salute e condizioni della revisione attiva;
+- `BoardGeometry` esegue distanze e ingombri quadrati, diagonale alternata 3.5-like, euclidea,
+  esagonale, gridless e teatro della mente; la CPU usa un profilo conservativo esplicito e degrada a
+  controllo manuale quando topologia o revisione non sono supportate;
+- revisioni pubblicate homebrew si importano ed esportano dal catalogo Regole tramite il formato
+  portabile con hash, limiti, compilazione e scrittura atomica già applicati dal repository.
 
 Il precedente elenco di lacune — ID aperti, formule, PE, risorse/trigger, action economy, danni e
 condizioni dinamici — è quindi superato. “Universale” continua però a non significare che qualunque
@@ -87,15 +102,15 @@ regola immaginabile venga automatizzata senza una primitiva. Restano confini esp
   continua ad avere semantica D20/SRD; un regolamento diverso usa le primitive generiche o la
   risoluzione assistita/manuale per le parti non ancora estratte;
 - la creazione personaggio guidata è ancora un adattatore con forma D&D (classe, livelli, dado vita,
-  PF e competenze). Può proiettare ID aperti senza contaminazione SRD, ma un gioco classless o con
-  una scheda radicalmente diversa usa oggi lo stato generico/manuale; un renderer di scheda guidato
-  completamente prodotto dai dati resta nella roadmap;
-- le istanze keyed-by-scope per sessione, attore, oggetto, scena e campagna sono operative. Restano
-  da estrarre la politica completa `lifetime/owner/syncPolicy`, la sincronizzazione transazionale
-  fra archivi e il fan-out di un singolo effetto verso collezioni arbitrarie di bersagli; il frame
-  atomico corrente copre sorgente, un bersaglio scelto e sessione;
-- griglie esagonali, topologie diverse, layout di scheda e workflow UI interamente generati dai dati
-  restano nella roadmap;
+  PF e competenze), scelto intenzionalmente come esperienza principale. Classi, stat e skill hanno ID
+  aperti; i giochi classless usano le sezioni `SHEET_SECTION` generate e la `GameSession` generica.
+  Restano SRD-specifici i riquadri storici della scheda 2024 e alcune procedure guidate avanzate;
+- policy di stato e fan-out multi-target sono operative. Resta da coordinare in un unico journal una
+  sincronizzazione che modifichi contemporaneamente più archivi fisici (regole, workspace, board e
+  più schede); il planner attuale è deliberatamente read-only fuori dalla sessione;
+- le geometrie alternative sono modellate, misurabili e capability-aware. Il renderer tattico e il
+  pathfinding completi restano l'adattatore quadrato SRD: esagoni/gridless vengono mostrati come non
+  automatizzati finché non esiste un renderer/pathfinder dedicato;
 - formule ed effetti sono volutamente un linguaggio sicuro e finito: non viene eseguito codice
   homebrew arbitrario. Ciò che non ha ancora una primitiva resta sempre rappresentabile e giocabile
   in modalità assistita o manuale.
@@ -109,7 +124,7 @@ catalogo:
 |---|---|
 | Classe | `classId`, `hitDieSides`, `fixedHitPointsPerLevel`, `primaryAbilities`, `multiclassPrerequisiteGroups`, `savingThrowProficiencies`, `maximumLevel`, `skillChoiceCount`, `spellcastingKind`, `spellcastingAbility`, `subclassIds`, `levelFeatureIds`, addestramenti in armi/armature e dotazione testuale |
 | Caratteristica/difesa/skill | ID aperto, caratteristica collegata, default/derivazione/minimo/massimo/modificatore, arrotondamento e bonus di addestramento |
-| Valore | `valueType`, `defaultValue`, `allowedValues`, `mutable`; il tipo può essere numero, booleano, testo o riferimento a una regola |
+| Valore | `valueType`, `defaultValue`, `allowedValues`, `mutable`, `dimension`, `canonicalUnit`; il tipo può essere numero, booleano, testo o riferimento a una regola |
 | Modificatore personaggio | `ownerRef`, `target`, `amount`, `condition`, `minimumLevel`, `group` |
 | Modificatore universale | `ownerRef`, `targetRef`, `application`, `recipient=SELF|TARGET|SESSION`, `operation`, `valueFormula` o `valueLiteral`, `conditionFormula`, `priority`, `minimumLevel`, `group` |
 | Privilegio/talento/incantesimo/azione | tipo di elemento, attivazione, prerequisito, eleggibilità di classe, dettagli di incantesimo, costo/risorsa e incantesimi concessi |
@@ -118,7 +133,12 @@ catalogo:
 | Risorsa/track | formule di massimo, iniziale e recupero più evento di recupero arbitrario |
 | Action economy/azione | budget nominati e formula, costi su budget o risorse, condizione ed effetti collegati |
 | Trigger | evento arbitrario, condizione, priorità, limite di esecuzione ed effetti collegati |
-| Danno/condizione | ID aperto; per la condizione anche massimo degli accumuli |
+| Danno/condizione | ID aperto; per la condizione anche massimo, stacking, separazione per fonte ed evento di rimozione |
+| Salute | risorsa primaria, buffer, condizioni a zero/morte, valori negativi e stato a zero |
+| Movimento | topologia, diagonale, unità per cella, unità canonica, elevazione e occupazione |
+| Sezione scheda | campi linkati, ordine, colonne, layout e formula di visibilità |
+| Procedura scena | fasi, azioni/tracker collegati e requisiti di iniziativa/board |
+| Policy di stato | `lifetime`, `owner`, `syncPolicy`, `resetEvent` per ogni entità stateful |
 
 `ownerRef` accetta l'ID della regola che concede un effetto. `activeByDefault` oppure il controllo
 live della sessione decide se quel proprietario è attivo; per una classe, `minimumLevel` indica la
@@ -256,8 +276,8 @@ deve mostrare prima della sessione quali parti non sono automatizzate. Un pack n
 Questa sezione fotografa la base precedente all'implementazione e viene mantenuta per spiegare le
 decisioni di migrazione. Non è un elenco dello stato corrente: binding/snapshot di sessione, scelta
 nel wizard, ID aperti principali, runtime generico, scope keyed-by-ID e controlli Regole sono stati
-introdotti. Le righe su geometria, magia, procedure tattiche legacy, policy/sincronizzazione dello
-stato e `GameSession` restano invece vincoli attuali.
+introdotti. La tabella seguente è volutamente storica: geometria, policy e `GameSession` indicate
+come assenti nella baseline hanno ora un primo contratto operativo descritto nella sezione 0.
 
 | Area attuale | Fondamenta riutilizzabile | Vincolo da rimuovere |
 |---|---|---|
@@ -1840,7 +1860,7 @@ Gate:
 - un fallimento in qualunque punto recupera una combinazione coerente di tutti gli archivi;
 - nessuna scheda con binding incompatibile viene modificata silenziosamente.
 
-### Fase 5 — ID dinamici e schede modulari — parziale avanzata
+### Fase 5 — ID dinamici e schede modulari — implementazione operativa, rifiniture residue
 
 Deliverable:
 
@@ -1875,7 +1895,7 @@ Gate:
 - le golden SRD passano attraverso il nuovo runtime;
 - nessuna regola critica dipende da nome localizzato o ID SRD speciale.
 
-### Fase 7 — Movimento, magia e progressioni avanzate — progressione parziale; resto pianificato
+### Fase 7 — Movimento, magia e progressioni avanzate — geometria/GameSession operative; tattica avanzata parziale
 
 Deliverable:
 
@@ -1894,7 +1914,7 @@ Gate:
 - il pack d6 sintetico completa scene sociali/esplorative senza campi D20 obbligatori;
 - una regola non supportata degrada a Manuale senza corrompere stato o UI.
 
-### Fase 8 — Ecosistema e hardening — pianificata
+### Fase 8 — Ecosistema e hardening — import/export operativo; hardening avanzato pianificato
 
 Deliverable:
 
@@ -2107,11 +2127,11 @@ La fetta verticale originariamente consigliata è ora operativa: repository, can
 revisione SRD immutabile, sezione Regole, fork, binding, snapshot, scelta nel wizard, modifica live,
 Undo e protezione delle sincronizzazioni incompatibili sono coperti. L'implementazione è già andata
 oltre quel traguardo con classi/ID aperti, formule, valori tipizzati, tabelle, risorse, trigger e
-action economy generici. Anche le istanze di stato keyed-by-scope per sessione, attore, oggetto,
-scena e campagna sono operative e retrocompatibili. Il contenitore `GameSession` non-combat, il
-journal realmente multi-file, la policy completa di durata/sincronizzazione e le transazioni con
-fan-out verso collezioni arbitrarie di scope bersaglio non vanno confusi con il frame atomico
-sorgente/bersaglio/sessione del combattimento: restano deliverable separati delle fasi 4, 5 e 7.
+action economy generici. Anche le istanze di stato keyed-by-scope, la policy di
+durata/sincronizzazione, il fan-out atomico multi-target e il contenitore `GameSession` non-combat
+sono operativi e retrocompatibili. Il confine residuo importante è il journal realmente multi-file
+fra repository, workspace, board e più schede: non va confuso con le transazioni già atomiche
+all'interno di una singola sessione.
 
 ## 27. Tracciabilità della richiesta
 
@@ -2120,7 +2140,7 @@ sorgente/bersaglio/sessione del combattimento: restano deliverable separati dell
 | Non giocabile soltanto con SRD | Runtime versionato, moduli, ID dinamici e fallback manuale |
 | Qualunque edizione/regolamento simile | Primitive generiche più pack sintetici 3.5-like e classless d6 come gate |
 | Regole e modificatori modificabili | RuleEntity, formule, ModifierDefinition, patch e editor |
-| Classi modulari | ID aperti e proiezione guidata senza eredità SRD implicita; renderer di scheda totalmente data-driven ancora pianificato |
+| Classi modulari | ID aperti, proiezione guidata senza eredità SRD implicita e sezioni scheda data-driven persistite |
 | Sezione Regole accanto al Compendio | Nuova destinazione principale e confine Regole/Compendio |
 | Standard read-only ma modificabile | Crea variante/fork copy-on-write, mai overwrite |
 | Homebrew sempre visibile | Archivio globale, badge e filtro Standard/Homebrew |

@@ -441,6 +441,8 @@ data class CharacterSheet(
      * content pack SRD, che continuano a funzionare in modalità manuale.
      */
     val progression: CharacterProgression = CharacterProgression(),
+    /** Sezioni e campi aggiuntivi materializzati dalla revisione del regolamento. */
+    val modularSheet: ModularSheetState = ModularSheetState(),
 
     // --- difesa, vita e morte ---
     /**

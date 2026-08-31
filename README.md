@@ -559,9 +559,11 @@ revision with pause, conservative state migration, audit and Undo.
 Independent rulesets do not inherit undeclared SRD classes, stats, skills, equipment, damage types
 or conditions. Their generic runtime supports typed values, formulas, tables, resources, arbitrary
 events and triggers, named turn budgets, linked effects and scoped state for session, actor, object,
-scene or campaign. The current guided character sheet remains D&D-shaped; games with a radically
-different or classless sheet use the generic/manual workflow until a fully data-generated sheet
-renderer is added. The detailed capability contract and roadmap are in
+scene or campaign. Rulesets can also declare state lifetime/ownership/sync, multi-target actions,
+health models, movement topology and units, scene procedures, and persisted data-generated sheet
+sections. The primary guided sheet remains deliberately D&D-shaped, while classless or radically
+different games use those generated sections and the general non-combat `GameSession`. Portable
+homebrew revisions can be imported or exported from Rules. The detailed capability contract is in
 [`docs/piano-regole-modulari.md`](docs/piano-regole-modulari.md).
 
 ## Architecture
@@ -570,8 +572,8 @@ renderer is added. The detailed capability contract and roadmap are in
 |---|---|---|
 | `engine/rules-model` | Java 17 | versioned rule entities, compiler, formulas, links and generic scoped runtime |
 | `engine/rules-persistence` | Java 17 | standards, copy-on-write drafts, immutable revisions and portable ruleset packages |
-| `engine/domain-model` | Java 17 | actors, abilities, conditions, state, campaigns. Immutable, zero dependencies |
-| `engine/core-engine` | Java 17 | seeded dice, state machine, append only audit, XP budget, enemy CPU |
+| `engine/domain-model` | Java 17 | actors, abilities, conditions, state, campaigns and rules-driven board geometry |
+| `engine/core-engine` | Java 17 | seeded dice, combat and general GameSession state machines, append-only audit, Undo and CPU support profiles |
 | `engine/board-model` | Java 17 | board layer: ink, templates, stamps, labels, scene tokens, fog, floor, wall and explored masks, vision settings and the sight field |
 | `engine/persistence-json` | Java 17 | atomic saves, backups, import and export |
 | `engine/character-rules` | Kotlin | versioned class choices, XP progression and class resources |

@@ -41,6 +41,7 @@ import app.d6d.ui.components.dismissDialogOnTap
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.keepDialogOpenOnTap
 import app.d6d.i18n.label
+import app.d6d.rules.model.RuleScope
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.OrnateDivider
@@ -358,6 +359,13 @@ fun BattleToolsDialog(
                     }
                 }
 
+                GenericRuleTools(
+                    viewModel = viewModel,
+                    combatantIds = combatantIds,
+                    focusedTargetId = targetId,
+                    commandsEnabled = commandsEnabled,
+                )
+
                 if (
                     viewModel.tacticalDeathSaveControlsAvailable ||
                     viewModel.tacticalExhaustionControlsAvailable
@@ -399,6 +407,203 @@ fun BattleToolsDialog(
         }
     }
 }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GenericRuleTools(
+    viewModel: BattleViewModel,
+    combatantIds: List<String>,
+    focusedTargetId: String?,
+    commandsEnabled: Boolean,
+) {
+    val actions = viewModel.genericRuleActions
+    val resources = viewModel.genericRuleResources
+    val conditions = viewModel.genericRuleConditions
+    val healthModels = viewModel.genericHealthModels
+    if (actions.isEmpty() && resources.isEmpty() && conditions.isEmpty() && healthModels.isEmpty()) return
+
+    val language = strings.language
+    val italian = language.tag == "it"
+    val initialTarget = focusedTargetId ?: combatantIds.firstOrNull()
+    var selectedTargetIds by remember(viewModel.sessionGeneration) {
+        mutableStateOf(initialTarget?.let(::setOf).orEmpty())
+    }
+    val availableTargetIds = selectedTargetIds.intersect(combatantIds.toSet())
+    val focusedScope = focusedTargetId?.let(RuleScope::actor) ?: RuleScope.session()
+    val sourceScope = viewModel.activeActorId?.let(RuleScope::actor) ?: RuleScope.session()
+    val targetScopes = availableTargetIds.sorted().map(RuleScope::actor)
+
+    OrnateDivider(color = Palette.Party)
+    Eyebrow(if (italian) "Regole del regolamento attivo" else "Active ruleset tools", Palette.Party)
+    Text(
+        if (italian) {
+            "Questi controlli provengono dalla revisione incorporata nella sessione, non da campi D&D impliciti."
+        } else {
+            "These controls come from the revision embedded in this session, not from implicit D&D fields."
+        },
+        color = Palette.TextMuted,
+        style = MaterialTheme.typography.bodySmall,
+    )
+
+    if (actions.isNotEmpty()) {
+        Text(
+            if (italian) "Bersagli delle azioni (selezione multipla)" else "Action targets (multi-select)",
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            combatantIds.forEach { id ->
+                GameButton(
+                    label = viewModel.name(id),
+                    dense = true,
+                    selected = id in availableTargetIds,
+                    accent = if (viewModel.isParty(id)) Palette.Party else Palette.Enemy,
+                    onClick = {
+                        selectedTargetIds = if (id in selectedTargetIds) {
+                            selectedTargetIds - id
+                        } else {
+                            selectedTargetIds + id
+                        }
+                    },
+                )
+            }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            actions.forEach { action ->
+                GameButton(
+                    label = action.name().text(language.tag),
+                    subtitle = action.description().text(language.tag).takeIf(String::isNotBlank),
+                    accent = Palette.Heal,
+                    enabled = commandsEnabled && targetScopes.isNotEmpty(),
+                    onClick = {
+                        viewModel.executeGenericRuleAction(action.id(), sourceScope, targetScopes)
+                    },
+                )
+            }
+        }
+    }
+
+    if (healthModels.isNotEmpty()) {
+        Eyebrow(if (italian) "Salute modulare" else "Modular health", Palette.Heal)
+        healthModels.forEach { health ->
+            val primaryId = health.attributes()["primaryResourceRef"].orEmpty()
+            val primary = viewModel.genericRuleState(focusedScope)?.resources()?.get(primaryId)
+            Text(
+                buildString {
+                    append(health.name().text(language.tag))
+                    if (primary != null) {
+                        append(": ").append(primary.current().toPlainString())
+                            .append(" / ").append(primary.maximum().toPlainString())
+                    } else if (primaryId.isNotBlank()) {
+                        append(" · ").append(primaryId)
+                    }
+                },
+                color = Palette.Text,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+
+    if (resources.isNotEmpty()) {
+        Eyebrow(if (italian) "Risorse e tracciati" else "Resources and tracks", Palette.Temporary)
+        resources.forEach { entity ->
+            val state = viewModel.genericRuleState(focusedScope)?.resources()?.get(entity.id())
+            if (state != null) {
+                GenericResourceEditor(
+                    label = entity.name().text(language.tag),
+                    entityId = entity.id(),
+                    current = state.current().toPlainString(),
+                    maximum = state.maximum().toPlainString(),
+                    enabled = commandsEnabled,
+                    onSave = { current, maximum ->
+                        viewModel.setGenericResource(entity.id(), current, maximum, focusedScope)
+                    },
+                )
+                entity.attributes()["recoveryEvent"]
+                    ?.takeIf { it.isNotBlank() && it != "MANUAL" }
+                    ?.let { event ->
+                        GameButton(
+                            label = if (italian) "Invia $event" else "Fire $event",
+                            dense = true,
+                            enabled = commandsEnabled,
+                            onClick = { viewModel.fireGenericRuleEvent(event, focusedScope) },
+                        )
+                    }
+            }
+        }
+    }
+
+    if (conditions.isNotEmpty()) {
+        Eyebrow(if (italian) "Condizioni modulari" else "Modular conditions", Palette.Bloodied)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            conditions.forEach { entity ->
+                val stacks = viewModel.genericRuleState(focusedScope)?.conditionStacks()?.get(entity.id()) ?: 0
+                val maximum = entity.attributes()["maximumStacks"]?.toIntOrNull()?.coerceAtLeast(1) ?: 1
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    GameButton(
+                        "−",
+                        dense = true,
+                        enabled = commandsEnabled && stacks > 0,
+                        onClick = { viewModel.setGenericConditionStacks(entity.id(), stacks - 1, focusedScope) },
+                    )
+                    Chip("${entity.name().text(language.tag)} · $stacks/$maximum", Palette.Bloodied)
+                    GameButton(
+                        "+",
+                        dense = true,
+                        enabled = commandsEnabled && stacks < maximum,
+                        onClick = { viewModel.setGenericConditionStacks(entity.id(), stacks + 1, focusedScope) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GenericResourceEditor(
+    label: String,
+    entityId: String,
+    current: String,
+    maximum: String,
+    enabled: Boolean,
+    onSave: (String, String) -> Unit,
+) {
+    val italian = strings.language.tag == "it"
+    var currentDraft by remember(entityId, current) { mutableStateOf(current) }
+    var maximumDraft by remember(entityId, maximum) { mutableStateOf(maximum) }
+    Text(label, color = Palette.Text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        LabeledNumberField(
+            if (italian) "Attuale" else "Current",
+            currentDraft,
+            { currentDraft = decimalInput(it) },
+            Modifier.weight(1f),
+        )
+        LabeledNumberField(
+            if (italian) "Massimo" else "Maximum",
+            maximumDraft,
+            { maximumDraft = decimalInput(it) },
+            Modifier.weight(1f),
+        )
+        GameButton(
+            strings.common.save,
+            dense = true,
+            enabled = enabled && currentDraft.toBigDecimalOrNull() != null && maximumDraft.toBigDecimalOrNull() != null,
+            onClick = { onSave(currentDraft, maximumDraft) },
+        )
+    }
+}
+
+private fun decimalInput(value: String): String = value.filterIndexed { index, char ->
+    char.isDigit() || char == '.' || char == ',' || char == '-' && index == 0
+}.replace(',', '.')
 
 private fun signedIntegerInput(value: String): String {
     val negative = value.startsWith('-')
