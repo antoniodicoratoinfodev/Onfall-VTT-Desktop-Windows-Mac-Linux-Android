@@ -26,6 +26,7 @@ import app.d6d.rules.character.EffectCondition
 import app.d6d.rules.character.EffectTarget
 import app.d6d.rules.model.RuleEntity
 import app.d6d.rules.model.RuleKind
+import app.d6d.rules.model.RulesetOrigin
 import app.d6d.rules.model.RulesetRevision
 
 /**
@@ -41,7 +42,32 @@ object SrdRulesetCharacterAdapter {
 
     fun project(revision: RulesetRevision, language: AppLanguage): RulesContentPack {
         validateExecutableLinks(revision, language)
-        val base = Srd521ItContent.packFor(language)
+        val srdBase = Srd521ItContent.packFor(language)
+        val base = if (inheritsSrdContent(revision)) {
+            srdBase
+        } else {
+            // Il modello guidato usa ancora lo stesso DTO del pack SRD, ma un
+            // regolamento autonomo deve partire da collezioni realmente vuote:
+            // nessuna classe, stat, skill, arma o provenienza entra per fallback.
+            srdBase.copy(
+                manifest = srdBase.manifest.copy(
+                    id = revision.projectId(),
+                    sourceUrl = "",
+                    license = "",
+                    attribution = "",
+                ),
+                classes = emptyList(),
+                elements = emptyList(),
+                weapons = emptyList(),
+                backgrounds = emptyList(),
+                equipmentPackages = emptyList(),
+                maximumCharacterLevel = 1,
+                enforceExperienceThresholds = false,
+                stats = emptyList(),
+                skills = emptyList(),
+                experienceThresholds = emptyList(),
+            )
+        }
         val allEntities = revision.entities()
         val enabled = allEntities.filter(RuleEntity::enabled)
         val classEntities = enabled.filter { it.kind() == RuleKind.CLASS }
@@ -66,6 +92,7 @@ object SrdRulesetCharacterAdapter {
                         projected.ownerRef.equals(id.value, ignoreCase = true) ||
                         projected.ownerRef.equals(id.contentId, ignoreCase = true)
                 },
+                packId = base.manifest.id,
                 language = language,
             )
             definition.levels.flatMap { it.featureIds }.forEach { featureId ->
@@ -115,7 +142,7 @@ object SrdRulesetCharacterAdapter {
             ?: if (enforceExperienceRaw == null) {
                 // Oltre la tabella SRD il fallback sicuro è l'avanzamento deciso
                 // dal tavolo, finché la revisione non dichiara una propria curva PE.
-                maximumCharacterLevel <= 20
+                base.experienceThresholds.isNotEmpty()
             } else {
                 error("enforceExperienceThresholds must be true or false")
             }
@@ -174,10 +201,11 @@ object SrdRulesetCharacterAdapter {
                 return@forEach
             }
             val inherited = result[id]
-            fun simpleInteger(key: String, fallback: Int): Int = entity.attributes()[key]
-                ?.takeIf(String::isNotBlank)
-                ?.toIntOrNull()
-                ?: fallback
+            fun simpleInteger(key: String, fallback: Int): Int {
+                val raw = entity.attributes()[key]?.takeIf(String::isNotBlank) ?: return fallback
+                return raw.toIntOrNull()
+                    ?: error("${entity.id()}.$key must be an integer for the guided character sheet")
+            }
             result[id] = CharacterStatDefinition(
                 id = id,
                 name = entity.name().text(language.tag),
@@ -393,6 +421,7 @@ object SrdRulesetCharacterAdapter {
         id: CharacterClassId,
         base: ClassDefinition?,
         modifiers: List<ProjectedModifier>,
+        packId: String,
         language: AppLanguage,
     ): ClassDefinition {
         val attributes = entity.attributes()
@@ -458,7 +487,7 @@ object SrdRulesetCharacterAdapter {
                 },
                 kind = ChoiceKind.SKILL_PROFICIENCY,
                 count = skillCount,
-                poolId = if (skillCount == 0) null else "${Srd521ItContent.packFor(language).manifest.id}:pool:skills:any",
+                poolId = if (skillCount == 0) null else "$packId:pool:skills:any",
             )
         }
         val weaponTrainingGrant = WeaponTrainingGrant(
@@ -516,6 +545,21 @@ object SrdRulesetCharacterAdapter {
             ?.takeIf(String::isNotBlank)
             ?.let(CharacterClassId::of)
             ?: CharacterClassId.of(entity.id())
+
+    /**
+     * La provenienza viene riconosciuta dalle entità, non dal solo hash della
+     * base: una revisione importata resta proiettabile anche senza avere tutta
+     * la propria genealogia installata. Una collisione di ID in un pack
+     * autonomo non basta invece a trascinare dentro lo SRD.
+     */
+    fun inheritsSrdContent(revision: RulesetRevision): Boolean = revision.entities().any { entity ->
+        entity.id() in srdEntityIds &&
+            (entity.origin() == RulesetOrigin.BUNDLED_STANDARD || entity.derivedFrom() in srdEntityIds)
+    }
+
+    private val srdEntityIds: Set<String> by lazy {
+        Srd521Ruleset.revision.entities().mapTo(linkedSetOf(), RuleEntity::id)
+    }
 
     private fun modifier(entity: RuleEntity, language: AppLanguage): ProjectedModifier {
         val attributes = entity.attributes()

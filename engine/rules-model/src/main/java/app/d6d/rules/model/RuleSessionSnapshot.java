@@ -13,7 +13,8 @@ import java.util.TreeMap;
 public record RuleSessionSnapshot(
         List<RuleEntity> entities,
         RuleRuntimeState state,
-        Map<RuleScope, RuleRuntimeState> scopedStates) {
+        Map<RuleScope, RuleRuntimeState> scopedStates,
+        boolean configured) {
     public RuleSessionSnapshot {
         ArrayList<RuleEntity> sorted = new ArrayList<>(Objects.requireNonNull(entities, "entities"));
         sorted.sort(java.util.Comparator.comparing(RuleEntity::id));
@@ -37,21 +38,33 @@ public record RuleSessionSnapshot(
 
     /** Compatibilità sorgente: uno snapshot precedente contieneva soltanto lo stato di sessione. */
     public RuleSessionSnapshot(List<RuleEntity> entities, RuleRuntimeState state) {
-        this(entities, state, Map.of());
+        this(entities, state, Map.of(), !entities.isEmpty());
+    }
+
+    /** Compatibilità sorgente: prima dello schema 5 la presenza era dedotta dalle entità. */
+    public RuleSessionSnapshot(
+            List<RuleEntity> entities,
+            RuleRuntimeState state,
+            Map<RuleScope, RuleRuntimeState> scopedStates) {
+        this(entities, state, scopedStates, !entities.isEmpty());
     }
 
     public static RuleSessionSnapshot empty() {
-        return new RuleSessionSnapshot(List.of(), RuleRuntimeState.empty());
+        return new RuleSessionSnapshot(List.of(), RuleRuntimeState.empty(), Map.of(), false);
     }
 
     public static RuleSessionSnapshot fromRevision(RulesetRevision revision) {
         Objects.requireNonNull(revision, "revision");
         CompiledRuleset compiled = revision.compile();
-        return new RuleSessionSnapshot(revision.entities(), compiled.initialState(java.util.Map.of(), java.util.Set.of()));
+        return new RuleSessionSnapshot(
+                revision.entities(),
+                compiled.initialState(java.util.Map.of(), java.util.Set.of()),
+                Map.of(),
+                true);
     }
 
     public boolean executable() {
-        return !entities.isEmpty();
+        return configured;
     }
 
     public CompiledRuleset compile(String canonicalHash) {
@@ -60,7 +73,7 @@ public record RuleSessionSnapshot(
     }
 
     public RuleSessionSnapshot withState(RuleRuntimeState changed) {
-        return new RuleSessionSnapshot(entities, changed, scopedStates);
+        return new RuleSessionSnapshot(entities, changed, scopedStates, configured);
     }
 
     public Optional<RuleRuntimeState> findState(RuleScope scope) {
@@ -75,7 +88,7 @@ public record RuleSessionSnapshot(
         if (scope.isSession()) return withState(changed);
         LinkedHashMap<RuleScope, RuleRuntimeState> updated = new LinkedHashMap<>(scopedStates);
         updated.put(scope, changed);
-        return new RuleSessionSnapshot(entities, state, updated);
+        return new RuleSessionSnapshot(entities, state, updated, configured);
     }
 
     public RuleSessionSnapshot withoutScope(RuleScope scope) {
@@ -83,6 +96,6 @@ public record RuleSessionSnapshot(
         if (scope.isSession() || !scopedStates.containsKey(scope)) return this;
         LinkedHashMap<RuleScope, RuleRuntimeState> updated = new LinkedHashMap<>(scopedStates);
         updated.remove(scope);
-        return new RuleSessionSnapshot(entities, state, updated);
+        return new RuleSessionSnapshot(entities, state, updated, configured);
     }
 }

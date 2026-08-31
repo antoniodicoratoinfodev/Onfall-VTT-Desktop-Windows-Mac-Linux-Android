@@ -1,6 +1,7 @@
 package app.d6d.ui.encounter
 
 import app.d6d.domain.combat.CombatStatus
+import app.d6d.domain.combat.EventType
 import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.ui.state.EnemyCpuSpeed
 import app.d6d.persistence.catalog.ActorCatalogStore
@@ -11,6 +12,7 @@ import app.d6d.sheet.SheetStore
 import app.d6d.sheet.StatBlockActorKind
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.content.srd521it.Srd521Ruleset
+import app.d6d.rules.model.GenericRulesetFoundation
 import app.d6d.rules.model.RulesetOrigin
 import app.d6d.rules.model.RulesetRevision
 import app.d6d.ui.roster.RosterKind
@@ -411,6 +413,29 @@ class EncounterBuilderViewModelTest {
         assertFalse(builder.selectedRulesetSupportsEnemyCpu)
         assertNull(builder.enemyCpuDifficulty)
         assertEquals(structural.binding(), builder.startedSession().currentState().rulesetBinding())
+    }
+
+    @Test
+    fun `una nuova partita puo usare la fondazione vuota senza introdurre un d20 implicito`() {
+        val standard = Srd521Ruleset.revision
+        val foundation = GenericRulesetFoundation.revision()
+        val builder = EncounterBuilderViewModel(
+            roster(),
+            seedProvider = { 83L },
+            rulesetProvider = { listOf(standard, foundation) },
+        )
+
+        builder.selectRuleset(foundation.canonicalHash())
+        val session = builder.startedSession()
+
+        assertEquals(foundation.binding(), session.currentState().rulesetBinding())
+        assertTrue(session.currentState().ruleSession().executable())
+        assertTrue(session.currentState().ruleSession().entities().isEmpty())
+        assertFalse(builder.selectedRulesetSupportsEnemyCpu)
+        assertNull(builder.enemyCpuDifficulty)
+        val initiativeEvents = session.auditTrail().filter { it.type() == EventType.INITIATIVE_SET }
+        assertTrue(initiativeEvents.isNotEmpty())
+        assertTrue(initiativeEvents.none { "mode" in it.details() })
     }
 
     @Test

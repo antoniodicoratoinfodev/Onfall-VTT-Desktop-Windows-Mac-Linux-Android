@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import app.d6d.content.srd521it.Srd521Ruleset
 import app.d6d.content.srd521it.SrdRulesetCharacterAdapter
 import app.d6d.rules.model.CoreRuleIds
+import app.d6d.rules.model.GenericRulesetFoundation
 import app.d6d.rules.model.LocalizedRuleText
 import app.d6d.rules.model.RuleAutomationLevel
 import app.d6d.rules.model.RuleEntity
@@ -42,15 +43,16 @@ data class RulesetChoice(
 /** Stato del catalogo Regole e dei fork homebrew locali. */
 class RulesViewModel(dataDirectory: Path) {
     private val standard = Srd521Ruleset.revision
+    private val blankFoundation = GenericRulesetFoundation.revision()
 
     var status by mutableStateOf<String?>(null)
         private set
 
     private val repository: LocalRulesetRepository? = runCatching {
-        LocalRulesetRepository(dataDirectory.resolve("rulesets"), listOf(standard))
+        LocalRulesetRepository(dataDirectory.resolve("rulesets"), listOf(standard, blankFoundation))
     }.onFailure { status = it.message }.getOrNull()
 
-    private var storedRevisions by mutableStateOf<List<RulesetRevision>>(listOf(standard))
+    private var storedRevisions by mutableStateOf<List<RulesetRevision>>(listOf(standard, blankFoundation))
     private var storedDrafts by mutableStateOf<List<RulesetDraft>>(emptyList())
 
     /** Revisioni stabili selezionabili da una nuova partita; le bozze non entrano nel runtime. */
@@ -143,6 +145,12 @@ class RulesViewModel(dataDirectory: Path) {
             )
         }
 
+    /** I controlli legacy compaiono soltanto se il regolamento li dichiara. */
+    val hasLegacyRuntimeControls: Boolean
+        get() = selected?.revision?.entities().orEmpty().any {
+            it.enabled() && it.id() in legacyRuntimeEntityIds
+        }
+
     val visibleEntities: List<RuleEntity>
         get() {
             val query = search.trim().lowercase()
@@ -201,6 +209,24 @@ class RulesViewModel(dataDirectory: Path) {
             selectedKey = draft.id()
             selectedEntityId = entityToEdit?.takeIf { source.entity(it) != null }
             status = AppLocale.current.rules.saved(draft.name())
+        }
+    }
+
+    /** Crea una linea homebrew senza ereditare alcun contenuto SRD/D&D. */
+    fun createBlankRuleset() {
+        val repo = repository ?: return
+        guarded {
+            val words = AppLocale.current.rules
+            val draft = repo.createHomebrew(
+                blankFoundation.canonicalHash(),
+                words.blankRulesetName,
+                words.blankRulesetDescription,
+            )
+            reload()
+            originFilter = RulesetOriginFilter.HOMEBREW
+            selectedKey = draft.id()
+            selectedEntityId = null
+            status = words.saved(draft.name())
         }
     }
 
@@ -454,19 +480,28 @@ class RulesViewModel(dataDirectory: Path) {
         kind: RuleKind,
         entityId: String,
         legacyModifier: Boolean = false,
-    ): Map<String, String> = when (kind) {
+    ): Map<String, String> {
+        val selectedRevision = selected?.revision
+        val srdDerived = selectedRevision?.let(SrdRulesetCharacterAdapter::inheritsSrdContent) == true
+        val declaredStats = selectedRevision?.entities().orEmpty()
+            .filter { it.enabled() && it.kind() == RuleKind.STAT }
+            .map { it.attributes()["statId"].orEmpty().ifBlank { it.id() } }
+        val defaultStat = declaredStats.firstOrNull { it.equals("STRENGTH", ignoreCase = true) }
+            ?: declaredStats.firstOrNull().orEmpty()
+        val defaultMaximumLevel = if (srdDerived) "20" else "1"
+        return when (kind) {
         RuleKind.CLASS -> linkedMapOf(
             "classId" to entityId,
             "hitDieSides" to "8",
             "fixedHitPointsPerLevel" to "5",
-            "primaryAbilities" to "STRENGTH",
-            "multiclassPrerequisiteGroups" to "STRENGTH",
-            "savingThrowProficiencies" to "STRENGTH",
+            "primaryAbilities" to defaultStat,
+            "multiclassPrerequisiteGroups" to defaultStat,
+            "savingThrowProficiencies" to defaultStat,
             "spellcastingKind" to "NONE",
             "spellcastingAbility" to "",
             "subclassIds" to "",
             "levelFeatureIds" to "",
-            "maximumLevel" to "20",
+            "maximumLevel" to defaultMaximumLevel,
             "skillChoiceCount" to "0",
             "weaponTraining" to "",
             "weaponCategories" to "",
@@ -513,20 +548,30 @@ class RulesViewModel(dataDirectory: Path) {
         )
         RuleKind.PROGRESSION -> linkedMapOf(
             "minimumLevel" to "1",
-            "maximumCharacterLevel" to "20",
+            "maximumCharacterLevel" to defaultMaximumLevel,
             "enforceExperienceThresholds" to "false",
             "experienceTableRef" to "",
         )
-        RuleKind.STAT, RuleKind.SAVE, RuleKind.DEFENSE -> linkedMapOf(
-            "statId" to entityId,
-            "abbreviation" to "NEW",
-            "defaultFormula" to "10",
-            "minimumFormula" to "1",
-            "maximumFormula" to "30",
-            "advancementMaximum" to "20",
-            "modifierFormula" to "floor((\${score} - 10) / 2)",
-            "rounding" to "NONE",
-        )
+        RuleKind.STAT, RuleKind.SAVE, RuleKind.DEFENSE -> if (srdDerived) {
+            linkedMapOf(
+                "statId" to entityId,
+                "abbreviation" to "NEW",
+                "defaultFormula" to "10",
+                "minimumFormula" to "1",
+                "maximumFormula" to "30",
+                "advancementMaximum" to "20",
+                "modifierFormula" to "floor((\${score} - 10) / 2)",
+                "rounding" to "NONE",
+            )
+        } else {
+            linkedMapOf(
+                "statId" to entityId,
+                "abbreviation" to "NEW",
+                "defaultFormula" to "0",
+                "modifierFormula" to "\${score}",
+                "rounding" to "NONE",
+            )
+        }
         RuleKind.VALUE -> linkedMapOf(
             "valueType" to "TEXT",
             "defaultValue" to "",
@@ -535,9 +580,9 @@ class RulesViewModel(dataDirectory: Path) {
         )
         RuleKind.SKILL -> linkedMapOf(
             "skillId" to entityId,
-            "statRef" to "",
+            "statRef" to defaultStat,
             "formula" to "",
-            "trainedBonusFormula" to "\${proficiency}",
+            "trainedBonusFormula" to if (srdDerived) "\${proficiency}" else "0",
         )
         RuleKind.TABLE -> linkedMapOf(
             "tableId" to entityId,
@@ -552,12 +597,12 @@ class RulesViewModel(dataDirectory: Path) {
             "recoveryEvent" to "MANUAL",
             "recoveryFormula" to "\${maximum}",
         )
-        RuleKind.ACTION_ECONOMY -> linkedMapOf("budgets" to "action=1")
+        RuleKind.ACTION_ECONOMY -> linkedMapOf("budgets" to "")
         RuleKind.ACTION -> linkedMapOf(
             "actionId" to entityId,
             "ownerRef" to "",
             "conditionFormula" to "1",
-            "costs" to "turn:action=1",
+            "costs" to "",
             "effectRefs" to "",
         )
         RuleKind.TRIGGER -> linkedMapOf(
@@ -570,7 +615,7 @@ class RulesViewModel(dataDirectory: Path) {
         RuleKind.ROLL, RuleKind.RANDOMIZER -> linkedMapOf(
             "mode" to "DICE",
             "countFormula" to "1",
-            "sidesFormula" to "20",
+            "sidesFormula" to if (srdDerived) "20" else "6",
             "keep" to "SUM",
             "successThresholdFormula" to "1",
             "tableRef" to "",
@@ -578,6 +623,7 @@ class RulesViewModel(dataDirectory: Path) {
         RuleKind.DAMAGE_TYPE -> linkedMapOf("damageTypeId" to entityId)
         RuleKind.CONDITION -> linkedMapOf("conditionId" to entityId, "maximumStacks" to "1")
         else -> emptyMap()
+        }
     }
 
     /**
@@ -653,10 +699,16 @@ class RulesViewModel(dataDirectory: Path) {
             RuleKind.ACTION,
         )
         val executableKinds = setOf(
-            RuleKind.CLASS, RuleKind.MODIFIER, RuleKind.FEATURE, RuleKind.STAT, RuleKind.SKILL,
+            RuleKind.CLASS, RuleKind.MODIFIER, RuleKind.FEATURE, RuleKind.SUBCLASS, RuleKind.FEAT,
+            RuleKind.SPELL, RuleKind.STAT, RuleKind.SKILL,
             RuleKind.SAVE, RuleKind.DEFENSE, RuleKind.VALUE, RuleKind.TABLE, RuleKind.RESOURCE, RuleKind.TRACK,
             RuleKind.ACTION, RuleKind.ACTION_ECONOMY, RuleKind.TRIGGER, RuleKind.ROLL,
             RuleKind.RANDOMIZER, RuleKind.PROGRESSION, RuleKind.DAMAGE_TYPE, RuleKind.CONDITION,
+        )
+        val legacyRuntimeEntityIds = setOf(
+            CoreRuleIds.CRITICAL_HIT,
+            CoreRuleIds.EXHAUSTION,
+            CoreRuleIds.PROFICIENCY,
         )
     }
 }

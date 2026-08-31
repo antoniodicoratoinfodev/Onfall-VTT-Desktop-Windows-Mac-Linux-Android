@@ -8,6 +8,7 @@ import app.d6d.rules.character.ChoiceSelection
 import app.d6d.rules.character.EffectTarget
 import app.d6d.rules.character.LevelUpRequest
 import app.d6d.rules.model.LocalizedRuleText
+import app.d6d.rules.model.GenericRulesetFoundation
 import app.d6d.rules.model.RuleAutomationLevel
 import app.d6d.rules.model.RuleEntity
 import app.d6d.rules.model.RuleKind
@@ -31,6 +32,82 @@ class SrdRulesetCharacterAdapterTest {
         assertEquals(original.classes, projected.classes)
         assertEquals(original.elements, projected.elements)
         assertEquals(original.proficiencyProgression, projected.proficiencyProgression)
+    }
+
+    @Test
+    fun `un regolamento autonomo non eredita nessun contenuto o identificatore SRD`() {
+        val statEntityId = "story:rule:heart"
+        val statId = Ability.of("story:stat:heart")
+        val skillId = "story:skill:read-person"
+        val classId = CharacterClassId.of("story:class:wanderer")
+        val stat = entity(
+            id = statEntityId,
+            kind = RuleKind.STAT,
+            name = "Cuore",
+            attributes = mapOf(
+                "statId" to statId.value,
+                "defaultFormula" to "3",
+                "minimumFormula" to "0",
+                "maximumFormula" to "6",
+                "modifierFormula" to "\${score}",
+            ),
+        )
+        val skill = entity(
+            id = "story:rule:read-person",
+            kind = RuleKind.SKILL,
+            name = "Leggere le persone",
+            attributes = mapOf(
+                "skillId" to skillId,
+                "statRef" to statEntityId,
+                "trainedBonusFormula" to "1",
+            ),
+        )
+        val characterClass = entity(
+            id = "story:rule:wanderer",
+            kind = RuleKind.CLASS,
+            name = "Viandante",
+            attributes = mapOf(
+                "classId" to classId.value,
+                "hitDieSides" to "6",
+                "fixedHitPointsPerLevel" to "4",
+                "primaryAbilities" to statId.value,
+                "multiclassPrerequisiteGroups" to statId.value,
+                "savingThrowProficiencies" to statId.value,
+                "maximumLevel" to "3",
+                "skillChoiceCount" to "1",
+                "spellcastingKind" to "NONE",
+                "subclassIds" to "",
+                "levelFeatureIds" to "",
+            ),
+        )
+        val foundation = GenericRulesetFoundation.revision()
+        val revision = RulesetRevision.create(
+            "story:rules",
+            "story:rules:1",
+            "1.0.0",
+            "Storie erranti",
+            "Regolamento autonomo di test.",
+            RulesetOrigin.HOMEBREW,
+            foundation.canonicalHash(),
+            foundation.runtime(),
+            listOf(stat, skill, characterClass),
+            "2026-08-31T00:00:00Z",
+        )
+
+        val pack = SrdRulesetCharacterAdapter.project(revision, AppLanguage.ITALIAN)
+
+        assertFalse(SrdRulesetCharacterAdapter.inheritsSrdContent(revision))
+        assertEquals("story:rules", pack.manifest.id)
+        assertEquals(listOf(statId), pack.stats.map { it.id })
+        assertEquals(listOf(skillId), pack.skills.map { it.id.value })
+        assertEquals(listOf(classId), pack.classes.map { it.id })
+        assertEquals("story:rules:pool:skills:any", pack.classDefinition(classId).skillChoice.poolId)
+        assertTrue(pack.elements.isEmpty())
+        assertTrue(pack.weapons.isEmpty())
+        assertTrue(pack.backgrounds.isEmpty())
+        assertTrue(pack.equipmentPackages.isEmpty())
+        assertTrue(pack.experienceThresholds.isEmpty())
+        assertFalse(pack.enforceExperienceThresholds)
     }
 
     @Test

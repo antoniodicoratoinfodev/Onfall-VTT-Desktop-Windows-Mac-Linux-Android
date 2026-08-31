@@ -31,4 +31,30 @@ class RuleFormulaTest {
         assertThrows(ArithmeticException.class, () -> division.evaluate(
                 RuleFormula.context(Map.of("zero", BigDecimal.ZERO), Map.of())));
     }
+
+    @Test
+    void rejectsInvalidFunctionArityAtCompilationTime() {
+        assertThrows(IllegalArgumentException.class, () -> RuleFormula.compile("if(1)"));
+        assertThrows(IllegalArgumentException.class, () -> RuleFormula.compile("clamp(1, 0)"));
+        assertThrows(IllegalArgumentException.class, () -> RuleFormula.compile("abs(1, 2)"));
+        assertThrows(IllegalArgumentException.class, () -> RuleFormula.compile("min()"));
+    }
+
+    @Test
+    void rejectsUnaryChainsBeyondTheNestingBudgetWithoutOverflowingTheStack() {
+        String source = "!".repeat(65) + "1";
+
+        assertThrows(IllegalArgumentException.class, () -> RuleFormula.compile(source));
+    }
+
+    @Test
+    void tableLookupUsesNumericEqualityIndependentlyFromDecimalScale() {
+        RuleFormula formula = RuleFormula.compile("lookup(\"table:rank\", 1 + 1)");
+
+        BigDecimal result = formula.evaluate(RuleFormula.context(
+                Map.of(), Map.of("table:rank", Map.of(
+                        new BigDecimal("2.0"), new BigDecimal("3.00")))));
+
+        assertEquals(new BigDecimal("3"), result);
+    }
 }

@@ -63,7 +63,7 @@ import java.util.function.Function;
  * independent from Java implementation details.</p>
  */
 public final class CombatSessionJsonCodec {
-    public static final int SCHEMA_VERSION = 4;
+    public static final int SCHEMA_VERSION = 5;
 
     /** Converts a consistent state-and-audit snapshot into a JSON object. */
     public Map<String, Object> encode(CombatSession session) {
@@ -277,6 +277,7 @@ public final class CombatSessionJsonCodec {
                         "state", encodeRuleRuntimeState(entry.getValue())))
                 .toList();
         return object(
+                "configured", snapshot.configured(),
                 "entities", snapshot.entities().stream().map(this::encodeRuleEntity).toList(),
                 "state", encodeRuleRuntimeState(snapshot.state()),
                 "scopedStates", scopedStates);
@@ -326,7 +327,10 @@ public final class CombatSessionJsonCodec {
                 if (previous != null) throw invalid(scopePath, "duplicate rule scope " + scope.canonicalKey());
             }
         }
-        return new RuleSessionSnapshot(entities, state, scopedStates);
+        boolean configured = value.containsKey("configured")
+                ? bool(value, "configured", path)
+                : !entities.isEmpty();
+        return new RuleSessionSnapshot(entities, state, scopedStates, configured);
     }
 
     private RuleRuntimeState decodeRuleRuntimeState(Map<?, ?> encodedState, String path) {

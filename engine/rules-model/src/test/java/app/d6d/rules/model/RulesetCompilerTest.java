@@ -263,6 +263,23 @@ class RulesetCompilerTest {
     }
 
     @Test
+    void conditionEffectsClampHugeFormulaResultsWithoutIntegerOverflow() {
+        List<RuleEntity> entities = List.of(
+                entity("test:condition:marked", RuleKind.CONDITION, Map.of("maximumStacks", "3")),
+                entity("test:effect:mark", RuleKind.MODIFIER, Map.of(
+                        "ownerRef", "test:condition:marked", "targetRef", "test:condition:marked",
+                        "application", "ADD_CONDITION", "operation", "SET",
+                        "valueFormula", "999999999999999999999999")),
+                entity("test:action:mark", RuleKind.ACTION, Map.of("effectRefs", "test:effect:mark")));
+        CompiledRuleset rules = revision("test:large-condition", entities).compile();
+
+        RuleExecutionResult result = rules.executeAction(
+                "test:action:mark", rules.initialState(Map.of(), Set.of()));
+
+        assertEquals(3, result.state().conditionStacks().get("test:condition:marked"));
+    }
+
+    @Test
     void resourceAndTurnInitializationFollowDependenciesInsteadOfLexicalOrder() {
         List<RuleEntity> entities = List.of(
                 entity("test:resource:a", RuleKind.RESOURCE, Map.of(
@@ -339,10 +356,15 @@ class RulesetCompilerTest {
         assertThrows(IllegalArgumentException.class, () -> rules.initialState(
                 Map.of("test:stat:focus", RuleValue.bool(true)), Set.of()));
         assertThrows(IllegalArgumentException.class, () -> rules.initialState(
+                Map.of("level:test:class", RuleValue.number(new BigDecimal("1.5"))), Set.of()));
+        assertThrows(IllegalArgumentException.class, () -> rules.initialState(
+                Map.of("level:test:class", RuleValue.number(new BigDecimal("2147483648"))), Set.of()));
+        assertThrows(IllegalArgumentException.class, () -> rules.initialState(
                 Map.of(), Set.of("trained:test:skill:missing")));
 
         RuleRuntimeState valid = rules.initialState(
-                Map.of("context:rank", RuleValue.number(2)), Set.of("trained:test:skill:notice"));
+                Map.of("context:rank", RuleValue.number(2), "level:test:class", RuleValue.number(12)),
+                Set.of("trained:test:skill:notice"));
         assertTrue(valid.activeRuleIds().contains("trained:test:skill:notice"));
     }
 

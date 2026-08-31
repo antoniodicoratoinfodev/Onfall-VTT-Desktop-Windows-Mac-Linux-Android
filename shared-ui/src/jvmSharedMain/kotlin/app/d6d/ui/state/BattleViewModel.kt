@@ -35,6 +35,7 @@ import app.d6d.board.WallMask
 import app.d6d.engine.CombatRuleException
 import app.d6d.engine.CombatSession
 import app.d6d.rules.model.RuleKind
+import app.d6d.rules.model.CoreRuleIds
 import app.d6d.rules.model.RuleRuntimeState
 import app.d6d.rules.model.RuleScope
 import app.d6d.rules.model.RuleValue
@@ -330,6 +331,17 @@ class BattleViewModel(
     val encounterId: String get() = state.encounterId()
     val displayName: String get() = encounterId
 
+    private fun declaresLegacyRule(id: String): Boolean =
+        !state.ruleSession().executable() || state.ruleSession().entities().any {
+            it.enabled() && it.id() == id
+        }
+
+    /** I pannelli tattici legacy non diventano regole implicite di un pack autonomo. */
+    val tacticalD20ControlsAvailable: Boolean get() = declaresLegacyRule(CoreRuleIds.D20_TEST)
+    val tacticalHitPointControlsAvailable: Boolean get() = declaresLegacyRule(CoreRuleIds.HIT_POINTS)
+    val tacticalDeathSaveControlsAvailable: Boolean get() = declaresLegacyRule(CoreRuleIds.DEATH_SAVES)
+    val tacticalExhaustionControlsAvailable: Boolean get() = declaresLegacyRule(CoreRuleIds.EXHAUSTION)
+
     /** Tipi aperti dichiarati dalla revisione esatta; i salvataggi legacy usano il catalogo storico. */
     val availableDamageTypes: List<DamageType>
         get() {
@@ -337,7 +349,7 @@ class BattleViewModel(
                 .filter { it.enabled() && it.kind() == RuleKind.DAMAGE_TYPE }
                 .map { DamageType.of(it.attributes()["damageTypeId"].orEmpty().ifBlank { it.id() }) }
                 .distinct()
-            return declared.ifEmpty { DamageType.values().toList() }
+            return if (state.ruleSession().executable()) declared else DamageType.values().toList()
         }
 
     val availableConditionTypes: List<ConditionType>
@@ -345,9 +357,8 @@ class BattleViewModel(
             val declared = state.ruleSession().entities()
                 .filter { it.enabled() && it.kind() == RuleKind.CONDITION }
                 .map { ConditionType.of(it.attributes()["conditionId"].orEmpty().ifBlank { it.id() }) }
-                .filterNot { it == ConditionType.EXHAUSTION || it == ConditionType.CUSTOM }
                 .distinct()
-            return declared.ifEmpty {
+            return if (state.ruleSession().executable()) declared else {
                 ConditionType.values().filterNot {
                     it == ConditionType.EXHAUSTION || it == ConditionType.CUSTOM
                 }

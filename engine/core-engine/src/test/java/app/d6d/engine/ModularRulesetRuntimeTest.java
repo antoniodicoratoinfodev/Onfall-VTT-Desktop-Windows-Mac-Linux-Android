@@ -275,6 +275,47 @@ class ModularRulesetRuntimeTest {
     }
 
     @Test
+    void aLateTriggerBudgetFailureRollsBackCostsStateAuditAndUndo() {
+        List<RuleEntity> entities = List.of(
+                entity("test:turn", RuleKind.ACTION_ECONOMY, Map.of("budgets", "action=1")),
+                entity("test:resource:focus", RuleKind.RESOURCE, Map.of(
+                        "maximumFormula", "3", "initialFormula", "3")),
+                entity("test:condition:loop", RuleKind.CONDITION, Map.of("maximumStacks", "1")),
+                entity("test:effect:add-loop", RuleKind.MODIFIER, Map.of(
+                        "ownerRef", "test:condition:loop", "targetRef", "test:condition:loop",
+                        "application", "ADD_CONDITION", "operation", "SET", "valueFormula", "1")),
+                entity("test:effect:remove-loop", RuleKind.MODIFIER, Map.of(
+                        "ownerRef", "test:condition:loop", "targetRef", "test:condition:loop",
+                        "application", "REMOVE_CONDITION", "operation", "SET", "valueFormula", "0")),
+                entity("test:action:start-loop", RuleKind.ACTION, Map.of(
+                        "costs", "turn:action=1;resource:test:resource:focus=1")),
+                entity("test:trigger:start-loop", RuleKind.TRIGGER, Map.of(
+                        "event", "ACTION_EXECUTED", "effectRefs", "test:effect:add-loop",
+                        "maximumExecutions", "128")),
+                entity("test:trigger:remove-loop", RuleKind.TRIGGER, Map.of(
+                        "event", "CONDITION_ADDED", "effectRefs", "test:effect:remove-loop",
+                        "maximumExecutions", "128")),
+                entity("test:trigger:repeat-loop", RuleKind.TRIGGER, Map.of(
+                        "event", "CONDITION_REMOVED", "effectRefs", "test:effect:add-loop",
+                        "maximumExecutions", "128")));
+        RulesetRevision revision = RulesetRevision.create(
+                "test:atomic", "revision:atomic:1", "1", "Atomic", "",
+                RulesetOrigin.HOMEBREW, "", CONFIG, entities, "2026-08-30T00:00:00Z");
+        CombatSession session = active(revision);
+        var stateBefore = session.currentState();
+        var auditBefore = session.auditTrail();
+        boolean undoBefore = session.canUndo();
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> session.executeRuleAction("test:action:start-loop"));
+
+        assertTrue(failure.getMessage().contains("budget"));
+        assertEquals(stateBefore, session.currentState());
+        assertEquals(auditBefore, session.auditTrail());
+        assertEquals(undoBefore, session.canUndo());
+    }
+
+    @Test
     void automaticActorTurnEventsRouteSessionEffectsToTheSessionScope() {
         List<RuleEntity> entities = List.of(
                 entity("test:value:actor-marker", RuleKind.VALUE, Map.of(

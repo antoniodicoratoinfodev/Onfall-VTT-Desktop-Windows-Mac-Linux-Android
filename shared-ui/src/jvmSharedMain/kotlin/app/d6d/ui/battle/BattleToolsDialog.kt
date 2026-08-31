@@ -174,128 +174,138 @@ fun BattleToolsDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
-                        Chip(
-                            words.hitPointsShort(
-                                combatant.currentHitPoints(),
-                                combatant.snapshot().maxHitPoints(),
-                            ),
-                            Palette.Text,
-                        )
-                        if (combatant.temporaryHitPoints() > 0) {
+                        if (viewModel.tacticalHitPointControlsAvailable) {
                             Chip(
-                                words.temporaryHitPointsOf(combatant.temporaryHitPoints()),
-                                Palette.Temporary,
+                                words.hitPointsShort(
+                                    combatant.currentHitPoints(),
+                                    combatant.snapshot().maxHitPoints(),
+                                ),
+                                Palette.Text,
+                            )
+                            if (combatant.temporaryHitPoints() > 0) {
+                                Chip(
+                                    words.temporaryHitPointsOf(combatant.temporaryHitPoints()),
+                                    Palette.Temporary,
+                                )
+                            }
+                        }
+                        if (viewModel.tacticalExhaustionControlsAvailable) {
+                            Chip(words.exhaustionLevel(combatant.exhaustionLevel()), Palette.Bloodied)
+                        }
+                        if (viewModel.tacticalDeathSaveControlsAvailable) {
+                            when {
+                                combatant.dead() -> Chip(words.dead, Palette.Critical)
+                                combatant.stable() -> Chip(words.stable, Palette.Heal)
+                                combatant.unconscious() -> Chip(words.unconscious, Palette.Bloodied)
+                            }
+                        }
+                    }
+                }
+
+                if (viewModel.tacticalD20ControlsAvailable) {
+                    Eyebrow(words.abilityCheck)
+                    Text(
+                        words.abilityCheckHint,
+                        color = Palette.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        SaveAbility.entries.forEach { ability ->
+                            val selected = ability == abilityCheckAbility
+                            GameButton(
+                                label = ability.label(language),
+                                accent = if (selected) Palette.Gold else Palette.TextFaint,
+                                selected = selected,
+                                onClick = { abilityCheckAbility = ability },
                             )
                         }
-                        Chip(words.exhaustionLevel(combatant.exhaustionLevel()), Palette.Bloodied)
-                        when {
-                            combatant.dead() -> Chip(words.dead, Palette.Critical)
-                            combatant.stable() -> Chip(words.stable, Palette.Heal)
-                            combatant.unconscious() -> Chip(words.unconscious, Palette.Bloodied)
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        LabeledNumberField(
+                            label = strings.sheet.modifier,
+                            value = abilityCheckModifierText,
+                            onValueChange = { abilityCheckModifierText = signedIntegerInput(it) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalAlignment = Alignment.End,
+                        ) {
+                            Text(
+                                words.rollModeFromBar(viewModel.rollMode.label(language)),
+                                color = Palette.TextMuted,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            GameButton(
+                                words.rollCheck,
+                                accent = Palette.Party,
+                                enabled = commandsEnabled && abilityCheckModifier != null,
+                                onClick = {
+                                    val selectedTarget = targetId
+                                    val modifier = abilityCheckModifier
+                                    if (selectedTarget != null && modifier != null) {
+                                        viewModel.rollAbilityCheck(
+                                            selectedTarget,
+                                            abilityCheckAbility,
+                                            modifier,
+                                        )
+                                    }
+                                },
+                            )
                         }
                     }
                 }
 
-                Eyebrow(words.abilityCheck)
-                Text(
-                    words.abilityCheckHint,
-                    color = Palette.TextMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    SaveAbility.entries.forEach { ability ->
-                        val selected = ability == abilityCheckAbility
-                        GameButton(
-                            label = ability.label(language),
-                            accent = if (selected) Palette.Gold else Palette.TextFaint,
-                            selected = selected,
-                            onClick = { abilityCheckAbility = ability },
-                        )
-                    }
-                }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Bottom,
-                ) {
+                if (viewModel.tacticalHitPointControlsAvailable) {
+                    Eyebrow(words.hitPoints)
                     LabeledNumberField(
-                        label = strings.sheet.modifier,
-                        value = abilityCheckModifierText,
-                        onValueChange = { abilityCheckModifierText = signedIntegerInput(it) },
-                        modifier = Modifier.weight(1f),
+                        label = words.amount,
+                        value = amountText,
+                        onValueChange = { amountText = it.filter(Char::isDigit).take(5) },
                     )
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        horizontalAlignment = Alignment.End,
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
-                        Text(
-                            words.rollModeFromBar(viewModel.rollMode.label(language)),
-                            color = Palette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall,
+                        GameButton(
+                            words.applyDamage,
+                            accent = Palette.Enemy,
+                            enabled = commandsEnabled && amount > 0 && damageTypes.isNotEmpty(),
+                            onClick = { targetId?.let { viewModel.applyManualDamage(it, amount, damageType) } },
                         )
                         GameButton(
-                            words.rollCheck,
-                            accent = Palette.Party,
-                            enabled = commandsEnabled && abilityCheckModifier != null,
-                            onClick = {
-                                val selectedTarget = targetId
-                                val modifier = abilityCheckModifier
-                                if (selectedTarget != null && modifier != null) {
-                                    viewModel.rollAbilityCheck(
-                                        selectedTarget,
-                                        abilityCheckAbility,
-                                        modifier,
-                                    )
-                                }
-                            },
+                            strings.sheet.heal,
+                            accent = Palette.Heal,
+                            enabled = commandsEnabled && amount > 0,
+                            onClick = { targetId?.let { viewModel.heal(it, amount) } },
+                        )
+                        GameButton(
+                            words.temporaryHitPoints,
+                            accent = Palette.Temporary,
+                            enabled = commandsEnabled && amount > 0,
+                            onClick = { targetId?.let { viewModel.grantTemporary(it, amount) } },
                         )
                     }
-                }
-
-                Eyebrow(words.hitPoints)
-                LabeledNumberField(
-                    label = words.amount,
-                    value = amountText,
-                    onValueChange = { amountText = it.filter(Char::isDigit).take(5) },
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    GameButton(
-                        words.applyDamage,
-                        accent = Palette.Enemy,
-                        enabled = commandsEnabled && amount > 0,
-                        onClick = { targetId?.let { viewModel.applyManualDamage(it, amount, damageType) } },
-                    )
-                    GameButton(
-                        strings.sheet.heal,
-                        accent = Palette.Heal,
-                        enabled = commandsEnabled && amount > 0,
-                        onClick = { targetId?.let { viewModel.heal(it, amount) } },
-                    )
-                    GameButton(
-                        words.temporaryHitPoints,
-                        accent = Palette.Temporary,
-                        enabled = commandsEnabled && amount > 0,
-                        onClick = { targetId?.let { viewModel.grantTemporary(it, amount) } },
-                    )
-                }
-                Text(words.damageTypeLabel, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    damageTypes.forEach { type ->
-                        GameButton(
-                            label = type.label(language),
-                            accent = if (type == damageType) Palette.Gold else Palette.TextFaint,
-                            selected = type == damageType,
-                            onClick = { damageType = type },
-                        )
+                    Text(words.damageTypeLabel, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        damageTypes.forEach { type ->
+                            GameButton(
+                                label = type.label(language),
+                                accent = if (type == damageType) Palette.Gold else Palette.TextFaint,
+                                selected = type == damageType,
+                                onClick = { damageType = type },
+                            )
+                        }
                     }
                 }
 
@@ -327,7 +337,7 @@ fun BattleToolsDialog(
                     GameButton(
                         words.addCondition,
                         accent = Palette.Bloodied,
-                        enabled = commandsEnabled,
+                        enabled = commandsEnabled && conditionTypes.isNotEmpty(),
                         onClick = { targetId?.let { viewModel.addCondition(it, conditionType, duration) } },
                     )
                 }
@@ -348,31 +358,41 @@ fun BattleToolsDialog(
                     }
                 }
 
-                Eyebrow(words.deathAndExhaustion)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                if (
+                    viewModel.tacticalDeathSaveControlsAvailable ||
+                    viewModel.tacticalExhaustionControlsAvailable
                 ) {
-                    GameButton(
-                        words.deathSaveRoll,
-                        accent = Palette.Bloodied,
-                        enabled = commandsEnabled,
-                        onClick = { targetId?.let(viewModel::rollDeathSave) },
-                    )
-                    GameButton(
-                        strings.sheet.stabilize,
-                        accent = Palette.Heal,
-                        enabled = commandsEnabled,
-                        onClick = { targetId?.let(viewModel::stabilize) },
-                    )
-                    (0..6).forEach { level ->
-                        GameButton(
-                            label = words.exhaustionLevel(level),
-                            accent = if (target?.exhaustionLevel() == level) Palette.Gold else Palette.TextFaint,
-                            selected = target?.exhaustionLevel() == level,
-                            enabled = commandsEnabled,
-                            onClick = { targetId?.let { viewModel.setExhaustion(it, level) } },
-                        )
+                    Eyebrow(words.deathAndExhaustion)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        if (viewModel.tacticalDeathSaveControlsAvailable) {
+                            GameButton(
+                                words.deathSaveRoll,
+                                accent = Palette.Bloodied,
+                                enabled = commandsEnabled,
+                                onClick = { targetId?.let(viewModel::rollDeathSave) },
+                            )
+                            GameButton(
+                                strings.sheet.stabilize,
+                                accent = Palette.Heal,
+                                enabled = commandsEnabled,
+                                onClick = { targetId?.let(viewModel::stabilize) },
+                            )
+                        }
+                        if (viewModel.tacticalExhaustionControlsAvailable) {
+                            val maximumExhaustion = target?.maximumExhaustion() ?: 0
+                            (0..maximumExhaustion).forEach { level ->
+                                GameButton(
+                                    label = words.exhaustionLevel(level),
+                                    accent = if (target?.exhaustionLevel() == level) Palette.Gold else Palette.TextFaint,
+                                    selected = target?.exhaustionLevel() == level,
+                                    enabled = commandsEnabled,
+                                    onClick = { targetId?.let { viewModel.setExhaustion(it, level) } },
+                                )
+                            }
+                        }
                     }
                 }
             }

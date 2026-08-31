@@ -219,12 +219,23 @@ private fun RulesetSelectionStep(
                     }
                     Text(words.revision(revision.version()), color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall)
+                    val exposesLegacyRuntime = revision.entities().any {
+                        it.enabled() && it.id() in setOf(
+                            app.d6d.rules.model.CoreRuleIds.CRITICAL_HIT,
+                            app.d6d.rules.model.CoreRuleIds.EXHAUSTION,
+                            app.d6d.rules.model.CoreRuleIds.PROFICIENCY,
+                        )
+                    }
                     Text(
-                        words.runtimeSummary(
-                            revision.runtime().criticalHitMinimumNatural(),
-                            revision.runtime().maximumExhaustion(),
-                            revision.entities().size,
-                        ),
+                        if (exposesLegacyRuntime) {
+                            words.runtimeSummary(
+                                revision.runtime().criticalHitMinimumNatural(),
+                                revision.runtime().maximumExhaustion(),
+                                revision.entities().size,
+                            )
+                        } else {
+                            words.entities(revision.entities().size)
+                        },
                         color = Palette.TextFaint,
                         style = MaterialTheme.typography.labelSmall,
                     )

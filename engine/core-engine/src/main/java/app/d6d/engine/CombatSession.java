@@ -340,7 +340,8 @@ public final class CombatSession {
             migratedScopes.put(entry.getKey(), migrateRuleRuntimeState(
                     nextRules, previousRules, entry.getValue()));
         }
-        return new RuleSessionSnapshot(requested.entities(), migrated, migratedScopes);
+        return new RuleSessionSnapshot(
+                requested.entities(), migrated, migratedScopes, requested.configured());
     }
 
     private RuleRuntimeState migrateRuleRuntimeState(
@@ -351,11 +352,14 @@ public final class CombatSession {
 
         LinkedHashMap<String, RuleValue> values = new LinkedHashMap<>();
         previous.values().forEach((id, value) -> {
-            if (id.startsWith("context:") || id.startsWith("level:")) {
-                if (value.type() == RuleValue.Type.NUMBER
-                        || (id.startsWith("context:") && value.type() == RuleValue.Type.BOOLEAN)) {
+            if (id.startsWith("context:")) {
+                if (value.type() == RuleValue.Type.NUMBER || value.type() == RuleValue.Type.BOOLEAN) {
                     values.put(id, value);
                 }
+                return;
+            }
+            if (id.startsWith("level:")) {
+                if (isMigratableLevel(value)) values.put(id, value);
                 return;
             }
             String resolved = nextRules.resolveId(id);
@@ -432,6 +436,16 @@ public final class CombatSession {
                 turnBudget,
                 fresh.activeRuleIds(),
                 Math.max(previous.revision(), fresh.revision()) + 1);
+    }
+
+    private static boolean isMigratableLevel(RuleValue value) {
+        if (value.type() != RuleValue.Type.NUMBER) return false;
+        try {
+            int level = value.asNumber().intValueExact();
+            return level >= 0 && level <= 1_000_000;
+        } catch (ArithmeticException failure) {
+            return false;
+        }
     }
 
     public synchronized RuleSessionSnapshot genericRuleSession() {

@@ -1,6 +1,7 @@
 package app.d6d.ui.rules
 
 import app.d6d.i18n.AppLanguage
+import app.d6d.content.srd521it.SrdRulesetCharacterAdapter
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageType
 import app.d6d.rules.model.CoreRuleIds
@@ -84,6 +85,58 @@ class RulesViewModelTest {
         assertTrue(nextDraft.isDraft)
         assertEquals(installed.revision.projectId(), nextDraft.revision.projectId())
         assertEquals(installed.revision.canonicalHash(), nextDraft.revision.baseCanonicalHash())
+    }
+
+    @Test
+    fun `un regolamento vuoto nasce senza SRD e usa default neutrali`() {
+        val rules = RulesViewModel(directory)
+
+        rules.createBlankRuleset()
+
+        val draft = requireNotNull(rules.selected)
+        assertTrue(draft.isDraft)
+        assertTrue(draft.revision.entities().isEmpty())
+        assertFalse(rules.hasLegacyRuntimeControls)
+
+        rules.addRule(RuleKind.STAT)
+        val stat = requireNotNull(rules.selectedEntity)
+        assertEquals("0", stat.attributes()["defaultFormula"])
+        assertEquals("\${score}", stat.attributes()["modifierFormula"])
+        assertFalse(stat.attributes().containsKey("minimumFormula"))
+        assertFalse(stat.attributes().containsKey("maximumFormula"))
+
+        rules.resetSelectedEntityChange()
+        rules.publishSelected("1.0.0")
+
+        val published = requireNotNull(rules.selected)
+        assertFalse(published.isDraft)
+        assertTrue(published.revision.entities().isEmpty())
+        assertFalse(SrdRulesetCharacterAdapter.inheritsSrdContent(published.revision))
+    }
+
+    @Test
+    fun `stat e classe creati dalla fondazione vuota producono un pack guidato autonomo`() {
+        val rules = RulesViewModel(directory)
+        rules.createBlankRuleset()
+
+        rules.addRule(RuleKind.STAT)
+        val statEntity = requireNotNull(rules.selectedEntity)
+        val statId = statEntity.attributes().getValue("statId")
+        rules.addRule(RuleKind.CLASS)
+        val classEntity = requireNotNull(rules.selectedEntity)
+
+        assertEquals(statId, classEntity.attributes()["primaryAbilities"])
+        assertEquals("1", classEntity.attributes()["maximumLevel"])
+        rules.publishSelected("1.0.0")
+
+        val revision = requireNotNull(rules.selected).revision
+        val pack = SrdRulesetCharacterAdapter.project(revision, AppLanguage.ITALIAN)
+        assertEquals(listOf(statId), pack.stats.map { it.id.value })
+        assertEquals(listOf(classEntity.id()), pack.classes.map { it.id.value })
+        assertTrue(pack.skills.isEmpty())
+        assertTrue(pack.weapons.isEmpty())
+        assertTrue(pack.backgrounds.isEmpty())
+        assertTrue(pack.equipmentPackages.isEmpty())
     }
 
     @Test

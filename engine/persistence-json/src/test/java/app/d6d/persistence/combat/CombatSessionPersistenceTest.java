@@ -23,6 +23,7 @@ import app.d6d.domain.combat.SpellSlotResourceId;
 import app.d6d.engine.CombatSession;
 import app.d6d.persistence.json.Json;
 import app.d6d.rules.model.LocalizedRuleText;
+import app.d6d.rules.model.GenericRulesetFoundation;
 import app.d6d.rules.model.RuleAutomationLevel;
 import app.d6d.rules.model.RuleEntity;
 import app.d6d.rules.model.RuleKind;
@@ -206,7 +207,7 @@ class CombatSessionPersistenceTest {
                 .get("portable:resource:stress").current());
         assertEquals(RuleValue.text("DANGER"),
                 restored.genericTypedRuleValue(locationRules, "portable:value:scene"));
-        assertEquals(4, CombatSessionJsonCodec.SCHEMA_VERSION);
+        assertEquals(5, CombatSessionJsonCodec.SCHEMA_VERSION);
         assertEquals(original.auditTrail(), restored.auditTrail());
 
         var originalNext = original.rollRuleRandomizer("portable:randomizer:risk");
@@ -231,6 +232,22 @@ class CombatSessionPersistenceTest {
     }
 
     @Test
+    void configuredRulesetWithZeroEntitiesSurvivesRoundTripWithoutBecomingLegacy() {
+        CombatSession original = CombatSession.create(
+                "empty-rules", 8181L, GenericRulesetFoundation.revision(), "content-1");
+        CombatSessionJsonCodec codec = new CombatSessionJsonCodec();
+
+        CombatSession restored = codec.decode(Json.parseObject(Json.encode(codec.encode(original))));
+
+        assertTrue(restored.currentState().ruleSession().configured());
+        assertTrue(restored.currentState().ruleSession().executable());
+        assertTrue(restored.currentState().ruleSession().entities().isEmpty());
+        assertEquals(
+                GenericRulesetFoundation.revision().canonicalHash(),
+                restored.currentState().rulesetBinding().canonicalHash());
+    }
+
+    @Test
     void schemaThreeEmbeddedStateWithoutScopesRemainsReadable() {
         CombatSessionJsonCodec codec = new CombatSessionJsonCodec();
         CombatSession original = populatedActiveSession(7474L);
@@ -243,6 +260,7 @@ class CombatSessionPersistenceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> ruleSession = (Map<String, Object>) state.get("ruleSession");
         ruleSession.remove("scopedStates");
+        ruleSession.remove("configured");
 
         CombatSession restored = codec.decode(Json.parseObject(Json.encode(encoded)));
 

@@ -1,9 +1,10 @@
 # Onfall
 
-Onfall is an offline-first combat and encounter tracker compatible with 5.5e (D&D 2024) and the
-System Reference Document 5.2.1. The application uses the SRD as its reference for rules,
-terminology and game content; it does not rely on material from proprietary rulebooks outside the
-SRD. Multiplayer support is planned for the future.
+Onfall is an offline-first combat and encounter tracker with a bundled 5.5e (D&D 2024) System
+Reference Document 5.2.1 ruleset and a versioned, data-driven runtime for homebrew or independent
+games. The SRD is one protected ruleset, not an implicit engine default: a project can fork it or
+start from a genuinely blank generic foundation. It does not rely on material from proprietary
+rulebooks outside the SRD. Multiplayer support is planned for the future.
 
 The SRD material is supplied through a separate bilingual content pack (Italian and English) for
 guided character creation, class progression, feats, actions, spells, equipment and creatures. Its
@@ -18,16 +19,19 @@ engine, data and screens.
 
 ## What it is
 
-Five parts living on the same engine:
+Six parts living on the same engine:
 
 1. the **Compendium**, an editable archive of characters, creatures, and reusable abilities;
 2. an **encounter builder** that turns Compendium templates into an independent game session;
 3. a **combat engine** that is independent from the interface, deterministic, audited, and undoable;
 4. an **enemy CPU** that plays the opposing side when nobody at the table wants to, at three levels
    of ruthlessness or not at all;
-5. a **game interface** that presents the fight as a turn based battle.
+5. a **Rules** library for read-only standards, editable drafts, published homebrew revisions and
+   generic formulas, values, resources, triggers and action economies;
+6. a **game interface** that presents the fight as a turn based battle.
 
-Four destinations hold them together: **Battle**, **Game**, **Compendium** and **Settings**. The
+Five destinations hold them together: **Battle**, **Game**, **Compendium**, **Rules** and
+**Settings**. The
 navigation rail on the left collapses to icons, or disappears entirely, when the table needs the
 room. The screenshots below are taken in English; the whole interface, units included, switches to
 Italian at runtime and back.
@@ -41,8 +45,8 @@ at different points of a campaign: *The Ruins of Deepvale* (level 1), *The Iron 
 *The Broken Crown* (level 20). Their names follow the interface language, like everything else the
 SRD pack carries.
 
-The builder then walks through five steps: where to start from, who takes part, the grid, how to
-begin, and who commands the opposition. In the participants step each template gets a **faction**
+The builder also asks for the exact published **ruleset revision** to snapshot into the new game,
+then walks through participants, grid, start mode and opposition. In the participants step each template gets a **faction**
 and a **quantity**, so the same stat block can enter the fight four times without being duplicated
 in the archive. The grid step sets columns, rows and the distance one square represents. Distances
 follow the selected language: metres in Italian, using the rules conversion (5 feet = 1.5 m), and
@@ -545,10 +549,27 @@ Italian ids rather than minting its own, and a generated crosswalk maps the name
 Those ids are what a saved sheet stores, so switching language renames what a character shows
 without orphaning a single feature, spell or feat it had already chosen.
 
+## Modular rulesets
+
+The **Rules** destination lists bundled standards as read only and lets a table create an editable
+homebrew fork or a blank independent ruleset. Publishing freezes a revision and validates all
+formula and reference links. Every new game embeds that exact revision; an existing game can switch
+revision with pause, conservative state migration, audit and Undo.
+
+Independent rulesets do not inherit undeclared SRD classes, stats, skills, equipment, damage types
+or conditions. Their generic runtime supports typed values, formulas, tables, resources, arbitrary
+events and triggers, named turn budgets, linked effects and scoped state for session, actor, object,
+scene or campaign. The current guided character sheet remains D&D-shaped; games with a radically
+different or classless sheet use the generic/manual workflow until a fully data-generated sheet
+renderer is added. The detailed capability contract and roadmap are in
+[`docs/piano-regole-modulari.md`](docs/piano-regole-modulari.md).
+
 ## Architecture
 
 | Module | Language | Role |
 |---|---|---|
+| `engine/rules-model` | Java 17 | versioned rule entities, compiler, formulas, links and generic scoped runtime |
+| `engine/rules-persistence` | Java 17 | standards, copy-on-write drafts, immutable revisions and portable ruleset packages |
 | `engine/domain-model` | Java 17 | actors, abilities, conditions, state, campaigns. Immutable, zero dependencies |
 | `engine/core-engine` | Java 17 | seeded dice, state machine, append only audit, XP budget, enemy CPU |
 | `engine/board-model` | Java 17 | board layer: ink, templates, stamps, labels, scene tokens, fog, floor, wall and explored masks, vision settings and the sight field |
@@ -564,8 +585,8 @@ The engine is Java and stays usable from both platforms because Android and desk
 bytecode. The shared UI lives in `jvmSharedMain` rather than `commonMain`, which lets it use the
 engine's Java classes directly.
 
-`core-engine` knows nothing about texts, classes, or monsters: the rules live in the engine, the
-content in separate packages.
+`core-engine` knows nothing about localized texts, concrete classes, or monsters: it consumes a
+compiled rules snapshot, while editorial content stays in separate packages.
 
 Every engine module, the content pack and the presentation state carry their own unit tests, under
 `engine/*/src/test`, `content/srd-5.2.1-it/src/test` and `shared-ui/src/desktopTest`.

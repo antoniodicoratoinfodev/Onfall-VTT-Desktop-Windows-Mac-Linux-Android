@@ -154,8 +154,12 @@ class NewStatePersistenceTest {
         CombatSessionJsonCodec codec = new CombatSessionJsonCodec();
         Map<String, Object> encoded = new java.util.LinkedHashMap<>(codec.encode(richSession()));
         // Come un file scritto prima che l'attivazione esistesse.
-        Map<String, Object> state = new java.util.LinkedHashMap<>(
-                (Map<String, Object>) encoded.get("currentState"));
+        Object rawState = encoded.get("currentState");
+        if (!(rawState instanceof Map<?, ?> stateMembers)) {
+            throw new AssertionError("currentState must be an object");
+        }
+        Map<String, Object> state = new java.util.LinkedHashMap<>();
+        stateMembers.forEach((key, value) -> state.put((String) key, value));
         state.remove("dormantCombatantIds");
         state.remove("alarmRadiusFeet");
         encoded.put("currentState", state);

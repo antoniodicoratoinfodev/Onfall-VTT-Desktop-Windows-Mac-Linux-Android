@@ -1,6 +1,6 @@
 # Piano completo per regolamenti modulari e homebrew
 
-Stato: piano vivo; runtime modulare esteso implementato e verificato sul codice il 30 agosto 2026
+Stato: piano vivo; runtime modulare esteso implementato e verificato sul codice il 31 agosto 2026
 
 Ambito: desktop e Android, offline-first, compatibilità con salvataggi esistenti
 
@@ -16,6 +16,11 @@ nomi o formule specifiche dello SRD.
   pubblicate con hash canonico e backup atomici;
 - Regole è una destinazione principale con ricerca, filtri Standard/Homebrew, editor e
   pubblicazione validata;
+- **Nuovo regolamento vuoto** crea un progetto da una fondazione generica read-only con zero entità:
+  non eredita dadi, classi, caratteristiche, skill, danni, condizioni, armi, background o licenze SRD;
+- la proiezione personaggio riconosce la genealogia SRD dalle entità e non dal nome: un fork SRD
+  conserva il proprio pack, mentre un regolamento autonomo riceve soltanto stat, skill, classi ed
+  elementi dichiarati; anche i pool di scelta usano l'ID del pack autonomo;
 - ogni nuova sessione sceglie una revisione pubblicata e incorpora binding, entità eseguibili e
   stato generico; una sessione aperta può cambiarla con pausa, migrazione conservativa, Undo e audit;
 - critico, 1 naturale, Sfinimento e bonus di competenza sono parametri runtime univoci: modificarli
@@ -60,6 +65,14 @@ nomi o formule specifiche dello SRD.
 - la sincronizzazione combattimento→scheda viene rifiutata quando gli hash di revisione non
   coincidono, evitando contaminazioni silenziose;
 - schede e sessioni precedenti restano leggibili tramite i default legacy;
+- una sessione distingue esplicitamente «snapshot configurato ma senza entità» da «salvataggio
+  legacy senza snapshot» (`configured`, schema JSON 5): anche un regolamento interamente manuale e
+  vuoto mantiene binding, tassonomie esatte e possibilità di ricevere regole in una revisione futura;
+- selettori di danni e condizioni non reinseriscono più le enum D&D quando la revisione eseguibile
+  dichiara una lista vuota; il fallback storico esiste soltanto per i salvataggi legacy;
+- i controlli tattici legacy per prove d20, PF, morte e Sfinimento sono capability-aware: restano
+  disponibili per SRD e salvataggi storici, ma non compaiono in un regolamento autonomo che non
+  dichiara le corrispondenti entità; l'iniziativa iniziale usa il valore statico senza simulare un d20;
 - test sintetici 3.5-like e non-D20 verificano formule, pool di d6, budget di turno personalizzati,
   tabelle PE, valori testuali, risorse, trigger concatenati, condizioni, tassonomie dinamiche e
   transazioni source→target→sessione senza codice specifico dell'edizione; test di migrazione
@@ -73,6 +86,10 @@ regola immaginabile venga automatizzata senza una primitiva. Restano confini esp
 - l'automazione tattica legacy di attacchi, PF, morte, concentrazione, slot, CPU e alcune procedure
   continua ad avere semantica D20/SRD; un regolamento diverso usa le primitive generiche o la
   risoluzione assistita/manuale per le parti non ancora estratte;
+- la creazione personaggio guidata è ancora un adattatore con forma D&D (classe, livelli, dado vita,
+  PF e competenze). Può proiettare ID aperti senza contaminazione SRD, ma un gioco classless o con
+  una scheda radicalmente diversa usa oggi lo stato generico/manuale; un renderer di scheda guidato
+  completamente prodotto dai dati resta nella roadmap;
 - le istanze keyed-by-scope per sessione, attore, oggetto, scena e campagna sono operative. Restano
   da estrarre la politica completa `lifetime/owner/syncPolicy`, la sincronizzazione transazionale
   fra archivi e il fan-out di un singolo effetto verso collezioni arbitrarie di bersagli; il frame
@@ -151,7 +168,7 @@ La nuova sezione Regole permette di:
 - consultare tutte le regole standard;
 - filtrare per Standard, Homebrew, Modificate, Importate, Disabilitate e In uso;
 - cercare per nome, descrizione, identificatore, tag, classe o categoria;
-- creare un regolamento partendo dallo SRD, da una base D20 vuota o da zero;
+- creare un regolamento partendo dallo SRD oppure da una fondazione generica realmente vuota;
 - duplicare una singola regola standard come variante homebrew;
 - modificare caratteristiche, formule, modificatori, classi, progressione, azioni, condizioni,
   danni, magia, riposi, movimento, equipaggiamento e altri elementi descritti più avanti;
@@ -1035,8 +1052,9 @@ editata in una modalità esperto con validazione immediata.
 Scelte iniziali:
 
 - **Da SRD 5.2.1**: scelta consigliata e richiesta principale;
-- **Fondazione D20 vuota**: dadi e infrastruttura, nessun contenuto editoriale;
-- **Da zero/manuale**: soltanto tracker, mappa e campi generici;
+- **Da zero/manuale**: fondazione generica con zero entità; nessun contenuto o default D20/SRD;
+- **Fondazione D20 vuota**: preset futuro costruibile sopra la stessa base generica, non requisito
+  tecnico del runtime;
 - **Importa pacchetto**.
 
 Flusso da SRD:
@@ -2102,7 +2120,7 @@ sorgente/bersaglio/sessione del combattimento: restano deliverable separati dell
 | Non giocabile soltanto con SRD | Runtime versionato, moduli, ID dinamici e fallback manuale |
 | Qualunque edizione/regolamento simile | Primitive generiche più pack sintetici 3.5-like e classless d6 come gate |
 | Regole e modificatori modificabili | RuleEntity, formule, ModifierDefinition, patch e editor |
-| Classi modulari | ClassDefinition keyed by ID, progressione e scheda generate |
+| Classi modulari | ID aperti e proiezione guidata senza eredità SRD implicita; renderer di scheda totalmente data-driven ancora pianificato |
 | Sezione Regole accanto al Compendio | Nuova destinazione principale e confine Regole/Compendio |
 | Standard read-only ma modificabile | Crea variante/fork copy-on-write, mai overwrite |
 | Homebrew sempre visibile | Archivio globale, badge e filtro Standard/Homebrew |

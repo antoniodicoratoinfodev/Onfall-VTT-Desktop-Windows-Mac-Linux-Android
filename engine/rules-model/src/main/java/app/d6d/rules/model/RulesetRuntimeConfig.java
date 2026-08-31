@@ -49,6 +49,16 @@ public record RulesetRuntimeConfig(
         return new RulesetRuntimeConfig(CURRENT_SEMANTICS, 20, true, 6, 2, 5, 2, 4, 6);
     }
 
+    /**
+     * Valori di compatibilità interni per un regolamento che usa soltanto le
+     * primitive generiche. Non dichiarano alcuna meccanica: critico,
+     * Sfinimento e competenza diventano regole soltanto quando esistono le
+     * rispettive entità nel regolamento.
+     */
+    public static RulesetRuntimeConfig genericManual() {
+        return new RulesetRuntimeConfig(CURRENT_SEMANTICS, 20, false, 1, 0, 0, 0, 1, 0);
+    }
+
     public int proficiencyBonus(int level) {
         int normalizedLevel = Math.max(1, level);
         return Math.min(proficiencyBonusMaximum,

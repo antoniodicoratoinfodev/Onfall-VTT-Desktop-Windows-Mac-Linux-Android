@@ -4,12 +4,15 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Formula numerica sicura e deterministica.
@@ -347,13 +350,20 @@ public final class RuleFormula {
         }
 
         private Node unary() {
-            if (current.kind == TokenKind.OPERATOR
+            ArrayList<String> operators = new ArrayList<>();
+            while (current.kind == TokenKind.OPERATOR
                     && (current.text.equals("+") || current.text.equals("-") || current.text.equals("!"))) {
-                String operator = current.text;
+                if (depth + operators.size() >= MAX_DEPTH) {
+                    throw error("Formula nesting is too deep");
+                }
+                operators.add(current.text);
                 advance();
-                return new UnaryNode(operator, unary());
             }
-            return primary();
+            Node result = primary();
+            for (int index = operators.size() - 1; index >= 0; index--) {
+                result = new UnaryNode(operators.get(index), result);
+            }
+            return result;
         }
 
         private Node primary() {
@@ -421,7 +431,23 @@ public final class RuleFormula {
                     .contains(name)) {
                 throw error("Unknown formula function " + name);
             }
+            validateArity(name, arguments.size());
             return new FunctionNode(name, List.copyOf(arguments), textArgument);
+        }
+
+        private void validateArity(String name, int actual) {
+            int expected = switch (name) {
+                case "if", "clamp" -> 3;
+                case "abs", "floor", "ceil", "round", "lookup" -> 1;
+                case "min", "max" -> -1;
+                default -> throw new IllegalStateException("Unknown formula function " + name);
+            };
+            if (expected >= 0 && actual != expected) {
+                throw error(name + " expects " + expected + " arguments");
+            }
+            if (expected < 0 && actual < 1) {
+                throw error(name + " expects at least 1 argument");
+            }
         }
 
         private int precedence(String operator) {
@@ -451,8 +477,27 @@ public final class RuleFormula {
 
     /** Contesto semplice utile a editor, test e anteprime. */
     public static Context context(Map<String, BigDecimal> values, Map<String, ? extends Map<BigDecimal, BigDecimal>> tables) {
-        Map<String, BigDecimal> safeValues = Map.copyOf(values);
-        Map<String, ? extends Map<BigDecimal, BigDecimal>> safeTables = Map.copyOf(tables);
+        LinkedHashMap<String, BigDecimal> copiedValues = new LinkedHashMap<>();
+        Objects.requireNonNull(values, "values").forEach((id, value) -> copiedValues.put(
+                Objects.requireNonNull(id, "value id"),
+                normalize(Objects.requireNonNull(value, "formula context value"))));
+        Map<String, BigDecimal> safeValues = Map.copyOf(copiedValues);
+
+        LinkedHashMap<String, Map<BigDecimal, BigDecimal>> copiedTables = new LinkedHashMap<>();
+        Objects.requireNonNull(tables, "tables").forEach((tableId, sourceRows) -> {
+            TreeMap<BigDecimal, BigDecimal> rows = new TreeMap<>(BigDecimal::compareTo);
+            Objects.requireNonNull(sourceRows, "formula table").forEach((key, value) -> {
+                BigDecimal normalizedKey = normalize(Objects.requireNonNull(key, "formula table key"));
+                BigDecimal previous = rows.put(normalizedKey,
+                        normalize(Objects.requireNonNull(value, "formula table value")));
+                if (previous != null) {
+                    throw new IllegalArgumentException(
+                            "Formula table " + tableId + " contains duplicate numeric key " + normalizedKey);
+                }
+            });
+            copiedTables.put(Objects.requireNonNull(tableId, "table id"), Collections.unmodifiableMap(rows));
+        });
+        Map<String, Map<BigDecimal, BigDecimal>> safeTables = Map.copyOf(copiedTables);
         return new Context() {
             @Override public BigDecimal value(String id) {
                 return safeValues.get(id);
@@ -461,7 +506,7 @@ public final class RuleFormula {
             @Override public BigDecimal lookup(String tableId, BigDecimal key) {
                 Map<BigDecimal, BigDecimal> table = safeTables.get(tableId);
                 if (table == null) throw new IllegalArgumentException("Missing formula table " + tableId);
-                BigDecimal exact = table.get(key);
+                BigDecimal exact = table.get(normalize(Objects.requireNonNull(key, "lookup key")));
                 if (exact == null) throw new IllegalArgumentException("Table " + tableId + " has no row for " + key);
                 return exact;
             }

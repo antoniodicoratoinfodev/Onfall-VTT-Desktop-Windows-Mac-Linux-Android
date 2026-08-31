@@ -278,7 +278,6 @@ class SheetViewModel(
             .filter { it.enabled() && it.kind() == RuleKind.DAMAGE_TYPE }
             .map { DamageType.of(it.attributes()["damageTypeId"].orEmpty().ifBlank { it.id() }) }
             .distinct()
-            .ifEmpty { DamageType.values().toList() }
     }
 
     fun conditionTypesFor(sheet: CharacterSheet = character): List<ConditionType> {
@@ -290,9 +289,7 @@ class SheetViewModel(
         return revision.entities()
             .filter { it.enabled() && it.kind() == RuleKind.CONDITION }
             .map { ConditionType.of(it.attributes()["conditionId"].orEmpty().ifBlank { it.id() }) }
-            .filterNot { it == ConditionType.CUSTOM }
             .distinct()
-            .ifEmpty { ConditionType.values().filterNot { it == ConditionType.CUSTOM } }
     }
 
     private var currentKind by mutableStateOf(SheetKind.PERSONAGGIO)

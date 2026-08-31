@@ -125,7 +125,7 @@ object Srd521Ruleset {
             mapOf("dieSides" to "20"), source, license,
         ),
         core(
-            "onfall:core:combat:turn-budget",
+            CoreRuleIds.TURN_ECONOMY,
             RuleKind.ACTION_ECONOMY,
             "Economia del turno",
             "Turn Economy",
@@ -134,7 +134,7 @@ object Srd521Ruleset {
             mapOf("actions" to "1", "bonusActions" to "1", "reactions" to "1"), source, license,
         ),
         core(
-            "onfall:core:health:hit-points",
+            CoreRuleIds.HIT_POINTS,
             RuleKind.HEALTH_MODEL,
             "Punti Ferita e Punti Ferita Temporanei",
             "Hit Points and Temporary Hit Points",
@@ -143,7 +143,7 @@ object Srd521Ruleset {
             emptyMap(), source, license,
         ),
         core(
-            "onfall:core:health:death-saves",
+            CoreRuleIds.DEATH_SAVES,
             RuleKind.HEALTH_MODEL,
             "Tiri salvezza contro morte",
             "Death Saving Throws",
@@ -152,7 +152,7 @@ object Srd521Ruleset {
             mapOf("successes" to "3", "failures" to "3"), source, license,
         ),
         core(
-            "onfall:core:combat:concentration",
+            CoreRuleIds.CONCENTRATION,
             RuleKind.SAVE,
             "Concentrazione",
             "Concentration",

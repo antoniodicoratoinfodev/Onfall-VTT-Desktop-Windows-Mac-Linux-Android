@@ -10,6 +10,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RulesetModelTest {
     private RuleEntity entity(String id, Map<String, String> attributes) {
@@ -129,5 +130,19 @@ class RulesetModelTest {
         assertEquals(Map.of("hitDie", "d12"), changed.attributes());
         assertEquals(List.of("class", "homebrew"), changed.tags());
         assertEquals(RuleKind.CORE_MECHANIC, base.entity(genericId).kind());
+    }
+
+    @Test
+    void genericFoundationIsReadOnlyEmptyAndStillProducesAConfiguredSnapshot() {
+        RulesetRevision foundation = GenericRulesetFoundation.revision();
+
+        assertTrue(foundation.readOnly());
+        assertTrue(foundation.entities().isEmpty());
+        assertTrue(foundation.compile().entities().isEmpty());
+        RuleSessionSnapshot snapshot = RuleSessionSnapshot.fromRevision(foundation);
+        assertTrue(snapshot.configured());
+        assertTrue(snapshot.executable());
+        assertTrue(snapshot.entities().isEmpty());
+        assertEquals(RulesetRuntimeConfig.genericManual(), foundation.runtime());
     }
 }

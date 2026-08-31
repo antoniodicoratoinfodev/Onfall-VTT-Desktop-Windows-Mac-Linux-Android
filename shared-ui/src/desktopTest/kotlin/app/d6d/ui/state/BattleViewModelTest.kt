@@ -27,6 +27,11 @@ import app.d6d.engine.ai.EnemyCpuDifficulty
 import app.d6d.engine.ai.EnemyCpuReason
 import app.d6d.engine.ai.EnemyCpuTargetReport
 import app.d6d.content.srd521it.Srd521Ruleset
+import app.d6d.rules.model.GenericRulesetFoundation
+import app.d6d.rules.model.LocalizedRuleText
+import app.d6d.rules.model.RuleAutomationLevel
+import app.d6d.rules.model.RuleEntity
+import app.d6d.rules.model.RuleKind
 import app.d6d.rules.model.RulesetOrigin
 import app.d6d.rules.model.RulesetRevision
 import app.d6d.domain.space.GridPosition
@@ -65,6 +70,69 @@ class BattleViewModelTest {
     }
 
     private fun viewModel() = BattleViewModel(SampleEncounter.startedSession(seed = 4242L))
+
+    @Test
+    fun `una revisione configurata vuota non riceve tassonomie DnD implicite`() {
+        val generic = BattleViewModel(
+            CombatSession.create("generic-empty", 99L, GenericRulesetFoundation.revision(), "content-1"),
+        )
+        val legacy = BattleViewModel(CombatSession.create("legacy", 100L))
+
+        assertTrue(generic.state.ruleSession().executable())
+        assertTrue(generic.availableDamageTypes.isEmpty())
+        assertTrue(generic.availableConditionTypes.isEmpty())
+        assertFalse(generic.tacticalD20ControlsAvailable)
+        assertFalse(generic.tacticalHitPointControlsAvailable)
+        assertFalse(generic.tacticalDeathSaveControlsAvailable)
+        assertFalse(generic.tacticalExhaustionControlsAvailable)
+        assertTrue(legacy.availableDamageTypes.isNotEmpty())
+        assertTrue(legacy.availableConditionTypes.isNotEmpty())
+        assertTrue(legacy.tacticalD20ControlsAvailable)
+        assertTrue(legacy.tacticalHitPointControlsAvailable)
+    }
+
+    @Test
+    fun `un regolamento autonomo espone esattamente le proprie tassonomie`() {
+        fun taxonomy(id: String, kind: RuleKind, key: String, value: String) = RuleEntity(
+            id,
+            kind,
+            RulesetOrigin.HOMEBREW,
+            LocalizedRuleText.bilingual(value, value),
+            LocalizedRuleText.bilingual("Tassonomia di test.", "Test taxonomy."),
+            "",
+            true,
+            RuleAutomationLevel.FULL,
+            mapOf(key to value),
+            listOf("test"),
+            "Test",
+            "",
+            0,
+        )
+        val foundation = GenericRulesetFoundation.revision()
+        val damage = DamageType.of("story:damage:doubt")
+        val condition = ConditionType.of("story:condition:lost")
+        val revision = RulesetRevision.create(
+            "story:rules",
+            "story:rules:1",
+            "1",
+            "Story rules",
+            "Independent taxonomy.",
+            RulesetOrigin.HOMEBREW,
+            foundation.canonicalHash(),
+            foundation.runtime(),
+            listOf(
+                taxonomy("story:rule:damage:doubt", RuleKind.DAMAGE_TYPE, "damageTypeId", damage.name()),
+                taxonomy("story:rule:condition:lost", RuleKind.CONDITION, "conditionId", condition.name()),
+            ),
+            "now",
+        )
+        val model = BattleViewModel(CombatSession.create("story", 101L, revision, "content-1"))
+
+        assertEquals(listOf(damage), model.availableDamageTypes)
+        assertEquals(listOf(condition), model.availableConditionTypes)
+        assertFalse(DamageType.FIRE in model.availableDamageTypes)
+        assertFalse(ConditionType.PRONE in model.availableConditionTypes)
+    }
 
     @Test
     fun `la difficolta cpu fa round trip nella presentation`() {

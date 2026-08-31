@@ -709,18 +709,20 @@ fun CommandBar(
                 // e' acceso vale la regola normale. Ricliccare quello attivo lo spegne
                 // (torna a normale); cliccare l'altro sposta l'evidenza — non si
                 // sommano mai.
-                listOf(D20Mode.ADVANTAGE, D20Mode.DISADVANTAGE).forEach { mode ->
-                    val selected = viewModel.rollMode == mode
-                    GameButton(
-                        label = mode.label(language),
-                        accent = if (selected) Palette.TextMuted else Palette.TextFaint,
-                        selected = selected,
-                        enabled = displayedActorCanAct,
-                        dense = true,
-                        onClick = {
-                            viewModel.rollMode = if (selected) D20Mode.NORMAL else mode
-                        },
-                    )
+                if (viewModel.tacticalD20ControlsAvailable) {
+                    listOf(D20Mode.ADVANTAGE, D20Mode.DISADVANTAGE).forEach { mode ->
+                        val selected = viewModel.rollMode == mode
+                        GameButton(
+                            label = mode.label(language),
+                            accent = if (selected) Palette.TextMuted else Palette.TextFaint,
+                            selected = selected,
+                            enabled = displayedActorCanAct,
+                            dense = true,
+                            onClick = {
+                                viewModel.rollMode = if (selected) D20Mode.NORMAL else mode
+                            },
+                        )
+                    }
                 }
                 GameButton(
                     label = "◆ ${strings.dice.title}",

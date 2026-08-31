@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.d6d.domain.combat.ActorDefinition
 import app.d6d.domain.combat.CombatantSetup
-import app.d6d.domain.combat.D20Mode
 import app.d6d.domain.space.MapGrid
 import app.d6d.engine.CombatSession
 import app.d6d.engine.ai.EnemyCpuDifficulty
@@ -470,7 +469,11 @@ class EncounterBuilderViewModel(
         session.configureMap(grid)
         if (mode == EncounterMode.FIGHT) autoPlaceForFight(session, grid, prepared)
         session.markReady()
-        setups.forEach { session.useStaticInitiative(it.instanceId(), D20Mode.NORMAL) }
+        // L'ordine iniziale usa il valore statico già dichiarato dal combattente:
+        // non deve introdurre un d20 implicito in un regolamento autonomo.
+        setups.forEach { setup ->
+            session.setInitiative(setup.instanceId(), setup.actor().initiativeScore())
+        }
         session.start()
         return session
     }

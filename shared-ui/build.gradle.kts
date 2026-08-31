@@ -86,7 +86,7 @@ kotlin {
                 // Il ritmo del turno CPU si prova a tempo virtuale: i test non
                 // devono aspettare davvero le pause che rendono leggibile la partita.
                 implementation(libs.kotlinx.coroutines.test)
-                runtimeOnly("org.junit.platform:junit-platform-launcher")
+                runtimeOnly(libs.junit.platform.launcher)
             }
         }
     }

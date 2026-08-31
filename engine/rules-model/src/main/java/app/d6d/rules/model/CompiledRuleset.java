@@ -374,6 +374,7 @@ public final class CompiledRuleset {
             if ((numericOverride || levelContext) && supplied.type() != RuleValue.Type.NUMBER) {
                 throw new IllegalArgumentException("Supplied numeric rule value " + id + " must be numeric");
             }
+            if (levelContext) validateLevelValue(id, supplied);
             if (genericContext && supplied.type() != RuleValue.Type.NUMBER
                     && supplied.type() != RuleValue.Type.BOOLEAN) {
                 throw new IllegalArgumentException("Supplied context value " + id + " must be numeric or boolean");
@@ -1060,7 +1061,10 @@ public final class CompiledRuleset {
             }
             case ADD_CONDITION -> {
                 int maximum = conditionMaximumStacks(target);
-                int stacks = Math.max(1, Math.min(maximum, after.intValue()));
+                int stacks = after.max(BigDecimal.ONE)
+                        .min(BigDecimal.valueOf(maximum))
+                        .setScale(0, RoundingMode.FLOOR)
+                        .intValueExact();
                 changed = state.withCondition(target, stacks);
                 after = BigDecimal.valueOf(stacks);
                 eventType = "CONDITION_ADDED";
@@ -1167,7 +1171,17 @@ public final class CompiledRuleset {
     private int ownerLevel(String ownerRef, RuleRuntimeState state) {
         if (ownerRef.isEmpty()) return Integer.MAX_VALUE;
         RuleValue value = state.values().get("level:" + resolveId(ownerRef));
-        return value == null ? 1 : value.asNumber().intValue();
+        return value == null ? 1 : value.asNumber().intValueExact();
+    }
+
+    private static void validateLevelValue(String id, RuleValue value) {
+        try {
+            int level = value.asNumber().intValueExact();
+            if (level < 0 || level > 1_000_000) throw new ArithmeticException();
+        } catch (ArithmeticException failure) {
+            throw new IllegalArgumentException(
+                    "Supplied level rule value " + id + " must be a whole number from 0 to 1000000");
+        }
     }
 
     private BigDecimal apply(ModifierOperation operation, BigDecimal current, BigDecimal operand) {

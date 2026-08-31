@@ -37,6 +37,9 @@ interface RulesStrings {
     val forkHint: String
     val newRevisionDraft: String
     val newRevisionHint: String
+    val newBlankRuleset: String
+    val blankRulesetName: String
+    val blankRulesetDescription: String
     val saveDraft: String
     val restoreFromBase: String
     val removeAddedRule: String
@@ -115,6 +118,10 @@ internal object RulesStringsIt : RulesStrings {
     override val forkHint = "Lo standard resta intatto; la nuova linea parte da questa revisione."
     override val newRevisionDraft = "Nuova revisione"
     override val newRevisionHint = "La revisione pubblicata resta immutabile; le modifiche entrano in una nuova bozza."
+    override val newBlankRuleset = "Nuovo regolamento vuoto"
+    override val blankRulesetName = "Il mio regolamento"
+    override val blankRulesetDescription =
+        "Regolamento indipendente: aggiungi soltanto le regole, i valori e i collegamenti che ti servono."
     override val saveDraft = "Salva bozza"
     override val restoreFromBase = "Ripristina dalla base"
     override val removeAddedRule = "Rimuovi dalla bozza"
@@ -199,6 +206,10 @@ internal object RulesStringsEn : RulesStrings {
     override val forkHint = "The standard remains untouched; the new line starts from this revision."
     override val newRevisionDraft = "New revision"
     override val newRevisionHint = "The published revision stays immutable; edits go into a new draft."
+    override val newBlankRuleset = "New blank ruleset"
+    override val blankRulesetName = "My ruleset"
+    override val blankRulesetDescription =
+        "Independent ruleset: add only the rules, values, and links that you need."
     override val saveDraft = "Save draft"
     override val restoreFromBase = "Restore from base"
     override val removeAddedRule = "Remove from draft"

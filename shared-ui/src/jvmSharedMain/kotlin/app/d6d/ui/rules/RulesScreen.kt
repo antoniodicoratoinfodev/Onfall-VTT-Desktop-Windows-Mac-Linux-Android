@@ -155,6 +155,14 @@ private fun RulesetList(viewModel: RulesViewModel, modifier: Modifier = Modifier
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         item { Eyebrow(words.ruleset) }
+        item {
+            GameButton(
+                words.newBlankRuleset,
+                dense = true,
+                accent = Palette.Heal,
+                onClick = viewModel::createBlankRuleset,
+            )
+        }
         items(viewModel.choices, key = { it.key }) { choice ->
             RulesetCard(choice, choice.key == viewModel.selectedKey) { viewModel.selectRuleset(choice.key) }
         }
@@ -379,7 +387,7 @@ private fun RuleDetail(
                     if (summary.disabled > 0) Chip(words.disabledCount(summary.disabled), Palette.Critical)
                 }
             }
-            RuntimeEditor(viewModel)
+            if (viewModel.hasLegacyRuntimeControls) RuntimeEditor(viewModel)
             var newKind by remember(choice.key) { mutableStateOf(RuleKind.CUSTOM) }
             Eyebrow(words.ruleType)
             FlowRow(
@@ -1752,6 +1760,14 @@ private fun CompactRulesContent(
             Modifier.fillMaxWidth().heightIn(max = 190.dp).background(Palette.Surface.copy(alpha = .9f)).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            item {
+                GameButton(
+                    strings.rules.newBlankRuleset,
+                    dense = true,
+                    accent = Palette.Heal,
+                    onClick = viewModel::createBlankRuleset,
+                )
+            }
             items(viewModel.choices, key = { it.key }) { choice ->
                 RulesetCard(choice, choice.key == viewModel.selectedKey) { viewModel.selectRuleset(choice.key) }
             }

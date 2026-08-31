@@ -7,7 +7,7 @@ dependencies {
     api(project(":engine:domain-model"))
 
     testImplementation(libs.junit.jupiter)
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 java {
