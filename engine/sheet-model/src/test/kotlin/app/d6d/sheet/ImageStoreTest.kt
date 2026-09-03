@@ -221,11 +221,25 @@ class ImageStoreTest {
     @Test
     fun `la libreria dei ritratti si salva e si rilegge`() {
         val store = store()
-        store.saveLibrary(PortraitLibrary(portraits = mapOf("pg-kaelen" to "kaelen.png")))
+        store.saveLibrary(
+            PortraitLibrary(
+                portraits = mapOf("pg-kaelen" to "kaelen.png"),
+                framings = mapOf("pg-kaelen" to PortraitFraming(0.2f, 0.75f, 2.4f)),
+            ),
+        )
 
         val reloaded = ImageStore(dataDirectory).loadLibrary()
 
         assertEquals("kaelen.png", reloaded.portraits["pg-kaelen"])
+        assertEquals(PortraitFraming(0.2f, 0.75f, 2.4f), reloaded.framings["pg-kaelen"])
+    }
+
+    @Test
+    fun `una inquadratura non valida viene normalizzata senza spazi vuoti`() {
+        assertEquals(
+            PortraitFraming(0.5f, 0.5f, PortraitFraming.MAX_ZOOM),
+            PortraitFraming(Float.POSITIVE_INFINITY, Float.NaN, 99f).normalized(),
+        )
     }
 
     @Test

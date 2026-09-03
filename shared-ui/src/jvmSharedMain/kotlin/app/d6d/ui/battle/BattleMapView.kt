@@ -8,7 +8,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -75,7 +74,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -116,6 +114,7 @@ import app.d6d.ui.components.color
 import app.d6d.ui.components.healthRingColor
 import app.d6d.ui.components.initials
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.images.FramedPortraitImage
 import app.d6d.ui.images.rememberBitmap
 import app.d6d.ui.images.rememberPortrait
 import app.d6d.ui.state.AreaTargeting
@@ -1316,6 +1315,7 @@ private fun MapToken(
     // l'anello si accende. Sparisce da solo quando il numero scade.
     val critFlash = viewModel.floating[id].orEmpty().any { it.kind == FloatKind.CRIT }
     val portrait = portraits.rememberPortrait(snapshot.definitionId())
+    val portraitFraming = portraits.portraitFraming(snapshot.definitionId())
     val density = LocalDensity.current
     val cellPx = with(density) { cellSize.toPx() }
     var dragOffset by remember(id, placement.origin(), viewModel.editMode) { mutableStateOf(Offset.Zero) }
@@ -1452,10 +1452,9 @@ private fun MapToken(
             contentAlignment = Alignment.Center,
         ) {
             if (portrait != null) {
-                Image(
-                    bitmap = portrait,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                FramedPortraitImage(
+                    image = portrait,
+                    framing = portraitFraming,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import app.d6d.sheet.ImageStore
 import app.d6d.sheet.MapLibrary
 import app.d6d.sheet.PortraitLibrary
+import app.d6d.sheet.PortraitFraming
 import app.d6d.sheet.StoredMap
 import java.nio.file.Path
 import java.util.LinkedHashMap
@@ -262,6 +263,44 @@ class PortraitRepository(
 
     fun portraitName(definitionId: String): String? = library.portraits[definitionId]
 
+    /** Inquadratura salvata del ritratto; gli archivi precedenti restano centrati. */
+    fun portraitFraming(definitionId: String): PortraitFraming =
+        library.framings[definitionId]?.normalized() ?: PortraitFraming.DEFAULT
+
+    /**
+     * Salva una nuova inquadratura senza modificare il file originale.
+     *
+     * Lo stato in memoria cambia subito, cosi' il token non lampeggia tornando al
+     * centro mentre la piccola libreria JSON viene scritta sul dispatcher I/O.
+     */
+    fun setPortraitFraming(definitionId: String, framing: PortraitFraming) {
+        if (definitionId !in library.portraits) return
+        val normalized = framing.normalized()
+        val previous = library
+        val framings = if (normalized == PortraitFraming.DEFAULT) {
+            library.framings - definitionId
+        } else {
+            library.framings + (definitionId to normalized)
+        }
+        val updated = library.copy(framings = framings)
+        if (updated == previous) return
+
+        library = updated
+        revision++
+        dispatchIo(
+            operation = { store.saveLibrary(updated) },
+            onSuccess = {},
+            onFailure = { failure ->
+                // Non coprire modifiche piu' recenti mentre termina una scrittura.
+                if (library == updated) {
+                    library = previous
+                    revision++
+                }
+                message = operationError(failure)
+            },
+        )
+    }
+
     /** Assegna un ritratto tramite il selettore asincrono della piattaforma. */
     fun assignPortraitAsync(definitionId: String, onComplete: (Boolean) -> Unit = {}) {
         message = null
@@ -409,7 +448,10 @@ class PortraitRepository(
 
     fun clearPortrait(definitionId: String) {
         val previous = library.portraits[definitionId]
-        val updated = library.copy(portraits = library.portraits - definitionId)
+        val updated = library.copy(
+            portraits = library.portraits - definitionId,
+            framings = library.framings - definitionId,
+        )
         val deleteImage = previous != null &&
             updated.portraits.values.none { it == previous } &&
             mapLibrary.maps.none { it.image == previous }
@@ -439,7 +481,11 @@ class PortraitRepository(
     private fun persistPortrait(definitionId: String, chosen: Path): PortraitImport {
         val stored = store.importImage(chosen, AppLocale.language)
         val previous = library.portraits[definitionId]
-        val updated = library.copy(portraits = library.portraits + (definitionId to stored))
+        val updated = library.copy(
+            portraits = library.portraits + (definitionId to stored),
+            // Una nuova immagine riparte dall'inquadratura completa e centrata.
+            framings = library.framings - definitionId,
+        )
         try {
             store.saveLibrary(updated)
         } catch (failure: Exception) {

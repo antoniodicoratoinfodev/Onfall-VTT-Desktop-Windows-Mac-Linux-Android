@@ -1,6 +1,7 @@
 package app.d6d.ui.images
 
 import app.d6d.sheet.ImageStore
+import app.d6d.sheet.PortraitFraming
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -167,6 +168,40 @@ class PortraitRepositoryTest {
         assertNotNull(store.resolve(secondStored))
         repository.clearPortrait("eroe")
         assertEquals(null, store.resolve(secondStored))
+    }
+
+    @Test
+    fun `l'inquadratura viene salvata e una nuova immagine la azzera`() {
+        var source = sampleImage("primo.png")
+        val store = ImageStore(directory.resolve("dati"))
+        val repository = PortraitRepository(store, pickerReturning(source))
+        repository.assignPortraitAsync("eroe")
+        val framing = PortraitFraming(0.15f, 0.8f, 2.25f)
+
+        repository.setPortraitFraming("eroe", framing)
+
+        assertEquals(framing, repository.portraitFraming("eroe"))
+        assertEquals(framing, store.loadLibrary().framings["eroe"])
+
+        source = sampleImage("secondo.png")
+        val replacement = PortraitRepository(store, pickerReturning(source))
+        replacement.assignPortraitAsync("eroe")
+
+        assertEquals(PortraitFraming.DEFAULT, replacement.portraitFraming("eroe"))
+        assertFalse(store.loadLibrary().framings.containsKey("eroe"))
+    }
+
+    @Test
+    fun `togliere il ritratto elimina anche la sua inquadratura`() {
+        val store = ImageStore(directory.resolve("dati"))
+        val repository = PortraitRepository(store, pickerReturning(sampleImage()))
+        repository.assignPortraitAsync("eroe")
+        repository.setPortraitFraming("eroe", PortraitFraming(0f, 1f, 3f))
+
+        repository.clearPortrait("eroe")
+
+        assertFalse(repository.library.framings.containsKey("eroe"))
+        assertFalse(store.loadLibrary().framings.containsKey("eroe"))
     }
 
     @Test

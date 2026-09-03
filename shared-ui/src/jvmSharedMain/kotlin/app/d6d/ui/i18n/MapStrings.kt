@@ -30,6 +30,9 @@ interface MapStrings {
     val imageSelectionCancelled: String
     val backgroundLoaded: String
     val portraitAssigned: String
+    val frameImage: String
+    val frameImageHint: String
+    val imageZoom: String
     val invalidImage: String
     val imagePickerAlreadyOpen: String
     val imageProviderReturnedNoData: String
@@ -74,6 +77,10 @@ internal object MapStringsIt : MapStrings {
     override val imageSelectionCancelled = "Selezione immagine annullata."
     override val backgroundLoaded = "Sfondo caricato."
     override val portraitAssigned = "Ritratto assegnato."
+    override val frameImage = "Inquadra"
+    override val frameImageHint =
+        "Trascina l'immagine per scegliere la parte visibile. Usa lo zoom per avvicinarla."
+    override val imageZoom = "Zoom"
     override val invalidImage = "Immagine non valida."
     override val imagePickerAlreadyOpen = "Un selettore di immagini è già aperto."
     override val imageProviderReturnedNoData =
@@ -121,6 +128,10 @@ internal object MapStringsEn : MapStrings {
     override val imageSelectionCancelled = "Image selection cancelled."
     override val backgroundLoaded = "Background loaded."
     override val portraitAssigned = "Portrait assigned."
+    override val frameImage = "Reframe"
+    override val frameImageHint =
+        "Drag the image to choose the visible area. Use zoom to move closer."
+    override val imageZoom = "Zoom"
     override val invalidImage = "Invalid image."
     override val imagePickerAlreadyOpen = "An image picker is already open."
     override val imageProviderReturnedNoData =

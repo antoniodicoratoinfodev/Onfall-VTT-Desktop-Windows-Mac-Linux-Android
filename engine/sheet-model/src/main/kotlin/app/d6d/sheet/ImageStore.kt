@@ -18,10 +18,40 @@ import kotlin.math.absoluteValue
  */
 @Serializable
 data class PortraitLibrary(
-    val schemaVersion: Int = 1,
+    val schemaVersion: Int = 2,
     /** definitionId → nome del file nell'archivio locale. */
     val portraits: Map<String, String> = emptyMap(),
+    /** definitionId → inquadratura scelta per il medaglione. */
+    val framings: Map<String, PortraitFraming> = emptyMap(),
 )
+
+/**
+ * Inquadratura non distruttiva di un ritratto dentro un token quadrato/rotondo.
+ *
+ * [focusX] e [focusY] indicano dove cade la finestra di ritaglio fra i due estremi
+ * dell'immagine (0 = sinistra/alto, 1 = destra/basso). [zoom] parte dal riempimento
+ * completo del token e puo' ingrandirlo fino a quattro volte. Conservare questi
+ * valori invece di generare una copia ritagliata lascia sempre recuperabile
+ * l'immagine originale.
+ */
+@Serializable
+data class PortraitFraming(
+    val focusX: Float = 0.5f,
+    val focusY: Float = 0.5f,
+    val zoom: Float = 1f,
+) {
+    fun normalized(): PortraitFraming = PortraitFraming(
+        focusX = focusX.takeIf(Float::isFinite)?.coerceIn(0f, 1f) ?: 0.5f,
+        focusY = focusY.takeIf(Float::isFinite)?.coerceIn(0f, 1f) ?: 0.5f,
+        zoom = zoom.takeIf(Float::isFinite)?.coerceIn(MIN_ZOOM, MAX_ZOOM) ?: MIN_ZOOM,
+    )
+
+    companion object {
+        const val MIN_ZOOM = 1f
+        const val MAX_ZOOM = 4f
+        val DEFAULT = PortraitFraming()
+    }
+}
 
 /**
  * Archivio locale delle immagini caricate dall'utente.

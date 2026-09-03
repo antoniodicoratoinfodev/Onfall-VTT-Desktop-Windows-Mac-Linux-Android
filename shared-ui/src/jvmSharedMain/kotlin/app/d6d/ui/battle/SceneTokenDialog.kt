@@ -1,6 +1,5 @@
 package app.d6d.ui.battle
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,7 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -57,6 +55,8 @@ import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.i18n.BoardStrings
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.images.FramedPortraitImage
+import app.d6d.ui.images.PortraitFramingEditor
 import app.d6d.ui.images.rememberPortrait
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.state.BattleViewModel
@@ -64,6 +64,7 @@ import app.d6d.ui.settings.LocalAppPreferences
 import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import java.util.UUID
+import app.d6d.sheet.PortraitFraming
 
 /** Popup unico per creare una pedina di scena o modificarne i metadati. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -107,6 +108,11 @@ internal fun SceneTokenDialogHost(
     // errore rimasto aperto viene ridisegnato nel nuovo vocabolario.
     var lootResult by remember(request) { mutableStateOf<LootTransferResult?>(null) }
     var removeOriginalImage by remember(request) { mutableStateOf(false) }
+    val originalAssetId = existing?.imageAssetId().orEmpty()
+    var imageFraming by remember(request) {
+        mutableStateOf(portraits.portraitFraming(originalAssetId))
+    }
+    var framingEditorOpen by remember(request) { mutableStateOf(false) }
     val candidateAssetId = remember(request) { "scene-token-image-${UUID.randomUUID()}" }
     val retainCandidate = remember(request) { mutableStateOf(false) }
     val dialogActive = remember(request) { mutableStateOf(true) }
@@ -117,7 +123,6 @@ internal fun SceneTokenDialogHost(
     portraits.revision
     val candidateStored = portraits.portraitName(candidateAssetId) != null
     val candidateImage = portraits.rememberPortrait(candidateAssetId)
-    val originalAssetId = existing?.imageAssetId().orEmpty()
     val originalImage = portraits.rememberPortrait(originalAssetId)
     val shownImage = candidateImage.takeUnless { removeOriginalImage }
         ?: originalImage.takeUnless { removeOriginalImage }
@@ -184,16 +189,30 @@ internal fun SceneTokenDialogHost(
                     name = name,
                     color = Color(colorArgb),
                     compact = compact,
-                    onImageRequested = { removeOriginalImage = false },
+                    onImageRequested = {
+                        removeOriginalImage = false
+                        if (!candidateStored) {
+                            imageFraming = portraits.portraitFraming(originalAssetId)
+                        }
+                    },
                     onImageImportFinished = { imported ->
                         if (imported && !dialogActive.value && !retainCandidate.value) {
                             portraits.clearPortrait(candidateAssetId)
+                        } else if (imported) {
+                            imageFraming = PortraitFraming.DEFAULT
+                            framingEditorOpen = true
                         }
                     },
                     onRemove = {
                         removeOriginalImage = true
+                        imageFraming = PortraitFraming.DEFAULT
+                        framingEditorOpen = false
                         if (candidateStored) portraits.clearPortrait(candidateAssetId)
                     },
+                    framing = imageFraming,
+                    framingEditorOpen = framingEditorOpen,
+                    onFramingEditorOpenChange = { framingEditorOpen = it },
+                    onFramingChange = { imageFraming = it },
                 )
                 Text(words.tokenImageHint, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
 
@@ -328,6 +347,9 @@ internal fun SceneTokenDialogHost(
                         removeOriginalImage -> ""
                         else -> originalAssetId
                     }
+                    if (imageAssetId.isNotBlank()) {
+                        portraits.setPortraitFraming(imageAssetId, imageFraming)
+                    }
                     val draft = SceneTokenDraft(
                         name = name.trim(),
                         category = category,
@@ -427,6 +449,10 @@ private fun SceneTokenImagePicker(
     onImageRequested: () -> Unit,
     onImageImportFinished: (Boolean) -> Unit,
     onRemove: () -> Unit,
+    framing: PortraitFraming,
+    framingEditorOpen: Boolean,
+    onFramingEditorOpenChange: (Boolean) -> Unit,
+    onFramingChange: (PortraitFraming) -> Unit,
 ) {
     val mapWords = strings.maps
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -439,10 +465,9 @@ private fun SceneTokenImagePicker(
             contentAlignment = Alignment.Center,
         ) {
             if (shownImage != null) {
-                Image(
-                    bitmap = shownImage,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                FramedPortraitImage(
+                    image = shownImage,
+                    framing = framing,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
@@ -454,7 +479,10 @@ private fun SceneTokenImagePicker(
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             GameButton(
                 label = if (shownImage == null) mapWords.uploadImage else mapWords.changeImage,
                 modifier = Modifier.sizeIn(minHeight = if (compact) 48.dp else 40.dp),
@@ -466,12 +494,27 @@ private fun SceneTokenImagePicker(
             )
             if (shownImage != null) {
                 GameButton(
+                    strings.maps.frameImage,
+                    modifier = Modifier.sizeIn(minHeight = if (compact) 48.dp else 40.dp),
+                    selected = framingEditorOpen,
+                    dense = true,
+                    onClick = { onFramingEditorOpenChange(!framingEditorOpen) },
+                )
+                GameButton(
                     strings.common.remove,
                     modifier = Modifier.sizeIn(minHeight = if (compact) 48.dp else 40.dp),
                     dense = true,
                     onClick = onRemove,
                 )
             }
+        }
+        if (shownImage != null && framingEditorOpen) {
+            PortraitFramingEditor(
+                image = shownImage,
+                framing = framing,
+                onFramingChange = onFramingChange,
+                previewSize = if (compact) 154.dp else 176.dp,
+            )
         }
         if (candidateStored) {
             Text(mapWords.portraitAssigned, color = Palette.Gold, style = MaterialTheme.typography.labelMedium)

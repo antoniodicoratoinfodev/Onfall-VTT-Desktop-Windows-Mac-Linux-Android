@@ -1,21 +1,25 @@
 package app.d6d.ui.images
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,6 +28,7 @@ import app.d6d.ui.components.initials
 import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.i18n.strings
+import app.d6d.sheet.PortraitFraming
 
 /**
  * Ritratto di un attore, con caricamento dell'immagine.
@@ -36,6 +41,7 @@ import app.d6d.ui.i18n.strings
  * l'illustrazione di un manuale non la rende distribuibile.
  */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun PortraitPicker(
     repository: PortraitRepository,
     definitionId: String,
@@ -50,6 +56,11 @@ fun PortraitPicker(
     repository.revision
 
     val portrait = repository.rememberPortrait(definitionId)
+    val savedFraming = repository.portraitFraming(definitionId)
+    // Non usare il nome del file come chiave: cambia proprio al termine del picker
+    // e azzererebbe l'apertura automatica dell'editor richiesta dal caricamento.
+    var editing by remember(definitionId) { mutableStateOf(false) }
+    var framing by remember(definitionId) { mutableStateOf(savedFraming) }
 
     Column(
         modifier,
@@ -65,10 +76,9 @@ fun PortraitPicker(
             contentAlignment = Alignment.Center,
         ) {
             if (portrait != null) {
-                Image(
-                    bitmap = portrait,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                FramedPortraitImage(
+                    image = portrait,
+                    framing = if (editing) framing else savedFraming,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
@@ -84,14 +94,65 @@ fun PortraitPicker(
         GameButton(
             label = if (portrait == null) words.uploadImage else words.changeImage,
             accent = Palette.Party,
-            onClick = { repository.assignPortraitAsync(definitionId) },
+            onClick = {
+                repository.assignPortraitAsync(definitionId) { imported ->
+                    if (imported) {
+                        framing = PortraitFraming.DEFAULT
+                        editing = true
+                    }
+                }
+            },
         )
         if (portrait != null) {
             GameButton(
+                label = words.frameImage,
+                accent = Palette.Gold,
+                selected = editing,
+                onClick = {
+                    framing = savedFraming
+                    editing = !editing
+                },
+            )
+            GameButton(
                 label = strings.common.remove,
                 accent = Palette.TextFaint,
-                onClick = { repository.clearPortrait(definitionId) },
+                onClick = {
+                    editing = false
+                    repository.clearPortrait(definitionId)
+                },
             )
+        }
+
+        if (portrait != null && editing) {
+            PortraitFramingEditor(
+                image = portrait,
+                framing = framing,
+                onFramingChange = { framing = it },
+                previewSize = 126.dp,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                GameButton(
+                    label = strings.common.save,
+                    accent = Palette.Heal,
+                    dense = true,
+                    onClick = {
+                        repository.setPortraitFraming(definitionId, framing)
+                        editing = false
+                    },
+                )
+                GameButton(
+                    label = strings.common.cancel,
+                    accent = Palette.TextFaint,
+                    dense = true,
+                    onClick = {
+                        framing = savedFraming
+                        editing = false
+                    },
+                )
+            }
         }
 
         repository.message?.let {

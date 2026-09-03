@@ -254,6 +254,15 @@ characters, allies, NPCs, monsters, objects, traps, hazards, terrain, loot, vehi
 anything else. They remain on a separate layer and can be selected, moved, resized, rotated, edited,
 or removed without changing the encounter roster.
 
+After an image is imported, Onfall opens a **non-destructive token framing editor**. Dragging moves
+the artwork behind the circular frame; the slider, or a pinch gesture on touch screens, zooms from
+the cover fit up to 4×, while Reset restores the centred full-frame crop. The chosen focus and zoom
+are saved with the local portrait library and reused everywhere that token is drawn, without
+altering or duplicating the original image. The same editor is available for character and creature
+portraits in the Compendium, so their tactical combatant tokens keep the selected composition too.
+Replacing or removing an image also clears its old framing, and libraries written before this
+feature continue to open with their portraits centred.
+
 The bundled SRD content pack supplies structured rules data, but no creature or item artwork. The
 examples below therefore use the SRD Wolf, Longbow, and Ranger equipment with Onfall's fallback
 medallions; no external illustration was added.
@@ -296,7 +305,8 @@ as darker context.</sub>
 <tr>
 <td align="center">
 <img src="sample/scene-token-editor.png" width="720"/><br/>
-<sub>Scene token editor: the SRD Wolf as a Monster, using Onfall's fallback medallion because the pack contains no artwork</sub>
+<sub>Scene token editor: the SRD Wolf as a Monster, using Onfall's fallback medallion because the
+pack contains no artwork. Importing an image opens the framing controls directly below its preview.</sub>
 </td>
 </tr>
 <tr>

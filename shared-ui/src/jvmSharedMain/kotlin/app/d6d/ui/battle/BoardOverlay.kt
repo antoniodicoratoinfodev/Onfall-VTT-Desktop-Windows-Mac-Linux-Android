@@ -3,7 +3,6 @@ package app.d6d.ui.battle
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -45,7 +44,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
@@ -83,6 +81,7 @@ import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.images.PortraitRepository
+import app.d6d.ui.images.FramedPortraitImage
 import app.d6d.ui.images.rememberPortrait
 import app.d6d.ui.components.initials
 import app.d6d.ui.components.DialogTitle
@@ -204,6 +203,7 @@ private fun SceneTokenView(
     val sidePx = (token.sizeSquares() * cellPx).toFloat().coerceAtLeast(4f)
     val sideDp = with(density) { sidePx.toDp() }
     val image = portraits.rememberPortrait(token.imageAssetId())
+    val imageFraming = portraits.portraitFraming(token.imageAssetId())
     val color = Color(token.colorArgb())
     val boardWords = strings.board
     val category = token.category().label(boardWords)
@@ -236,10 +236,9 @@ private fun SceneTokenView(
             contentAlignment = Alignment.Center,
         ) {
             if (image != null) {
-                Image(
-                    bitmap = image,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                FramedPortraitImage(
+                    image = image,
+                    framing = imageFraming,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
