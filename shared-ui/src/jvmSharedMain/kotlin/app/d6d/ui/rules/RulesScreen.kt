@@ -402,6 +402,39 @@ private fun RulesOverview(
             )
         }
         HorizontalDivider(color = Palette.Line)
+        Eyebrow(if (italian) "Crea un nuovo regolamento" else "Create a new ruleset")
+        Text(
+            if (italian) {
+                "Scegli se usare tutte le regole SRD come punto di partenza oppure cominciare da zero."
+            } else {
+                "Choose whether to use the complete SRD as your starting point or begin from scratch."
+            },
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            GameButton(
+                words.newFromSrdRuleset,
+                subtitle = words.newFromSrdHint,
+                accent = Palette.Heal,
+                onClick = {
+                    viewModel.createSrdBasedRuleset()
+                    onOpenArea(RulesWorkspaceArea.BUILDER)
+                },
+            )
+            GameButton(
+                words.newBlankRuleset,
+                subtitle = words.newBlankRulesetHint,
+                onClick = {
+                    viewModel.createBlankRuleset()
+                    onOpenArea(RulesWorkspaceArea.BUILDER)
+                },
+            )
+        }
+        HorizontalDivider(color = Palette.Line)
         Eyebrow(if (italian) "Regolamento selezionato" else "Selected ruleset")
         if (choice == null) {
             Text(words.noResults, color = Palette.TextMuted)
@@ -773,9 +806,18 @@ private fun RulesetList(
         item { Eyebrow(words.ruleset) }
         item {
             GameButton(
-                words.newBlankRuleset,
+                words.newFromSrdRuleset,
+                subtitle = words.newFromSrdHint,
                 dense = true,
                 accent = Palette.Heal,
+                onClick = viewModel::createSrdBasedRuleset,
+            )
+        }
+        item {
+            GameButton(
+                words.newBlankRuleset,
+                subtitle = words.newBlankRulesetHint,
+                dense = true,
                 onClick = viewModel::createBlankRuleset,
             )
         }

@@ -326,6 +326,25 @@ class RulesViewModel(dataDirectory: Path) {
         }
     }
 
+    /** Crea sempre una nuova linea homebrew dalla revisione SRD inclusa, indipendentemente dalla selezione corrente. */
+    fun createSrdBasedRuleset() {
+        val repo = repository ?: return
+        cancelModuleComposition()
+        guarded {
+            val words = AppLocale.current.rules
+            val draft = repo.createHomebrew(
+                standard.canonicalHash(),
+                words.forkName(standard.name()),
+                standard.description(),
+            )
+            reload()
+            originFilter = RulesetOriginFilter.HOMEBREW
+            selectedKey = draft.id()
+            selectedEntityId = null
+            status = words.saved(draft.name())
+        }
+    }
+
     /** Crea una linea homebrew senza ereditare alcun contenuto SRD/D&D. */
     fun createBlankRuleset() {
         val repo = repository ?: return

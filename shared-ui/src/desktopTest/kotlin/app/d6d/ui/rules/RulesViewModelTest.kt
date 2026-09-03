@@ -136,6 +136,42 @@ class RulesViewModelTest {
     }
 
     @Test
+    fun `partire dall SRD crea una nuova bozza completa e lascia intatto lo standard`() {
+        val rules = RulesViewModel(directory)
+        rules.createBlankRuleset()
+        val standard = Srd521Ruleset.revision
+        val baseEntity = standard.entities().first { it.enabled() }
+        val originalName = baseEntity.name().text("it")
+
+        // Il comando deve usare lo SRD anche quando la selezione corrente è una bozza diversa.
+        rules.createSrdBasedRuleset()
+
+        val draft = requireNotNull(rules.selected)
+        assertTrue(draft.isDraft)
+        assertEquals(RulesetOrigin.HOMEBREW, draft.origin)
+        assertEquals(standard.canonicalHash(), draft.revision.baseCanonicalHash())
+        assertEquals(standard.entities().map { it.id() }, draft.revision.entities().map { it.id() })
+
+        rules.selectEntity(baseEntity.id())
+        assertTrue(rules.updateEntity(
+            entityId = baseEntity.id(),
+            name = "Versione personalizzata",
+            description = baseEntity.description().text("it"),
+            kind = baseEntity.kind(),
+            automation = baseEntity.automationLevel(),
+            enabled = false,
+            attributes = baseEntity.attributes(),
+            tags = baseEntity.tags(),
+        ))
+
+        assertEquals("Versione personalizzata", rules.selectedEntity?.name()?.text("it"))
+        assertFalse(requireNotNull(rules.selectedEntity).enabled())
+        assertEquals(1, rules.draftChangeSummary?.modified)
+        assertEquals(originalName, standard.entity(baseEntity.id()).name().text("it"))
+        assertTrue(standard.entity(baseEntity.id()).enabled())
+    }
+
+    @Test
     fun `la modalita visuale della regola sopravvive al riavvio insieme alla bozza`() {
         val rules = RulesViewModel(directory)
         rules.createBlankRuleset()

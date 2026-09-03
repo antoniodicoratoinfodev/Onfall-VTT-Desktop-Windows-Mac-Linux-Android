@@ -37,7 +37,10 @@ interface RulesStrings {
     val forkHint: String
     val newRevisionDraft: String
     val newRevisionHint: String
+    val newFromSrdRuleset: String
+    val newFromSrdHint: String
     val newBlankRuleset: String
+    val newBlankRulesetHint: String
     val blankRulesetName: String
     val blankRulesetDescription: String
     val saveDraft: String
@@ -118,7 +121,11 @@ internal object RulesStringsIt : RulesStrings {
     override val forkHint = "Lo standard resta intatto; la nuova linea parte da questa revisione."
     override val newRevisionDraft = "Nuova revisione"
     override val newRevisionHint = "La revisione pubblicata resta immutabile; le modifiche entrano in una nuova bozza."
+    override val newFromSrdRuleset = "Parti dall’SRD"
+    override val newFromSrdHint =
+        "Copia tutte le regole SRD in una bozza modificabile. Lo standard originale resta intatto."
     override val newBlankRuleset = "Nuovo regolamento vuoto"
+    override val newBlankRulesetHint = "Parti da zero, senza ereditare regole o contenuti SRD."
     override val blankRulesetName = "Il mio regolamento"
     override val blankRulesetDescription =
         "Regolamento indipendente: aggiungi soltanto le regole, i valori e i collegamenti che ti servono."
@@ -206,7 +213,11 @@ internal object RulesStringsEn : RulesStrings {
     override val forkHint = "The standard remains untouched; the new line starts from this revision."
     override val newRevisionDraft = "New revision"
     override val newRevisionHint = "The published revision stays immutable; edits go into a new draft."
+    override val newFromSrdRuleset = "Start from the SRD"
+    override val newFromSrdHint =
+        "Copy every SRD rule into an editable draft. The original standard remains untouched."
     override val newBlankRuleset = "New blank ruleset"
+    override val newBlankRulesetHint = "Start from scratch without inheriting SRD rules or content."
     override val blankRulesetName = "My ruleset"
     override val blankRulesetDescription =
         "Independent ruleset: add only the rules, values, and links that you need."

@@ -43,6 +43,19 @@ class RulesScreenUiTest {
     }
 
     @Test
+    fun `la panoramica espone la creazione di un regolamento a partire dall SRD`() = runComposeUiTest {
+        setContent {
+            AppTheme {
+                RulesScreen(RulesViewModel(directory), compact = false, activeBattle = null)
+            }
+        }
+
+        onNodeWithText("CREA UN NUOVO REGOLAMENTO").assertExists()
+        onNodeWithText("Parti dall’SRD").assertExists()
+        onNodeWithText("Nuovo regolamento vuoto").assertExists()
+    }
+
+    @Test
     fun `su layout compatto i comandi primari conservano un bersaglio touch adeguato`() = runComposeUiTest {
         setContent {
             AppTheme {
