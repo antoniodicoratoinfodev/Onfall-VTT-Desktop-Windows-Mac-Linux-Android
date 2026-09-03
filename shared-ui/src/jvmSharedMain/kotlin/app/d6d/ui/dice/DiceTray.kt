@@ -64,9 +64,18 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-private const val FULL_ROLL_MILLIS = 1_250
-private const val REDUCED_ROLL_MILLIS = 280
+internal const val FULL_ROLL_MILLIS = 1_250
+internal const val REDUCED_ROLL_MILLIS = 280
 private const val MAX_ANIMATED_DICE = 20
+
+/** Il primo piano ha un tempo piu' leggibile, esattamente il 10% oltre il vassoio standard. */
+internal fun diceRollDurationMillis(
+    reducedEffects: Boolean,
+    presentation: DiceRollPresentation,
+): Int {
+    val standard = if (reducedEffects) REDUCED_ROLL_MILLIS else FULL_ROLL_MILLIS
+    return if (presentation == DiceRollPresentation.FOREGROUND) standard + standard / 10 else standard
+}
 
 /** Overlay condiviso dalle shell desktop e Android. */
 @Composable
@@ -88,6 +97,7 @@ fun DiceTrayHost(
             DiceTray(
                 viewModel = viewModel,
                 skin = preferences.diceSkin,
+                presentation = preferences.diceRollPresentation,
                 reducedEffects = preferences.reducedDiceEffects,
                 compact = compact,
                 modifier = if (compact) {
@@ -97,6 +107,16 @@ fun DiceTrayHost(
                 },
             )
         }
+        ForegroundDiceRollHost(
+            pending = viewModel.pendingLinkedRoll,
+            result = viewModel.diceTrayResult,
+            presentation = preferences.diceRollPresentation,
+            skin = preferences.diceSkin,
+            reducedEffects = preferences.reducedDiceEffects,
+            compact = compact,
+            nameOf = viewModel::name,
+            onRoll = viewModel::startPendingLinkedRoll,
+        )
     }
 }
 
@@ -105,6 +125,7 @@ fun DiceTrayHost(
 private fun DiceTray(
     viewModel: BattleViewModel,
     skin: DiceSkinId,
+    presentation: DiceRollPresentation,
     reducedEffects: Boolean,
     compact: Boolean,
     modifier: Modifier,
@@ -119,7 +140,7 @@ private fun DiceTray(
     var automaticRolling by remember { mutableStateOf(false) }
     val linkedRolling = pending?.started == true
     val rolling = linkedRolling || automaticRolling
-    val rollMillis = if (reducedEffects) REDUCED_ROLL_MILLIS else FULL_ROLL_MILLIS
+    val rollMillis = diceRollDurationMillis(reducedEffects, presentation)
 
     LaunchedEffect(pending?.id, pending?.started) {
         val active = pending?.takeIf { it.started } ?: return@LaunchedEffect
@@ -417,7 +438,7 @@ private fun PercentileDice(
     }
 }
 
-private data class DiceSkinPalette(
+internal data class DiceSkinPalette(
     val faceTop: Color,
     val faceBottom: Color,
     val edge: Color,
@@ -426,7 +447,7 @@ private data class DiceSkinPalette(
     val particle: Color,
 )
 
-private fun skinPalette(skin: DiceSkinId): DiceSkinPalette = when (skin) {
+internal fun skinPalette(skin: DiceSkinId): DiceSkinPalette = when (skin) {
     DiceSkinId.RUNIC_OBSIDIAN -> DiceSkinPalette(
         Color(0xFF252136), Color(0xFF08070D), Color(0xFF9D7AE8), Color(0xFFE0D4FF),
         Color(0xFF7B51D8), Color(0xFFB49AF2),
@@ -512,7 +533,7 @@ private fun DicePiece(
     }
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDieShape(
+internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDieShape(
     sides: Int,
     palette: DiceSkinPalette,
 ) {

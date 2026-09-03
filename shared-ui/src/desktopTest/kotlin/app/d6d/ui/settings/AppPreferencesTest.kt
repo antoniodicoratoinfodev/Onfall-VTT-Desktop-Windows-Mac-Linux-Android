@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import app.d6d.ui.state.EnemyCpuSpeed
 import app.d6d.ui.dice.DiceRollVisibility
+import app.d6d.ui.dice.DiceRollPresentation
 import app.d6d.ui.dice.DiceSkinId
 import app.d6d.board.StampKind
 import app.d6d.board.TemplateShape
@@ -41,6 +42,7 @@ class AppPreferencesTest {
         assertEquals(EnemyCpuSpeed.NORMAL, loaded.speedOrDefault())
         assertTrue(loaded.animatedBackdrop)
         assertEquals(DiceRollVisibility.HIDDEN, loaded.diceRollVisibilityOrDefault())
+        assertEquals(DiceRollPresentation.STANDARD, loaded.diceRollPresentationOrDefault())
         assertEquals(DiceSkinId.RUNIC_OBSIDIAN, loaded.diceSkinOrDefault())
     }
 
@@ -50,6 +52,7 @@ class AppPreferencesTest {
             enemyCpuSpeed = EnemyCpuSpeed.INSTANT.name,
             animatedBackdrop = false,
             diceRollVisibility = DiceRollVisibility.VISIBLE.name,
+            diceRollPresentation = DiceRollPresentation.FOREGROUND.name,
             diceSkin = DiceSkinId.DRAGONFORGE.name,
             reducedDiceEffects = true,
         )
@@ -110,12 +113,13 @@ class AppPreferencesTest {
         Files.createDirectories(directory)
         Files.writeString(
             file,
-            """{"diceRollVisibility":"MAGICA","diceSkin":"SMERALDO","reducedDiceEffects":true}""",
+            """{"diceRollVisibility":"MAGICA","diceRollPresentation":"OLOGRAFICA","diceSkin":"SMERALDO","reducedDiceEffects":true}""",
         )
 
         val loaded = store().load()
 
         assertEquals(DiceRollVisibility.HIDDEN, loaded.diceRollVisibilityOrDefault())
+        assertEquals(DiceRollPresentation.STANDARD, loaded.diceRollPresentationOrDefault())
         assertEquals(DiceSkinId.RUNIC_OBSIDIAN, loaded.diceSkinOrDefault())
         assertTrue(loaded.reducedDiceEffects)
     }
@@ -152,6 +156,7 @@ class AppPreferencesTest {
         state.enemyCpuSpeed = EnemyCpuSpeed.SLOW
         state.animatedBackdrop = false
         state.diceRollVisibility = DiceRollVisibility.VISIBLE
+        state.diceRollPresentation = DiceRollPresentation.FOREGROUND
         state.diceSkin = DiceSkinId.MOON_IVORY
         state.reducedDiceEffects = true
         state.persist()
@@ -160,6 +165,7 @@ class AppPreferencesTest {
         assertEquals(EnemyCpuSpeed.SLOW, reloaded.enemyCpuSpeed)
         assertFalse(reloaded.animatedBackdrop)
         assertEquals(DiceRollVisibility.VISIBLE, reloaded.diceRollVisibility)
+        assertEquals(DiceRollPresentation.FOREGROUND, reloaded.diceRollPresentation)
         assertEquals(DiceSkinId.MOON_IVORY, reloaded.diceSkin)
         assertTrue(reloaded.reducedDiceEffects)
     }
@@ -171,6 +177,7 @@ class AppPreferencesTest {
                 enemyCpuSpeed = EnemyCpuSpeed.INSTANT.name,
                 animatedBackdrop = false,
                 diceRollVisibility = DiceRollVisibility.VISIBLE.name,
+                diceRollPresentation = DiceRollPresentation.FOREGROUND.name,
                 diceSkin = DiceSkinId.DRAGONFORGE.name,
                 reducedDiceEffects = true,
             ),
@@ -181,6 +188,7 @@ class AppPreferencesTest {
         assertEquals(EnemyCpuSpeed.NORMAL, state.enemyCpuSpeed)
         assertTrue(state.animatedBackdrop)
         assertEquals(DiceRollVisibility.HIDDEN, state.diceRollVisibility)
+        assertEquals(DiceRollPresentation.STANDARD, state.diceRollPresentation)
         assertEquals(DiceSkinId.RUNIC_OBSIDIAN, state.diceSkin)
         assertFalse(state.reducedDiceEffects)
     }

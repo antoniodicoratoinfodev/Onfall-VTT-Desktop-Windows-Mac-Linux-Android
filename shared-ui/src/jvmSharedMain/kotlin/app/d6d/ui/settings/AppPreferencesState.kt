@@ -7,6 +7,7 @@ import app.d6d.i18n.AppLanguage
 import app.d6d.board.StampKind
 import app.d6d.board.TemplateShape
 import app.d6d.ui.dice.DiceRollVisibility
+import app.d6d.ui.dice.DiceRollPresentation
 import app.d6d.ui.dice.DiceSkinId
 import androidx.compose.runtime.staticCompositionLocalOf
 
@@ -28,6 +29,7 @@ class AppPreferencesState(
     var boardTemplateShape by mutableStateOf(initial.templateShapeOrDefault())
     var boardStampKind by mutableStateOf(initial.stampKindOrDefault())
     var diceRollVisibility by mutableStateOf(initial.diceRollVisibilityOrDefault())
+    var diceRollPresentation by mutableStateOf(initial.diceRollPresentationOrDefault())
     var diceSkin by mutableStateOf(initial.diceSkinOrDefault())
     var reducedDiceEffects by mutableStateOf(initial.reducedDiceEffects)
 
@@ -73,6 +75,7 @@ class AppPreferencesState(
             boardTemplateShape = boardTemplateShape.name,
             boardStampKind = boardStampKind.name,
             diceRollVisibility = diceRollVisibility.name,
+            diceRollPresentation = diceRollPresentation.name,
             diceSkin = diceSkin.name,
             reducedDiceEffects = reducedDiceEffects,
         ).sanitized()
@@ -102,6 +105,7 @@ class AppPreferencesState(
         boardTemplateShape = value.templateShapeOrDefault()
         boardStampKind = value.stampKindOrDefault()
         diceRollVisibility = value.diceRollVisibilityOrDefault()
+        diceRollPresentation = value.diceRollPresentationOrDefault()
         diceSkin = value.diceSkinOrDefault()
         reducedDiceEffects = value.reducedDiceEffects
         language = value.languageOrSystemDefault()
@@ -119,6 +123,7 @@ class AppPreferencesState(
         boardTemplateShape = defaults.templateShapeOrDefault()
         boardStampKind = defaults.stampKindOrDefault()
         diceRollVisibility = defaults.diceRollVisibilityOrDefault()
+        diceRollPresentation = defaults.diceRollPresentationOrDefault()
         diceSkin = defaults.diceSkinOrDefault()
         reducedDiceEffects = defaults.reducedDiceEffects
         // La lingua torna a quella del sistema, cioe' allo stato di chi non ha

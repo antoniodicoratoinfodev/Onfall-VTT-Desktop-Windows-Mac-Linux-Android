@@ -39,6 +39,7 @@ import app.d6d.ui.layout.TurnOrderDisplayMode
 import app.d6d.ui.layout.UiLayoutState
 import app.d6d.ui.state.EnemyCpuSpeed
 import app.d6d.ui.dice.DiceRollVisibility
+import app.d6d.ui.dice.DiceRollPresentation
 import app.d6d.ui.dice.DiceSkinId
 import app.d6d.ui.state.label
 import app.d6d.ui.theme.GoldenRule
@@ -203,6 +204,31 @@ private fun DiceSettings(
                             accent = diceSkinAccent(skin),
                             dense = true,
                             onClick = { preferences.diceSkin = skin },
+                        )
+                    }
+                }
+            }
+            SettingsGroup(text.presentation, text.presentationHint) {
+                SettingsChoice(
+                    label = text.presentation,
+                    hint = if (preferences.diceRollPresentation == DiceRollPresentation.STANDARD) {
+                        text.standardPresentationHint
+                    } else {
+                        text.foregroundPresentationHint
+                    },
+                ) {
+                    DiceRollPresentation.entries.forEach { presentation ->
+                        val selected = preferences.diceRollPresentation == presentation
+                        GameButton(
+                            label = if (presentation == DiceRollPresentation.STANDARD) {
+                                text.standardPresentation
+                            } else {
+                                text.foregroundPresentation
+                            },
+                            selected = selected,
+                            accent = if (selected) Palette.Gold else Palette.TextMuted,
+                            dense = true,
+                            onClick = { preferences.diceRollPresentation = presentation },
                         )
                     }
                 }

@@ -6,6 +6,7 @@ import app.d6d.board.TemplateShape
 import app.d6d.persistence.json.AtomicFiles
 import app.d6d.ui.state.EnemyCpuSpeed
 import app.d6d.ui.dice.DiceRollVisibility
+import app.d6d.ui.dice.DiceRollPresentation
 import app.d6d.ui.dice.DiceSkinId
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -45,6 +46,8 @@ data class AppPreferences(
     // Predefinito conservativo: aggiornare l'app non inserisce attese nei
     // combattimenti esistenti finche' il tavolo non sceglie esplicitamente.
     val diceRollVisibility: String = DiceRollVisibility.HIDDEN.name,
+    // STANDARD conserva esattamente la presentazione esistente per chi aggiorna.
+    val diceRollPresentation: String = DiceRollPresentation.STANDARD.name,
     val diceSkin: String = DiceSkinId.RUNIC_OBSIDIAN.name,
     val reducedDiceEffects: Boolean = false,
 ) {
@@ -55,6 +58,7 @@ data class AppPreferences(
         boardTemplateShape = templateShapeOrDefault().name,
         boardStampKind = stampKindOrDefault().name,
         diceRollVisibility = diceRollVisibilityOrDefault().name,
+        diceRollPresentation = diceRollPresentationOrDefault().name,
         diceSkin = diceSkinOrDefault().name,
     )
 
@@ -75,11 +79,15 @@ data class AppPreferences(
         runCatching { DiceRollVisibility.valueOf(diceRollVisibility) }
             .getOrDefault(DiceRollVisibility.HIDDEN)
 
+    fun diceRollPresentationOrDefault(): DiceRollPresentation =
+        runCatching { DiceRollPresentation.valueOf(diceRollPresentation) }
+            .getOrDefault(DiceRollPresentation.STANDARD)
+
     fun diceSkinOrDefault(): DiceSkinId =
         runCatching { DiceSkinId.valueOf(diceSkin) }.getOrDefault(DiceSkinId.RUNIC_OBSIDIAN)
 
     companion object {
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
         const val DEFAULT_BOARD_COLOR: Int = 0xFFFFC857.toInt()
     }
 }

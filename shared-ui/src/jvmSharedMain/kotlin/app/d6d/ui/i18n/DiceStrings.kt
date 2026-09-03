@@ -29,6 +29,16 @@ interface DiceStrings {
     val history: String
     val clearHistory: String
 
+    val presentation: String
+    val presentationHint: String
+    val standardPresentation: String
+    val standardPresentationHint: String
+    val foregroundPresentation: String
+    val foregroundPresentationHint: String
+    val readyToRoll: String
+    val clickDieToRoll: String
+    val clickToDismiss: String
+
     val settingsTitle: String
     val settingsDescription: String
     val rollVisibility: String
@@ -75,6 +85,17 @@ internal object DiceStringsIt : DiceStrings {
     override val noRollsRequired = "Questa azione non richiede dadi."
     override val history = "Ultimi tiri liberi"
     override val clearHistory = "Svuota cronologia"
+
+    override val presentation = "Presentazione del tiro"
+    override val presentationHint = "Scegli quanto spazio occupa l'animazione quando i dadi vengono tirati."
+    override val standardPresentation = "Tiro di dado visivamente standard"
+    override val standardPresentationHint = "Mantiene il vassoio attuale, compatto e sempre leggibile insieme alla mappa."
+    override val foregroundPresentation = "Tiro di dado in primo piano"
+    override val foregroundPresentationHint =
+        "Lascia visibile il tavolo e mostra il dado animato in un pannello centrale."
+    override val readyToRoll = "Pronto al tiro"
+    override val clickDieToRoll = "Clicca il dado per tirare"
+    override val clickToDismiss = "Clicca per chiudere"
 
     override val settingsTitle = "Dadi"
     override val settingsDescription = "Come il tavolo mostra e anima i tiri del motore."
@@ -142,6 +163,17 @@ internal object DiceStringsEn : DiceStrings {
     override val noRollsRequired = "This action does not require dice."
     override val history = "Recent unlinked rolls"
     override val clearHistory = "Clear history"
+
+    override val presentation = "Roll presentation"
+    override val presentationHint = "Choose how much space the animation uses when dice are rolled."
+    override val standardPresentation = "Visually standard dice roll"
+    override val standardPresentationHint = "Keeps the current compact tray readable alongside the map."
+    override val foregroundPresentation = "Foreground dice roll"
+    override val foregroundPresentationHint =
+        "Keeps the table visible and shows the animated die in a central panel."
+    override val readyToRoll = "Ready to roll"
+    override val clickDieToRoll = "Click the die to roll"
+    override val clickToDismiss = "Click to close"
 
     override val settingsTitle = "Dice"
     override val settingsDescription = "How the table shows and animates engine rolls."

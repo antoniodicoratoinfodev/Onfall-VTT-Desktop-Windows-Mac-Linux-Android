@@ -10,6 +10,15 @@ enum class DiceRollVisibility {
     VISIBLE,
 }
 
+/** Quanto spazio occupa la presentazione visiva di un lancio. */
+enum class DiceRollPresentation {
+    /** Il vassoio compatto storico, lasciato invariato. */
+    STANDARD,
+
+    /** Un dado protagonista in un pannello centrale, con il resto del tavolo ancora visibile. */
+    FOREGROUND,
+}
+
 /** Materiale visivo applicato a ogni poliedro del vassoio. */
 enum class DiceSkinId {
     RUNIC_OBSIDIAN,

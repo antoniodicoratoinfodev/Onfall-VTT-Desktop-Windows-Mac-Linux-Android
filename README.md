@@ -548,6 +548,23 @@ another language gives you that machine's language, not the previous one's.
 **CPU pace** sets how the enemy turn is played back: *Slow*, *Normal*, *Fast*, or *Instant*, which
 drops the pauses entirely and resolves the whole enemy turn in one go.
 
+**Dice** controls both game-roll behaviour and presentation. With game rolls set to **Visible**, an
+action that needs dice opens a **Linked** roll: player rolls wait for **Roll**, then the exact result
+is committed to that pending attack, save, damage, healing, check, death save, or initiative step.
+With game rolls **Hidden**, the engine resolves those rolls immediately and records them in the
+event log. **Unlinked** remains the free tabletop roller; its results never alter the game state.
+
+Roll presentation is independent from that choice. **Visually standard dice roll** preserves the
+current compact tray. **Foreground dice roll** keeps the app visible behind a smaller central panel
+and animates the selected polyhedral skin as a solid faceted object, with restrained lighting,
+simulated depth, shadow, bounce and an upright result reveal. Its animation is 10% slower than the
+standard one. A pending Linked roll first waits in a ready pose and starts when the player clicks the
+die; once revealed, the
+result fades by itself after a few seconds or immediately when the player clicks. Percentile rolls
+appear as two d10s, while larger pools show the first dice and summarize the remainder. Both
+presentations support Linked and Unlinked rolls, all three skins, and the reduced-effects preference;
+reduced effects keeps the foreground reveal but removes rapid rotation, bounce and light movement.
+
 **Turn order** decides what the strip above the map shows: hidden, so the map gains the room; the
 order alone, without the numbers; or the order with each combatant's initiative roll beside it.
 
