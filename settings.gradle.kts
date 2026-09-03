@@ -19,6 +19,9 @@ rootProject.name = "onfall"
 // Motore condiviso: Java puro, senza dipendenze esterne, consumato
 // sia dal desktop JVM sia da Android.
 include(":engine:rules-model")
+// Modello puro per editor guidati: traduce intenzioni e blocchi visuali nelle
+// stesse entità/formule consumate dal runtime, senza introdurre un secondo motore.
+include(":engine:rules-authoring")
 include(":engine:domain-model")
 include(":engine:core-engine")
 // Annotazioni della mappa: modello puro, separato dalle regole di combattimento.

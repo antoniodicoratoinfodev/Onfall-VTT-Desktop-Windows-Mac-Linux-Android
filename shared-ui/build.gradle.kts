@@ -62,6 +62,7 @@ kotlin {
                 api(project(":engine:board-model"))
                 api(project(":engine:persistence-json"))
                 api(project(":engine:rules-persistence"))
+                api(project(":engine:rules-authoring"))
                 api(project(":engine:sheet-model"))
                 implementation(project(":content:srd-5.2.1-it"))
 
@@ -86,13 +87,16 @@ kotlin {
                 // Il ritmo del turno CPU si prova a tempo virtuale: i test non
                 // devono aspettare davvero le pause che rendono leggibile la partita.
                 implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.jetbrains.compose.ui.test)
+                implementation(compose.desktop.currentOs)
                 runtimeOnly(libs.junit.platform.launcher)
             }
         }
     }
 }
 
-// I font del tema (Cinzel e Alegreya, licenza SIL OFL — vedi NOTICE-FONTS.md) sono
+// I font del tema (Cinzel, Alegreya e Alegreya Sans, licenza SIL OFL — vedi
+// NOTICE-FONTS.md) sono
 // risorse Java, non risorse Compose: identita' tipografica identica su desktop e
 // Android, senza dipendere dai caratteri di sistema.
 //

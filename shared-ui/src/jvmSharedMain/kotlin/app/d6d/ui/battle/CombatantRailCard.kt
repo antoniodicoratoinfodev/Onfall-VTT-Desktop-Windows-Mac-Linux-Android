@@ -41,7 +41,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.CombatResourceState
@@ -61,6 +60,7 @@ import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.i18n.Strings
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.rules.character.CharacterClassId
 
 /**
@@ -196,7 +196,6 @@ fun CombatantRailCard(
                 Text(
                     text = words.openSheetBadge,
                     color = Palette.TextMuted,
-                    fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
                         .clickable(
@@ -236,8 +235,7 @@ fun CombatantRailCard(
                         if (combatant.temporaryHitPoints() > 0) append(" +${combatant.temporaryHitPoints()}")
                     },
                     color = Palette.Text,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = OnfallTheme.typography.numberSmall,
                 )
                 if ((active || viewModel.editMode) && budget != null) {
                     ResourcePips(
@@ -278,8 +276,7 @@ fun CombatantRailCard(
                 Text(
                     text = "✎  ${words.editResourcesHint}",
                     color = Palette.Heal,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
 
@@ -473,7 +470,6 @@ private fun SpellSlotIndicators(
                 Text(
                     text = kind.visibleLabel(strings),
                     color = slotColor,
-                    fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelSmall,
                 )
                 FlowRow(
@@ -525,7 +521,6 @@ private fun SpellSlotSquare(
         Text(
             "${slot.level}°",
             color = slotColor,
-            fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
         )
         if (slot.total <= MAX_SPELL_SLOT_PIPS) {
@@ -554,7 +549,6 @@ private fun SpellSlotSquare(
             Text(
                 text = "${slot.remaining}/${slot.total}",
                 color = slotColor,
-                fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -579,7 +573,6 @@ private fun ClassResourceIndicators(
         Text(
             text = words.classResourcesCapitalized,
             color = Palette.Gold,
-            fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
         )
         resources.forEach { resource ->
@@ -627,7 +620,6 @@ private fun ClassResourceRow(
             Text(
                 text = resource.name,
                 color = Palette.Text,
-                fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -636,7 +628,6 @@ private fun ClassResourceRow(
             Text(
                 text = "${resource.remaining}/${resource.total}",
                 color = resourceColor,
-                fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -700,7 +691,6 @@ private fun CombatantHeader(
                     active -> Palette.TurnBright
                     else -> Palette.Text
                 },
-                fontWeight = FontWeight.Bold,
                 // Quando la barra e' stretta il nome puo' andare a capo invece di
                 // essere troncato con i puntini.
                 maxLines = if (narrow) 2 else 1,

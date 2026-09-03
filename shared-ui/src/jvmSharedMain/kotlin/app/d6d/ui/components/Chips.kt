@@ -5,16 +5,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.ConditionType
 import app.d6d.i18n.label
 import app.d6d.ui.i18n.currentLanguage
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 
 /** Glifo compatto, per leggere le condizioni a colpo d'occhio nelle barre laterali. */
@@ -61,8 +60,7 @@ fun Chip(
     Text(
         text = text,
         color = color,
-        fontWeight = FontWeight.Bold,
-        style = MaterialTheme.typography.bodySmall,
+        style = OnfallTheme.typography.compactControl,
         modifier = modifier
             .background(Palette.SurfaceHigh, RoundedCornerShape(6.dp))
             .border(1.dp, Palette.Line, RoundedCornerShape(6.dp))
@@ -82,7 +80,17 @@ fun Eyebrow(text: String, color: Color = Palette.Gold, modifier: Modifier = Modi
     Text(
         text = text.uppercase(),
         color = color,
-        style = MaterialTheme.typography.labelSmall,
+        style = OnfallTheme.typography.sectionLabel,
         modifier = modifier,
+    )
+}
+
+/** Titolo uniforme per i dialoghi, senza ereditare il ruolo headline di Material. */
+@Composable
+fun DialogTitle(text: String, color: Color = Palette.Text) {
+    Text(
+        text = text,
+        color = color,
+        style = OnfallTheme.typography.screenTitle,
     )
 }

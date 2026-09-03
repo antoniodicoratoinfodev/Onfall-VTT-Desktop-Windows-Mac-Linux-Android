@@ -126,6 +126,9 @@ class EncounterBuilderViewModel(
     private val roster: RosterViewModel,
     private val seedProvider: () -> Long = { System.currentTimeMillis() },
     private val rulesetProvider: () -> List<RulesetRevision> = { listOf(Srd521Ruleset.revision) },
+    private val defaultRulesetHashProvider: () -> String = {
+        Srd521Ruleset.revision.canonicalHash()
+    },
 ) {
 
     var step by mutableStateOf(NewGameStep.TEMPLATE)
@@ -139,9 +142,19 @@ class EncounterBuilderViewModel(
     val availableRulesets: List<RulesetRevision>
         get() = rulesetProvider().ifEmpty { listOf(Srd521Ruleset.revision) }
 
+    private val defaultRuleset: RulesetRevision
+        get() {
+            val available = availableRulesets
+            return available.firstOrNull {
+                it.canonicalHash() == defaultRulesetHashProvider()
+            } ?: available.firstOrNull {
+                it.canonicalHash() == Srd521Ruleset.revision.canonicalHash()
+            } ?: available.first()
+        }
+
     val selectedRuleset: RulesetRevision
         get() = availableRulesets.firstOrNull { it.canonicalHash() == selectedRulesetHash }
-            ?: availableRulesets.first().also { selectedRulesetHash = it.canonicalHash() }
+            ?: defaultRuleset.also { selectedRulesetHash = it.canonicalHash() }
 
     val selectedRulesetSupportsEnemyCpu: Boolean
         get() = selectedRulesetCpuSupport.automated()
@@ -237,9 +250,7 @@ class EncounterBuilderViewModel(
     fun restartWizard() {
         step = NewGameStep.TEMPLATE
         templateSource = null
-        selectedRulesetHash = availableRulesets.firstOrNull {
-            it.origin() == app.d6d.rules.model.RulesetOrigin.BUNDLED_STANDARD
-        }?.canonicalHash() ?: availableRulesets.first().canonicalHash()
+        selectedRulesetHash = defaultRuleset.canonicalHash()
         scratchBaselineIds = emptySet()
         choices = emptyMap()
         includedTemplateId = null

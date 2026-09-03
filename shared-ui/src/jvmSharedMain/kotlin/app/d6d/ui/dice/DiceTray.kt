@@ -48,7 +48,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.D20Mode
@@ -58,6 +57,7 @@ import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.settings.LocalAppPreferences
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import kotlinx.coroutines.delay
 import kotlin.math.PI
@@ -157,8 +157,7 @@ private fun DiceTray(
         ) {
             Column {
                 Eyebrow(if (pending != null) words.linked else words.title)
-                Text(words.title, color = Palette.Text, fontWeight = FontWeight.Black,
-                    style = MaterialTheme.typography.titleLarge)
+                Text(words.title, color = Palette.Text, style = MaterialTheme.typography.titleLarge)
             }
             GameButton(
                 label = words.close,
@@ -319,7 +318,7 @@ private fun StepperRow(label: String, value: Int, minimum: Int, maximum: Int, on
             Text(
                 value.toString(),
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
+                style = OnfallTheme.typography.numberMedium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.widthIn(min = 42.dp),
             )
@@ -359,8 +358,7 @@ private fun DiceResult(
                 Text(
                     words.rollFor(words.purpose(roll.purpose), actor, target),
                     color = Palette.Text,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = OnfallTheme.typography.bodyEmphasis,
                 )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -390,8 +388,7 @@ private fun DiceResult(
                 Text(
                     if (rolling) "${words.total}: —" else "${words.total}: ${roll.total}",
                     color = if (rolling || roll.kept) skinPalette(skin).number else Palette.TextFaint,
-                    fontWeight = FontWeight.Black,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = OnfallTheme.typography.numberMedium,
                 )
             }
         }
@@ -505,8 +502,11 @@ private fun DicePiece(
         Text(
             label,
             color = palette.number,
-            fontWeight = FontWeight.Black,
-            style = if (label.length > 1) MaterialTheme.typography.labelMedium else MaterialTheme.typography.titleMedium,
+            style = if (label.length > 1) {
+                OnfallTheme.typography.tokenInitials
+            } else {
+                OnfallTheme.typography.numberMedium
+            },
             textAlign = TextAlign.Center,
         )
     }

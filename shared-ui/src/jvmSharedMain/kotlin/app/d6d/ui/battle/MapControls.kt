@@ -38,6 +38,7 @@ import app.d6d.ui.maps.GridLimits
 import app.d6d.ui.maps.MapPickerDialog
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.OnfallTheme
 
 /**
  * Comandi della mappa.
@@ -83,7 +84,7 @@ fun MapControls(
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(words.mapCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                Text(words.mapCaps, color = Palette.Gold, style = OnfallTheme.typography.sectionLabel)
                 Chip(
                     words.gridSummary(
                         grid.columns(),
@@ -153,7 +154,7 @@ fun MapControls(
             Text(
                 text = words.dragImageHint,
                 color = Palette.TextMuted,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             )
         }

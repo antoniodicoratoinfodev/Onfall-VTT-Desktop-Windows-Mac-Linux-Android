@@ -16,12 +16,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.initials
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.i18n.strings
 
@@ -75,8 +75,8 @@ fun PortraitPicker(
                 Text(
                     text = initials(name),
                     color = Palette.Text,
-                    fontWeight = FontWeight.Black,
                     fontSize = (diameter.value * 0.30f).sp,
+                    style = OnfallTheme.typography.tokenInitials,
                 )
             }
         }

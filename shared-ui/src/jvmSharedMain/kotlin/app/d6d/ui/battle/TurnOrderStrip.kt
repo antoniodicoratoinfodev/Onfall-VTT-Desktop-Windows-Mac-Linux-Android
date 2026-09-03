@@ -34,6 +34,7 @@ import app.d6d.ui.components.Faction
 import app.d6d.ui.components.color
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.i18n.strings
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 
 /**
@@ -283,8 +284,7 @@ private fun MoveButton(glyph: String, enabled: Boolean, muted: Boolean = false, 
     Text(
         text = glyph,
         color = tint,
-        fontWeight = FontWeight.Black,
-        style = MaterialTheme.typography.labelSmall,
+        style = OnfallTheme.typography.tokenInitials,
         modifier = Modifier
             .background(Palette.SurfaceHigh, RoundedCornerShape(4.dp))
             .border(1.dp, Palette.Line, RoundedCornerShape(4.dp))

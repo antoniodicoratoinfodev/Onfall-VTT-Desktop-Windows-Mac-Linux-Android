@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     api(project(":engine:rules-model"))
+    api(project(":engine:rules-authoring"))
     implementation(project(":engine:persistence-json"))
 
     testImplementation(libs.junit.jupiter)

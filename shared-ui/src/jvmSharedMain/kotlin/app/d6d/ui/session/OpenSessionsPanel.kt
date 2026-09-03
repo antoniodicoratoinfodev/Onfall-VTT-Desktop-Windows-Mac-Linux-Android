@@ -29,10 +29,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.DialogTitle
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.runDiskIo
 import app.d6d.ui.i18n.SessionStrings
@@ -252,13 +252,7 @@ private fun OpenSessionsPanelContent(
         AlertDialog(
             onDismissRequest = { compactMenuOpen = false },
             containerColor = Palette.Surface,
-            title = {
-                Text(
-                    words.openSessionsCount(workspace.openSessions.size),
-                    color = Palette.Text,
-                    fontWeight = FontWeight.Bold,
-                )
-            },
+            title = { DialogTitle(words.openSessionsCount(workspace.openSessions.size)) },
             text = {
                 Column(
                     Modifier
@@ -340,13 +334,7 @@ private fun OpenSessionsPanelContent(
         AlertDialog(
             onDismissRequest = { closeCandidate = null },
             containerColor = Palette.Surface,
-            title = {
-                Text(
-                    if (isDraft) words.unsavedDraft else words.unsavedChanges,
-                    color = Palette.Text,
-                    fontWeight = FontWeight.Bold,
-                )
-            },
+            title = { DialogTitle(if (isDraft) words.unsavedDraft else words.unsavedChanges) },
             text = {
                 Text(
                     if (isDraft) {

@@ -22,7 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.i18n.label
@@ -39,6 +38,7 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 
 @Composable
@@ -49,8 +49,7 @@ internal fun AbilityArchiveHeader(compact: Boolean, onCreate: () -> Unit) {
             Text(
                 text = words.title,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleLarge,
+                style = OnfallTheme.typography.screenTitle,
             )
             Text(
                 text = words.subtitle,
@@ -244,10 +243,9 @@ private fun AbilityListRow(
         Text(
             text = ability.name.ifBlank { strings.compendium.unnamed },
             color = Palette.Text,
-            fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyMedium,
+            style = OnfallTheme.typography.abilityName,
         )
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(5.dp),

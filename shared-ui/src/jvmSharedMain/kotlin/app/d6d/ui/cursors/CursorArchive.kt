@@ -26,7 +26,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Eyebrow
@@ -68,7 +67,6 @@ fun CursorArchive(
             Text(
                 text = strings.cursors.title,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
@@ -140,7 +138,6 @@ private fun CursorSizeSelector(preferences: CursorPreferences) {
         Text(
             text = strings.cursors.sizeLabel.uppercase(),
             color = Palette.TextMuted,
-            fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
         )
         Row(
@@ -212,7 +209,6 @@ private fun CursorPairCard(
             Text(
                 text = title,
                 color = if (selected) accent else Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
@@ -300,7 +296,6 @@ private fun CursorPosePreview(
         Text(
             text = label.uppercase(),
             color = Palette.TextMuted,
-            fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
         )
     }

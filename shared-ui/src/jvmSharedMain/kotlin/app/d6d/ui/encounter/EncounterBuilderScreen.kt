@@ -32,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.engine.CombatSession
@@ -52,6 +51,7 @@ import app.d6d.ui.session.OpenSessionsPanel
 import app.d6d.ui.session.SessionWorkspace
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.rules.model.RulesetOrigin
 
 /** Configuratore del prossimo combattimento, alimentato dal Compendio. */
@@ -158,7 +158,6 @@ private fun EncounterHeader(step: NewGameStep, compact: Boolean) {
         Text(
             text = strings.nav.game,
             color = Palette.Text,
-            fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
         )
         Text(
@@ -188,8 +187,7 @@ private fun RulesetSelectionStep(
         modifier.fillMaxWidth().padding(if (compact) 12.dp else 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(words.chooseForSession, color = Palette.Text, fontWeight = FontWeight.Black,
-            style = MaterialTheme.typography.headlineSmall)
+        Text(words.chooseForSession, color = Palette.Text, style = MaterialTheme.typography.headlineSmall)
         Text(words.chooseForSessionBody, color = Palette.TextMuted,
             style = MaterialTheme.typography.bodyMedium)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -206,7 +204,7 @@ private fun RulesetSelectionStep(
                 ) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
-                        Text(revision.name(), color = Palette.Text, fontWeight = FontWeight.Black,
+                        Text(revision.name(), color = Palette.Text,
                             style = MaterialTheme.typography.titleMedium)
                         Chip(
                             if (revision.origin() == RulesetOrigin.BUNDLED_STANDARD) words.standard else words.homebrew,
@@ -281,7 +279,6 @@ private fun TemplateChoiceStep(
             Text(
                 words.whereToStart,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(
@@ -458,7 +455,6 @@ private fun ParticipantCard(
                 Text(
                     text = participant.name,
                     color = Palette.Text,
-                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleMedium,
@@ -534,7 +530,6 @@ private fun EmptyCompendium(
             Text(
                 text = if (creatingFromScratch) words.emptyCompendiumBody else words.emptyCompendiumTitle,
                 color = Palette.Text,
-                fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
@@ -570,7 +565,6 @@ private fun GridStep(
         Text(
             words.gridSize,
             color = Palette.Text,
-            fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
         )
         FlowRow(
@@ -611,7 +605,6 @@ private fun GridStep(
         Text(
             words.squareScaleLabel,
             color = Palette.Text,
-            fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
         )
         FlowRow(
@@ -677,7 +670,6 @@ private fun ModeStep(
             Text(
                 words.howToStart,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.headlineSmall,
             )
             FlowRow(
@@ -732,7 +724,6 @@ private fun DifficultyStep(
             Text(
                 words.howDangerous,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(
@@ -744,8 +735,7 @@ private fun DifficultyStep(
                 Text(
                     enemyCpuInactiveWarning(warning, strings),
                     color = Palette.Enemy,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = OnfallTheme.typography.bodyEmphasis,
                     modifier = Modifier.fillMaxWidth()
                         .background(Palette.Enemy.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
                         .padding(10.dp),
@@ -755,8 +745,7 @@ private fun DifficultyStep(
                 Text(
                     strings.rules.cpuManualFallback,
                     color = Palette.GoldBright,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = OnfallTheme.typography.bodyEmphasis,
                     modifier = Modifier.fillMaxWidth()
                         .background(Palette.Gold.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
                         .padding(10.dp),

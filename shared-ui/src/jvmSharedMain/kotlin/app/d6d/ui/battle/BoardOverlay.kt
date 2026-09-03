@@ -51,7 +51,6 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,8 +85,10 @@ import app.d6d.ui.i18n.strings
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.images.rememberPortrait
 import app.d6d.ui.components.initials
+import app.d6d.ui.components.DialogTitle
 import app.d6d.ui.settings.LocalAppPreferences
 import app.d6d.ui.state.BattleViewModel
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import java.util.UUID
 import kotlin.math.abs
@@ -154,8 +155,8 @@ internal fun BoardContentLayer(
                 Text(
                     text = label.text(),
                     color = Color(label.colorArgb()),
+                    style = OnfallTheme.typography.bodyEmphasis,
                     fontSize = label.textSizeSp().toFloat().sp,
-                    fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .absoluteOffset { IntOffset(point.x.roundToInt(), point.y.roundToInt()) }
                         .wrapContentSize(Alignment.TopStart, unbounded = true)
@@ -245,8 +246,8 @@ private fun SceneTokenView(
                 Text(
                     initials(token.name()),
                     color = Palette.Text,
-                    fontWeight = FontWeight.Black,
                     fontSize = (sideDp.value * 0.28f).coerceIn(7f, 34f).sp,
+                    style = OnfallTheme.typography.tokenInitials,
                 )
             }
             if (sideDp >= 34.dp) {
@@ -334,7 +335,7 @@ private fun MeasurementTotalLabel(
         Text(
             text = distanceLabel(partial, currentLanguage),
             color = Palette.Gold,
-            style = MaterialTheme.typography.labelSmall,
+            style = OnfallTheme.typography.numberCompact,
             modifier = Modifier
                 .absoluteOffset { IntOffset(screen.x.roundToInt(), screen.y.roundToInt()) }
                 .background(Palette.Abyss.copy(alpha = 0.78f), RoundedCornerShape(4.dp))
@@ -345,8 +346,7 @@ private fun MeasurementTotalLabel(
     Text(
         text = if (points.size > 2) "Σ ${distanceLabel(feet, currentLanguage)}" else distanceLabel(feet, currentLanguage),
         color = Palette.GoldBright,
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Black,
+        style = OnfallTheme.typography.numberCompact,
         modifier = Modifier
             .absoluteOffset { IntOffset(end.x.roundToInt() + 6, end.y.roundToInt() + 4) }
             .background(Palette.Abyss.copy(alpha = 0.82f), RoundedCornerShape(4.dp))
@@ -670,7 +670,7 @@ internal fun BoardInteractionOverlay(
     if (labelPoint != null) {
         AlertDialog(
             onDismissRequest = { labelPoint = null },
-            title = { Text(strings.board.writeLabel) },
+            title = { DialogTitle(strings.board.writeLabel) },
             text = {
                 TextField(
                     value = labelText,

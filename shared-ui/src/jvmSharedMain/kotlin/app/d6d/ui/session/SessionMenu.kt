@@ -33,22 +33,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.d6d.persistence.session.SessionSummary
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.runDiskIo
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.DialogTitle
 import app.d6d.ui.components.dismissDialogOnTap
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.keepDialogOpenOnTap
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.i18n.strings
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
@@ -164,7 +163,6 @@ fun SessionMenuDialog(
             Text(
                 text = strings.session.sessionsLabel,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
             OrnateDivider(color = Palette.GoldDim)
@@ -333,7 +331,7 @@ fun SessionMenuDialog(
         AlertDialog(
             onDismissRequest = { overwriteName = null },
             containerColor = Palette.Surface,
-            title = { Text(words.replaceSessionTitle, color = Palette.Text) },
+            title = { DialogTitle(words.replaceSessionTitle) },
             text = {
                 Text(
                     words.replaceSessionBody,
@@ -362,7 +360,7 @@ fun SessionMenuDialog(
         AlertDialog(
             onDismissRequest = { discardForSession = null },
             containerColor = Palette.Surface,
-            title = { Text(words.discardChangesTitle, color = Palette.Text) },
+            title = { DialogTitle(words.discardChangesTitle) },
             text = {
                 Text(
                     words.discardChangesBody(summary.displayName),
@@ -392,7 +390,7 @@ fun SessionMenuDialog(
         AlertDialog(
             onDismissRequest = { deleteSession = null },
             containerColor = Palette.Surface,
-            title = { Text(words.deleteSessionTitle, color = Palette.Text) },
+            title = { DialogTitle(words.deleteSessionTitle) },
             text = {
                 Text(
                     words.deleteSessionBody(summary.displayName),
@@ -434,9 +432,7 @@ fun OpenSavedSessionDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.Surface,
-        title = {
-            Text(words.openSavedSessionTitle, color = Palette.Text, fontWeight = FontWeight.Bold)
-        },
+        title = { DialogTitle(words.openSavedSessionTitle) },
         text = {
             if (workspace.savedSessions.isEmpty()) {
                 Text(
@@ -512,7 +508,7 @@ private fun SessionNameField(
         value = name,
         onValueChange = onNameChange,
         singleLine = true,
-        textStyle = TextStyle(color = Palette.Text, fontSize = 13.sp),
+        textStyle = OnfallTheme.typography.fieldValue.copy(color = Palette.Text),
         cursorBrush = SolidColor(Palette.Gold),
         modifier = modifier
             .fillMaxWidth()
@@ -570,7 +566,6 @@ private fun SessionSummaryContent(
             Text(
                 text = summary.displayName,
                 color = if (damaged) Palette.Critical else Palette.Text,
-                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleMedium,

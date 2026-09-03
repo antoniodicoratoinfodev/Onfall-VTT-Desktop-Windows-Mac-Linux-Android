@@ -48,22 +48,21 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import app.d6d.sheet.ImageStore
 import app.d6d.sheet.StoredMap
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.DialogTitle
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.images.rememberBitmap
 import app.d6d.ui.i18n.strings
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 
 /**
@@ -145,7 +144,7 @@ fun MapArchive(
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             containerColor = Palette.Surface,
-            title = { Text(words.deleteMapTitle, color = Palette.Text) },
+            title = { DialogTitle(words.deleteMapTitle) },
             text = {
                 Text(
                     words.deleteMapBody(map.name),
@@ -203,7 +202,6 @@ private fun MapArchiveTitle(modifier: Modifier = Modifier) {
         Text(
             text = strings.compendium.maps,
             color = Palette.Text,
-            fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
         )
         Text(
@@ -238,8 +236,7 @@ private fun MapsFolderRow(path: String) {
             Text(
                 text = path,
                 color = Palette.Gold,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold,
+                style = OnfallTheme.typography.supportingEmphasis,
             )
         }
         Text(
@@ -309,7 +306,7 @@ private fun MapNameField(name: String, onCommit: (String) -> Unit) {
             value = draft,
             onValueChange = { draft = it },
             singleLine = true,
-            textStyle = TextStyle(color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+            textStyle = OnfallTheme.typography.itemTitle.copy(color = Palette.Text),
             cursorBrush = SolidColor(Palette.Gold),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { commit() }),
@@ -339,7 +336,6 @@ private fun MapNameField(name: String, onCommit: (String) -> Unit) {
         Text(
             text = name,
             color = Palette.Text,
-            fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.titleMedium,

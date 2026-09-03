@@ -31,13 +31,13 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.ui.abilities.AbilityArchive
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.ClassIcon
+import app.d6d.ui.components.DialogTitle
 import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.components.PanelScrollbar
 import app.d6d.ui.images.PortraitRepository
@@ -247,7 +247,7 @@ fun RosterScreen(
         AlertDialog(
             onDismissRequest = { pendingNavigation = null },
             containerColor = Palette.Surface,
-            title = { Text(words.discardDraftTitle, color = Palette.Text) },
+            title = { DialogTitle(words.discardDraftTitle) },
             text = {
                 Text(
                     words.discardDraftBody,
@@ -372,7 +372,6 @@ private fun RosterTitle(modifier: Modifier = Modifier) {
         Text(
             text = strings.compendium.title,
             color = Palette.Text,
-            fontWeight = FontWeight.Black,
             style = MaterialTheme.typography.titleLarge,
         )
         Text(
@@ -397,7 +396,6 @@ private fun CompactEditorHeader(viewModel: RosterViewModel, onBack: () -> Unit) 
             Text(
                 text = if (viewModel.editorKind == RosterKind.PERSONAGGIO) words.characterSheet else words.statBlock,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleMedium,
@@ -508,7 +506,6 @@ private fun RosterRow(
             Text(
                 text = item.name,
                 color = Palette.Text,
-                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleMedium,

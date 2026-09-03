@@ -41,7 +41,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,6 +52,8 @@ import app.d6d.ui.board.BoardController
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.board.SceneTokenDraft
 import app.d6d.ui.components.initials
+import app.d6d.ui.components.DialogTitle
+import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.i18n.BoardStrings
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.images.PortraitRepository
@@ -60,6 +61,7 @@ import app.d6d.ui.images.rememberPortrait
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.settings.LocalAppPreferences
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import java.util.UUID
 
@@ -136,7 +138,7 @@ internal fun SceneTokenDialogHost(
 
     AlertDialog(
         onDismissRequest = ::dismiss,
-        title = { Text(if (creating) words.createToken else words.editToken) },
+        title = { DialogTitle(if (creating) words.createToken else words.editToken) },
         text = {
             Column(
                 Modifier
@@ -154,7 +156,7 @@ internal fun SceneTokenDialogHost(
                     singleLine = true,
                 )
 
-                Text(words.tokenCategory, color = Palette.Gold, fontWeight = FontWeight.Bold)
+                Eyebrow(words.tokenCategory)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -193,12 +195,12 @@ internal fun SceneTokenDialogHost(
                         if (candidateStored) portraits.clearPortrait(candidateAssetId)
                     },
                 )
-                Text(words.tokenImageHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+                Text(words.tokenImageHint, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
 
-                Text(words.colour, color = Palette.Gold, fontWeight = FontWeight.Bold)
+                Eyebrow(words.colour)
                 TokenColourChoices(colorArgb, compact) { colorArgb = it }
 
-                Text(words.tokenSize, color = Palette.Gold, fontWeight = FontWeight.Bold)
+                Eyebrow(words.tokenSize)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     listOf(0.5, 1.0, 2.0, 3.0, 4.0).forEach { size ->
                         GameButton(
@@ -247,7 +249,7 @@ internal fun SceneTokenDialogHost(
                         color = Palette.TextMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Text(words.lootInventoryCategory, color = Palette.Gold, fontWeight = FontWeight.Bold)
+                    Eyebrow(words.lootInventoryCategory)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -280,7 +282,7 @@ internal fun SceneTokenDialogHost(
                     )
 
                     if (!creating) {
-                        Text(words.collectLoot, color = Palette.Gold, fontWeight = FontWeight.Bold)
+                        Eyebrow(words.collectLoot)
                         Text(words.collectLootHint, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
                         if (collectors.isEmpty()) {
                             Text(words.noLootCollectors, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
@@ -447,8 +449,8 @@ private fun SceneTokenImagePicker(
                 Text(
                     initials(name),
                     color = Palette.Text,
-                    fontWeight = FontWeight.Black,
                     fontSize = 27.sp,
+                    style = OnfallTheme.typography.tokenInitials,
                 )
             }
         }
@@ -472,7 +474,7 @@ private fun SceneTokenImagePicker(
             }
         }
         if (candidateStored) {
-            Text(mapWords.portraitAssigned, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+            Text(mapWords.portraitAssigned, color = Palette.Gold, style = MaterialTheme.typography.labelMedium)
         }
         portraits.message?.let {
             Text(it, color = Palette.Gold, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
@@ -499,7 +501,9 @@ private fun TokenColourChoices(selected: Int, compact: Boolean, onSelect: (Int) 
                     .clickable(role = Role.Button) { onSelect(argb) },
                 contentAlignment = Alignment.Center,
             ) {
-                if (selected == argb) Text("✓", color = Palette.Abyss, fontWeight = FontWeight.Black)
+                if (selected == argb) {
+                    Text("✓", color = Palette.Abyss, style = OnfallTheme.typography.tokenInitials)
+                }
             }
         }
     }

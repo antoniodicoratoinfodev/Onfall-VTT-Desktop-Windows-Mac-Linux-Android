@@ -39,7 +39,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -48,6 +47,7 @@ import app.d6d.engine.CombatSession
 import app.d6d.ui.battle.BattleScreen
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.AppGlyph
+import app.d6d.ui.components.DialogTitle
 import app.d6d.ui.components.GlyphIcon
 import app.d6d.ui.components.VerticalResizeHandle
 import app.d6d.ui.components.initials
@@ -91,6 +91,7 @@ import app.d6d.content.srd521it.SrdBeasts
 import app.d6d.ui.theme.AppTheme
 import app.d6d.ui.theme.AtmosphericBackground
 import app.d6d.ui.theme.GoldenRule
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import java.nio.file.Path
 import kotlinx.coroutines.CoroutineScope
@@ -197,6 +198,7 @@ fun AppRoot(
                 SheetStore(dataDirectory.resolve("schede.json")),
                 loadOnCreate = false,
                 rulesetProvider = { rules.publishedRevisions },
+                defaultRulesetHashProvider = { rules.defaultPublishedRevisionHash },
             )
         }
         // Ogni scheda aperta riceve un BattleViewModel distinto. La taglia iniziale
@@ -244,7 +246,13 @@ fun AppRoot(
                 )
             }
         }
-        val encounterBuilder = remember { EncounterBuilderViewModel(roster, rulesetProvider = { rules.publishedRevisions }) }
+        val encounterBuilder = remember {
+            EncounterBuilderViewModel(
+                roster,
+                rulesetProvider = { rules.publishedRevisions },
+                defaultRulesetHashProvider = { rules.defaultPublishedRevisionHash },
+            )
+        }
         val portraits = remember {
             PortraitRepository(ImageStore(dataDirectory), filePicker, uiScope, loadOnCreate = false)
         }
@@ -599,13 +607,7 @@ fun AppRoot(
                         destination = Destination.INCONTRO
                     },
                     containerColor = Palette.Surface,
-                    title = {
-                        Text(
-                            text.unsavedGamesTitle,
-                            color = Palette.Text,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    },
+                    title = { DialogTitle(text.unsavedGamesTitle) },
                     text = {
                         Text(
                             text.unsavedGamesBody(
@@ -720,7 +722,6 @@ private fun NoOpenSessionScreen(
             Text(
                 text = text.noOpenSessionTitle,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
@@ -810,8 +811,7 @@ private fun NavRail(
                 // il nome commerciale viene deciso.
                 text = initials(AppIdentity.displayName),
                 color = Palette.Abyss,
-                fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleSmall,
+                style = OnfallTheme.typography.tokenInitials,
             )
         }
         Destination.entries.forEach { entry ->

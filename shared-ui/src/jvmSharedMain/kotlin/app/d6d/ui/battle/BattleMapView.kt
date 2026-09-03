@@ -84,7 +84,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -122,6 +121,7 @@ import app.d6d.ui.images.rememberPortrait
 import app.d6d.ui.state.AreaTargeting
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.state.PendingArea
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.Vignette
@@ -1465,9 +1465,9 @@ private fun MapToken(
             Text(
                 text = if (defeated) "✕" else initials(snapshot.name()),
                 color = if (defeated) Palette.TextFaint else Palette.Text,
-                fontWeight = FontWeight.Black,
                 fontSize = labelSize,
                 lineHeight = labelSize,
+                style = OnfallTheme.typography.tokenInitials,
                 maxLines = 1,
                 softWrap = false,
                 textAlign = TextAlign.Center,
@@ -1592,7 +1592,6 @@ private fun MapNotConfigured(viewModel: BattleViewModel, modifier: Modifier = Mo
             Text(
                 text = words.noMapConfigured,
                 color = Palette.Text,
-                fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleLarge,
             )
             OrnateDivider(color = Palette.GoldDim)
@@ -1742,7 +1741,6 @@ private fun AreaTargetingBanner(
             Text(
                 text = words.aimingAt(targeting.name),
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
@@ -1803,7 +1801,6 @@ private fun AreaManualCard(
                 Text(
                     text = pending.spellName,
                     color = Palette.Text,
-                    fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
@@ -1816,8 +1813,7 @@ private fun AreaManualCard(
             Text(
                 text = "⋮⋮",
                 color = Palette.TextMuted,
-                fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleMedium,
+                style = OnfallTheme.typography.tokenInitials,
                 modifier = Modifier.semantics {
                     contentDescription = words.dragToMovePanel
                 },
@@ -1850,8 +1846,7 @@ private fun AreaManualCard(
                         Text(
                             text = choice.name,
                             color = Palette.Text,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = OnfallTheme.typography.itemTitle,
                             modifier = Modifier.weight(1f),
                         )
                         Chip(

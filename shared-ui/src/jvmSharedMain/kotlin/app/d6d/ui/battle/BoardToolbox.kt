@@ -58,6 +58,7 @@ import app.d6d.ui.board.MasterLens
 import app.d6d.ui.board.BoardToolState
 import app.d6d.ui.board.VisionPresentation
 import app.d6d.ui.components.AppGlyph
+import app.d6d.ui.components.DialogTitle
 import app.d6d.ui.components.GlyphIcon
 import app.d6d.ui.i18n.BoardStrings
 import app.d6d.ui.i18n.AppLocale
@@ -159,7 +160,7 @@ internal fun BoardToolboxPanel(
                 )
             }
             if (locked) {
-                Text(words.boardLockedHint, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+                Text(words.boardLockedHint, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -538,7 +539,7 @@ internal fun BoardToolOptions(
                             preferences.boardTemplateShape = shape
                         })
                     }
-                    Text(words.illustrativeTemplate, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+                    Text(words.illustrativeTemplate, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
                 }
                 ColourChoices(preferences.boardColorArgb, compact) { preferences.boardColorArgb = it }
             }
@@ -589,7 +590,7 @@ internal fun BoardToolOptions(
                     BoardOptionButton(words.revealAllFog, compact, onClick = {
                         board.setFog(FogMask.empty(grid.columns(), grid.rows()))
                     })
-                    Text(words.fogPaintHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+                    Text(words.fogPaintHint, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
                 }
             }
             BoardTool.FLOOR -> {
@@ -614,7 +615,7 @@ internal fun BoardToolOptions(
                 BoardOptionButton(words.clearFloors, compact, onClick = {
                     board.setFloors(FloorMask.empty(grid.columns(), grid.rows()))
                 })
-                Text(words.floorHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+                Text(words.floorHint, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
             }
             BoardTool.WALL -> {
                 BoardOptionButton(words.addWalls, compact, selected = state.wallAdding, onClick = { state.wallAdding = true })
@@ -629,13 +630,13 @@ internal fun BoardToolOptions(
                 BoardOptionButton(words.clearWalls, compact, onClick = {
                     board.setWalls(WallMask.empty(grid.columns(), grid.rows()))
                 })
-                Text(words.wallHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+                Text(words.wallHint, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
             }
             BoardTool.TOKEN -> {
                 if (state.pendingToken == null) {
                     BoardOptionButton(words.createToken, compact, onClick = state::requestTokenCreation)
                 } else {
-                    Text(words.tokenPlacementHint, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                    Text(words.tokenPlacementHint, color = Palette.Gold, style = MaterialTheme.typography.bodySmall)
                     BoardOptionButton(words.cancelPlacement, compact, onClick = state::table)
                 }
             }
@@ -648,7 +649,7 @@ internal fun BoardToolOptions(
         var text by remember(edited.id()) { mutableStateOf(edited.text()) }
         AlertDialog(
             onDismissRequest = { state.labelEditorId = null },
-            title = { Text(words.editText) },
+            title = { DialogTitle(words.editText) },
             text = { TextField(text, { text = it.take(500) }, singleLine = false) },
             confirmButton = {
                 GameButton(strings.common.apply, enabled = text.isNotBlank(), onClick = {
@@ -759,7 +760,7 @@ private fun AwarenessOptions(
     BoardOptionButton(words.awarenessOn, compact, selected = enabled, onClick = { onEnabledChange(true) })
     BoardOptionButton(words.awarenessOff, compact, selected = !enabled, onClick = { onEnabledChange(false) })
     if (inspectedDormant != null) {
-        Text(words.awarenessOf(inspectedName), color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(words.awarenessOf(inspectedName), color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
         BoardOptionButton(
             words.awarenessDormant, compact, selected = inspectedDormant,
             onClick = { onInspectedDormantChange(true) },
@@ -769,7 +770,7 @@ private fun AwarenessOptions(
             onClick = { onInspectedDormantChange(false) },
         )
     }
-    Text(words.awarenessHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+    Text(words.awarenessHint, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable
@@ -814,7 +815,7 @@ private fun VisionOptions(
     })
 
     if (inspectedCombatantId == null) {
-        Text(words.visionPickCombatantHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+        Text(words.visionPickCombatantHint, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
     } else {
         val personal = vision.radiusFeetFor(inspectedCombatantId)
         val overridden = vision.hasOverride(inspectedCombatantId)
@@ -849,13 +850,13 @@ private fun VisionOptions(
     }
 
     BoardOptionButton(words.forgetExplored, compact, onClick = { confirmForgetExplored = true })
-    Text(words.forgetExploredHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
-    Text(words.visionDynamicHint, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+    Text(words.forgetExploredHint, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
+    Text(words.visionDynamicHint, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
 
     if (confirmForgetExplored) {
         AlertDialog(
             onDismissRequest = { confirmForgetExplored = false },
-            title = { Text(words.forgetExplored) },
+            title = { DialogTitle(words.forgetExplored) },
             text = { Text(words.forgetExploredConfirm) },
             confirmButton = {
                 GameButton(strings.common.confirm, onClick = {

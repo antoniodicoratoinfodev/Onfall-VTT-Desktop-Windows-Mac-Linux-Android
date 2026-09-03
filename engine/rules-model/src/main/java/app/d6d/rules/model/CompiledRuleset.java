@@ -28,6 +28,27 @@ public final class CompiledRuleset {
     public enum StatRounding { NONE, FLOOR, CEILING, HALF_UP }
     public enum TableLookup { EXACT, FLOOR, CEILING, NEAREST }
     public enum ModifierOperation { ADD, MULTIPLY, SET, MINIMUM, MAXIMUM }
+    public enum ModifierStacking {
+        STACK,
+        HIGHEST_VALUE,
+        LOWEST_VALUE,
+        HIGHEST_BONUS_AND_LOWEST_PENALTY,
+        HIGHEST_PRIORITY,
+        UNIQUE_SOURCE,
+        EXCLUSIVE
+    }
+    public enum ModifierPhase { REPLACE, ADDITIVE, MULTIPLICATIVE, LIMIT, FINAL, LEGACY }
+    public enum ModifierDecision {
+        APPLIED,
+        OWNER_INACTIVE,
+        LEVEL_TOO_LOW,
+        CONDITION_FALSE,
+        LOWER_PRIORITY,
+        LOWER_VALUE,
+        HIGHER_VALUE,
+        DUPLICATE_SOURCE,
+        ZERO_IGNORED
+    }
     public enum EffectApplication {
         STATIC,
         CHANGE_VALUE,
@@ -40,6 +61,7 @@ public final class CompiledRuleset {
     public enum CostPool { TURN, RESOURCE }
     public enum RandomizerMode { DICE, DICE_POOL, PERCENTILE, TABLE, MANUAL }
     public enum KeepMode { SUM, HIGHEST, LOWEST, SUCCESSES }
+    public enum RollComparison { MEET_OR_EXCEED, EXCEED, AT_OR_BELOW, BELOW }
     public enum SheetLayout { LIST, GRID, CARDS, COMPACT }
     public enum BoardTopology { SQUARE, HEX_POINTY, HEX_FLAT, GRIDLESS, THEATRE_OF_MIND }
     public enum DiagonalRule { UNIFORM, FIVE_TEN_FIVE, EUCLIDEAN, MANUAL }
@@ -75,6 +97,92 @@ public final class CompiledRuleset {
             randomizerId = requireId(randomizerId);
             draws = List.copyOf(Objects.requireNonNull(draws, "draws"));
             value = normalize(Objects.requireNonNull(value, "value"));
+        }
+    }
+
+    /** Prova o attacco; usa un randomizer ma aggiunge totale, bersaglio ed esiti. */
+    public record RollDefinition(
+            String id,
+            String randomizerRef,
+            RuleFormula totalFormula,
+            RuleFormula targetFormula,
+            RollComparison comparison,
+            int naturalSuccessMinimum,
+            int naturalFailureMaximum,
+            int threatMinimumNatural,
+            boolean confirmationRequired,
+            int criticalMultiplier,
+            String outcomeTableRef,
+            String opposedRollRef) {
+        public RollDefinition {
+            id = requireId(id);
+            randomizerRef = requireId(randomizerRef);
+            totalFormula = Objects.requireNonNull(totalFormula, "totalFormula");
+            targetFormula = Objects.requireNonNull(targetFormula, "targetFormula");
+            comparison = Objects.requireNonNull(comparison, "comparison");
+            if (naturalSuccessMinimum < 0 || naturalSuccessMinimum > 1_000_000) {
+                throw new IllegalArgumentException(id + " naturalSuccessMinimum is invalid");
+            }
+            if (naturalFailureMaximum < 0 || naturalFailureMaximum > 1_000_000) {
+                throw new IllegalArgumentException(id + " naturalFailureMaximum is invalid");
+            }
+            if (naturalSuccessMinimum > 0 && naturalFailureMaximum > 0
+                    && naturalFailureMaximum >= naturalSuccessMinimum) {
+                throw new IllegalArgumentException(id + " natural success and failure ranges overlap");
+            }
+            if (threatMinimumNatural < 0 || threatMinimumNatural > 1_000_000) {
+                throw new IllegalArgumentException(id + " threatMinimumNatural is invalid");
+            }
+            if (confirmationRequired && threatMinimumNatural == 0) {
+                throw new IllegalArgumentException(id + " confirmation requires a threat range");
+            }
+            if (criticalMultiplier < 1 || criticalMultiplier > 100) {
+                throw new IllegalArgumentException(id + " criticalMultiplier is invalid");
+            }
+            outcomeTableRef = outcomeTableRef == null ? "" : outcomeTableRef.trim();
+            opposedRollRef = opposedRollRef == null ? "" : opposedRollRef.trim();
+        }
+    }
+
+    /** Trace completa e persistibile di una singola risoluzione di tiro. */
+    public record RollResolution(
+            String rollId,
+            RandomizerResult primary,
+            BigDecimal total,
+            BigDecimal target,
+            BigDecimal margin,
+            boolean automaticSuccess,
+            boolean automaticFailure,
+            boolean success,
+            boolean threat,
+            boolean critical,
+            int criticalMultiplier,
+            RandomizerResult confirmation,
+            BigDecimal confirmationTotal,
+            RandomizerResult opposed,
+            BigDecimal opposedTotal,
+            RuleValue outcome) {
+        public RollResolution {
+            rollId = requireId(rollId);
+            primary = Objects.requireNonNull(primary, "primary");
+            total = normalize(Objects.requireNonNull(total, "total"));
+            target = normalize(Objects.requireNonNull(target, "target"));
+            margin = normalize(Objects.requireNonNull(margin, "margin"));
+            if (automaticSuccess && automaticFailure) {
+                throw new IllegalArgumentException("A roll cannot be both an automatic success and failure");
+            }
+            if (criticalMultiplier < 1 || criticalMultiplier > 100) {
+                throw new IllegalArgumentException("criticalMultiplier is invalid");
+            }
+            confirmationTotal = confirmationTotal == null ? null : normalize(confirmationTotal);
+            opposedTotal = opposedTotal == null ? null : normalize(opposedTotal);
+            if ((confirmation == null) != (confirmationTotal == null)) {
+                throw new IllegalArgumentException("Confirmation roll and total must both be present or absent");
+            }
+            if ((opposed == null) != (opposedTotal == null)) {
+                throw new IllegalArgumentException("Opposed roll and total must both be present or absent");
+            }
+            outcome = Objects.requireNonNull(outcome, "outcome");
         }
     }
 
@@ -226,6 +334,9 @@ public final class CompiledRuleset {
             RuleFormula valueFormula,
             RuleFormula conditionFormula,
             String group,
+            ModifierStacking stacking,
+            String sourceRef,
+            ModifierPhase phase,
             int priority,
             int minimumLevel,
             EffectApplication application,
@@ -239,15 +350,102 @@ public final class CompiledRuleset {
             valueFormula = Objects.requireNonNull(valueFormula, "valueFormula");
             conditionFormula = Objects.requireNonNull(conditionFormula, "conditionFormula");
             group = group == null ? "" : group.trim();
+            stacking = Objects.requireNonNull(stacking, "stacking");
+            sourceRef = sourceRef == null || sourceRef.isBlank() ? id : requireId(sourceRef);
+            phase = Objects.requireNonNull(phase, "phase");
             if (minimumLevel < 1) throw new IllegalArgumentException(id + " minimumLevel must be positive");
             application = Objects.requireNonNull(application, "application");
             recipient = Objects.requireNonNull(recipient, "recipient");
             if (application == EffectApplication.STATIC && recipient != EffectRecipient.SELF) {
                 throw new IllegalArgumentException(id + " static modifier must target SELF");
             }
+            if (application == EffectApplication.STATIC && group.isEmpty()
+                    && stacking != ModifierStacking.STACK) {
+                throw new IllegalArgumentException(id + " ungrouped static modifier must use STACK");
+            }
+            if (application != EffectApplication.STATIC
+                    && (!group.isEmpty() || stacking != ModifierStacking.STACK
+                    || phase != ModifierPhase.LEGACY)) {
+                throw new IllegalArgumentException(id + " event effect cannot declare static stacking or phase");
+            }
             if (application == EffectApplication.SET_VALUE && literalValue == null) {
                 throw new IllegalArgumentException(id + " SET_VALUE effect needs a typed literal");
             }
+            if (application == EffectApplication.STATIC) validatePhase(id, operation, phase);
+        }
+
+        /** Costruttore compatibile con il contratto precedente. */
+        public ModifierDefinition(
+                String id,
+                String ownerRef,
+                String targetRef,
+                ModifierOperation operation,
+                RuleFormula valueFormula,
+                RuleFormula conditionFormula,
+                String group,
+                int priority,
+                int minimumLevel,
+                EffectApplication application,
+                EffectRecipient recipient,
+                RuleValue literalValue) {
+            this(id, ownerRef, targetRef, operation, valueFormula, conditionFormula, group,
+                    group == null || group.isBlank()
+                            ? ModifierStacking.STACK : ModifierStacking.HIGHEST_PRIORITY,
+                    ownerRef == null || ownerRef.isBlank() ? id : ownerRef,
+                    ModifierPhase.LEGACY, priority, minimumLevel, application, recipient, literalValue);
+        }
+    }
+
+    /** Riga deterministica della spiegazione di un valore calcolato. */
+    public record ModifierTraceStep(
+            String modifierId,
+            String group,
+            ModifierStacking stacking,
+            String sourceRef,
+            ModifierPhase phase,
+            ModifierOperation operation,
+            int priority,
+            ModifierDecision decision,
+            BigDecimal operand,
+            BigDecimal before,
+            BigDecimal after) {
+        public ModifierTraceStep {
+            modifierId = requireId(modifierId);
+            group = group == null ? "" : group.trim();
+            stacking = Objects.requireNonNull(stacking, "stacking");
+            sourceRef = requireId(sourceRef);
+            phase = Objects.requireNonNull(phase, "phase");
+            operation = Objects.requireNonNull(operation, "operation");
+            decision = Objects.requireNonNull(decision, "decision");
+            operand = operand == null ? null : normalize(operand);
+            before = before == null ? null : normalize(before);
+            after = after == null ? null : normalize(after);
+            if (decision == ModifierDecision.APPLIED
+                    && (operand == null || before == null || after == null)) {
+                throw new IllegalArgumentException("Applied modifier trace needs operand, before and after");
+            }
+        }
+    }
+
+    /** Base, scelte di stacking, limiti e risultato prodotti dalla stessa pipeline di value(). */
+    public record RuleValueTrace(
+            String targetRef,
+            BigDecimal baseValue,
+            BigDecimal afterModifiers,
+            BigDecimal minimumValue,
+            BigDecimal maximumValue,
+            StatRounding rounding,
+            BigDecimal resultValue,
+            List<ModifierTraceStep> modifiers) {
+        public RuleValueTrace {
+            targetRef = requireId(targetRef);
+            baseValue = normalize(Objects.requireNonNull(baseValue, "baseValue"));
+            afterModifiers = normalize(Objects.requireNonNull(afterModifiers, "afterModifiers"));
+            minimumValue = minimumValue == null ? null : normalize(minimumValue);
+            maximumValue = maximumValue == null ? null : normalize(maximumValue);
+            rounding = Objects.requireNonNull(rounding, "rounding");
+            resultValue = normalize(Objects.requireNonNull(resultValue, "resultValue"));
+            modifiers = List.copyOf(Objects.requireNonNull(modifiers, "modifiers"));
         }
     }
 
@@ -269,13 +467,44 @@ public final class CompiledRuleset {
         }
     }
 
-    public record ProgressionDefinition(String id, String experienceTableRef, int minimumLevel, int maximumLevel) {
+    public record ProgressionDefinition(
+            String id,
+            String experienceTableRef,
+            int minimumLevel,
+            int maximumLevel,
+            Map<String, String> trackTableRefs,
+            boolean defaultExperience) {
         public ProgressionDefinition {
             id = requireId(id);
             experienceTableRef = experienceTableRef == null ? "" : experienceTableRef.trim();
             if (minimumLevel < 0 || maximumLevel < minimumLevel) {
                 throw new IllegalArgumentException(id + " progression level range is invalid");
             }
+            TreeMap<String, String> normalizedTracks = new TreeMap<>();
+            for (Map.Entry<String, String> entry
+                    : Objects.requireNonNull(trackTableRefs, "trackTableRefs").entrySet()) {
+                String trackId = entry.getKey();
+                String tableRef = entry.getValue();
+                String normalizedTrack = requireId(trackId);
+                String normalizedTable = requireId(tableRef);
+                if (normalizedTracks.put(normalizedTrack, normalizedTable) != null) {
+                    throw new IllegalArgumentException(id + " contains duplicate progression track " + normalizedTrack);
+                }
+            }
+            trackTableRefs = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(normalizedTracks));
+            if (defaultExperience && experienceTableRef.isEmpty()) {
+                throw new IllegalArgumentException(id
+                        + ".defaultExperience requires an experienceTableRef");
+            }
+        }
+
+        /** Costruttore sorgente-compatibile per i call site precedenti alle track nominate. */
+        public ProgressionDefinition(
+                String id,
+                String experienceTableRef,
+                int minimumLevel,
+                int maximumLevel) {
+            this(id, experienceTableRef, minimumLevel, maximumLevel, Map.of(), false);
         }
     }
 
@@ -398,6 +627,7 @@ public final class CompiledRuleset {
     private final Map<String, SkillDefinition> skills;
     private final Map<String, ValueDefinition> valueDefinitions;
     private final Map<String, RandomizerDefinition> randomizers;
+    private final Map<String, RollDefinition> rolls;
     private final Map<String, TableDefinition> tables;
     private final Map<String, ResourceDefinition> resources;
     private final Map<String, TurnStructureDefinition> turnStructures;
@@ -412,6 +642,7 @@ public final class CompiledRuleset {
     private final Map<String, StatePersistencePolicy> persistencePolicies;
     private final Set<String> damageTypes;
     private final Set<String> conditions;
+    private final Map<String, ProgressionDefinition> progressions;
     private final ProgressionDefinition progression;
     private final CapabilityProfile capabilities;
 
@@ -423,6 +654,7 @@ public final class CompiledRuleset {
             Map<String, SkillDefinition> skills,
             Map<String, ValueDefinition> valueDefinitions,
             Map<String, RandomizerDefinition> randomizers,
+            Map<String, RollDefinition> rolls,
             Map<String, TableDefinition> tables,
             Map<String, ResourceDefinition> resources,
             Map<String, TurnStructureDefinition> turnStructures,
@@ -437,6 +669,7 @@ public final class CompiledRuleset {
             Map<String, StatePersistencePolicy> persistencePolicies,
             Set<String> damageTypes,
             Set<String> conditions,
+            Map<String, ProgressionDefinition> progressions,
             ProgressionDefinition progression,
             CapabilityProfile capabilities) {
         this.canonicalHash = requireId(canonicalHash);
@@ -446,6 +679,7 @@ public final class CompiledRuleset {
         this.skills = Map.copyOf(skills);
         this.valueDefinitions = Map.copyOf(valueDefinitions);
         this.randomizers = Map.copyOf(randomizers);
+        this.rolls = Map.copyOf(rolls);
         this.tables = Map.copyOf(tables);
         this.resources = Map.copyOf(resources);
         this.turnStructures = Map.copyOf(turnStructures);
@@ -460,6 +694,9 @@ public final class CompiledRuleset {
         this.persistencePolicies = Map.copyOf(persistencePolicies);
         this.damageTypes = Set.copyOf(damageTypes);
         this.conditions = Set.copyOf(conditions);
+        TreeMap<String, ProgressionDefinition> sortedProgressions = new TreeMap<>(progressions);
+        this.progressions = java.util.Collections.unmodifiableMap(
+                new LinkedHashMap<>(sortedProgressions));
         this.progression = progression;
         this.capabilities = Objects.requireNonNull(capabilities, "capabilities");
     }
@@ -470,6 +707,7 @@ public final class CompiledRuleset {
     public Map<String, SkillDefinition> skills() { return skills; }
     public Map<String, ValueDefinition> valueDefinitions() { return valueDefinitions; }
     public Map<String, RandomizerDefinition> randomizers() { return randomizers; }
+    public Map<String, RollDefinition> rolls() { return rolls; }
     public Map<String, TableDefinition> tables() { return tables; }
     public Map<String, ResourceDefinition> resources() { return resources; }
     public Map<String, TurnStructureDefinition> turnStructures() { return turnStructures; }
@@ -484,8 +722,21 @@ public final class CompiledRuleset {
     public Map<String, StatePersistencePolicy> persistencePolicies() { return persistencePolicies; }
     public Set<String> damageTypes() { return damageTypes; }
     public Set<String> conditions() { return conditions; }
-    public ProgressionDefinition progression() { return progression; }
+    public Map<String, ProgressionDefinition> progressions() { return progressions; }
+    /** Curva PE usata dagli overload legacy privi dell'ID della progressione. */
+    public ProgressionDefinition experienceProgression() { return progression; }
+
+    /** @deprecated usare {@link #experienceProgression()} per distinguere la curva PE dalle track nominate. */
+    @Deprecated
+    public ProgressionDefinition progression() { return experienceProgression(); }
+    public String defaultExperienceProgressionId() { return progression == null ? "" : progression.id(); }
     public CapabilityProfile capabilities() { return capabilities; }
+
+    public ProgressionDefinition progression(String id) {
+        ProgressionDefinition result = progressions.get(resolveId(id));
+        if (result == null) throw new IllegalArgumentException("Unknown progression " + id);
+        return result;
+    }
 
     public String resolveId(String id) {
         String normalized = requireId(id);
@@ -600,6 +851,18 @@ public final class CompiledRuleset {
     public BigDecimal value(String id, RuleRuntimeState state) {
         return new RuntimeContext(Objects.requireNonNull(state, "state"), Map.of(), new LinkedHashSet<>())
                 .value(resolveId(id));
+    }
+
+    /** Spiega un valore numerico usando esattamente la stessa pipeline di {@link #value}. */
+    public RuleValueTrace valueTrace(String id, RuleRuntimeState state) {
+        String resolved = resolveId(id);
+        Objects.requireNonNull(state, "state");
+        if (resolved.endsWith(":modifier")) {
+            BigDecimal result = value(resolved, state);
+            return new RuleValueTrace(resolved, result, result, null, null,
+                    StatRounding.NONE, result, List.of());
+        }
+        return calculateTrace(resolved, state, new LinkedHashSet<>());
     }
 
     /** Restituisce anche valori non numerici senza costringerli dentro una formula. */
@@ -733,6 +996,134 @@ public final class CompiledRuleset {
         };
         RuleValue tableValue = definition.tableRef.isEmpty() ? null : table(definition.tableRef).value(value);
         return new RandomizerResult(definition.id, draws, value, tableValue);
+    }
+
+    public RollResolution resolveRoll(
+            String rollId,
+            RuleRuntimeState state,
+            RandomSource source) {
+        return resolveRoll(rollId, state, state, source);
+    }
+
+    /** Risolve una prova fra stato fonte e stato bersaglio consumando soltanto l'RNG ricevuto. */
+    public RollResolution resolveRoll(
+            String rollId,
+            RuleRuntimeState rollerState,
+            RuleRuntimeState targetState,
+            RandomSource source) {
+        RollDefinition definition = rolls.get(resolveId(rollId));
+        if (definition == null) throw new IllegalArgumentException("Unknown roll " + rollId);
+        Objects.requireNonNull(rollerState, "rollerState");
+        Objects.requireNonNull(targetState, "targetState");
+        Objects.requireNonNull(source, "source");
+
+        RollAttempt primary = rollAttempt(definition, rollerState, source);
+        RandomizerResult opposedRandomizer = null;
+        BigDecimal opposedTotal = null;
+        BigDecimal target;
+        if (!definition.opposedRollRef.isEmpty()) {
+            RollDefinition opposedDefinition = rolls.get(resolveId(definition.opposedRollRef));
+            if (opposedDefinition == null) {
+                throw new IllegalStateException("Missing compiled opposed roll " + definition.opposedRollRef);
+            }
+            RollAttempt opposed = rollAttempt(opposedDefinition, targetState, source);
+            opposedRandomizer = opposed.randomizer();
+            opposedTotal = opposed.total();
+            target = opposed.total();
+        } else {
+            target = definition.targetFormula.evaluate(
+                    new RuntimeContext(targetState, Map.of(), new LinkedHashSet<>()));
+        }
+
+        BigDecimal natural = primary.randomizer().value();
+        boolean automaticFailure = definition.naturalFailureMaximum > 0
+                && natural.compareTo(BigDecimal.valueOf(definition.naturalFailureMaximum)) <= 0;
+        boolean automaticSuccess = !automaticFailure && definition.naturalSuccessMinimum > 0
+                && natural.compareTo(BigDecimal.valueOf(definition.naturalSuccessMinimum)) >= 0;
+        boolean comparisonSucceeded = comparisonSuccess(
+                definition.comparison, primary.total(), target);
+        boolean success = automaticFailure ? false : automaticSuccess
+                || comparisonSucceeded;
+        BigDecimal margin = comparisonMargin(definition.comparison, primary.total(), target);
+        boolean threat = success && definition.threatMinimumNatural > 0
+                && natural.compareTo(BigDecimal.valueOf(definition.threatMinimumNatural)) >= 0;
+
+        RandomizerResult confirmation = null;
+        BigDecimal confirmationTotal = null;
+        boolean critical = threat;
+        if (threat && definition.confirmationRequired) {
+            RollAttempt confirmationAttempt = rollAttempt(definition, rollerState, source);
+            confirmation = confirmationAttempt.randomizer();
+            confirmationTotal = confirmationAttempt.total();
+            BigDecimal confirmationNatural = confirmation.value();
+            boolean confirmationAutomaticFailure = definition.naturalFailureMaximum > 0
+                    && confirmationNatural.compareTo(
+                    BigDecimal.valueOf(definition.naturalFailureMaximum)) <= 0;
+            boolean confirmationAutomaticSuccess = !confirmationAutomaticFailure
+                    && definition.naturalSuccessMinimum > 0
+                    && confirmationNatural.compareTo(
+                    BigDecimal.valueOf(definition.naturalSuccessMinimum)) >= 0;
+            critical = !confirmationAutomaticFailure && (confirmationAutomaticSuccess
+                    || comparisonSuccess(definition.comparison, confirmationTotal, target));
+        }
+
+        // Le bande della tabella descrivono il margine numerico. Quando una
+        // regola naturale scavalca quel confronto, usarle produrrebbe una trace
+        // contraddittoria (per esempio SUCCESS con un 1 naturale fallito).
+        boolean naturalOverride = success != comparisonSucceeded;
+        RuleValue outcome = naturalOverride || definition.outcomeTableRef.isEmpty()
+                ? RuleValue.text(defaultOutcome(automaticSuccess, automaticFailure, success, critical))
+                : table(definition.outcomeTableRef).value(margin);
+        return new RollResolution(
+                definition.id, primary.randomizer(), primary.total(), target, margin,
+                automaticSuccess, automaticFailure, success, threat, critical,
+                critical ? definition.criticalMultiplier : 1,
+                confirmation, confirmationTotal, opposedRandomizer, opposedTotal, outcome);
+    }
+
+    private RollAttempt rollAttempt(
+            RollDefinition definition,
+            RuleRuntimeState state,
+            RandomSource source) {
+        RandomizerResult randomizer = roll(definition.randomizerRef, state, source);
+        BigDecimal total = definition.totalFormula.evaluate(new RuntimeContext(
+                state, Map.of("roll", randomizer.value(), "natural", randomizer.value()),
+                new LinkedHashSet<>()));
+        return new RollAttempt(randomizer, total);
+    }
+
+    private static boolean comparisonSuccess(
+            RollComparison comparison,
+            BigDecimal total,
+            BigDecimal target) {
+        int order = total.compareTo(target);
+        return switch (comparison) {
+            case MEET_OR_EXCEED -> order >= 0;
+            case EXCEED -> order > 0;
+            case AT_OR_BELOW -> order <= 0;
+            case BELOW -> order < 0;
+        };
+    }
+
+    private static BigDecimal comparisonMargin(
+            RollComparison comparison,
+            BigDecimal total,
+            BigDecimal target) {
+        return switch (comparison) {
+            case MEET_OR_EXCEED, EXCEED -> total.subtract(target);
+            case AT_OR_BELOW, BELOW -> target.subtract(total);
+        };
+    }
+
+    private static String defaultOutcome(
+            boolean automaticSuccess,
+            boolean automaticFailure,
+            boolean success,
+            boolean critical) {
+        if (critical) return "CRITICAL_SUCCESS";
+        if (automaticFailure) return "AUTOMATIC_FAILURE";
+        if (automaticSuccess) return "AUTOMATIC_SUCCESS";
+        return success ? "SUCCESS" : "FAILURE";
     }
 
     public RuleRuntimeState beginTurn(RuleRuntimeState state) {
@@ -1154,26 +1545,68 @@ public final class CompiledRuleset {
     }
 
     public int levelForExperience(BigDecimal experience) {
-        if (progression == null || progression.experienceTableRef.isEmpty()) {
+        if (progression == null) {
             throw new IllegalStateException("This ruleset does not define an experience progression");
         }
-        RuleValue value = table(progression.experienceTableRef).value(experience.max(BigDecimal.ZERO));
+        return levelForExperience(progression.id, experience);
+    }
+
+    public int levelForExperience(String progressionId, BigDecimal experience) {
+        ProgressionDefinition definition = progression(progressionId);
+        if (definition.experienceTableRef.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Progression " + progressionId + " does not define an experience curve");
+        }
+        Objects.requireNonNull(experience, "experience");
+        RuleValue value = table(definition.experienceTableRef).value(experience.max(BigDecimal.ZERO));
         int level = value.asNumber().intValueExact();
-        return Math.max(progression.minimumLevel, Math.min(progression.maximumLevel, level));
+        return Math.max(definition.minimumLevel, Math.min(definition.maximumLevel, level));
     }
 
     public BigDecimal experienceForLevel(int level) {
-        if (progression == null || progression.experienceTableRef.isEmpty()) {
+        if (progression == null) {
             throw new IllegalStateException("This ruleset does not define an experience progression");
         }
-        int normalized = Math.max(progression.minimumLevel, Math.min(progression.maximumLevel, level));
-        TableDefinition table = table(progression.experienceTableRef);
+        return experienceForLevel(progression.id, level);
+    }
+
+    public BigDecimal experienceForLevel(String progressionId, int level) {
+        ProgressionDefinition definition = progression(progressionId);
+        if (definition.experienceTableRef.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Progression " + progressionId + " does not define an experience curve");
+        }
+        int normalized = Math.max(definition.minimumLevel, Math.min(definition.maximumLevel, level));
+        TableDefinition table = table(definition.experienceTableRef);
         return table.rows.entrySet().stream()
                 .filter(entry -> entry.getValue().type() == RuleValue.Type.NUMBER
                         && entry.getValue().asNumber().intValue() == normalized)
                 .map(Map.Entry::getKey)
                 .min(BigDecimal::compareTo)
                 .orElseThrow(() -> new IllegalStateException("No experience threshold for level " + normalized));
+    }
+
+    /** Valore numerico di una track nominata al livello dichiarato, senza aggregazioni implicite. */
+    public BigDecimal progressionTrackValue(String progressionId, String trackId, int level) {
+        ProgressionDefinition definition = progression(progressionId);
+        if (level < definition.minimumLevel || level > definition.maximumLevel) {
+            throw new IllegalArgumentException(
+                    "Level " + level + " is outside progression " + progressionId + " range "
+                            + definition.minimumLevel + ".." + definition.maximumLevel);
+        }
+        String normalizedTrack = requireId(trackId);
+        String tableRef = definition.trackTableRefs.get(normalizedTrack);
+        if (tableRef == null) {
+            throw new IllegalArgumentException(
+                    "Progression " + progressionId + " does not define track " + trackId);
+        }
+        return table(tableRef).value(BigDecimal.valueOf(level)).asNumber();
+    }
+
+    /** @deprecated usare {@link #progressionTrackValue(String, String, int)}. */
+    @Deprecated
+    public BigDecimal progressionValue(String progressionId, String trackId, int level) {
+        return progressionTrackValue(progressionId, trackId, level);
     }
 
     private RuleRuntimeState recoverResources(String event, RuleRuntimeState original, List<RuleRuntimeEvent> events) {
@@ -1492,6 +1925,10 @@ public final class CompiledRuleset {
     }
 
     private BigDecimal calculate(String resolvedId, RuleRuntimeState state, Set<String> path) {
+        return calculateTrace(resolvedId, state, path).resultValue();
+    }
+
+    private RuleValueTrace calculateTrace(String resolvedId, RuleRuntimeState state, Set<String> path) {
         RuleValue supplied = state.values().get(resolvedId);
         StatDefinition stat = stats.get(resolvedId);
         SkillDefinition skill = skills.get(resolvedId);
@@ -1502,24 +1939,35 @@ public final class CompiledRuleset {
                     if (!path.add(resolvedId)) {
                         throw new IllegalStateException("Cyclic runtime dependency at " + resolvedId);
                     }
-                    base = applyStaticModifiers(resolvedId, base, state, path);
-                    path.remove(resolvedId);
+                    try {
+                        ModifierApplication applied = applyStaticModifiers(resolvedId, base, state, path);
+                        return trace(resolvedId, base, applied, null, null, StatRounding.NONE,
+                                applied.result());
+                    } finally {
+                        path.remove(resolvedId);
+                    }
                 }
-                return normalize(base);
+                return trace(resolvedId, base, ModifierApplication.empty(base),
+                        null, null, StatRounding.NONE, base);
             }
             throw new IllegalArgumentException("Unknown numeric rule value " + resolvedId);
         }
         if (!path.add(resolvedId)) throw new IllegalStateException("Cyclic runtime dependency at " + resolvedId);
-        RuntimeContext context = new RuntimeContext(state, Map.of(), path);
-        BigDecimal base;
-        if (stat != null) {
-            base = supplied != null ? supplied.asNumber()
-                    : (stat.derivedFormula != null ? stat.derivedFormula : stat.defaultFormula).evaluate(context);
-            base = applyStaticModifiers(resolvedId, base, state, path);
-            if (stat.minimumFormula != null) base = base.max(stat.minimumFormula.evaluate(context));
-            if (stat.maximumFormula != null) base = base.min(stat.maximumFormula.evaluate(context));
-            base = round(base, stat.rounding);
-        } else {
+        try {
+            RuntimeContext context = new RuntimeContext(state, Map.of(), path);
+            BigDecimal base;
+            if (stat != null) {
+                base = supplied != null ? supplied.asNumber()
+                        : (stat.derivedFormula != null ? stat.derivedFormula : stat.defaultFormula).evaluate(context);
+                ModifierApplication applied = applyStaticModifiers(resolvedId, base, state, path);
+                BigDecimal minimum = stat.minimumFormula == null ? null : stat.minimumFormula.evaluate(context);
+                BigDecimal maximum = stat.maximumFormula == null ? null : stat.maximumFormula.evaluate(context);
+                BigDecimal result = applied.result();
+                if (minimum != null) result = result.max(minimum);
+                if (maximum != null) result = result.min(maximum);
+                result = round(result, stat.rounding);
+                return trace(resolvedId, base, applied, minimum, maximum, stat.rounding, result);
+            }
             if (supplied != null) {
                 base = supplied.asNumber();
             } else {
@@ -1529,43 +1977,213 @@ public final class CompiledRuleset {
                     base = base.add(skill.trainedBonusFormula.evaluate(context));
                 }
             }
-            base = applyStaticModifiers(resolvedId, base, state, path);
+            ModifierApplication applied = applyStaticModifiers(resolvedId, base, state, path);
+            return trace(resolvedId, base, applied, null, null, StatRounding.NONE, applied.result());
+        } finally {
+            path.remove(resolvedId);
         }
-        path.remove(resolvedId);
-        return normalize(base);
     }
 
-    private BigDecimal applyStaticModifiers(
+    private RuleValueTrace trace(
+            String target,
+            BigDecimal base,
+            ModifierApplication applied,
+            BigDecimal minimum,
+            BigDecimal maximum,
+            StatRounding rounding,
+            BigDecimal result) {
+        return new RuleValueTrace(target, base, applied.result(), minimum, maximum,
+                rounding, result, applied.trace());
+    }
+
+    private ModifierApplication applyStaticModifiers(
             String target,
             BigDecimal initial,
             RuleRuntimeState state,
             Set<String> path) {
-        List<ModifierDefinition> candidates = modifiers.values().stream()
+        List<ModifierDefinition> matching = modifiers.values().stream()
                 .filter(modifier -> modifier.application == EffectApplication.STATIC)
                 .filter(modifier -> resolveId(modifier.targetRef).equals(target))
-                .filter(modifier -> modifier.ownerRef.isEmpty()
-                        || state.activeRuleIds().contains(resolveId(modifier.ownerRef)))
-                .filter(modifier -> modifier.minimumLevel <= ownerLevel(modifier.ownerRef, state))
-                .filter(modifier -> truth(modifier.conditionFormula.evaluate(
-                        new RuntimeContext(state, Map.of("current", initial), path))))
-                .sorted(Comparator.comparingInt(ModifierDefinition::priority)
-                        .thenComparing(ModifierDefinition::id))
                 .toList();
-        LinkedHashMap<String, ModifierDefinition> grouped = new LinkedHashMap<>();
-        ArrayList<ModifierDefinition> effective = new ArrayList<>();
+        List<ModifierDefinition> candidates = matching.stream().sorted(modifierOrder(matching)).toList();
+        if (candidates.isEmpty()) return ModifierApplication.empty(initial);
+
+        LinkedHashMap<String, ModifierDecision> decisions = new LinkedHashMap<>();
+        ArrayList<ModifierDefinition> eligible = new ArrayList<>();
         for (ModifierDefinition candidate : candidates) {
-            if (candidate.group.isEmpty()) effective.add(candidate);
-            else grouped.put(candidate.group, candidate); // ordinati: priorita' maggiore sostituisce.
+            if (!candidate.ownerRef.isEmpty()
+                    && !state.activeRuleIds().contains(resolveId(candidate.ownerRef))) {
+                decisions.put(candidate.id, ModifierDecision.OWNER_INACTIVE);
+            } else if (candidate.minimumLevel > ownerLevel(candidate.ownerRef, state)) {
+                decisions.put(candidate.id, ModifierDecision.LEVEL_TOO_LOW);
+            } else if (!truth(candidate.conditionFormula.evaluate(
+                    new RuntimeContext(state, Map.of("current", initial), path)))) {
+                decisions.put(candidate.id, ModifierDecision.CONDITION_FALSE);
+            } else {
+                eligible.add(candidate);
+            }
         }
-        effective.addAll(grouped.values());
-        effective.sort(Comparator.comparingInt(ModifierDefinition::priority).thenComparing(ModifierDefinition::id));
+
+        LinkedHashSet<String> selectedIds = new LinkedHashSet<>();
+        LinkedHashMap<String, BigDecimal> selectionOperands = new LinkedHashMap<>();
+        LinkedHashMap<String, List<ModifierDefinition>> groups = new LinkedHashMap<>();
+        for (ModifierDefinition candidate : eligible) {
+            if (candidate.group.isEmpty()) selectedIds.add(candidate.id);
+            else groups.computeIfAbsent(candidate.group, ignored -> new ArrayList<>()).add(candidate);
+        }
+        groups.values().forEach(group -> selectGroup(
+                group, initial, state, path, selectedIds, selectionOperands, decisions));
+
+        List<ModifierDefinition> effective = eligible.stream()
+                .filter(modifier -> selectedIds.contains(modifier.id))
+                .sorted(modifierOrder(candidates)).toList();
+        LinkedHashMap<String, AppliedModifier> appliedById = new LinkedHashMap<>();
         BigDecimal result = initial;
         for (ModifierDefinition modifier : effective) {
-            BigDecimal operand = modifier.valueFormula.evaluate(
-                    new RuntimeContext(state, Map.of("current", result), path));
+            BigDecimal operand = selectionOperands.get(modifier.id);
+            if (operand == null) {
+                operand = modifier.valueFormula.evaluate(
+                        new RuntimeContext(state, Map.of("current", result), path));
+            }
+            BigDecimal before = result;
             result = apply(modifier.operation, result, operand);
+            appliedById.put(modifier.id, new AppliedModifier(operand, before, result));
+            decisions.put(modifier.id, ModifierDecision.APPLIED);
         }
-        return result;
+
+        ArrayList<ModifierTraceStep> trace = new ArrayList<>();
+        for (ModifierDefinition modifier : candidates) {
+            AppliedModifier applied = appliedById.get(modifier.id);
+            trace.add(new ModifierTraceStep(
+                    modifier.id, modifier.group, modifier.stacking, modifier.sourceRef,
+                    modifier.phase, modifier.operation, modifier.priority,
+                    decisions.get(modifier.id),
+                    applied == null ? selectionOperands.get(modifier.id) : applied.operand(),
+                    applied == null ? null : applied.before(),
+                    applied == null ? null : applied.after()));
+        }
+        return new ModifierApplication(result, trace);
+    }
+
+    private void selectGroup(
+            List<ModifierDefinition> group,
+            BigDecimal initial,
+            RuleRuntimeState state,
+            Set<String> path,
+            Set<String> selectedIds,
+            Map<String, BigDecimal> selectionOperands,
+            Map<String, ModifierDecision> decisions) {
+        ModifierStacking stacking = group.get(0).stacking;
+        switch (stacking) {
+            case STACK -> group.forEach(modifier -> selectedIds.add(modifier.id));
+            case HIGHEST_PRIORITY -> {
+                ModifierDefinition winner = group.stream().max(modifierRank()).orElseThrow();
+                selectedIds.add(winner.id);
+                group.stream().filter(modifier -> modifier != winner)
+                        .forEach(modifier -> decisions.put(modifier.id, ModifierDecision.LOWER_PRIORITY));
+            }
+            case HIGHEST_VALUE, LOWEST_VALUE -> {
+                evaluateSelectionOperands(group, initial, state, path, selectionOperands);
+                boolean highest = stacking == ModifierStacking.HIGHEST_VALUE;
+                ModifierDefinition winner = selectByValue(group, selectionOperands, highest);
+                selectedIds.add(winner.id);
+                group.stream().filter(modifier -> modifier != winner).forEach(modifier -> decisions.put(
+                        modifier.id, highest ? ModifierDecision.LOWER_VALUE : ModifierDecision.HIGHER_VALUE));
+            }
+            case HIGHEST_BONUS_AND_LOWEST_PENALTY -> {
+                evaluateSelectionOperands(group, initial, state, path, selectionOperands);
+                List<ModifierDefinition> bonuses = group.stream()
+                        .filter(modifier -> selectionOperands.get(modifier.id).signum() > 0).toList();
+                List<ModifierDefinition> penalties = group.stream()
+                        .filter(modifier -> selectionOperands.get(modifier.id).signum() < 0).toList();
+                ModifierDefinition bonus = bonuses.isEmpty()
+                        ? null : selectByValue(bonuses, selectionOperands, true);
+                ModifierDefinition penalty = penalties.isEmpty()
+                        ? null : selectByValue(penalties, selectionOperands, false);
+                if (bonus != null) selectedIds.add(bonus.id);
+                if (penalty != null) selectedIds.add(penalty.id);
+                for (ModifierDefinition modifier : group) {
+                    if (modifier == bonus || modifier == penalty) continue;
+                    int sign = selectionOperands.get(modifier.id).signum();
+                    decisions.put(modifier.id, sign > 0
+                            ? ModifierDecision.LOWER_VALUE
+                            : sign < 0 ? ModifierDecision.HIGHER_VALUE : ModifierDecision.ZERO_IGNORED);
+                }
+            }
+            case UNIQUE_SOURCE -> {
+                LinkedHashMap<String, List<ModifierDefinition>> bySource = new LinkedHashMap<>();
+                group.forEach(modifier -> bySource
+                        .computeIfAbsent(modifier.sourceRef, ignored -> new ArrayList<>()).add(modifier));
+                bySource.values().forEach(sameSource -> {
+                    ModifierDefinition winner = sameSource.stream().max(modifierRank()).orElseThrow();
+                    selectedIds.add(winner.id);
+                    sameSource.stream().filter(modifier -> modifier != winner).forEach(modifier ->
+                            decisions.put(modifier.id, ModifierDecision.DUPLICATE_SOURCE));
+                });
+            }
+            case EXCLUSIVE -> {
+                if (group.size() > 1) {
+                    throw new IllegalStateException(
+                            "Exclusive modifier group " + group.get(0).group + " has more than one active modifier");
+                }
+                selectedIds.add(group.get(0).id);
+            }
+        }
+    }
+
+    private void evaluateSelectionOperands(
+            List<ModifierDefinition> group,
+            BigDecimal initial,
+            RuleRuntimeState state,
+            Set<String> path,
+            Map<String, BigDecimal> operands) {
+        for (ModifierDefinition modifier : group) {
+            operands.put(modifier.id, modifier.valueFormula.evaluate(
+                    new RuntimeContext(state, Map.of("current", initial), path)));
+        }
+    }
+
+    private static ModifierDefinition selectByValue(
+            List<ModifierDefinition> modifiers,
+            Map<String, BigDecimal> operands,
+            boolean highest) {
+        ModifierDefinition winner = null;
+        for (ModifierDefinition candidate : modifiers) {
+            if (winner == null) {
+                winner = candidate;
+                continue;
+            }
+            int valueOrder = operands.get(candidate.id).compareTo(operands.get(winner.id));
+            if ((highest && valueOrder > 0) || (!highest && valueOrder < 0)
+                    || valueOrder == 0 && modifierRank().compare(candidate, winner) > 0) {
+                winner = candidate;
+            }
+        }
+        return winner;
+    }
+
+    private static Comparator<ModifierDefinition> modifierRank() {
+        return Comparator.comparingInt(ModifierDefinition::priority).thenComparing(ModifierDefinition::id);
+    }
+
+    private static Comparator<ModifierDefinition> modifierOrder(List<ModifierDefinition> modifiers) {
+        boolean explicitlyPhased = modifiers.stream().anyMatch(
+                modifier -> modifier.phase != ModifierPhase.LEGACY);
+        Comparator<ModifierDefinition> result = explicitlyPhased
+                ? Comparator.comparingInt(modifier -> phaseOrder(modifier.phase))
+                : Comparator.comparingInt(ignored -> 0);
+        return result.thenComparingInt(ModifierDefinition::priority).thenComparing(ModifierDefinition::id);
+    }
+
+    private static int phaseOrder(ModifierPhase phase) {
+        return switch (phase) {
+            case REPLACE -> 0;
+            case ADDITIVE -> 1;
+            case MULTIPLICATIVE -> 2;
+            case LIMIT -> 3;
+            case FINAL -> 4;
+            case LEGACY -> 5;
+        };
     }
 
     private int ownerLevel(String ownerRef, RuleRuntimeState state) {
@@ -1592,6 +2210,19 @@ public final class CompiledRuleset {
             case MINIMUM -> current.max(operand);
             case MAXIMUM -> current.min(operand);
         };
+    }
+
+    private static void validatePhase(String id, ModifierOperation operation, ModifierPhase phase) {
+        boolean valid = switch (phase) {
+            case LEGACY, FINAL -> true;
+            case REPLACE -> operation == ModifierOperation.SET;
+            case ADDITIVE -> operation == ModifierOperation.ADD;
+            case MULTIPLICATIVE -> operation == ModifierOperation.MULTIPLY;
+            case LIMIT -> operation == ModifierOperation.MINIMUM || operation == ModifierOperation.MAXIMUM;
+        };
+        if (!valid) {
+            throw new IllegalArgumentException(id + " operation " + operation + " is invalid in phase " + phase);
+        }
     }
 
     private TableDefinition table(String id) {
@@ -1644,7 +2275,8 @@ public final class CompiledRuleset {
             }
             if (id.startsWith("turn:")) return state.turnBudget().get(id.substring("turn:".length()));
             RuleValue direct = state.values().get(id);
-            if (direct != null && !stats.containsKey(id) && !skills.containsKey(id)) return direct.asNumber();
+            if (direct != null && !stats.containsKey(id) && !skills.containsKey(id)
+                    && !valueDefinitions.containsKey(id)) return direct.asNumber();
             return calculate(id, state, path);
         }
 
@@ -1654,6 +2286,23 @@ public final class CompiledRuleset {
     }
 
     private record Applied(RuleRuntimeState state, List<RuleRuntimeEvent> events) { }
+    private record AppliedModifier(BigDecimal operand, BigDecimal before, BigDecimal after) { }
+    private record ModifierApplication(BigDecimal result, List<ModifierTraceStep> trace) {
+        private ModifierApplication {
+            result = normalize(Objects.requireNonNull(result, "result"));
+            trace = List.copyOf(Objects.requireNonNull(trace, "trace"));
+        }
+
+        static ModifierApplication empty(BigDecimal value) {
+            return new ModifierApplication(value, List.of());
+        }
+    }
+    private record RollAttempt(RandomizerResult randomizer, BigDecimal total) {
+        private RollAttempt {
+            randomizer = Objects.requireNonNull(randomizer, "randomizer");
+            total = normalize(Objects.requireNonNull(total, "total"));
+        }
+    }
     private record CostKey(CostPool pool, String target) { }
     private record ScopedApplied(
             LinkedHashMap<RuleScope, RuleRuntimeState> states,

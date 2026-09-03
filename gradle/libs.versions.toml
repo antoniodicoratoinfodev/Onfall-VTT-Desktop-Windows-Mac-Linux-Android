@@ -31,6 +31,7 @@ jetbrains-compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", 
 jetbrains-compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose" }
 jetbrains-compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "composeMaterial3" }
 jetbrains-compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose" }
+jetbrains-compose-ui-test = { module = "org.jetbrains.compose.ui:ui-test", version.ref = "compose" }
 jetbrains-compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose" }
 
 [plugins]

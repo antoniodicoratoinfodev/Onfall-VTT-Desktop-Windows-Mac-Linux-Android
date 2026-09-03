@@ -1,7 +1,9 @@
 package app.d6d.ui.sheet
 
 import app.d6d.content.srd521it.Srd521ItContent
+import app.d6d.content.srd521it.Srd521Ruleset
 import app.d6d.i18n.AppLanguage
+import app.d6d.rules.model.GenericRulesetFoundation
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CatalogAbility
 import app.d6d.sheet.SheetStore
@@ -72,6 +74,29 @@ class SheetViewModelTest {
 
         model.character = model.character.copy(characterName = "Nuovo eroe")
         assertTrue(model.isDirty)
+    }
+
+    @Test
+    fun `una nuova scheda usa il default esplicito e non la fondazione vuota ordinata prima`() {
+        val standard = Srd521Ruleset.revision
+        val foundation = GenericRulesetFoundation.revision()
+        val model = SheetViewModel(
+            SheetStore(directory.resolve("default-ruleset.json")),
+            loadOnCreate = false,
+            rulesetProvider = { listOf(foundation, standard) },
+            defaultRulesetHashProvider = { standard.canonicalHash() },
+        )
+
+        assertEquals(
+            SheetNavigationResult.APPLIED,
+            model.newSheet(discardUnsavedChanges = true),
+        )
+
+        assertEquals(
+            standard.canonicalHash(),
+            model.character.modularSheet.rulesetCanonicalHash,
+        )
+        assertTrue(model.character.modularSheet.configured)
     }
 
     @Test

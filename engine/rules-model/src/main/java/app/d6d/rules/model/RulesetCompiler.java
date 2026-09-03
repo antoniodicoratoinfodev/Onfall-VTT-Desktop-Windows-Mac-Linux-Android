@@ -2,6 +2,7 @@ package app.d6d.rules.model;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -19,8 +20,50 @@ public final class RulesetCompiler {
     private static final Set<String> LOCAL_FORMULA_VALUES = Set.of(
             "score", "current", "maximum", "amount", "stacks", "eventCount", "level", "classLevel",
             "characterLevel", "proficiency", "experience");
+    private static final Set<String> ROLL_RESOLUTION_ATTRIBUTES = Set.of(
+            "randomizerRef",
+            "totalFormula",
+            "targetFormula",
+            "comparison",
+            "naturalSuccessMinimum",
+            "naturalFailureMaximum",
+            "threatMinimumNatural",
+            "confirmationRequired",
+            "criticalMultiplier",
+            "outcomeTableRef",
+            "opposedRollRef");
 
     private RulesetCompiler() { }
+
+    /**
+     * Contratto condiviso con gli editor: indica se una regola può essere
+     * referenziata direttamente come valore in una formula. Le risorse usano
+     * invece i riferimenti espliciti {@code resource:<id>:current/maximum}.
+     */
+    public static boolean isDirectNumericFormulaReferenceTarget(RuleEntity entity) {
+        Objects.requireNonNull(entity, "entity");
+        if (!entity.enabled() || entity.automationLevel() == RuleAutomationLevel.MANUAL) {
+            return false;
+        }
+        return switch (entity.kind()) {
+            case STAT, SKILL, SAVE, DEFENSE -> true;
+            case VALUE -> {
+                String raw = entity.attributes().getOrDefault("valueType", "TEXT").trim();
+                yield raw.equalsIgnoreCase(RuleValue.Type.NUMBER.name())
+                        || raw.equalsIgnoreCase(RuleValue.Type.BOOLEAN.name());
+            }
+            default -> false;
+        };
+    }
+
+    /** Unica capability autorevole per le policy di persistenza dello stato. */
+    public static boolean supportsStatePolicy(RuleKind kind) {
+        Objects.requireNonNull(kind, "kind");
+        return switch (kind) {
+            case STAT, SKILL, SAVE, DEFENSE, VALUE, RESOURCE, TRACK, CONDITION, ACTION_ECONOMY -> true;
+            default -> false;
+        };
+    }
 
     public static CompiledRuleset compile(RulesetRevision revision) {
         Objects.requireNonNull(revision, "revision");
@@ -44,6 +87,7 @@ public final class RulesetCompiler {
         LinkedHashMap<String, CompiledRuleset.SkillDefinition> skills = new LinkedHashMap<>();
         LinkedHashMap<String, CompiledRuleset.ValueDefinition> valueDefinitions = new LinkedHashMap<>();
         LinkedHashMap<String, CompiledRuleset.RandomizerDefinition> randomizers = new LinkedHashMap<>();
+        LinkedHashMap<String, CompiledRuleset.RollDefinition> rolls = new LinkedHashMap<>();
         LinkedHashMap<String, CompiledRuleset.TableDefinition> tables = new LinkedHashMap<>();
         LinkedHashMap<String, CompiledRuleset.ResourceDefinition> resources = new LinkedHashMap<>();
         LinkedHashMap<String, CompiledRuleset.TurnStructureDefinition> turnStructures = new LinkedHashMap<>();
@@ -58,7 +102,7 @@ public final class RulesetCompiler {
         LinkedHashMap<String, StatePersistencePolicy> persistencePolicies = new LinkedHashMap<>();
         LinkedHashSet<String> damageTypes = new LinkedHashSet<>();
         LinkedHashSet<String> conditions = new LinkedHashSet<>();
-        ArrayList<CompiledRuleset.ProgressionDefinition> progressions = new ArrayList<>();
+        LinkedHashMap<String, CompiledRuleset.ProgressionDefinition> progressions = new LinkedHashMap<>();
 
         validateDeclaredLinks(enabled, entities, aliases);
         for (RuleEntity entity : enabled) {
@@ -69,12 +113,16 @@ public final class RulesetCompiler {
                 conditions.add(entity.id());
                 integer(attributes, "maximumStacks", entity, 1, 1, 1_000);
             }
-            if (stateful(entity.kind()) && declaresStatePolicy(attributes)) {
+            if (supportsStatePolicy(entity.kind()) && declaresStatePolicy(attributes)) {
                 persistencePolicies.put(entity.id(), statePolicy(entity));
             }
             if (entity.automationLevel() == RuleAutomationLevel.MANUAL) continue;
             switch (entity.kind()) {
-                case ROLL, RANDOMIZER -> randomizers.put(entity.id(), randomizer(entity));
+                case RANDOMIZER -> randomizers.put(entity.id(), randomizer(entity));
+                case ROLL -> {
+                    if (declaresRollResolution(entity)) rolls.put(entity.id(), roll(entity));
+                    else randomizers.put(entity.id(), randomizer(entity));
+                }
                 case STAT, SAVE, DEFENSE -> stats.put(entity.id(), stat(entity));
                 case SKILL -> skills.put(entity.id(), skill(entity, aliases));
                 case VALUE -> valueDefinitions.put(entity.id(), valueDefinition(entity));
@@ -107,33 +155,33 @@ public final class RulesetCompiler {
                     CompiledRuleset.SceneProcedureDefinition procedure = sceneProcedure(entity);
                     if (procedure != null) sceneProcedures.put(entity.id(), procedure);
                 }
-                case PROGRESSION -> progressions.add(progression(entity));
+                case PROGRESSION -> progressions.put(entity.id(), progression(entity));
                 default -> { /* Rappresentabile/manuale, nessuna primitiva da compilare qui. */ }
             }
         }
 
-        validateDefinitions(entities, aliases, stats, skills, valueDefinitions, randomizers, tables, resources, turnStructures,
-                actions, modifiers, triggers, conditions, healthModels, sheetSections, sceneProcedures, progressions);
-        validateFormulaReferences(stats, skills, valueDefinitions, randomizers, tables, resources, turnStructures,
+        validateDefinitions(entities, aliases, stats, skills, valueDefinitions, randomizers, rolls, tables, resources, turnStructures,
+                actions, modifiers, triggers, conditions, healthModels, sheetSections, sceneProcedures,
+                progressions.values());
+        validateFormulaReferences(stats, skills, valueDefinitions, randomizers, rolls, tables, resources, turnStructures,
                 actions, modifiers, triggers, conditions, sheetSections, aliases);
         validateFormulaCycles(stats, skills, valueDefinitions, modifiers, aliases);
         validateRuntimeStateCycles(resources, turnStructures, aliases);
 
-        CompiledRuleset.ProgressionDefinition progression = progressions.stream()
-                .filter(candidate -> !candidate.experienceTableRef().isEmpty())
-                .findFirst().orElse(progressions.isEmpty() ? null : progressions.get(0));
+        CompiledRuleset.ProgressionDefinition progression = defaultExperienceProgression(
+                progressions.values());
         long manualCount = enabled.stream().filter(entity -> entity.automationLevel() == RuleAutomationLevel.MANUAL).count();
         CompiledRuleset.CapabilityProfile profile = new CompiledRuleset.CapabilityProfile(
                 !stats.isEmpty(), !skills.isEmpty(), !randomizers.isEmpty(),
-                hasFormulas(stats, skills, resources, modifiers),
+                hasFormulas(stats, skills, resources, modifiers, rolls),
                 !tables.isEmpty(), !resources.isEmpty(), !triggers.isEmpty(), !turnStructures.isEmpty(),
                 !damageTypes.isEmpty(), !conditions.isEmpty(), !valueDefinitions.isEmpty(),
                 !healthModels.isEmpty(), !movementModels.isEmpty(), !sheetSections.isEmpty(),
                 !sceneProcedures.isEmpty(), !persistencePolicies.isEmpty(), manualCount);
-        return new CompiledRuleset(canonicalHash, entities, aliases, stats, skills, valueDefinitions, randomizers, tables,
+        return new CompiledRuleset(canonicalHash, entities, aliases, stats, skills, valueDefinitions, randomizers, rolls, tables,
                 resources, turnStructures, actions, modifiers, triggers, conditionDefinitions, healthModels,
                 movementModels, sheetSections, sceneProcedures, persistencePolicies, damageTypes, conditions,
-                progression, profile);
+                progressions, progression, profile);
     }
 
     private static CompiledRuleset.RandomizerDefinition randomizer(RuleEntity entity) {
@@ -153,6 +201,30 @@ public final class RulesetCompiler {
                 formula(attributes, "successThresholdFormula",
                         attributes.getOrDefault("successThreshold", "1"), entity),
                 attributes.getOrDefault("tableRef", ""));
+    }
+
+    private static boolean declaresRollResolution(RuleEntity entity) {
+        return entity.attributes().keySet().stream().anyMatch(ROLL_RESOLUTION_ATTRIBUTES::contains);
+    }
+
+    private static CompiledRuleset.RollDefinition roll(RuleEntity entity) {
+        Map<String, String> attributes = entity.attributes();
+        int threatMinimum = integer(attributes, "threatMinimumNatural", entity, 0, 0, 1_000_000);
+        return new CompiledRuleset.RollDefinition(
+                entity.id(),
+                required(attributes, "randomizerRef", entity),
+                formula(attributes, "totalFormula", "${roll}", entity),
+                formula(attributes, "targetFormula", "0", entity),
+                enumeration(attributes, "comparison", CompiledRuleset.RollComparison.class,
+                        CompiledRuleset.RollComparison.MEET_OR_EXCEED, entity),
+                integer(attributes, "naturalSuccessMinimum", entity, 0, 0, 1_000_000),
+                integer(attributes, "naturalFailureMaximum", entity, 0, 0, 1_000_000),
+                threatMinimum,
+                bool(attributes, "confirmationRequired", entity, false),
+                integer(attributes, "criticalMultiplier", entity,
+                        threatMinimum > 0 ? 2 : 1, 1, 100),
+                attributes.getOrDefault("outcomeTableRef", ""),
+                attributes.getOrDefault("opposedRollRef", ""));
     }
 
     private static CompiledRuleset.StatDefinition stat(RuleEntity entity) {
@@ -329,13 +401,6 @@ public final class RulesetCompiler {
                 bool(attributes, "boardRequired", entity, false));
     }
 
-    private static boolean stateful(RuleKind kind) {
-        return switch (kind) {
-            case STAT, SKILL, SAVE, DEFENSE, VALUE, RESOURCE, TRACK, CONDITION, ACTION_ECONOMY -> true;
-            default -> false;
-        };
-    }
-
     private static boolean declaresStatePolicy(Map<String, String> attributes) {
         return attributes.containsKey("lifetime") || attributes.containsKey("owner")
                 || attributes.containsKey("syncPolicy") || attributes.containsKey("resetEvent");
@@ -429,13 +494,26 @@ public final class RulesetCompiler {
                 throw invalid(entity, "valueLiteral", failure.getMessage());
             }
         }
+        String group = attributes.getOrDefault("group", "").trim();
+        CompiledRuleset.ModifierStacking stacking = enumeration(
+                attributes, "stacking", CompiledRuleset.ModifierStacking.class,
+                group.isEmpty()
+                        ? CompiledRuleset.ModifierStacking.STACK
+                        : CompiledRuleset.ModifierStacking.HIGHEST_PRIORITY,
+                entity);
+        String sourceRef = attributes.getOrDefault(
+                "sourceRef", owner.isBlank() ? entity.id() : owner);
         return new CompiledRuleset.ModifierDefinition(
                 entity.id(), owner, target,
                 enumeration(attributes, "operation", CompiledRuleset.ModifierOperation.class,
                         CompiledRuleset.ModifierOperation.ADD, entity),
                 compile(valueSource, entity, "valueFormula"),
                 formula(attributes, "conditionFormula", "1", entity),
-                attributes.getOrDefault("group", ""),
+                group,
+                stacking,
+                sourceRef,
+                enumeration(attributes, "phase", CompiledRuleset.ModifierPhase.class,
+                        CompiledRuleset.ModifierPhase.LEGACY, entity),
                 integer(attributes, "priority", entity, 0, -1_000_000, 1_000_000),
                 integer(attributes, "minimumLevel", entity, 1, 1, 1_000_000),
                 application,
@@ -457,10 +535,37 @@ public final class RulesetCompiler {
     private static CompiledRuleset.ProgressionDefinition progression(RuleEntity entity) {
         Map<String, String> attributes = entity.attributes();
         int minimum = integer(attributes, "minimumLevel", entity, 1, 0, 1_000_000);
-        int maximum = integer(attributes, "maximumCharacterLevel", entity,
-                integer(attributes, "maximumLevel", entity, 20, minimum, 1_000_000), minimum, 1_000_000);
+        int maximum = attributes.containsKey("maximumLevel")
+                ? integer(attributes, "maximumLevel", entity, 20, minimum, 1_000_000)
+                : integer(attributes, "maximumCharacterLevel", entity, 20, minimum, 1_000_000);
+        TreeMap<String, String> tracks = new TreeMap<>();
+        attributes.forEach((key, value) -> {
+            if (!key.startsWith("track.")) return;
+            String trackId = key.substring("track.".length()).trim();
+            if (trackId.isEmpty()) throw invalid(entity, key, "track id cannot be blank");
+            if (value == null || value.isBlank()) throw invalid(entity, key, "table reference cannot be blank");
+            if (tracks.putIfAbsent(trackId, value.trim()) != null) {
+                throw invalid(entity, key, "duplicates normalized track id " + trackId);
+            }
+        });
         return new CompiledRuleset.ProgressionDefinition(entity.id(),
-                attributes.getOrDefault("experienceTableRef", ""), minimum, maximum);
+                attributes.getOrDefault("experienceTableRef", ""), minimum, maximum,
+                tracks, bool(attributes, "defaultExperience", entity, false));
+    }
+
+    private static CompiledRuleset.ProgressionDefinition defaultExperienceProgression(
+            Collection<CompiledRuleset.ProgressionDefinition> progressions) {
+        List<CompiledRuleset.ProgressionDefinition> experience = progressions.stream()
+                .filter(candidate -> !candidate.experienceTableRef().isEmpty()).toList();
+        if (experience.isEmpty()) return null;
+        if (experience.size() == 1) return experience.get(0);
+        List<CompiledRuleset.ProgressionDefinition> defaults = experience.stream()
+                .filter(CompiledRuleset.ProgressionDefinition::defaultExperience).toList();
+        if (defaults.size() != 1) {
+            throw new IllegalArgumentException(
+                    "Multiple experience progressions require exactly one defaultExperience=true");
+        }
+        return defaults.get(0);
     }
 
     private static void validateDefinitions(
@@ -470,6 +575,7 @@ public final class RulesetCompiler {
             Map<String, CompiledRuleset.SkillDefinition> skills,
             Map<String, CompiledRuleset.ValueDefinition> valueDefinitions,
             Map<String, CompiledRuleset.RandomizerDefinition> randomizers,
+            Map<String, CompiledRuleset.RollDefinition> rolls,
             Map<String, CompiledRuleset.TableDefinition> tables,
             Map<String, CompiledRuleset.ResourceDefinition> resources,
             Map<String, CompiledRuleset.TurnStructureDefinition> turnStructures,
@@ -480,7 +586,7 @@ public final class RulesetCompiler {
             Map<String, CompiledRuleset.HealthModelDefinition> healthModels,
             Map<String, CompiledRuleset.SheetSectionDefinition> sheetSections,
             Map<String, CompiledRuleset.SceneProcedureDefinition> sceneProcedures,
-            List<CompiledRuleset.ProgressionDefinition> progressions) {
+            Collection<CompiledRuleset.ProgressionDefinition> progressions) {
         skills.values().forEach(skill -> requireKind(skill.id(), "statRef", resolve(skill.statRef(), aliases),
                 stats.keySet(), "an executable stat"));
         valueDefinitions.values().forEach(value -> {
@@ -491,6 +597,26 @@ public final class RulesetCompiler {
         });
         randomizers.values().stream().filter(value -> !value.tableRef().isEmpty()).forEach(value ->
                 requireKind(value.id(), "tableRef", resolve(value.tableRef(), aliases), tables.keySet(), "a table"));
+        rolls.values().forEach(roll -> {
+            requireKind(roll.id(), "randomizerRef", resolve(roll.randomizerRef(), aliases),
+                    randomizers.keySet(), "a randomizer");
+            if (!roll.outcomeTableRef().isEmpty()) {
+                requireKind(roll.id(), "outcomeTableRef", resolve(roll.outcomeTableRef(), aliases),
+                        tables.keySet(), "a table");
+            }
+            if (!roll.opposedRollRef().isEmpty()) {
+                String opposedId = resolve(roll.opposedRollRef(), aliases);
+                requireKind(roll.id(), "opposedRollRef", opposedId, rolls.keySet(), "a roll");
+                if (opposedId.equals(roll.id())) {
+                    throw new IllegalArgumentException(roll.id() + ".opposedRollRef cannot reference itself");
+                }
+                CompiledRuleset.RollDefinition opposed = rolls.get(opposedId);
+                if (opposed != null && !opposed.opposedRollRef().isEmpty()) {
+                    throw new IllegalArgumentException(
+                            roll.id() + ".opposedRollRef cannot reference another opposed roll");
+                }
+            }
+        });
         LinkedHashSet<String> turnResourceIds = new LinkedHashSet<>();
         turnStructures.values().forEach(structure -> structure.budgets().keySet().forEach(id -> {
             if (!turnResourceIds.add(id)) throw new IllegalArgumentException("Turn resource " + id + " is declared twice");
@@ -549,6 +675,7 @@ public final class RulesetCompiler {
                         conditions, "a condition");
             }
         });
+        validateModifierStacking(modifiers, aliases);
         triggers.values().forEach(trigger -> trigger.effectRefs()
                 .forEach(ref -> requireEffect(trigger.id(), ref, modifiers, aliases, true)));
         healthModels.values().forEach(model -> {
@@ -580,9 +707,6 @@ public final class RulesetCompiler {
         });
         List<CompiledRuleset.ProgressionDefinition> experienceProgressions = progressions.stream()
                 .filter(candidate -> !candidate.experienceTableRef().isEmpty()).toList();
-        if (experienceProgressions.size() > 1) {
-            throw new IllegalArgumentException("A ruleset can define only one executable experience progression");
-        }
         experienceProgressions.forEach(progression -> {
             String table = resolve(progression.experienceTableRef(), aliases);
             requireKind(progression.id(), "experienceTableRef", table, tables.keySet(), "a table");
@@ -618,6 +742,93 @@ public final class RulesetCompiler {
                 previousLevel = level;
             }
         });
+        progressions.forEach(progression -> progression.trackTableRefs().forEach((trackId, rawTableRef) -> {
+            String field = "track." + trackId;
+            String table = resolve(rawTableRef, aliases);
+            requireKind(progression.id(), field, table, tables.keySet(), "a table");
+            CompiledRuleset.TableDefinition definition = tables.get(table);
+            if (definition.rows().values().stream().anyMatch(value -> value.type() != RuleValue.Type.NUMBER)) {
+                throw new IllegalArgumentException(
+                        progression.id() + '.' + field + " must point to a numeric table");
+            }
+            try {
+                definition.value(BigDecimal.valueOf(progression.minimumLevel())).asNumber();
+                definition.value(BigDecimal.valueOf(progression.maximumLevel())).asNumber();
+            } catch (RuntimeException failure) {
+                throw new IllegalArgumentException(
+                        progression.id() + '.' + field
+                                + " does not cover the declared level range "
+                                + progression.minimumLevel() + ".." + progression.maximumLevel(),
+                        failure);
+            }
+            if (definition.lookup() == CompiledRuleset.TableLookup.EXACT) {
+                long expectedRows = (long) progression.maximumLevel() - progression.minimumLevel() + 1L;
+                long coveredRows = definition.rows().keySet().stream().filter(key -> {
+                    try {
+                        int level = key.intValueExact();
+                        return level >= progression.minimumLevel() && level <= progression.maximumLevel();
+                    } catch (ArithmeticException failure) {
+                        return false;
+                    }
+                }).count();
+                if (coveredRows != expectedRows) {
+                    throw new IllegalArgumentException(
+                            progression.id() + '.' + field
+                                    + " must define every integer level in the declared range");
+                }
+            }
+        }));
+    }
+
+    private static void validateModifierStacking(
+            Map<String, CompiledRuleset.ModifierDefinition> modifiers,
+            Map<String, String> aliases) {
+        LinkedHashMap<String, List<CompiledRuleset.ModifierDefinition>> byTarget = new LinkedHashMap<>();
+        modifiers.values().stream()
+                .filter(modifier -> modifier.application() == CompiledRuleset.EffectApplication.STATIC)
+                .forEach(modifier -> byTarget
+                        .computeIfAbsent(resolve(modifier.targetRef(), aliases), ignored -> new ArrayList<>())
+                        .add(modifier));
+        byTarget.forEach((target, targetModifiers) -> {
+            boolean legacy = targetModifiers.stream()
+                    .anyMatch(modifier -> modifier.phase() == CompiledRuleset.ModifierPhase.LEGACY);
+            boolean phased = targetModifiers.stream()
+                    .anyMatch(modifier -> modifier.phase() != CompiledRuleset.ModifierPhase.LEGACY);
+            if (legacy && phased) {
+                throw new IllegalArgumentException(
+                        "Static modifiers for " + target + " cannot mix LEGACY and explicit phases");
+            }
+
+            LinkedHashMap<String, List<CompiledRuleset.ModifierDefinition>> groups = new LinkedHashMap<>();
+            targetModifiers.stream().filter(modifier -> !modifier.group().isEmpty()).forEach(modifier ->
+                    groups.computeIfAbsent(modifier.group(), ignored -> new ArrayList<>()).add(modifier));
+            groups.forEach((group, members) -> {
+                CompiledRuleset.ModifierDefinition first = members.get(0);
+                if (members.stream().anyMatch(member -> member.stacking() != first.stacking())) {
+                    throw new IllegalArgumentException(
+                            "Modifier group " + group + " for " + target + " declares different stacking policies");
+                }
+                if (members.stream().anyMatch(member -> member.phase() != first.phase())) {
+                    throw new IllegalArgumentException(
+                            "Modifier group " + group + " for " + target + " spans different phases");
+                }
+                if (first.stacking() == CompiledRuleset.ModifierStacking.HIGHEST_VALUE
+                        || first.stacking() == CompiledRuleset.ModifierStacking.LOWEST_VALUE
+                        || first.stacking()
+                        == CompiledRuleset.ModifierStacking.HIGHEST_BONUS_AND_LOWEST_PENALTY) {
+                    if (members.stream().anyMatch(member -> member.operation() != first.operation())) {
+                        throw new IllegalArgumentException(
+                                "Value-selected modifier group " + group + " must use one operation");
+                    }
+                }
+                if (first.stacking()
+                        == CompiledRuleset.ModifierStacking.HIGHEST_BONUS_AND_LOWEST_PENALTY
+                        && first.operation() != CompiledRuleset.ModifierOperation.ADD) {
+                    throw new IllegalArgumentException(
+                            "HIGHEST_BONUS_AND_LOWEST_PENALTY group " + group + " must use ADD");
+                }
+            });
+        });
     }
 
     private static void requireEffect(
@@ -642,6 +853,7 @@ public final class RulesetCompiler {
             Map<String, CompiledRuleset.SkillDefinition> skills,
             Map<String, CompiledRuleset.ValueDefinition> valueDefinitions,
             Map<String, CompiledRuleset.RandomizerDefinition> randomizers,
+            Map<String, CompiledRuleset.RollDefinition> rolls,
             Map<String, CompiledRuleset.TableDefinition> tables,
             Map<String, CompiledRuleset.ResourceDefinition> resources,
             Map<String, CompiledRuleset.TurnStructureDefinition> turnStructures,
@@ -668,6 +880,10 @@ public final class RulesetCompiler {
             add(formulas, value.id(), "sidesFormula", value.sidesFormula());
             add(formulas, value.id(), "successThresholdFormula", value.successThresholdFormula());
         });
+        rolls.values().forEach(value -> {
+            add(formulas, value.id(), "totalFormula", value.totalFormula());
+            add(formulas, value.id(), "targetFormula", value.targetFormula());
+        });
         resources.values().forEach(value -> {
             add(formulas, value.id(), "maximumFormula", value.maximumFormula());
             add(formulas, value.id(), "initialFormula", value.initialFormula());
@@ -692,6 +908,8 @@ public final class RulesetCompiler {
         turnStructures.values().forEach(structure -> turnResourceIds.addAll(structure.budgets().keySet()));
         for (OwnedFormula owned : formulas) {
             for (String rawRef : owned.formula.valueReferences()) {
+                if ("totalFormula".equals(owned.field)
+                        && ("roll".equals(rawRef) || "natural".equals(rawRef))) continue;
                 if (LOCAL_FORMULA_VALUES.contains(rawRef) || rawRef.startsWith("context:")
                         || rawRef.startsWith("level:")) continue;
                 if (rawRef.startsWith("resource:") && (rawRef.endsWith(":current") || rawRef.endsWith(":maximum"))) {
@@ -855,6 +1073,16 @@ public final class RulesetCompiler {
                     csv(value).forEach(ref -> requireEntity(entity.id(), key, ref, entities, aliases));
                 }
             });
+            if (entity.kind() == RuleKind.CLASS) {
+                String rawProgression = entity.attributes().getOrDefault("progressionEntityRef", "").trim();
+                if (!rawProgression.isEmpty()) {
+                    RuleEntity target = entities.get(resolve(rawProgression, aliases));
+                    if (target == null || target.kind() != RuleKind.PROGRESSION) {
+                        throw new IllegalArgumentException(entity.id()
+                                + ".progressionEntityRef must reference a progression");
+                    }
+                }
+            }
         });
     }
 
@@ -930,8 +1158,9 @@ public final class RulesetCompiler {
     private static RuleFormula optionalFormula(
             Map<String, String> attributes,
             String key,
-            String source,
+            String fallback,
             RuleEntity entity) {
+        String source = attributes.containsKey(key) ? attributes.get(key) : fallback;
         return source == null || source.isBlank() ? null : compile(source, entity, key);
     }
 
@@ -1048,8 +1277,10 @@ public final class RulesetCompiler {
             Map<String, CompiledRuleset.StatDefinition> stats,
             Map<String, CompiledRuleset.SkillDefinition> skills,
             Map<String, CompiledRuleset.ResourceDefinition> resources,
-            Map<String, CompiledRuleset.ModifierDefinition> modifiers) {
-        return !stats.isEmpty() || !skills.isEmpty() || !resources.isEmpty() || !modifiers.isEmpty();
+            Map<String, CompiledRuleset.ModifierDefinition> modifiers,
+            Map<String, CompiledRuleset.RollDefinition> rolls) {
+        return !stats.isEmpty() || !skills.isEmpty() || !resources.isEmpty()
+                || !modifiers.isEmpty() || !rolls.isEmpty();
     }
 
     private static Set<String> union(Set<String> first, Set<String> second) {

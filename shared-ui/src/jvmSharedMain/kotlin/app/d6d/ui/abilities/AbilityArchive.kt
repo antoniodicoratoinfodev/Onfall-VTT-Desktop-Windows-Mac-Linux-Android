@@ -28,7 +28,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.i18n.label
@@ -53,6 +52,7 @@ import app.d6d.sheet.CatalogHealing
 import app.d6d.sheet.CatalogHealingBonusSource
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.DialogTitle
 import app.d6d.ui.sheet.SheetBox
 import app.d6d.ui.sheet.SheetCheck
 import app.d6d.ui.sheet.SheetField
@@ -63,6 +63,7 @@ import app.d6d.ui.sheet.SheetViewModel
 import app.d6d.ui.sheet.readableText
 import app.d6d.ui.runDiskIo
 import app.d6d.ui.i18n.strings
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import kotlinx.coroutines.launch
 
@@ -164,9 +165,9 @@ fun AbilityArchive(
                     Text(
                         text = draft.name.ifBlank { words.newAbility },
                         color = Palette.Text,
-                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        style = OnfallTheme.typography.abilityName,
                     )
                 }
                 AbilityDetails(
@@ -258,7 +259,7 @@ fun AbilityArchive(
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             containerColor = Palette.Surface,
-            title = { Text(words.deleteAbilityTitle, color = Palette.Text) },
+            title = { DialogTitle(words.deleteAbilityTitle) },
             text = {
                 Text(
                     if (usage == 0) {
@@ -353,8 +354,7 @@ private fun ReadOnlyAbilityDetails(
                 Text(
                     text = ability.name.ifBlank { strings.compendium.unnamed },
                     color = Palette.Text,
-                    fontWeight = FontWeight.Black,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = OnfallTheme.typography.abilityNameLarge,
                 )
                 AbilityMetadataChips(ability, classNames)
                 Text(

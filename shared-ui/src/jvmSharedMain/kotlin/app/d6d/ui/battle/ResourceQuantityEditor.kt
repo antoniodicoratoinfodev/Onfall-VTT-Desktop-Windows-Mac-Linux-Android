@@ -33,19 +33,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.d6d.domain.combat.TurnResource
 import app.d6d.ui.components.dismissDialogOnTap
 import app.d6d.ui.components.keepDialogOpenOnTap
 import app.d6d.ui.i18n.strings
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.ornateFrame
@@ -139,8 +137,7 @@ internal fun ResourceQuantityEditor(
                         Text(
                             text = "$remaining/$maximum",
                             color = target.accent,
-                            fontWeight = FontWeight.Black,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = OnfallTheme.typography.numberMedium,
                         )
                     }
                     Column(
@@ -150,13 +147,11 @@ internal fun ResourceQuantityEditor(
                         Text(
                             text = words.resourceEditorEyebrow,
                             color = target.accent,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = OnfallTheme.typography.sectionLabel,
                         )
                         Text(
                             text = words.editResourceFor(target.name, combatantName),
                             color = Palette.Text,
-                            fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.titleLarge,
                         )
                     }
@@ -261,8 +256,7 @@ private fun QuantityCard(
         Text(
             text = label,
             color = Palette.Text,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodyMedium,
+            style = OnfallTheme.typography.bodyEmphasis,
             modifier = Modifier.weight(1f),
         )
         GameButton(
@@ -312,10 +306,8 @@ private fun QuantityField(
             onChange(parsed.coerceIn(range))
         },
         singleLine = true,
-        textStyle = TextStyle(
+        textStyle = OnfallTheme.typography.numberMedium.copy(
             color = Palette.Text,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Black,
             textAlign = TextAlign.Center,
         ),
         cursorBrush = SolidColor(accent),

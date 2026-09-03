@@ -27,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -46,6 +45,7 @@ import app.d6d.ui.i18n.strings
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
 
@@ -137,7 +137,6 @@ fun BattleToolsDialog(
                         Text(
                             words.tableToolsTitle,
                             color = Palette.Text,
-                            fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
@@ -574,7 +573,7 @@ private fun GenericResourceEditor(
     val italian = strings.language.tag == "it"
     var currentDraft by remember(entityId, current) { mutableStateOf(current) }
     var maximumDraft by remember(entityId, maximum) { mutableStateOf(maximum) }
-    Text(label, color = Palette.Text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+    Text(label, color = Palette.Text, style = OnfallTheme.typography.bodyEmphasis)
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(7.dp),

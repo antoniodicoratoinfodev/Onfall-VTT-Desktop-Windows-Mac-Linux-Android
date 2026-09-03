@@ -32,13 +32,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import app.d6d.ui.i18n.strings
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 
 /**
@@ -89,7 +88,7 @@ fun EditableValue(
             value = draft,
             onValueChange = { draft = it },
             singleLine = true,
-            textStyle = TextStyle(color = Palette.Text, fontSize = 13.sp),
+            textStyle = OnfallTheme.typography.fieldValue.copy(color = Palette.Text),
             cursorBrush = SolidColor(Palette.Gold),
             keyboardOptions = KeyboardOptions(
                 keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text,

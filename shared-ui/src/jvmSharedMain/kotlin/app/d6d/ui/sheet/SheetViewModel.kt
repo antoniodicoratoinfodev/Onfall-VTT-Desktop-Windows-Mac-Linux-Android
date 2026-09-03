@@ -28,7 +28,6 @@ import app.d6d.rules.character.LevelUpRequest
 import app.d6d.rules.character.RecoveryPeriod
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.SpellcastingKind
-import app.d6d.rules.model.RulesetOrigin
 import app.d6d.rules.model.RulesetRevision
 import app.d6d.rules.model.RuleKind
 import app.d6d.sheet.ArmorClassMethod
@@ -104,6 +103,9 @@ class SheetViewModel(
     private val store: SheetStore,
     loadOnCreate: Boolean = true,
     private val rulesetProvider: () -> List<RulesetRevision> = { listOf(Srd521Ruleset.revision) },
+    private val defaultRulesetHashProvider: () -> String = {
+        Srd521Ruleset.revision.canonicalHash()
+    },
 ) {
     val availableRulesets: List<RulesetRevision>
         get() = rulesetProvider()
@@ -116,16 +118,22 @@ class SheetViewModel(
             }
             .ifEmpty { listOf(Srd521Ruleset.revision) }
 
-    private val standardRuleset: RulesetRevision
-        get() = availableRulesets.firstOrNull { it.origin() == RulesetOrigin.BUNDLED_STANDARD }
-            ?: Srd521Ruleset.revision
+    private val defaultRuleset: RulesetRevision
+        get() {
+            val available = availableRulesets
+            return available.firstOrNull {
+                it.canonicalHash() == defaultRulesetHashProvider()
+            } ?: available.firstOrNull {
+                it.canonicalHash() == Srd521Ruleset.revision.canonicalHash()
+            } ?: available.first()
+        }
 
     var selectedCharacterRulesetHash by mutableStateOf(Srd521Ruleset.revision.canonicalHash())
         private set
 
     val selectedCharacterRuleset: RulesetRevision
         get() = availableRulesets.firstOrNull { it.canonicalHash() == selectedCharacterRulesetHash }
-            ?: standardRuleset
+            ?: defaultRuleset
 
     /**
      * Una scheda già configurata può riferirsi a una revisione rimossa dalla
@@ -252,7 +260,7 @@ class SheetViewModel(
             return availableRulesets.firstOrNull { it.canonicalHash() == exactHash }
         }
         // Le schede precedenti al binding appartengono al pacchetto SRD incluso.
-        return standardRuleset
+        return defaultRuleset
     }
 
     /** Definizioni fotografate dalla revisione della scheda; per una bozza nuova usa la revisione selezionata. */
@@ -1255,7 +1263,7 @@ class SheetViewModel(
         selectedCharacterRulesetHash = sheet.progression.rulesetCanonicalHash
             .ifBlank { sheet.modularSheet.rulesetCanonicalHash }
             .takeIf(String::isNotBlank)
-            ?: standardRuleset.canonicalHash()
+            ?: defaultRuleset.canonicalHash()
         selectedId = sheet.id
         pristineNewCharacter = null
     }
@@ -1271,7 +1279,7 @@ class SheetViewModel(
         val stamp = System.currentTimeMillis()
         when (kind) {
             SheetKind.PERSONAGGIO -> {
-                selectedCharacterRulesetHash = standardRuleset.canonicalHash()
+                selectedCharacterRulesetHash = defaultRuleset.canonicalHash()
                 character = CharacterSheet(
                     id = "pg-$stamp",
                     armorClassMethod = ArmorClassMethod.UNARMORED,
@@ -1282,7 +1290,7 @@ class SheetViewModel(
                     // inglese marcato italiano, e al riavvio non si traduceva.
                     contentLanguage = AppLocale.language,
                     modularSheet = RuleDrivenSheetProjector.project(
-                        standardRuleset,
+                        defaultRuleset,
                         AppLocale.language.tag,
                     ),
                 )

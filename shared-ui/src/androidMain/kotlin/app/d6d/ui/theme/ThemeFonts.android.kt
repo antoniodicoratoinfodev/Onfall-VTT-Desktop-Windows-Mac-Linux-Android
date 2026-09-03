@@ -9,7 +9,7 @@ import java.io.File
  *
  * Il file si scrive nella cartella temporanea dell'applicazione — su Android e' la
  * sua cache privata — e ci resta per la durata del processo. E' una scrittura per
- * carattere all'avvio, quattro in tutto, ed e' il prezzo per avere gli stessi
+ * carattere all'avvio, otto in tutto, ed e' il prezzo per avere gli stessi
  * caratteri del desktop invece di quelli che capita di trovare sul telefono.
  */
 internal actual fun themeFont(identity: String, data: ByteArray, weight: FontWeight): Font {

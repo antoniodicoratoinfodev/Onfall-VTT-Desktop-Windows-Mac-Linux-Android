@@ -27,7 +27,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.domain.combat.ConditionType
 import app.d6d.domain.combat.DamageType
@@ -50,12 +49,14 @@ import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.runDiskIo
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.ClassIcon
+import app.d6d.ui.components.DialogTitle
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.i18n.label
 import app.d6d.i18n.pick
 import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.OnfallTheme
 import kotlinx.coroutines.launch
 
 /**
@@ -108,7 +109,6 @@ fun MonsterStatBlockEditor(
                     Text(
                         text = block.name.ifBlank { words.unnamedCreature },
                         color = Palette.GoldBright,
-                        fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.displaySmall,
                     )
                     Text(block.subtitle(language), color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
@@ -355,7 +355,6 @@ fun MonsterStatBlockEditor(
                             Text(
                                 ability.abbreviation,
                                 color = Palette.Gold,
-                                fontWeight = FontWeight.Black,
                                 style = MaterialTheme.typography.labelSmall,
                             )
                             SheetNumberField("", block.score(ability)) { score ->
@@ -368,8 +367,7 @@ fun MonsterStatBlockEditor(
                             Text(
                                 signed(abilityModifier(block.score(ability))),
                                 color = Palette.Text,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = OnfallTheme.typography.numberSmall,
                             )
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -579,7 +577,7 @@ fun MonsterStatBlockEditor(
         AlertDialog(
             onDismissRequest = { deleteId = null },
             containerColor = Palette.Surface,
-            title = { Text(words.deleteStatBlockTitle, color = Palette.Text) },
+            title = { DialogTitle(words.deleteStatBlockTitle) },
             text = {
                 Text(
                     words.deleteStatBlockBody(block.name.ifBlank { words.unnamedCreature }),

@@ -25,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.rules.character.EffectTarget
 import app.d6d.sheet.Ability
@@ -37,6 +36,7 @@ import app.d6d.sheet.ArmorSpecialRule
 import app.d6d.sheet.CharacterSheet
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.Eyebrow
 import app.d6d.i18n.AppLanguage
 import app.d6d.i18n.abbreviationIn
 import app.d6d.i18n.pick
@@ -46,6 +46,7 @@ import app.d6d.ui.i18n.SheetStrings
 import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.OnfallTheme
 
 // --- classe armatura ---------------------------------------------------------------
 
@@ -147,8 +148,7 @@ private fun ArmorRuleWarnings(sheet: CharacterSheet) {
                     sheet.wornArmorCategory?.label(language).orEmpty(),
                 ),
                 color = Palette.Bloodied,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodySmall,
+                style = OnfallTheme.typography.supportingEmphasis,
             )
         }
         if (insufficientStrength) {
@@ -188,7 +188,7 @@ private fun ArmorClassBaseEditor(
             .padding(9.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Text(words.baseMethodCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+        Eyebrow(words.baseMethodCaps)
         ArmorClassMethodSelector(
             selected = sheet.armorClassMethod,
             compact = compact,
@@ -366,8 +366,7 @@ private fun ArmorClassBaseEditor(
         Text(
             armorClassBaseFormula(sheet, words, language),
             color = Palette.Party,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodySmall,
+            style = OnfallTheme.typography.supportingEmphasis,
         )
     }
 }
@@ -555,7 +554,7 @@ private fun ArmorClassAdjustmentsEditor(
             .padding(9.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Text(words.armorClassModifiersCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+        Eyebrow(words.armorClassModifiersCaps)
 
         SheetCheck(
             label = when {

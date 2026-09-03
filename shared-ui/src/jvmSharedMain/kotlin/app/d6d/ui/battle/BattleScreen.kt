@@ -49,7 +49,6 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -75,6 +74,7 @@ import app.d6d.ui.session.SessionMenuDialog
 import app.d6d.ui.session.SessionWorkspace
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.GoldenRule
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.i18n.label
 import app.d6d.ui.i18n.currentLanguage
@@ -185,8 +185,7 @@ fun BattleScreen(
                 Text(
                     text = strings.battle.resolvedImmediately(resolution.text),
                     color = tone,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = OnfallTheme.typography.supportingEmphasis,
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(tone.copy(alpha = 0.13f))
@@ -199,8 +198,7 @@ fun BattleScreen(
                 Text(
                     text = strings.battle.warning(text),
                     color = Palette.Bloodied,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = OnfallTheme.typography.supportingEmphasis,
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Palette.Bloodied.copy(alpha = 0.13f))
@@ -434,8 +432,7 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
                 Text(
                     text = strings.battle.eventLogTitle,
                     color = Palette.Gold,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = OnfallTheme.typography.sectionLabel,
                 )
                 if (!collapsed) {
                     Text(
@@ -448,7 +445,6 @@ private fun CollapsibleBattleLog(viewModel: BattleViewModel) {
             Text(
                 text = if (collapsed) strings.battle.openArrow else strings.battle.collapseArrow,
                 color = Palette.TextMuted,
-                fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.clickable {
                     if (collapsed) layout.logHeight = defaultHeight
@@ -1183,7 +1179,7 @@ private fun TurnsLabel(
         Text(
             text = words.turnOrderTitle,
             color = Palette.Gold,
-            style = MaterialTheme.typography.labelSmall,
+            style = OnfallTheme.typography.sectionLabel,
             maxLines = 1,
             softWrap = false,
         )
@@ -1207,8 +1203,7 @@ private fun BattleMark() {
         Text(
             text = "T",
             color = Palette.Abyss,
-            fontWeight = FontWeight.Black,
-            style = MaterialTheme.typography.titleMedium,
+            style = OnfallTheme.typography.tokenInitials,
         )
     }
 }
@@ -1219,7 +1214,6 @@ private fun BattleTitle(sessions: SessionManager, modifier: Modifier = Modifier)
         Text(
             text = sessions.currentDisplayName.ifBlank { strings.battle.unnamedEncounter },
             color = Palette.Text,
-            fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.titleMedium,

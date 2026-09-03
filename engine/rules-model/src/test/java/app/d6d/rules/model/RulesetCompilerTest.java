@@ -17,6 +17,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RulesetCompilerTest {
 
     @Test
+    void statFormulaFieldsTakePrecedenceOverLegacyLimitAliases() {
+        CompiledRuleset rules = revision("test:stat-limits", List.of(
+                entity("test:stat:focus", RuleKind.STAT, Map.of(
+                        "defaultFormula", "10",
+                        "minimum", "1",
+                        "minimumFormula", "2 + 1",
+                        "maximum", "20",
+                        "maximumFormula", "30")))).compile();
+
+        CompiledRuleset.StatDefinition stat = rules.stats().get("test:stat:focus");
+
+        assertEquals(new BigDecimal("3"), stat.minimumFormula().evaluate(
+                RuleFormula.context(Map.of(), Map.of())));
+        assertEquals(new BigDecimal("30"), stat.maximumFormula().evaluate(
+                RuleFormula.context(Map.of(), Map.of())));
+
+        CompiledRuleset withoutLimit = revision("test:stat-no-limit", List.of(
+                entity("test:stat:focus", RuleKind.STAT, Map.of(
+                        "defaultFormula", "10", "minimum", "1", "minimumFormula", ""))))
+                .compile();
+        assertEquals(null, withoutLimit.stats().get("test:stat:focus").minimumFormula());
+    }
+
+    @Test
     void executesSyntheticThreePointFiveLikeRulesWithoutEditionSpecificCode() {
         List<RuleEntity> entities = List.of(
                 entity("test:stat:strength", RuleKind.STAT, Map.of(
@@ -369,7 +393,7 @@ class RulesetCompilerTest {
     }
 
     @Test
-    void experienceProgressionsMustBeUnambiguousAndMonotonic() {
+    void experienceProgressionsMustHaveAnExplicitDefaultAndRemainMonotonic() {
         IllegalArgumentException decreasing = assertThrows(IllegalArgumentException.class,
                 () -> revision("test:decreasing-xp", List.of(
                         entity("test:xp", RuleKind.TABLE, Map.of(
@@ -388,7 +412,7 @@ class RulesetCompilerTest {
                         entity("test:progression:b", RuleKind.PROGRESSION, Map.of(
                                 "experienceTableRef", "test:xp", "maximumLevel", "2"))))
                         .compile());
-        assertTrue(ambiguous.getMessage().contains("only one"));
+        assertTrue(ambiguous.getMessage().contains("defaultExperience"));
     }
 
     @Test
@@ -497,6 +521,30 @@ class RulesetCompilerTest {
         assertEquals(new BigDecimal("1"), rules.value("many:value:mark", result.state(second)));
         assertEquals(BigDecimal.ZERO, rules.value("many:value:mark", result.state(RuleScope.session())));
         assertEquals(2, result.events().stream().filter(event -> event.type().equals("VALUE_CHANGED")).count());
+    }
+
+    @Test
+    void editorCapabilitiesMatchTheCompilerContracts() {
+        assertTrue(RulesetCompiler.isDirectNumericFormulaReferenceTarget(
+                entity("cap:stat", RuleKind.STAT, Map.of())));
+        assertTrue(RulesetCompiler.isDirectNumericFormulaReferenceTarget(
+                entity("cap:boolean", RuleKind.VALUE, Map.of("valueType", "boolean"))));
+        assertFalse(RulesetCompiler.isDirectNumericFormulaReferenceTarget(
+                entity("cap:text", RuleKind.VALUE, Map.of("valueType", "TEXT"))));
+        assertFalse(RulesetCompiler.isDirectNumericFormulaReferenceTarget(
+                entity("cap:resource", RuleKind.RESOURCE, Map.of())));
+        RuleEntity manualStat = new RuleEntity(
+                "cap:manual", RuleKind.STAT, RulesetOrigin.HOMEBREW,
+                LocalizedRuleText.bilingual("Manual", "Manual"),
+                LocalizedRuleText.bilingual("Test", "Test"), "", true,
+                RuleAutomationLevel.MANUAL, Map.of(), List.of(), "Test", "", 0);
+        assertFalse(RulesetCompiler.isDirectNumericFormulaReferenceTarget(manualStat));
+
+        assertTrue(RulesetCompiler.supportsStatePolicy(RuleKind.RESOURCE));
+        assertTrue(RulesetCompiler.supportsStatePolicy(RuleKind.CONDITION));
+        assertFalse(RulesetCompiler.supportsStatePolicy(RuleKind.MODIFIER));
+        assertFalse(RulesetCompiler.supportsStatePolicy(RuleKind.RANDOMIZER));
+        assertFalse(RulesetCompiler.supportsStatePolicy(RuleKind.ROLL));
     }
 
     private static RulesetRevision revision(String projectId, List<RuleEntity> entities) {

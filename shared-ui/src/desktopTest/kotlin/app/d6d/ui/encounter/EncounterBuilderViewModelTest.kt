@@ -439,6 +439,26 @@ class EncounterBuilderViewModelTest {
     }
 
     @Test
+    fun `riavviare il wizard usa il default esplicito e non il primo standard alfabetico`() {
+        val standard = Srd521Ruleset.revision
+        val foundation = GenericRulesetFoundation.revision()
+        val builder = EncounterBuilderViewModel(
+            roster(),
+            seedProvider = { 84L },
+            // Riproduce l'ordine del repository: la fondazione può precedere lo SRD.
+            rulesetProvider = { listOf(foundation, standard) },
+            defaultRulesetHashProvider = { standard.canonicalHash() },
+        )
+
+        builder.selectRuleset(foundation.canonicalHash())
+        assertEquals(foundation.canonicalHash(), builder.selectedRuleset.canonicalHash())
+
+        builder.restartWizard()
+
+        assertEquals(standard.canonicalHash(), builder.selectedRuleset.canonicalHash())
+    }
+
+    @Test
     fun `creare da zero non cancella i template e mostra solo le nuove schede`() {
         val roster = roster()
         val originalIds = roster.items.map { it.id }.toSet()

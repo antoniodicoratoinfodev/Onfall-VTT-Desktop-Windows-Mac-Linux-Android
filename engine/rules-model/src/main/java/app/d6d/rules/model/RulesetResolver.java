@@ -56,7 +56,7 @@ public final class RulesetResolver {
         return resolve(base, draft, "draft:" + draft.id(), "draft", draft.modifiedAt());
     }
 
-    private static void synchronizeRuntimeAttributes(
+    static void synchronizeRuntimeAttributes(
             Map<String, RuleEntity> entities,
             RulesetRuntimeConfig runtime) {
         for (String id : List.of(CoreRuleIds.CRITICAL_HIT, CoreRuleIds.EXHAUSTION, CoreRuleIds.PROFICIENCY)) {

@@ -76,13 +76,19 @@ class RosterViewModel(
     sheetStore: SheetStore,
     loadOnCreate: Boolean = true,
     rulesetProvider: () -> List<RulesetRevision> = { listOf(Srd521Ruleset.revision) },
+    defaultRulesetHashProvider: () -> String = { Srd521Ruleset.revision.canonicalHash() },
 ) {
 
     /** Vocabolario in uso: qui non arriva `LocalStrings`, siamo fuori da Compose. */
     private val words get() = AppLocale.current.compendium
 
     /** Editor delle schede, passato agli editor esistenti senza modificarli. */
-    val sheets = SheetViewModel(sheetStore, loadOnCreate, rulesetProvider)
+    val sheets = SheetViewModel(
+        sheetStore,
+        loadOnCreate,
+        rulesetProvider,
+        defaultRulesetHashProvider,
+    )
 
     var status by mutableStateOf<String?>(null)
 

@@ -126,64 +126,126 @@ private val DarkScheme = darkColorScheme(
     outline = Palette.Line,
 )
 
-// Titoli e intestazioni in graziato (serif), corpo e comandi in lineare: e' il
-// contrasto tipografico da manuale di gioco che definisce l'estetica.
+// Tre voci, tre compiti. Cinzel porta l'immaginario del gioco ma resta confinato
+// alle intestazioni brevi; Alegreya da' ai nomi un tono editoriale; Alegreya Sans
+// regge tutto cio' che si deve leggere o azionare. Le tre famiglie sono incorporate
+// (vedi NOTICE-FONTS.md), quindi Android e desktop mostrano davvero la stessa UI.
 //
-// Le famiglie sono incorporate come risorse (vedi NOTICE-FONTS.md), cosi' il
-// carattere e' identico su desktop e Android: Cinzel — capitali da iscrizione,
-// le minuscole diventano maiuscoletto — per le etichette e il display; Alegreya
-// per i titoli correnti e i nomi. Il corpo resta nel lineare di sistema.
-private fun appTypography(display: FontFamily, title: FontFamily) = Typography(
+// Tutti i quindici ruoli Material sono dichiarati: lasciarne anche uno ai default
+// riporterebbe in scena Roboto/San Francisco dentro dialoghi o controlli costruiti
+// dalla libreria, spezzando la coerenza senza che il chiamante se ne accorga.
+internal fun appTypography(
+    display: FontFamily,
+    title: FontFamily,
+    body: FontFamily,
+) = Typography(
+    displayLarge = TextStyle(
+        fontFamily = display,
+        fontWeight = FontWeight.Black,
+        fontSize = 40.sp,
+        lineHeight = 46.sp,
+        letterSpacing = 0.8.sp,
+    ),
+    displayMedium = TextStyle(
+        fontFamily = display,
+        fontWeight = FontWeight.Black,
+        fontSize = 34.sp,
+        lineHeight = 40.sp,
+        letterSpacing = 0.7.sp,
+    ),
     displaySmall = TextStyle(
         fontFamily = display,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Black,
         fontSize = 28.sp,
-        letterSpacing = 1.sp,
+        lineHeight = 34.sp,
+        letterSpacing = 0.6.sp,
+    ),
+    headlineLarge = TextStyle(
+        fontFamily = display,
+        fontWeight = FontWeight.Bold,
+        fontSize = 24.sp,
+        lineHeight = 30.sp,
+        letterSpacing = 0.5.sp,
+    ),
+    headlineMedium = TextStyle(
+        fontFamily = display,
+        fontWeight = FontWeight.Bold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        letterSpacing = 0.45.sp,
     ),
     headlineSmall = TextStyle(
         fontFamily = display,
         fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
-        letterSpacing = 0.8.sp,
+        lineHeight = 25.sp,
+        letterSpacing = 0.4.sp,
     ),
     titleLarge = TextStyle(
         fontFamily = title,
         fontWeight = FontWeight.Bold,
-        fontSize = 21.sp,
-        letterSpacing = 0.3.sp,
+        fontSize = 22.sp,
+        lineHeight = 27.sp,
+        letterSpacing = 0.15.sp,
     ),
     titleMedium = TextStyle(
         fontFamily = title,
         fontWeight = FontWeight.Bold,
-        fontSize = 16.5.sp,
-        letterSpacing = 0.2.sp,
+        fontSize = 17.sp,
+        lineHeight = 21.sp,
+        letterSpacing = 0.1.sp,
     ),
     titleSmall = TextStyle(
         fontFamily = title,
         fontWeight = FontWeight.Bold,
-        fontSize = 14.5.sp,
-        letterSpacing = 0.2.sp,
+        fontSize = 15.sp,
+        lineHeight = 19.sp,
+        letterSpacing = 0.1.sp,
+    ),
+    bodyLarge = TextStyle(
+        fontFamily = body,
+        fontWeight = FontWeight.Normal,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
     ),
     bodyMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontSize = 14.sp,
+        fontFamily = body,
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.5.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.05.sp,
     ),
     bodySmall = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = body,
+        fontWeight = FontWeight.Normal,
         fontSize = 12.5.sp,
+        lineHeight = 17.sp,
+        letterSpacing = 0.1.sp,
         color = Palette.TextMuted,
     ),
-    labelMedium = TextStyle(
-        fontFamily = display,
+    // Tutti i label Material sono funzionali: sans, compatti e marcati. Le
+    // iscrizioni decorative non riusano labelSmall ma il token sectionLabel,
+    // sempre attraverso componenti strutturali come Eyebrow e SheetBox.
+    labelLarge = TextStyle(
+        fontFamily = body,
         fontWeight = FontWeight.Bold,
-        fontSize = 11.sp,
-        letterSpacing = 1.4.sp,
+        fontSize = 14.sp,
+        lineHeight = 17.sp,
+        letterSpacing = 0.15.sp,
+    ),
+    labelMedium = TextStyle(
+        fontFamily = body,
+        fontWeight = FontWeight.Bold,
+        fontSize = 12.sp,
+        lineHeight = 15.sp,
+        letterSpacing = 0.2.sp,
     ),
     labelSmall = TextStyle(
-        fontFamily = display,
+        fontFamily = body,
         fontWeight = FontWeight.Bold,
-        fontSize = 10.sp,
-        letterSpacing = 2.2.sp,
+        fontSize = 10.5.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.35.sp,
     ),
 )
 
@@ -197,7 +259,7 @@ private val AppShapes = Shapes(
 )
 
 /**
- * Le due famiglie del tema. Si costruiscono al primo uso e poi restano: leggere i
+ * Le tre famiglie del tema. Si costruiscono al primo uso e poi restano: leggere i
  * caratteri e' lavoro d'avvio, non di ricomposizione.
  */
 private val displayFamily by lazy {
@@ -214,12 +276,30 @@ private val titleFamily by lazy {
     )
 }
 
+private val bodyFamily by lazy {
+    themeFontFamily(
+        "alegreya_sans_regular.ttf" to FontWeight.Normal,
+        "alegreya_sans_medium.ttf" to FontWeight.Medium,
+        "alegreya_sans_bold.ttf" to FontWeight.Bold,
+        // Il nero e' riservato a dadi, contatori e iniziali sui token: averne il
+        // volto reale evita il grassetto sintetico proprio nei glifi piu' piccoli.
+        "alegreya_sans_black.ttf" to FontWeight.Black,
+    )
+}
+
+private val AppTypography by lazy { appTypography(displayFamily, titleFamily, bodyFamily) }
+private val AppSemanticTypography by lazy {
+    onfallTypography(AppTypography, displayFamily, bodyFamily)
+}
+
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = DarkScheme,
-        typography = appTypography(displayFamily, titleFamily),
-        shapes = AppShapes,
-        content = content,
-    )
+    ProvideOnfallTypography(AppSemanticTypography) {
+        MaterialTheme(
+            colorScheme = DarkScheme,
+            typography = AppTypography,
+            shapes = AppShapes,
+            content = content,
+        )
+    }
 }

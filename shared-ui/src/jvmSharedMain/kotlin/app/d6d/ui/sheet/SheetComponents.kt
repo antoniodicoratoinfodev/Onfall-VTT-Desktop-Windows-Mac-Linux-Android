@@ -37,12 +37,9 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import app.d6d.sheet.formatModifier
 import app.d6d.sheet.i18n.distanceValue
 import app.d6d.sheet.i18n.distanceUnit
@@ -50,6 +47,7 @@ import app.d6d.sheet.i18n.feetFromDistance
 import app.d6d.sheet.i18n.parseDistance
 import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.i18n.strings
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 
 /**
@@ -75,7 +73,7 @@ fun SheetBox(
             text = title.uppercase(),
             color = Palette.Gold,
             textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelSmall,
+            style = OnfallTheme.typography.sectionLabel,
             modifier = Modifier.fillMaxWidth(),
         )
         content()
@@ -101,11 +99,7 @@ fun SheetField(
             value = value,
             onValueChange = onChange,
             singleLine = true,
-            textStyle = TextStyle(
-                color = Palette.Text,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            ),
+            textStyle = OnfallTheme.typography.fieldValue.copy(color = Palette.Text),
             cursorBrush = SolidColor(Palette.Gold),
             keyboardOptions = when {
                 decimal -> KeyboardOptions(keyboardType = KeyboardType.Decimal)
@@ -239,8 +233,7 @@ fun DerivedValue(
         Text(
             text = value,
             color = accent,
-            fontWeight = FontWeight.Black,
-            style = MaterialTheme.typography.titleLarge,
+            style = OnfallTheme.typography.numberLarge,
         )
         Text(
             text = label.uppercase(),
@@ -379,7 +372,7 @@ fun SheetTextArea(
     BasicTextField(
         value = value,
         onValueChange = onChange,
-        textStyle = TextStyle(color = Palette.Text, fontSize = 12.5.sp, lineHeight = 17.sp),
+        textStyle = OnfallTheme.typography.supporting.copy(color = Palette.Text),
         cursorBrush = SolidColor(Palette.Gold),
         minLines = minLines,
         modifier = modifier
@@ -396,8 +389,7 @@ fun StatLine(label: String, value: String, modifier: Modifier = Modifier) {
         Text(
             text = label,
             color = Palette.Gold,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodySmall,
+            style = OnfallTheme.typography.compactControl,
             modifier = Modifier.width(96.dp),
         )
         Text(

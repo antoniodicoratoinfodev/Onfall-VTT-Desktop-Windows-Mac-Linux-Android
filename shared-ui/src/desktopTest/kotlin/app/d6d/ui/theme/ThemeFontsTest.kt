@@ -21,6 +21,10 @@ class ThemeFontsTest {
         "cinzel_extrabold.ttf",
         "alegreya_medium.ttf",
         "alegreya_bold.ttf",
+        "alegreya_sans_regular.ttf",
+        "alegreya_sans_medium.ttf",
+        "alegreya_sans_bold.ttf",
+        "alegreya_sans_black.ttf",
     )
 
     @Test
@@ -53,6 +57,14 @@ class ThemeFontsTest {
             themeFontFamily(
                 "alegreya_medium.ttf" to FontWeight.Medium,
                 "alegreya_bold.ttf" to FontWeight.Bold,
+            ),
+        )
+        assertNotNull(
+            themeFontFamily(
+                "alegreya_sans_regular.ttf" to FontWeight.Normal,
+                "alegreya_sans_medium.ttf" to FontWeight.Medium,
+                "alegreya_sans_bold.ttf" to FontWeight.Bold,
+                "alegreya_sans_black.ttf" to FontWeight.Black,
             ),
         )
     }

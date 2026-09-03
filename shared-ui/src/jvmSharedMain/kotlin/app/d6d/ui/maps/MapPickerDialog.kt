@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -39,6 +38,7 @@ import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
 
@@ -95,7 +95,6 @@ fun MapPickerDialog(
                         Text(
                             text = words.chooseBackground,
                             color = Palette.Text,
-                            fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
@@ -176,10 +175,9 @@ fun MapPickerDialog(
                                 Text(
                                     text = map.name,
                                     color = if (selected) Palette.GoldBright else Palette.Text,
-                                    fontWeight = FontWeight.Bold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = OnfallTheme.typography.itemTitle,
                                 )
                                 if (selected) {
                                     Text(

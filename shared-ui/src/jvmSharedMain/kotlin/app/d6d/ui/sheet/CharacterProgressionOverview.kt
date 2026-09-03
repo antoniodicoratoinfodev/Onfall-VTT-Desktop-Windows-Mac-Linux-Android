@@ -21,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.rules.character.RecoveryPeriod
 import app.d6d.content.srd521it.SrdBeastForm
@@ -29,11 +28,14 @@ import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.isPactSlotMirrorResourceId
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.DialogTitle
+import app.d6d.ui.components.Eyebrow
 import app.d6d.i18n.label
 import app.d6d.i18n.pick
 import app.d6d.ui.i18n.currentLanguage
 import app.d6d.ui.i18n.strings
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.OnfallTheme
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -98,8 +100,7 @@ internal fun ProgressionOverview(
                 Text(
                     words.levelUpAvailable(sheet.effectiveLevel + 1),
                     color = Palette.GoldBright,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = OnfallTheme.typography.bodyEmphasis,
                 )
                 GameButton(
                     words.levelUpTo(sheet.effectiveLevel + 1),
@@ -122,7 +123,7 @@ internal fun ProgressionOverview(
             .filter { it.maximum > 0 }
             .filterNot { hasPactSlots && it.resourceId.isPactSlotMirrorResourceId() }
         if (visibleResourcePools.isNotEmpty()) {
-            Text(words.classResourcesCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+            Eyebrow(words.classResourcesCaps)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
@@ -141,8 +142,7 @@ internal fun ProgressionOverview(
                                 if (pool.dieSides > 0) append(words.dieSuffix(pool.dieSides))
                             },
                             color = Palette.Text,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = OnfallTheme.typography.supportingEmphasis,
                         )
                         Text(
                             words.resourcePool(pool.remaining, pool.maximum, pool.recovery.label(language)),
@@ -233,8 +233,7 @@ private fun LargeResourceEditor(
         Text(
             text = "$remaining/$maximum",
             color = Palette.Gold,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodySmall,
+            style = OnfallTheme.typography.numberSmall,
         )
         GameButton(
             label = "+1",
@@ -264,7 +263,7 @@ private fun WildShapeReplacementDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.Surface,
-        title = { Text(words.swapKnownFormTitle, color = Palette.Text) },
+        title = { DialogTitle(words.swapKnownFormTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
@@ -272,7 +271,7 @@ private fun WildShapeReplacementDialog(
                     color = Palette.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
-                Text(words.formToForgetCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                Eyebrow(words.formToForgetCaps)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -287,7 +286,7 @@ private fun WildShapeReplacementDialog(
                         )
                     }
                 }
-                Text(words.newFormCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                Eyebrow(words.newFormCaps)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),

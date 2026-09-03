@@ -30,7 +30,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.d6d.i18n.abbreviationIn
@@ -61,9 +60,12 @@ import app.d6d.ui.battle.GameButton
 import app.d6d.ui.battle.label
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.ClassIcon
+import app.d6d.ui.components.DialogTitle
+import app.d6d.ui.components.Eyebrow
 import app.d6d.ui.images.PortraitPicker
 import app.d6d.ui.images.PortraitRepository
 import app.d6d.ui.runDiskIo
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import kotlinx.coroutines.launch
 
@@ -180,7 +182,7 @@ fun CharacterSheetEditor(
         AlertDialog(
             onDismissRequest = { deleteId = null },
             containerColor = Palette.Surface,
-            title = { Text(words.deleteSheetTitle, color = Palette.Text) },
+            title = { DialogTitle(words.deleteSheetTitle) },
             text = {
                 Text(
                     words.deleteSheetBody(sheet.characterName.ifBlank { strings.common.unnamed }),
@@ -653,21 +655,22 @@ private fun ProficiencyLine(
         Text(
             text = signed(bonus),
             color = Palette.Text,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodySmall,
+            style = OnfallTheme.typography.numberSmall,
             modifier = Modifier.width(26.dp),
         )
         Text(
             text = label,
             color = if (bold) Palette.Text else Palette.TextMuted,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-            style = MaterialTheme.typography.bodySmall,
+            style = if (bold) {
+                OnfallTheme.typography.supportingEmphasis
+            } else {
+                OnfallTheme.typography.supporting
+            },
         )
         if (disadvantage) {
             Text(
                 text = currentLanguage.pick("SVANT.", "DISADV."),
                 color = Palette.Bloodied,
-                fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -1073,8 +1076,7 @@ private fun LegacyWeaponClassificationWarning(weapon: WeaponEntry) {
     Text(
         words.unclassifiedEntryHint,
         color = Palette.Bloodied,
-        fontWeight = FontWeight.Bold,
-        style = MaterialTheme.typography.bodySmall,
+        style = OnfallTheme.typography.supportingEmphasis,
     )
 }
 
@@ -1167,8 +1169,7 @@ private fun CharacterAbilityRow(ability: CatalogAbility, onRemove: () -> Unit) {
                 Text(
                     text = ability.name,
                     color = Palette.Text,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = OnfallTheme.typography.abilityName,
                 )
                 if (ability.rulesText.isNotBlank()) {
                     Text(
@@ -1229,7 +1230,7 @@ private fun AbilityPickerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.Surface,
-        title = { Text(words.addAbilityTitle, color = Palette.Text) },
+        title = { DialogTitle(words.addAbilityTitle) },
         text = {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 430.dp).verticalScroll(rememberScrollState()),
@@ -1257,8 +1258,7 @@ private fun AbilityPickerDialog(
                                 Text(
                                     ability.name,
                                     color = Palette.Text,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = OnfallTheme.typography.abilityName,
                                 )
                                 Text(
                                     buildString {
@@ -1343,7 +1343,7 @@ private fun TraitPickerDialog(
         containerColor = Palette.Surface,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, color = Palette.Text)
+                DialogTitle(title)
                 Text(
                     words.chooseFromCompendium(filtered.size),
                     color = Palette.TextMuted,
@@ -1432,10 +1432,9 @@ private fun TraitPickerDialog(
                                         Text(
                                             ability.name,
                                             color = Palette.Text,
-                                            fontWeight = FontWeight.Bold,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis,
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = OnfallTheme.typography.abilityName,
                                         )
                                         FlowRow(
                                             horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -1520,8 +1519,7 @@ private fun SpellcastingSection(
             Text(
                 words.castingBlockedByArmor,
                 color = Palette.Bloodied,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodySmall,
+                style = OnfallTheme.typography.supportingEmphasis,
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Palette.Bloodied.copy(alpha = 0.10f), RoundedCornerShape(7.dp))
@@ -1581,7 +1579,7 @@ private fun SpellcastingSection(
             ),
         )
 
-        Text(words.spellSlots, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Eyebrow(words.spellSlots, color = Palette.TextMuted)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1605,21 +1603,13 @@ private fun SpellcastingSection(
         }
 
         if (casting.spells.isNotEmpty()) {
-            Text(
-                words.selectedCantripsAndSpells,
-                color = Palette.TextMuted,
-                style = MaterialTheme.typography.labelSmall,
-            )
+            Eyebrow(words.selectedCantripsAndSpells, color = Palette.TextMuted)
             casting.spells
                 .sortedWith(compareBy({ it.level }, { it.name.lowercase() }))
                 .groupBy { it.level }
                 .forEach { (level, spells) ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            if (level == 0) words.cantripsHeading else words.levelHeading(level),
-                            color = Palette.Gold,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
+                        Eyebrow(if (level == 0) words.cantripsHeading else words.levelHeading(level))
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(5.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1659,7 +1649,6 @@ private fun SlotBlock(
         Text(
             words.slotLevel(slot.level),
             color = Palette.Gold,
-            fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
         )
         if (editableTotal) {
@@ -1695,10 +1684,9 @@ private fun PactSlotBlock(slot: SpellSlot, onChange: (SpellSlot) -> Unit) {
         Text(
             words.pactSlotLevel(slot.level),
             color = Palette.Gold,
-            fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
         )
-        Text(words.shortOrLongRest, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Text(words.shortOrLongRest, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
         PipRow(slot.total, slot.spent, color = Palette.Gold) {
             onChange(slot.copy(spent = it.coerceIn(0, slot.total)))
         }
@@ -1748,8 +1736,7 @@ private fun ProgressionEntries(
                     Text(
                         text = entry.name,
                         color = Palette.GoldBright,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = OnfallTheme.typography.itemTitle,
                     )
                     if (entry.sourcePage > 0) {
                         Text(
@@ -1776,7 +1763,7 @@ private fun ProgressionEntries(
         }
     }
     if (masteries.isNotEmpty()) {
-        Text(words.weaponMasteries, color = Palette.TextMuted, style = MaterialTheme.typography.labelSmall)
+        Eyebrow(words.weaponMasteries, color = Palette.TextMuted)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -1925,7 +1912,7 @@ private fun ModularSheetFieldEditor(
             }
         }
         if (field.description.isNotBlank() && field.kind != ModularSheetFieldKind.RULE_TEXT) {
-            Text(field.description, color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall)
+            Text(field.description, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -2020,8 +2007,7 @@ private fun CharacterNotesSection(
                                     Text(
                                         if (item.quantity > 1) "${item.quantity}× ${item.name}" else item.name,
                                         color = Palette.Text,
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = OnfallTheme.typography.itemTitle,
                                     )
                                     Text(
                                         item.category.label(strings),

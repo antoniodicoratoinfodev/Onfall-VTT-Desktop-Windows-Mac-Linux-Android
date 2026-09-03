@@ -38,6 +38,8 @@ import app.d6d.rules.character.RuleEffect
 import app.d6d.sheet.formatModifier
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Chip
+import app.d6d.ui.components.DialogTitle
+import app.d6d.ui.components.Eyebrow
 import app.d6d.i18n.abbreviationIn
 import app.d6d.i18n.label
 import app.d6d.sheet.i18n.distanceLabel
@@ -119,10 +121,7 @@ fun SrdProgressionDialog(
         containerColor = Palette.Surface,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(
-                    if (firstLevel) words.guidedCreationTitle else words.srdLevelUpTitle,
-                    color = Palette.Text,
-                )
+                DialogTitle(if (firstLevel) words.guidedCreationTitle else words.srdLevelUpTitle)
                 Text(
                     if (firstLevel) {
                         words.chooseExactlyForFirstLevel
@@ -143,7 +142,7 @@ fun SrdProgressionDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (firstLevel) {
-                    Text(strings.rules.ruleset, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                    Eyebrow(strings.rules.ruleset)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -170,7 +169,7 @@ fun SrdProgressionDialog(
                         }
                     }
                 }
-                Text(strings.abilities.classCaps, color = Palette.Gold, style = MaterialTheme.typography.labelSmall)
+                Eyebrow(strings.abilities.classCaps)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -500,7 +499,7 @@ private fun OptionDetails(option: SrdChoiceOption) {
             Text(
                 text = words.applied(effect.readableText(strings)),
                 color = Palette.Heal,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
             )
         }
     }

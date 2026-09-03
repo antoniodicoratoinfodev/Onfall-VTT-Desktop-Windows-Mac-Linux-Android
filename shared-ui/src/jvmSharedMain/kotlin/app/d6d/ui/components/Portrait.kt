@@ -10,7 +10,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,10 +21,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.Palette
 import app.d6d.ui.theme.healthColor
 
@@ -164,9 +163,8 @@ fun CombatantPortrait(
         Text(
             text = if (defeated) "✕" else initials(name),
             color = if (defeated) Palette.TextFaint else Palette.Text,
-            fontWeight = FontWeight.Black,
             fontSize = (diameter.value * 0.30f).sp,
-            style = MaterialTheme.typography.titleMedium,
+            style = OnfallTheme.typography.tokenInitials,
         )
     }
 }

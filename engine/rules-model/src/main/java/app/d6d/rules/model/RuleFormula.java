@@ -35,11 +35,11 @@ public final class RuleFormula {
     }
 
     private final String source;
-    private final Node root;
+    private final Expression root;
     private final Set<String> valueReferences;
     private final Set<String> tableReferences;
 
-    private RuleFormula(String source, Node root, Set<String> valueReferences, Set<String> tableReferences) {
+    private RuleFormula(String source, Expression root, Set<String> valueReferences, Set<String> tableReferences) {
         this.source = source;
         this.root = root;
         this.valueReferences = Set.copyOf(valueReferences);
@@ -51,8 +51,16 @@ public final class RuleFormula {
         if (normalized.isEmpty()) throw new IllegalArgumentException("Formula cannot be blank");
         if (normalized.length() > MAX_SOURCE_LENGTH) throw new IllegalArgumentException("Formula is too long");
         Parser parser = new Parser(normalized);
-        Node root = parser.parse();
+        Expression root = parser.parse();
         return new RuleFormula(normalized, root, parser.valueReferences, parser.tableReferences);
+    }
+
+    /**
+     * Compila un albero prodotto da un editor visuale usando la stessa pipeline
+     * di validazione delle formule testuali.
+     */
+    public static RuleFormula compile(Expression expression) {
+        return compile(canonicalSource(expression));
     }
 
     public static RuleFormula constant(long value) {
@@ -61,6 +69,44 @@ public final class RuleFormula {
 
     public String source() {
         return source;
+    }
+
+    /** Albero immutabile della formula, adatto a editor e strumenti di authoring. */
+    public Expression expression() {
+        return root;
+    }
+
+    /**
+     * Serializzazione deterministica di un albero. Le parentesi esplicite
+     * privilegiano la fedeltà semantica rispetto alla compattezza.
+     */
+    public static String canonicalSource(Expression expression) {
+        Objects.requireNonNull(expression, "expression");
+        if (expression instanceof NumberExpression number) {
+            return normalize(number.value()).toPlainString();
+        }
+        if (expression instanceof ValueExpression value) {
+            return "${" + value.id() + "}";
+        }
+        if (expression instanceof UnaryExpression unary) {
+            return unary.operator() + "(" + canonicalSource(unary.operand()) + ")";
+        }
+        if (expression instanceof BinaryExpression binary) {
+            return "(" + canonicalSource(binary.left()) + " " + binary.operator() + " "
+                    + canonicalSource(binary.right()) + ")";
+        }
+        if (expression instanceof FunctionExpression function) {
+            StringBuilder source = new StringBuilder(function.name()).append('(');
+            if (function.name().equals("lookup")) {
+                source.append('"').append(escapeString(function.textArgument())).append("\", ");
+            }
+            for (int index = 0; index < function.arguments().size(); index++) {
+                if (index > 0) source.append(", ");
+                source.append(canonicalSource(function.arguments().get(index)));
+            }
+            return source.append(')').toString();
+        }
+        throw new IllegalArgumentException("Unknown rule expression " + expression.getClass().getName());
     }
 
     public Set<String> valueReferences() {
@@ -73,7 +119,7 @@ public final class RuleFormula {
 
     public BigDecimal evaluate(Context context) {
         Objects.requireNonNull(context, "context");
-        return normalize(root.evaluate(context, new Budget()));
+        return normalize(evaluate(root, context, new Budget()));
     }
 
     private static BigDecimal normalize(BigDecimal value) {
@@ -84,47 +130,103 @@ public final class RuleFormula {
                 : new BigDecimal(normalized.toPlainString());
     }
 
-    private interface Node {
-        BigDecimal evaluate(Context context, Budget budget);
+    public sealed interface Expression permits NumberExpression, ValueExpression,
+            UnaryExpression, BinaryExpression, FunctionExpression {
+        <T> T accept(ExpressionVisitor<T> visitor);
     }
 
-    private record NumberNode(BigDecimal value) implements Node {
-        @Override public BigDecimal evaluate(Context context, Budget budget) {
-            budget.step();
-            return value;
+    /** Visitatore pubblico per rendering, validazione e strumenti di authoring. */
+    public interface ExpressionVisitor<T> {
+        T visitNumber(NumberExpression expression);
+        T visitValue(ValueExpression expression);
+        T visitUnary(UnaryExpression expression);
+        T visitBinary(BinaryExpression expression);
+        T visitFunction(FunctionExpression expression);
+    }
+
+    public record NumberExpression(BigDecimal value) implements Expression {
+        public NumberExpression {
+            Objects.requireNonNull(value, "value");
+        }
+
+        @Override public <T> T accept(ExpressionVisitor<T> visitor) {
+            return Objects.requireNonNull(visitor, "visitor").visitNumber(this);
         }
     }
 
-    private record ValueNode(String id) implements Node {
-        @Override public BigDecimal evaluate(Context context, Budget budget) {
-            budget.step();
-            BigDecimal result = context.value(id);
-            if (result == null) throw new IllegalArgumentException("Missing formula value " + id);
+    public record ValueExpression(String id) implements Expression {
+        public ValueExpression {
+            id = Objects.requireNonNull(id, "id").trim();
+            if (id.isEmpty()) throw new IllegalArgumentException("Formula reference cannot be blank");
+        }
+
+        @Override public <T> T accept(ExpressionVisitor<T> visitor) {
+            return Objects.requireNonNull(visitor, "visitor").visitValue(this);
+        }
+    }
+
+    public record UnaryExpression(String operator, Expression operand) implements Expression {
+        public UnaryExpression {
+            operator = Objects.requireNonNull(operator, "operator");
+            Objects.requireNonNull(operand, "operand");
+        }
+
+        @Override public <T> T accept(ExpressionVisitor<T> visitor) {
+            return Objects.requireNonNull(visitor, "visitor").visitUnary(this);
+        }
+    }
+
+    public record BinaryExpression(String operator, Expression left, Expression right) implements Expression {
+        public BinaryExpression {
+            operator = Objects.requireNonNull(operator, "operator");
+            Objects.requireNonNull(left, "left");
+            Objects.requireNonNull(right, "right");
+        }
+
+        @Override public <T> T accept(ExpressionVisitor<T> visitor) {
+            return Objects.requireNonNull(visitor, "visitor").visitBinary(this);
+        }
+    }
+
+    public record FunctionExpression(
+            String name,
+            List<Expression> arguments,
+            String textArgument
+    ) implements Expression {
+        public FunctionExpression {
+            name = Objects.requireNonNull(name, "name").trim().toLowerCase(Locale.ROOT);
+            arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments"));
+            textArgument = Objects.requireNonNullElse(textArgument, "");
+        }
+
+        @Override public <T> T accept(ExpressionVisitor<T> visitor) {
+            return Objects.requireNonNull(visitor, "visitor").visitFunction(this);
+        }
+    }
+
+    private static BigDecimal evaluate(Expression expression, Context context, Budget budget) {
+        budget.step();
+        if (expression instanceof NumberExpression number) return number.value();
+        if (expression instanceof ValueExpression value) {
+            BigDecimal result = context.value(value.id());
+            if (result == null) throw new IllegalArgumentException("Missing formula value " + value.id());
             return result;
         }
-    }
-
-    private record UnaryNode(String operator, Node operand) implements Node {
-        @Override public BigDecimal evaluate(Context context, Budget budget) {
-            budget.step();
-            BigDecimal value = operand.evaluate(context, budget);
-            return switch (operator) {
+        if (expression instanceof UnaryExpression unary) {
+            BigDecimal value = evaluate(unary.operand(), context, budget);
+            return switch (unary.operator()) {
                 case "+" -> value;
                 case "-" -> value.negate(MATH);
                 case "!" -> truth(value) ? BigDecimal.ZERO : BigDecimal.ONE;
-                default -> throw new IllegalStateException("Unknown unary operator " + operator);
+                default -> throw new IllegalStateException("Unknown unary operator " + unary.operator());
             };
         }
-    }
-
-    private record BinaryNode(String operator, Node left, Node right) implements Node {
-        @Override public BigDecimal evaluate(Context context, Budget budget) {
-            budget.step();
-            BigDecimal first = left.evaluate(context, budget);
-            if (operator.equals("&&") && !truth(first)) return BigDecimal.ZERO;
-            if (operator.equals("||") && truth(first)) return BigDecimal.ONE;
-            BigDecimal second = right.evaluate(context, budget);
-            return switch (operator) {
+        if (expression instanceof BinaryExpression binary) {
+            BigDecimal first = evaluate(binary.left(), context, budget);
+            if (binary.operator().equals("&&") && !truth(first)) return BigDecimal.ZERO;
+            if (binary.operator().equals("||") && truth(first)) return BigDecimal.ONE;
+            BigDecimal second = evaluate(binary.right(), context, budget);
+            return switch (binary.operator()) {
                 case "+" -> first.add(second, MATH);
                 case "-" -> first.subtract(second, MATH);
                 case "*" -> first.multiply(second, MATH);
@@ -148,26 +250,24 @@ public final class RuleFormula {
                 case "!=" -> bool(first.compareTo(second) != 0);
                 case "&&" -> bool(truth(second));
                 case "||" -> bool(truth(second));
-                default -> throw new IllegalStateException("Unknown binary operator " + operator);
+                default -> throw new IllegalStateException("Unknown binary operator " + binary.operator());
             };
         }
-    }
-
-    private record FunctionNode(String name, List<Node> arguments, String textArgument) implements Node {
-        @Override public BigDecimal evaluate(Context context, Budget budget) {
-            budget.step();
-            if (name.equals("if")) {
-                requireArity(3);
-                return truth(arguments.get(0).evaluate(context, budget))
-                        ? arguments.get(1).evaluate(context, budget)
-                        : arguments.get(2).evaluate(context, budget);
+        if (expression instanceof FunctionExpression function) {
+            if (function.name().equals("if")) {
+                requireArity(function, 3);
+                return truth(evaluate(function.arguments().get(0), context, budget))
+                        ? evaluate(function.arguments().get(1), context, budget)
+                        : evaluate(function.arguments().get(2), context, budget);
             }
-            if (name.equals("lookup")) {
-                requireArity(1);
-                return context.lookup(textArgument, arguments.get(0).evaluate(context, budget));
+            if (function.name().equals("lookup")) {
+                requireArity(function, 1);
+                return context.lookup(function.textArgument(),
+                        evaluate(function.arguments().get(0), context, budget));
             }
-            List<BigDecimal> values = arguments.stream().map(node -> node.evaluate(context, budget)).toList();
-            return switch (name) {
+            List<BigDecimal> values = function.arguments().stream()
+                    .map(node -> evaluate(node, context, budget)).toList();
+            return switch (function.name()) {
                 case "min" -> {
                     requireAtLeast(values, 1);
                     yield values.stream().min(BigDecimal::compareTo).orElseThrow();
@@ -177,29 +277,36 @@ public final class RuleFormula {
                     yield values.stream().max(BigDecimal::compareTo).orElseThrow();
                 }
                 case "clamp" -> {
-                    requireArity(3);
+                    requireArity(function, 3);
                     BigDecimal minimum = values.get(1);
                     BigDecimal maximum = values.get(2);
-                    if (minimum.compareTo(maximum) > 0) throw new IllegalArgumentException("clamp minimum exceeds maximum");
+                    if (minimum.compareTo(maximum) > 0) {
+                        throw new IllegalArgumentException("clamp minimum exceeds maximum");
+                    }
                     yield values.get(0).max(minimum).min(maximum);
                 }
-                case "abs" -> { requireArity(1); yield values.get(0).abs(MATH); }
-                case "floor" -> { requireArity(1); yield values.get(0).setScale(0, RoundingMode.FLOOR); }
-                case "ceil" -> { requireArity(1); yield values.get(0).setScale(0, RoundingMode.CEILING); }
-                case "round" -> { requireArity(1); yield values.get(0).setScale(0, RoundingMode.HALF_UP); }
-                default -> throw new IllegalStateException("Unknown formula function " + name);
+                case "abs" -> { requireArity(function, 1); yield values.get(0).abs(MATH); }
+                case "floor" -> { requireArity(function, 1); yield values.get(0).setScale(0, RoundingMode.FLOOR); }
+                case "ceil" -> { requireArity(function, 1); yield values.get(0).setScale(0, RoundingMode.CEILING); }
+                case "round" -> { requireArity(function, 1); yield values.get(0).setScale(0, RoundingMode.HALF_UP); }
+                default -> throw new IllegalStateException("Unknown formula function " + function.name());
             };
         }
+        throw new IllegalStateException("Unknown rule expression " + expression.getClass().getName());
+    }
 
-        private void requireArity(int expected) {
-            if (arguments.size() != expected) {
-                throw new IllegalArgumentException(name + " expects " + expected + " arguments");
-            }
+    private static void requireArity(FunctionExpression function, int expected) {
+        if (function.arguments().size() != expected) {
+            throw new IllegalArgumentException(function.name() + " expects " + expected + " arguments");
         }
+    }
 
-        private static void requireAtLeast(List<BigDecimal> values, int minimum) {
-            if (values.size() < minimum) throw new IllegalArgumentException("Function has too few arguments");
-        }
+    private static void requireAtLeast(List<BigDecimal> values, int minimum) {
+        if (values.size() < minimum) throw new IllegalArgumentException("Function has too few arguments");
+    }
+
+    private static String escapeString(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private static boolean truth(BigDecimal value) {
@@ -328,28 +435,28 @@ public final class RuleFormula {
             current = lexer.next();
         }
 
-        private Node parse() {
-            Node result = expression(0);
+        private Expression parse() {
+            Expression result = expression(0);
             if (current.kind != TokenKind.END) throw error("Unexpected token " + current.text);
             return result;
         }
 
-        private Node expression(int minimumPrecedence) {
+        private Expression expression(int minimumPrecedence) {
             if (++depth > MAX_DEPTH) throw error("Formula nesting is too deep");
-            Node left = unary();
+            Expression left = unary();
             while (current.kind == TokenKind.OPERATOR) {
                 int precedence = precedence(current.text);
                 if (precedence < minimumPrecedence) break;
                 String operator = current.text;
                 advance();
-                Node right = expression(precedence + 1);
-                left = new BinaryNode(operator, left, right);
+                Expression right = expression(precedence + 1);
+                left = new BinaryExpression(operator, left, right);
             }
             depth--;
             return left;
         }
 
-        private Node unary() {
+        private Expression unary() {
             ArrayList<String> operators = new ArrayList<>();
             while (current.kind == TokenKind.OPERATOR
                     && (current.text.equals("+") || current.text.equals("-") || current.text.equals("!"))) {
@@ -359,14 +466,14 @@ public final class RuleFormula {
                 operators.add(current.text);
                 advance();
             }
-            Node result = primary();
+            Expression result = primary();
             for (int index = operators.size() - 1; index >= 0; index--) {
-                result = new UnaryNode(operators.get(index), result);
+                result = new UnaryExpression(operators.get(index), result);
             }
             return result;
         }
 
-        private Node primary() {
+        private Expression primary() {
             if (current.kind == TokenKind.NUMBER) {
                 BigDecimal value;
                 try {
@@ -375,28 +482,28 @@ public final class RuleFormula {
                     throw error("Invalid number " + current.text);
                 }
                 advance();
-                return new NumberNode(value);
+                return new NumberExpression(value);
             }
             if (current.kind == TokenKind.VARIABLE) {
                 String id = current.text;
                 valueReferences.add(id);
                 advance();
-                return new ValueNode(id);
+                return new ValueExpression(id);
             }
             if (current.kind == TokenKind.IDENTIFIER) {
                 String identifier = current.text;
                 advance();
-                if (identifier.equalsIgnoreCase("true")) return new NumberNode(BigDecimal.ONE);
-                if (identifier.equalsIgnoreCase("false")) return new NumberNode(BigDecimal.ZERO);
+                if (identifier.equalsIgnoreCase("true")) return new NumberExpression(BigDecimal.ONE);
+                if (identifier.equalsIgnoreCase("false")) return new NumberExpression(BigDecimal.ZERO);
                 if (current.kind != TokenKind.LEFT) {
                     valueReferences.add(identifier);
-                    return new ValueNode(identifier);
+                    return new ValueExpression(identifier);
                 }
                 return function(identifier.toLowerCase(Locale.ROOT));
             }
             if (current.kind == TokenKind.LEFT) {
                 advance();
-                Node nested = expression(0);
+                Expression nested = expression(0);
                 expect(TokenKind.RIGHT, "Expected ')'");
                 advance();
                 return nested;
@@ -404,11 +511,11 @@ public final class RuleFormula {
             throw error("Expected a value");
         }
 
-        private Node function(String name) {
+        private Expression function(String name) {
             expect(TokenKind.LEFT, "Expected '('");
             advance();
             String textArgument = "";
-            ArrayList<Node> arguments = new ArrayList<>();
+            ArrayList<Expression> arguments = new ArrayList<>();
             if (name.equals("lookup")) {
                 expect(TokenKind.STRING, "lookup expects a quoted table id");
                 textArgument = current.text.trim();
@@ -432,7 +539,7 @@ public final class RuleFormula {
                 throw error("Unknown formula function " + name);
             }
             validateArity(name, arguments.size());
-            return new FunctionNode(name, List.copyOf(arguments), textArgument);
+            return new FunctionExpression(name, List.copyOf(arguments), textArgument);
         }
 
         private void validateArity(String name, int actual) {

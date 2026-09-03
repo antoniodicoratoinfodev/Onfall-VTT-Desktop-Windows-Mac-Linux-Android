@@ -43,7 +43,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -67,6 +66,7 @@ import app.d6d.ui.settings.LocalAppPreferences
 import app.d6d.ui.roster.RosterViewModel
 import app.d6d.ui.state.BattleViewModel
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.ornateFrame
 
 /**
@@ -430,8 +430,7 @@ private fun MapLegend(viewModel: BattleViewModel, modifier: Modifier = Modifier)
         Text(
             text = words.oneSquareEquals(square),
             color = Palette.Gold,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodySmall,
+            style = OnfallTheme.typography.supportingEmphasis,
         )
         Text(
             text = distance?.let { words.distanceToTarget(distanceLabel(it, language)) }
@@ -521,7 +520,6 @@ private fun StagePlate(
                 Text(
                     text = snapshot.name(),
                     color = Palette.Text,
-                    fontWeight = FontWeight.Black,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleMedium,

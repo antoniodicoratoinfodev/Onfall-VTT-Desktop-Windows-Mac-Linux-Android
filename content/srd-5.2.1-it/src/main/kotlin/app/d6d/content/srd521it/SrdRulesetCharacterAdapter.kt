@@ -149,7 +149,7 @@ object SrdRulesetCharacterAdapter {
                 error("enforceExperienceThresholds must be true or false")
             }
         val compiled = revision.compile()
-        val experienceThresholds = compiled.progression()?.experienceTableRef()
+        val experienceThresholds = compiled.experienceProgression()?.experienceTableRef()
             ?.takeIf(String::isNotBlank)
             ?.let { tableRef -> compiled.tables()[compiled.resolveId(tableRef)] }
             ?.rows()

@@ -32,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.ui.components.Chip
 import app.d6d.ui.components.dismissDialogOnTap
@@ -131,7 +130,6 @@ fun BattleItemsDialog(
                         Text(
                             words.title,
                             color = Palette.Text,
-                            fontWeight = FontWeight.Black,
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
@@ -276,7 +274,6 @@ private fun ItemRow(
             Text(
                 item.name,
                 color = Palette.Text,
-                fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
@@ -321,7 +318,6 @@ private fun ItemDetail(item: InventoryItem?, modifier: Modifier = Modifier) {
             Text(
                 item.name,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
             Chip(item.category.label(strings), item.category.tint)

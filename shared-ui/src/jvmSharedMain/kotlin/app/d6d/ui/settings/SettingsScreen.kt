@@ -24,12 +24,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.d6d.i18n.AppLanguage
 import app.d6d.ui.AppIdentity
 import app.d6d.ui.battle.GameButton
 import app.d6d.ui.components.Eyebrow
+import app.d6d.ui.components.DialogTitle
 import app.d6d.ui.cursors.CursorArchive
 import app.d6d.ui.cursors.CursorPreferences
 import app.d6d.ui.i18n.SettingsStrings
@@ -44,6 +44,7 @@ import app.d6d.ui.state.label
 import app.d6d.ui.theme.GoldenRule
 import app.d6d.ui.theme.OrnateDivider
 import app.d6d.ui.theme.Palette
+import app.d6d.ui.theme.OnfallTheme
 import app.d6d.ui.theme.ornateFrame
 import app.d6d.ui.theme.panelBrush
 import java.nio.file.Path
@@ -158,7 +159,6 @@ private fun DiceSettings(
             Text(
                 text = text.settingsTitle,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(text.settingsDescription, color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
@@ -257,7 +257,6 @@ private fun GeneralSettings(
             Text(
                 text = text.title,
                 color = Palette.Text,
-                fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
@@ -392,7 +391,7 @@ private fun GeneralSettings(
         AlertDialog(
             onDismissRequest = { confirmLayoutReset = false },
             containerColor = Palette.Surface,
-            title = { Text(text.resetLayoutTitle, color = Palette.Text) },
+            title = { DialogTitle(text.resetLayoutTitle) },
             text = { Text(text.resetLayoutBody, color = Palette.TextMuted) },
             confirmButton = {
                 GameButton(strings.common.reset, accent = Palette.Enemy, onClick = {
@@ -457,8 +456,7 @@ private fun SettingsChoice(
         Text(
             text = label,
             color = Palette.Text,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodyMedium,
+            style = OnfallTheme.typography.bodyEmphasis,
         )
         // In fila finche' ci stanno, a capo quando la finestra si stringe: gli
         // stessi comandi valgono su desktop largo e su shell compatta.
@@ -483,8 +481,7 @@ private fun InfoRow(label: String, value: String) {
         Text(
             text = label,
             color = Palette.Text,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodyMedium,
+            style = OnfallTheme.typography.bodyEmphasis,
         )
         Text(
             text = value,

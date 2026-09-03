@@ -52,10 +52,10 @@ back.
 
 The **Rules** destination lists bundled standards as read only and lets a table create an editable
 homebrew fork or a blank independent ruleset. Rules can be searched and filtered by origin, kind,
-automation level and enabled state. On narrow screens the complete type list scrolls horizontally,
-leaving the matching rule entries visible and selectable. Publishing freezes a revision and
-validates formulas, identifiers and reference links. Every new game embeds that exact revision; an
-existing game can switch revision with pause, conservative state migration, audit and Undo.
+intent, automation level and enabled state. Its five task areas separate overview, catalog, guided
+building, testing, and technical management. Publishing freezes a revision and validates formulas,
+identifiers and reference links. Every new game embeds that exact revision; an existing game can
+switch revision with pause, conservative state migration, audit and Undo.
 
 Independent rulesets do not inherit undeclared SRD classes, stats, skills, equipment, damage types
 or conditions. Their generic runtime supports typed values, formulas, tables, resources, arbitrary
@@ -67,28 +67,16 @@ available to compatible character creation and contributes its linked progressio
 resources and modifiers. The primary guided sheet remains deliberately D&D-shaped, while classless
 or radically different games use the generated sections and the general non-combat `GameSession`.
 Portable published homebrew revisions can be imported or exported from Rules. The detailed
-capability contract is in [`docs/piano-regole-modulari.md`](docs/piano-regole-modulari.md).
+capability contract is in [`docs/piano-regole-modulari.md`](docs/piano-regole-modulari.md). Rules
+open in a guided intent-based editor, with natural-language calculations, advanced visual blocks,
+and a permanent engine-data escape hatch. Its current UX and lossless authoring contract are in
+[`docs/progetto-costruttore-regole-guidato.md`](docs/progetto-costruttore-regole-guidato.md).
 
 Desktop and Android use the same rules repository, compiler, session binding, sheet projector and
-view model. The desktop presents them as three simultaneous panes; Android stacks the same panes and
-uses horizontally scrollable type filters so the matching rule list retains useful space. A ruleset
-created or imported on either platform therefore has the same identifiers, validation, runtime
-semantics and persisted format.
-
-<table>
-<tr>
-<td align="center">
-<img src="sample/desktop-rules-library.png" width="720"/><br/>
-<sub>Desktop Rules library: standards, blank foundation, homebrew drafts, filters and rule detail</sub>
-</td>
-</tr>
-<tr>
-<td align="center">
-<img src="sample/desktop-rules-homebrew-editor.png" width="720"/><br/>
-<sub>Desktop homebrew editor: metadata, runtime parameters, rule kinds and immutable publication</sub>
-</td>
-</tr>
-</table>
+view model. Desktop uses at most a catalog/creation panel beside the active workspace. Compact and
+Android layouts move from list to detail as separate pages, keep editor actions outside scrolling,
+and preserve 48 dp touch targets for dense controls. A ruleset created or imported on either
+platform therefore has the same identifiers, validation, runtime semantics and persisted format.
 
 ## Starting a session
 
@@ -649,6 +637,9 @@ compiled rules snapshot, while editorial content stays in separate packages.
 
 Every engine module, the content pack and the presentation state carry their own unit tests, under
 `engine/*/src/test`, `content/srd-5.2.1-it/src/test` and `shared-ui/src/desktopTest`.
+
+The shared visual type roles and their accessibility guardrails are documented in
+[`docs/sistema-tipografico.md`](docs/sistema-tipografico.md).
 
 The local disk is the source of truth: sheets, ability catalog, sessions, images and preferences are
 written under `~/.onfall`, atomically and with backups.

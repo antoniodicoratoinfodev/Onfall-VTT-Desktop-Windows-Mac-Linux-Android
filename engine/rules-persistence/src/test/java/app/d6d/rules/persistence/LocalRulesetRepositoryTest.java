@@ -1,11 +1,16 @@
 package app.d6d.rules.persistence;
 
 import app.d6d.persistence.json.Json;
+import app.d6d.rules.authoring.RuleAuthoringMetadata;
+import app.d6d.rules.authoring.RulesetAuthoringState;
 import app.d6d.rules.model.LocalizedRuleText;
 import app.d6d.rules.model.RuleAutomationLevel;
 import app.d6d.rules.model.RuleEntity;
 import app.d6d.rules.model.RuleKind;
+import app.d6d.rules.model.RulePatch;
 import app.d6d.rules.model.RulesetDraft;
+import app.d6d.rules.model.RulesetCompositionResult;
+import app.d6d.rules.model.RulesetModule;
 import app.d6d.rules.model.RulesetOrigin;
 import app.d6d.rules.model.RulesetRevision;
 import app.d6d.rules.model.RulesetRuntimeConfig;
@@ -18,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -71,6 +77,30 @@ class LocalRulesetRepositoryTest {
                 draft.patches(), draft.additions(), "two");
 
         assertThrows(IllegalStateException.class, () -> repository.saveDraft(stale));
+    }
+
+    @Test
+    void draftAndVisualAuthoringMetadataAreSavedAndRemovedAtomically() throws IOException {
+        RulesetRevision standard = standard();
+        LocalRulesetRepository repository = new LocalRulesetRepository(directory, List.of(standard));
+        RulesetDraft draft = repository.createHomebrew(standard.canonicalHash(), "Visual", "");
+        RuleAuthoringMetadata metadata = new RuleAuthoringMetadata(
+                "builtin.stat", 1, List.of("core:test"), Map.of("calculation", "blocks"),
+                Set.of(), Map.of("core:test", "hash"), List.of());
+        RulesetAuthoringState authoring = repository.authoringState()
+                .withGroup(draft.id(), "group:core-test", metadata);
+        RulesetDraft changed = draft.withContent(
+                draft.name(), "saved with blocks", draft.runtime(),
+                draft.patches(), draft.additions(), "later");
+
+        repository.saveDraft(changed, authoring);
+        LocalRulesetRepository reloaded = new LocalRulesetRepository(directory, List.of(standard));
+
+        assertEquals("saved with blocks", reloaded.findDraft(draft.id()).description());
+        assertEquals(metadata, reloaded.authoringState().groups(draft.id()).get("group:core-test"));
+
+        reloaded.publish(draft.id(), "1");
+        assertTrue(reloaded.authoringState().byDraftId().isEmpty());
     }
 
     @Test
@@ -188,5 +218,106 @@ class LocalRulesetRepositoryTest {
         assertEquals(2, recovered.revisions().size());
         assertTrue(Json.parseObject(Files.readString(directory.resolve("library.json")))
                 .containsKey("schemaVersion"));
+    }
+
+    @Test
+    void installedModulesAndPublishedCompositionsSurviveReloadAndLegacyWrites() throws IOException {
+        RulesetRevision standard = standard();
+        LocalRulesetRepository repository = new LocalRulesetRepository(directory, List.of(standard));
+        RulesetModule module = module("module:variant", "variant", "enabled");
+        repository.installModule(module);
+        // Un percorso schema-1 preesistente non deve cancellare i nuovi campi della libreria.
+        repository.createHomebrew(standard.canonicalHash(), "Ordinary draft", "");
+
+        RulesetCompositionResult published = repository.publishComposition(
+                standard.canonicalHash(), List.of(module.canonicalHash()), List.of(), standard.runtime(),
+                "Modular rules", "", "1.0.0");
+        LocalRulesetRepository reloaded = new LocalRulesetRepository(directory, List.of(standard));
+
+        assertEquals(List.of(module), reloaded.modules());
+        assertNotNull(reloaded.findRevision(published.revision().canonicalHash()));
+        assertEquals(published.lock(), reloaded.findCompositionLock(published.revision().canonicalHash()));
+        assertEquals("enabled", reloaded.findRevision(published.revision().canonicalHash())
+                .entity("core:test").attributes().get("variant"));
+    }
+
+    @Test
+    void portableModuleImportIsVerifiedAndIdempotent() throws IOException {
+        RulesetRevision standard = standard();
+        RulesetModule module = module("module:portable", "portable", "yes");
+        LocalRulesetRepository source = new LocalRulesetRepository(directory.resolve("source-module"), List.of(standard));
+        source.installModule(module);
+        Path file = directory.resolve("module.onfall-rules-module");
+        source.exportModule(module.canonicalHash(), file);
+
+        LocalRulesetRepository target = new LocalRulesetRepository(directory.resolve("target-module"), List.of(standard));
+        assertEquals(module, target.importModule(file));
+        assertEquals(module, target.importModule(file));
+        assertEquals(1, target.modules().size());
+    }
+
+    @Test
+    void portableBundleInstallsSnapshotLockAndExactModulesAtomically() throws IOException {
+        RulesetRevision standard = standard();
+        RulesetModule module = module("module:bundle", "bundle", "yes");
+        LocalRulesetRepository source = new LocalRulesetRepository(directory.resolve("source-bundle"), List.of(standard));
+        source.installModule(module);
+        RulesetCompositionResult published = source.publishComposition(
+                standard.canonicalHash(), List.of(module.canonicalHash()), List.of(), standard.runtime(),
+                "Bundle rules", "", "1.0.0");
+        Path file = directory.resolve("rules.onfall-rules-bundle");
+        source.exportBundle(published.revision().canonicalHash(), file);
+
+        LocalRulesetRepository target = new LocalRulesetRepository(directory.resolve("target-bundle"), List.of(standard));
+        RulesetCompositionResult imported = target.importBundle(file);
+        RulesetCompositionResult repeated = target.importBundle(file);
+
+        assertEquals(published.revision().canonicalHash(), imported.revision().canonicalHash());
+        assertEquals(published.lock(), imported.lock());
+        assertEquals(imported, repeated);
+        assertEquals(1, target.modules().size());
+        assertEquals(2, target.revisions().size());
+        assertEquals(imported.lock(), target.findCompositionLock(imported.revision().canonicalHash()));
+    }
+
+    @Test
+    void portableBundleCannotClaimAFlattenedRevisionItsModulesDoNotProduce() throws IOException {
+        RulesetRevision standard = standard();
+        RulesetModule module = module("module:claimed", "claimed", "yes");
+        LocalRulesetRepository source = new LocalRulesetRepository(directory.resolve("source-forged"), List.of(standard));
+        source.installModule(module);
+        RulesetCompositionResult legitimate = source.publishComposition(
+                standard.canonicalHash(), List.of(module.canonicalHash()), List.of(), standard.runtime(),
+                "Claimed rules", "", "1.0.0");
+        RulesetRevision forged = RulesetRevision.create(
+                legitimate.revision().projectId(), legitimate.revision().revisionId(),
+                legitimate.revision().version(), legitimate.revision().name(),
+                legitimate.revision().description(), legitimate.revision().origin(),
+                legitimate.revision().baseCanonicalHash(), legitimate.revision().runtime(),
+                List.of(standard.entity("core:test").withAttributes(Map.of("claimed", "forged"))),
+                legitimate.revision().publishedAt());
+        RulesetPortableBundle forgedBundle = new RulesetPortableBundle(
+                forged, legitimate.lock(), List.of(module));
+        Path file = directory.resolve("forged.onfall-rules-bundle");
+        Files.writeString(file, Json.encode(RulesetLibraryJsonCodec.encodePortableBundle(forgedBundle)),
+                StandardCharsets.UTF_8);
+
+        LocalRulesetRepository target = new LocalRulesetRepository(directory.resolve("target-forged"), List.of(standard));
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> target.importBundle(file));
+
+        assertTrue(failure.getMessage().contains("does not match"));
+        assertTrue(target.modules().isEmpty());
+        assertEquals(1, target.revisions().size());
+    }
+
+    private RulesetModule module(String id, String key, String value) {
+        return RulesetModule.create(
+                id, "1.0.0", LocalizedRuleText.single("en", id),
+                LocalizedRuleText.single("en", "Test module"), RulesetOrigin.HOMEBREW,
+                RulesetRuntimeConfig.CURRENT_SEMANTICS, List.of(), Set.of(),
+                List.of(new RulePatch(
+                        "patch:" + id, "core:test", null, null,
+                        Map.of(key, value), Set.of(), null)), List.of());
     }
 }
