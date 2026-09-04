@@ -96,7 +96,10 @@ class DiceRenderPreviewTest {
                 output.setRGB(x, y, color.toArgb())
             }
         }
-        ImageIO.write(output, "png", File("/private/tmp/onfall-dice-preview.png"))
+        // La tavola e' un artefatto di ispezione: va nella cartella temporanea
+        // di sistema, cosi' il test gira su Windows, macOS e Linux.
+        val preview = File(System.getProperty("java.io.tmpdir"), "onfall-dice-preview.png")
+        ImageIO.write(output, "png", preview)
     }
 }
 
