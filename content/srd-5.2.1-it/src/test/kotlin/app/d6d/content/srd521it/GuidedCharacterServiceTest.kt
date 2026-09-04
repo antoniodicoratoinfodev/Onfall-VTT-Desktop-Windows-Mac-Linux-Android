@@ -1,18 +1,25 @@
 package app.d6d.content.srd521it
 
+import app.d6d.domain.combat.ConditionType
+import app.d6d.domain.combat.DamageType
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.CharacterProgression
+import app.d6d.rules.character.CharacterProgressionEngine
 import app.d6d.rules.character.ChoiceKind
+import app.d6d.rules.character.ChoiceReplacementWindow
 import app.d6d.rules.character.ChoiceSelection
 import app.d6d.rules.character.ClassLevelState
 import app.d6d.rules.character.ExperienceProgression
 import app.d6d.rules.character.LevelUpRequest
+import app.d6d.rules.character.RecoveryPeriod
+import app.d6d.rules.character.SubclassSelection
 import app.d6d.sheet.ArmorCategory
 import app.d6d.sheet.ArmorClassMethod
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.GuidedCharacterService
 import app.d6d.sheet.Proficiency
+import app.d6d.sheet.RestChoiceReplacement
 import app.d6d.sheet.Skill
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -401,6 +408,162 @@ class GuidedCharacterServiceTest {
                 "Il Monaco di 14º livello deve essere competente nel TS di ${it.italianLabel}.",
             )
         }
+    }
+
+    @Test
+    fun `il riposo lungo cambia la terra e riallinea incantesimi resistenza e immunita`() {
+        val classDefinition = Srd521ItContent.pack.classDefinition(CharacterClassId.DRUID)
+        val subclassId = classDefinition.subclassIds.single()
+        val landChoice = classDefinition.level(3).choices.single {
+            it.id.endsWith(":3:terra")
+        }
+        val arid = landChoice.optionIds.single { it.endsWith(":terra-arida") }
+        val polar = landChoice.optionIds.single { it.endsWith(":terra-polare") }
+        val aridSpells = classDefinition.levels
+            .take(10)
+            .flatMap { it.spellGrants }
+            .filter { it.requiredOptionId == arid }
+            .flatMapTo(mutableSetOf()) { it.spellIds }
+        val polarSpells = classDefinition.levels
+            .take(10)
+            .flatMap { it.spellGrants }
+            .filter { it.requiredOptionId == polar }
+            .flatMapTo(mutableSetOf()) { it.spellIds }
+        val scores = Ability.entries.associateWith { 12 }
+        val initialProgression = CharacterProgressionEngine(Srd521ItContent.pack).refreshDerivedState(
+            progression = CharacterProgression(
+                classLevels = listOf(ClassLevelState(CharacterClassId.DRUID, 10)),
+                subclasses = listOf(SubclassSelection(CharacterClassId.DRUID, subclassId)),
+                selections = listOf(ChoiceSelection(landChoice.id, listOf(arid))),
+                selectedFeatureIds = listOf(arid),
+            ),
+            abilityScores = scores,
+        )
+        val sheet = CharacterSheet(abilityScores = scores, progression = initialProgression)
+
+        assertTrue(aridSpells.all { it in sheet.progression.alwaysPreparedSpellIds })
+        assertTrue(
+            service.replaceableChoicesAfterRest(sheet, RecoveryPeriod.SHORT_REST)
+                .none { it.second.id == landChoice.id },
+        )
+        assertTrue(
+            service.replaceableChoicesAfterRest(sheet, RecoveryPeriod.LONG_REST)
+                .any { it.second.id == landChoice.id },
+        )
+
+        val replaced = service.restAndReplaceSelectedOptions(
+            sheet = sheet,
+            period = RecoveryPeriod.LONG_REST,
+            replacements = listOf(
+                RestChoiceReplacement(CharacterClassId.DRUID, landChoice.id, arid, polar),
+            ),
+        )
+
+        assertEquals(
+            listOf(polar),
+            replaced.progression.selections.single { it.choiceId == landChoice.id }.optionIds,
+        )
+        assertTrue(aridSpells.none { it in replaced.progression.alwaysPreparedSpellIds })
+        assertTrue(polarSpells.all { it in replaced.progression.alwaysPreparedSpellIds })
+        val actor = replaced.toActorDefinition()
+        assertTrue(DamageType.COLD in actor.resistances())
+        assertTrue(ConditionType.POISONED in actor.conditionImmunities())
+    }
+
+    @Test
+    fun `un solo riposo breve puo cambiare entrambe le tattiche del cacciatore`() {
+        val classDefinition = Srd521ItContent.pack.classDefinition(CharacterClassId.RANGER)
+        val subclassId = classDefinition.subclassIds.single()
+        val choices = classDefinition.levels
+            .take(7)
+            .flatMap { it.choices }
+            .filter { it.requiredOptionId == subclassId }
+            .filter { it.replacementWindow == ChoiceReplacementWindow.SHORT_OR_LONG_REST }
+        assertEquals(2, choices.size)
+        val oldByChoice = choices.associate { it.id to it.optionIds.first() }
+        val newByChoice = choices.associate { it.id to it.optionIds.last() }
+        val sheet = CharacterSheet(
+            progression = CharacterProgression(
+                classLevels = listOf(ClassLevelState(CharacterClassId.RANGER, 7)),
+                subclasses = listOf(SubclassSelection(CharacterClassId.RANGER, subclassId)),
+                selections = choices.map { choice ->
+                    ChoiceSelection(choice.id, listOf(oldByChoice.getValue(choice.id)))
+                },
+                selectedFeatureIds = oldByChoice.values.toList(),
+            ),
+        )
+
+        assertEquals(
+            choices.mapTo(mutableSetOf()) { it.id },
+            service.replaceableChoicesAfterRest(sheet, RecoveryPeriod.SHORT_REST)
+                .mapTo(mutableSetOf()) { it.second.id },
+        )
+        val replaced = service.restAndReplaceSelectedOptions(
+            sheet = sheet,
+            period = RecoveryPeriod.SHORT_REST,
+            replacements = choices.map { choice ->
+                RestChoiceReplacement(
+                    CharacterClassId.RANGER,
+                    choice.id,
+                    oldByChoice.getValue(choice.id),
+                    newByChoice.getValue(choice.id),
+                )
+            },
+        )
+
+        choices.forEach { choice ->
+            assertEquals(
+                listOf(newByChoice.getValue(choice.id)),
+                replaced.progression.selections.single { it.choiceId == choice.id }.optionIds,
+            )
+        }
+    }
+
+    @Test
+    fun `affinita elementale e resilienza immonda seguono le opzioni selezionate`() {
+        val sorcererDefinition = Srd521ItContent.pack.classDefinition(CharacterClassId.SORCERER)
+        val sorcererSubclass = sorcererDefinition.subclassIds.single()
+        val affinityChoice = sorcererDefinition.level(6).choices.single {
+            it.id.endsWith(":6:affinita-elementale")
+        }
+        val lightning = affinityChoice.optionIds.single { it.endsWith(":affinita-fulmine") }
+        val sorcerer = CharacterSheet(
+            progression = CharacterProgression(
+                classLevels = listOf(ClassLevelState(CharacterClassId.SORCERER, 6)),
+                subclasses = listOf(SubclassSelection(CharacterClassId.SORCERER, sorcererSubclass)),
+                selections = listOf(ChoiceSelection(affinityChoice.id, listOf(lightning))),
+                selectedFeatureIds = listOf(lightning),
+            ),
+        )
+        assertTrue(DamageType.LIGHTNING in sorcerer.toActorDefinition().resistances())
+
+        val warlockDefinition = Srd521ItContent.pack.classDefinition(CharacterClassId.WARLOCK)
+        val warlockSubclass = warlockDefinition.subclassIds.single()
+        val resilienceChoice = warlockDefinition.level(10).choices.single {
+            it.id.endsWith(":10:resilienza-immonda")
+        }
+        val fire = resilienceChoice.optionIds.single { it.endsWith(":fuoco") }
+        val cold = resilienceChoice.optionIds.single { it.endsWith(":freddo") }
+        val warlock = CharacterSheet(
+            progression = CharacterProgression(
+                classLevels = listOf(ClassLevelState(CharacterClassId.WARLOCK, 10)),
+                subclasses = listOf(SubclassSelection(CharacterClassId.WARLOCK, warlockSubclass)),
+                selections = listOf(ChoiceSelection(resilienceChoice.id, listOf(fire))),
+                selectedFeatureIds = listOf(fire),
+            ),
+            fiendishResilienceDamageType = DamageType.FIRE,
+        )
+        val replaced = service.restAndReplaceSelectedOptions(
+            sheet = warlock,
+            period = RecoveryPeriod.SHORT_REST,
+            replacements = listOf(
+                RestChoiceReplacement(CharacterClassId.WARLOCK, resilienceChoice.id, fire, cold),
+            ),
+        )
+
+        assertEquals(DamageType.COLD, replaced.fiendishResilienceDamageType)
+        assertTrue(DamageType.COLD in replaced.toActorDefinition().resistances())
+        assertFalse(DamageType.FIRE in replaced.toActorDefinition().resistances())
     }
 
     private fun createSimple(classId: CharacterClassId): CharacterSheet {

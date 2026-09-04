@@ -109,6 +109,102 @@ class SrdSpellChoiceRegressionTest {
         )
     }
 
+    @Test
+    fun `a ogni livello da bardo una scoperta magica puo essere sostituita`() {
+        val bard = pack.classDefinition(CharacterClassId.BARD)
+        val subclassId = bard.subclassIds.single()
+        val discovery = bard.level(6).choices.single { it.kind == ChoiceKind.MAGICAL_DISCOVERY }
+        val optionProbe = CharacterSheet(
+            progression = CharacterProgression(
+                classLevels = listOf(ClassLevelState(CharacterClassId.BARD, 6)),
+                subclasses = listOf(SubclassSelection(CharacterClassId.BARD, subclassId)),
+            ),
+        )
+        val discoveryOptions = SrdChoiceResolver.options(
+            discovery,
+            CharacterClassId.BARD,
+            6,
+            optionProbe,
+        )
+        val oldCantrip = discoveryOptions.first { pack.element(it.id)?.spell?.level == 0 }
+        val retainedSpell = discoveryOptions.first { pack.element(it.id)?.spell?.level ?: 0 > 0 }
+        val sheet = optionProbe.copy(
+            experiencePoints = ExperienceProgression.thresholdForLevel(7),
+            progression = optionProbe.progression.copy(
+                selections = listOf(
+                    ChoiceSelection(discovery.id, listOf(oldCantrip.id, retainedSpell.id)),
+                ),
+                knownCantripIds = listOf(oldCantrip.id),
+                alwaysPreparedSpellIds = listOf(retainedSpell.id),
+            ),
+        )
+        val target = service.requirements(sheet, CharacterClassId.BARD)
+            .single { it.kind == ChoiceKind.REPLACEMENT_TARGET }
+        assertEquals(0, target.minimumCount)
+
+        var chosen = linkedMapOf(target.id to listOf(oldCantrip.id))
+        var newCantripId = ""
+        repeat(6) {
+            val provisional = chosen.map { ChoiceSelection(it.key, it.value) }
+            val requirements = service.requirements(sheet, CharacterClassId.BARD, provisional)
+            chosen.keys.retainAll(requirements.mapTo(mutableSetOf()) { it.id })
+            requirements.forEach { requirement ->
+                if (requirement.id == target.id) return@forEach
+                val current = chosen[requirement.id].orEmpty()
+                if (current.size in requirement.minimumCount..requirement.count) return@forEach
+                val options = SrdChoiceResolver.options(
+                    requirement,
+                    CharacterClassId.BARD,
+                    7,
+                    sheet,
+                    chosen.map { ChoiceSelection(it.key, it.value) },
+                )
+                val selected = if (requirement.replacesChoiceId == discovery.id) {
+                    val replacement = options.first {
+                        it.id != oldCantrip.id && pack.element(it.id)?.spell?.level == 0
+                    }
+                    newCantripId = replacement.id
+                    listOf(replacement.id)
+                } else if (requirement.minimumCount == 0) {
+                    emptyList()
+                } else {
+                    options.take(requirement.count).map { it.id }
+                }
+                chosen[requirement.id] = selected
+            }
+        }
+        val finalRequirements = service.requirements(
+            sheet,
+            CharacterClassId.BARD,
+            chosen.map { ChoiceSelection(it.key, it.value) },
+        )
+        val request = LevelUpRequest(
+            classId = CharacterClassId.BARD,
+            hitPointIncrease = service.fixedHitPointIncrease(sheet, CharacterClassId.BARD),
+            usedFixedHitPoints = true,
+            selections = finalRequirements.map { requirement ->
+                ChoiceSelection(requirement.id, chosen[requirement.id].orEmpty())
+            },
+        )
+
+        val validation = service.validate(sheet, request)
+        assertTrue(validation.valid, validation.issues.joinToString { it.message })
+        val advanced = service.advance(sheet, request)
+
+        assertEquals(
+            listOf(newCantripId, retainedSpell.id),
+            advanced.progression.selections.single { it.choiceId == discovery.id }.optionIds,
+        )
+        assertFalse(oldCantrip.id in advanced.progression.knownCantripIds)
+        assertTrue(newCantripId in advanced.progression.knownCantripIds)
+        assertTrue(retainedSpell.id in advanced.progression.alwaysPreparedSpellIds)
+        assertTrue(
+            advanced.progression.selections.none {
+                it.choiceId == target.id || it.choiceId.contains(":replacement:7:")
+            },
+        )
+    }
+
     private fun assertConditionalCantripPool(
         classId: CharacterClassId,
         optionSuffix: String,
@@ -151,15 +247,15 @@ class SrdSpellChoiceRegressionTest {
         nextClassLevel: Int,
     ): CharacterSheet = CharacterSheet(
         experiencePoints = ExperienceProgression.thresholdForLevel(nextClassLevel),
-            progression = CharacterProgression(
-                contentPackId = pack.manifest.id,
-                contentPackVersion = pack.manifest.version,
-                classLevels = listOf(ClassLevelState(classId, nextClassLevel - 1)),
-                subclasses = if (nextClassLevel > 3) {
-                    listOf(SubclassSelection(classId, pack.classDefinition(classId).subclassIds.single()))
-                } else {
-                    emptyList()
-                },
-            ),
+        progression = CharacterProgression(
+            contentPackId = pack.manifest.id,
+            contentPackVersion = pack.manifest.version,
+            classLevels = listOf(ClassLevelState(classId, nextClassLevel - 1)),
+            subclasses = if (nextClassLevel > 3) {
+                listOf(SubclassSelection(classId, pack.classDefinition(classId).subclassIds.single()))
+            } else {
+                emptyList()
+            },
+        ),
     )
 }

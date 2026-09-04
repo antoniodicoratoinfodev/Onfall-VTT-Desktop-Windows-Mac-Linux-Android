@@ -547,7 +547,7 @@ object SrdRulesetCharacterAdapter {
             minimum = 0,
         )
         val skillChoice = if (base != null) {
-            base.skillChoice.copy(count = skillCount)
+            base.skillChoice.copy(count = skillCount, minimumCount = skillCount)
         } else {
             ChoiceDefinition(
                 id = "${id.value}:choice:skills",

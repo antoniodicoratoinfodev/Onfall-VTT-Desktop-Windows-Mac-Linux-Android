@@ -318,6 +318,102 @@ class SrdRulesetCharacterAdapterTest {
     }
 
     @Test
+    fun `una classe modulare genera la scelta sottoclasse al livello dichiarato`() {
+        val classId = CharacterClassId.of("homebrew:class:warden")
+        val subclassIds = listOf("homebrew:subclass:moon", "homebrew:subclass:sun")
+        val characterClass = entity(
+            id = "local:class:warden",
+            kind = RuleKind.CLASS,
+            name = "Custode",
+            attributes = mapOf(
+                "classId" to classId.value,
+                "maximumLevel" to "4",
+                "skillChoiceCount" to "0",
+                "spellcastingKind" to "NONE",
+                "subclassIds" to subclassIds.joinToString(","),
+                "subclassLevel" to "2",
+            ),
+        )
+        val subclasses = subclassIds.mapIndexed { index, subclassId ->
+            entity(
+                id = subclassId,
+                kind = RuleKind.SUBCLASS,
+                name = if (index == 0) "Custode lunare" else "Custode solare",
+                attributes = mapOf("elementKind" to "CLASS_OPTION"),
+            )
+        }
+
+        val definition = SrdRulesetCharacterAdapter.project(
+            homebrewRevision(listOf(characterClass) + subclasses),
+            AppLanguage.ITALIAN,
+        ).classDefinition(classId)
+
+        assertEquals(2, definition.subclassLevel)
+        assertTrue(definition.level(1).choices.none { it.kind == ChoiceKind.SUBCLASS })
+        assertEquals(
+            subclassIds,
+            definition.level(2).choices.single { it.kind == ChoiceKind.SUBCLASS }.optionIds,
+        )
+        assertTrue(
+            definition.levels.drop(2).flatMap { it.choices }
+                .none { it.kind == ChoiceKind.SUBCLASS },
+        )
+    }
+
+    @Test
+    fun `un requisito condizionale deve riferirsi a una opzione esistente`() {
+        val feature = entity(
+            id = "local:feature:orphan",
+            kind = RuleKind.FEATURE,
+            name = "Privilegio orfano",
+            attributes = mapOf(
+                "elementKind" to "CLASS_FEATURE",
+                "requiredOptionId" to "local:option:missing",
+            ),
+        )
+
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            SrdRulesetCharacterAdapter.project(
+                homebrewRevision(listOf(feature)),
+                AppLanguage.ITALIAN,
+            )
+        }
+
+        assertTrue(failure.message.orEmpty().contains("requiredOptionId references missing option"))
+    }
+
+    @Test
+    fun `ridurre a zero le competenze di una classe riallinea anche il minimo della scelta`() {
+        val standard = Srd521Ruleset.revision
+        val fighter = standard.entities().single { entity ->
+            entity.kind() == RuleKind.CLASS &&
+                entity.attributes()["classId"] == CharacterClassId.FIGHTER.value
+        }
+        val changedFighter = fighter.withAttributes(
+            fighter.attributes() + ("skillChoiceCount" to "0"),
+        )
+        val revision = RulesetRevision.create(
+            "test:no-fighter-skills",
+            "test:no-fighter-skills:revision:1",
+            "1.0.0",
+            "Guerriero senza competenze",
+            "Regolamento di test.",
+            RulesetOrigin.HOMEBREW,
+            standard.canonicalHash(),
+            standard.runtime(),
+            standard.entities().map { if (it.id() == fighter.id()) changedFighter else it },
+            "2026-09-04T00:00:00Z",
+        )
+
+        val choice = SrdRulesetCharacterAdapter.project(revision, AppLanguage.ITALIAN)
+            .classDefinition(CharacterClassId.FIGHTER)
+            .skillChoice
+
+        assertEquals(0, choice.count)
+        assertEquals(0, choice.minimumCount)
+    }
+
+    @Test
     fun `una classe oltre il venti estende la progressione e usa PE solo finche la tabella li dichiara`() {
         val classId = CharacterClassId.of("homebrew:class:epic")
         val epicClass = entity(

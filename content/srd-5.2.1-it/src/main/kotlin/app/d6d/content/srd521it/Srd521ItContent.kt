@@ -142,7 +142,9 @@ object Srd521ItContent {
                             append('.')
                         }
                     },
-                    classEligibility = listOf(ClassEligibility(classDefinition.id, 3)),
+                    classEligibility = listOf(
+                        ClassEligibility(classDefinition.id, classDefinition.subclassLevel),
+                    ),
                     sourcePage = subclassFeatures.minOfOrNull { it.sourcePage } ?: 0,
                 ),
             )

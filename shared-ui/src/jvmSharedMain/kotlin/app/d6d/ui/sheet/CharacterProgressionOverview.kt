@@ -122,6 +122,12 @@ internal fun ProgressionOverview(
         }
 
         val hasPactSlots = sheet.spellcasting?.pactSlots?.total?.let { it > 0 } == true
+        val hasRecoverableSpellSlots = sheet.spellcasting?.let { casting ->
+            casting.slots.any { it.total > 0 } || casting.pactSlots?.total?.let { it > 0 } == true
+        } == true
+        val canReplaceWildShape =
+            viewModel.knownWildShapeForms().isNotEmpty() &&
+                viewModel.wildShapeReplacementOptions().isNotEmpty()
         val visibleResourcePools = sheet.progression.resourcePools
             .filter { it.maximum > 0 }
             .filterNot { hasPactSlots && it.resourceId.isPactSlotMirrorResourceId() }
@@ -171,6 +177,11 @@ internal fun ProgressionOverview(
                     }
                 }
             }
+        }
+        if (
+            visibleResourcePools.isNotEmpty() || hasRecoverableSpellSlots ||
+            shortRestChoices.isNotEmpty() || longRestChoices.isNotEmpty() || canReplaceWildShape
+        ) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -203,10 +214,7 @@ internal fun ProgressionOverview(
                         onClick = { replacementRest = RecoveryPeriod.LONG_REST },
                     )
                 }
-                if (
-                    viewModel.knownWildShapeForms().isNotEmpty() &&
-                    viewModel.wildShapeReplacementOptions().isNotEmpty()
-                ) {
+                if (canReplaceWildShape) {
                     GameButton(
                         words.longRestAndSwapForm,
                         accent = Palette.Gold,

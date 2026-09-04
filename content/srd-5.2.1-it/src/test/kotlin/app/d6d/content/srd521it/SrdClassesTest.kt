@@ -3,9 +3,11 @@ package app.d6d.content.srd521it
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceDefinition
+import app.d6d.rules.character.ChoiceKind
 import app.d6d.rules.character.ClassDefinition
 import app.d6d.rules.character.ClassLevelDefinition
 import app.d6d.rules.character.ResourceMaximum
+import app.d6d.rules.character.RuleElementKind
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -23,6 +25,37 @@ class SrdClassesTest {
                 (1..20).toList(),
                 definition.levels.map { it.level },
                 "${definition.name}: progressione incompleta o non ordinata",
+            )
+        }
+    }
+
+    @Test
+    fun `ogni classe sceglie la propria sottoclasse al terzo livello e ne filtra i privilegi`() {
+        val pack = Srd521ItContent.pack
+
+        srdClasses.forEach { definition ->
+            assertEquals(3, definition.subclassLevel, "${definition.name}: livello sottoclasse")
+            val subclassChoices = definition.levels.flatMap { level ->
+                level.choices
+                    .filter { it.kind == ChoiceKind.SUBCLASS }
+                    .map { level.level to it }
+            }
+            assertEquals(1, subclassChoices.size, "${definition.name}: scelta sottoclasse duplicata o assente")
+            assertEquals(3, subclassChoices.single().first, "${definition.name}: scelta al livello errato")
+            assertEquals(
+                definition.subclassIds,
+                subclassChoices.single().second.optionIds,
+                "${definition.name}: opzioni sottoclasse incoerenti",
+            )
+
+            val subclassFeatures = definition.levels
+                .flatMap { it.featureIds }
+                .mapNotNull(pack::element)
+                .filter { it.kind == RuleElementKind.SUBCLASS_FEATURE }
+            assertTrue(subclassFeatures.isNotEmpty(), "${definition.name}: privilegi di sottoclasse assenti")
+            assertTrue(
+                subclassFeatures.all { it.requiredOptionId in definition.subclassIds },
+                "${definition.name}: un privilegio di sottoclasse non dipende dalla sottoclasse scelta",
             )
         }
     }
