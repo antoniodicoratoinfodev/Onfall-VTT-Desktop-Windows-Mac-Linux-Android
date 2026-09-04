@@ -220,7 +220,11 @@ class SrdBackgroundsAndEquipmentTest {
                         listOf("srd521-it:equipment:background:criminale:b")
                     "srd521-it:choice:class:ladro:equipment" ->
                         listOf("srd521-it:equipment:class:ladro:b")
-                    else -> available.take(choice.count).map { it.id }
+                    else -> if (choice.minimumCount == 0) {
+                        emptyList()
+                    } else {
+                        available.take(choice.count).map { it.id }
+                    }
                 }
             }
         }
@@ -274,7 +278,11 @@ class SrdBackgroundsAndEquipmentTest {
                         listOf("srd521-it:equipment:background:soldato:a")
                     "srd521-it:choice:class:guerriero:equipment" ->
                         listOf("srd521-it:equipment:class:guerriero:a")
-                    else -> options.take(choice.count).map { it.id }
+                    else -> if (choice.minimumCount == 0) {
+                        emptyList()
+                    } else {
+                        options.take(choice.count).map { it.id }
+                    }
                 }
             }
         }

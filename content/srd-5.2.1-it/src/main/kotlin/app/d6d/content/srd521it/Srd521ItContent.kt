@@ -3,6 +3,7 @@ package app.d6d.content.srd521it
 import app.d6d.i18n.AppLanguage
 import app.d6d.i18n.abbreviationIn
 import app.d6d.i18n.label
+import app.d6d.i18n.pick
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.CharacterSkillDefinition
 import app.d6d.rules.character.CharacterStatDefinition
@@ -112,7 +113,7 @@ object Srd521ItContent {
             val classDefinition = SrdClasses.all(language).first { slug in it.subclassIds.single() }
             val subclassFeatures = sourceElements.filter {
                 it.kind == RuleElementKind.SUBCLASS_FEATURE &&
-                    it.classEligibility.any { eligibility -> eligibility.classId == classDefinition.id }
+                    it.requiredOptionId == requiredId
             }
             return ElementResolution(
                 RuleElementDefinition(
@@ -123,7 +124,21 @@ object Srd521ItContent {
                         append(words.subclassDescription(classDefinition.name))
                         if (subclassFeatures.isNotEmpty()) {
                             append(words.subclassFeaturesPrefix)
-                            append(subclassFeatures.joinToString { it.name })
+                            append(
+                                subclassFeatures
+                                    .groupBy { feature ->
+                                        feature.classEligibility
+                                            .firstOrNull { it.classId == classDefinition.id }
+                                            ?.minimumLevel
+                                            ?: classDefinition.subclassLevel
+                                    }
+                                    .toSortedMap()
+                                    .entries
+                                    .joinToString("; ") { (level, features) ->
+                                        language.pick("livello $level", "level $level") + ": " +
+                                            features.joinToString { it.name }
+                                    },
+                            )
                             append('.')
                         }
                     },

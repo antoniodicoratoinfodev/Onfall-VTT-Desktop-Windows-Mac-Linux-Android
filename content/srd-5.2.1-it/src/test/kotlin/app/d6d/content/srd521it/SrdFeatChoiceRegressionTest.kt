@@ -101,7 +101,11 @@ class SrdFeatChoiceRegressionTest {
                 )
                 ChoiceSelection(
                     requirement.id,
-                    options.take(requirement.count).map { it.id },
+                    if (requirement.minimumCount == 0) {
+                        emptyList()
+                    } else {
+                        options.take(requirement.count).map { it.id }
+                    },
                 )
             }
         return LevelUpRequest(

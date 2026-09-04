@@ -38,6 +38,13 @@ object SrdChoiceResolver {
             .filter(String::isNotBlank)
             .distinct()
 
+    /** Risolve una singola opzione anche quando è già scelta e quindi filtrata dai pool. */
+    fun option(
+        id: String,
+        language: AppLanguage = AppLanguage.ITALIAN,
+        pack: RulesContentPack = Srd521ItContent.packFor(language),
+    ): SrdChoiceOption = optionForId(id, pack.element(id), language, pack)
+
     fun options(
         choice: ChoiceDefinition,
         classId: CharacterClassId,

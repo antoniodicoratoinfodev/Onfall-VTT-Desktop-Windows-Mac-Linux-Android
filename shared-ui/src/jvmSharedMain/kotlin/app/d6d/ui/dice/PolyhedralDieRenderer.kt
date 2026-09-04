@@ -5,10 +5,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.TextStyle
@@ -52,6 +55,12 @@ internal data class DieVector(
         return if (magnitude < 1e-9) this else this / magnitude
     }
 }
+
+/** Posa conclusiva della faccia estratta, esposta ai test geometrici. */
+internal data class SettledDieFace(
+    val normal: DieVector,
+    val up: DieVector,
+)
 
 private data class DieQuaternion(
     val w: Double,
@@ -147,10 +156,20 @@ private data class VisibleDieFace(
     val index: Int,
     val depth: Double,
     val normal: DieVector,
+    val centre3d: DieVector,
+    val up3d: DieVector,
+    val right3d: DieVector,
+    val radius3d: Double,
     val points: List<Offset>,
     val centre: Offset,
-    val up: Offset,
 )
+
+private data class DiePlanePoint(
+    val x: Double,
+    val y: Double,
+)
+
+private val hundredSidedGeometry: DieGeometry by lazy { hundredSidedDie() }
 
 /** Restituisce il solido corretto per ogni dado supportato dal vassoio. */
 internal fun dieGeometry(sides: Int): DieGeometry = when (sides) {
@@ -160,12 +179,41 @@ internal fun dieGeometry(sides: Int): DieGeometry = when (sides) {
     10 -> pentagonalTrapezohedron()
     12 -> dual(icosahedron())
     20 -> icosahedron()
+    100 -> hundredSidedGeometry
     else -> error("Unsupported polyhedral die: d$sides")
 }
 
 /** Indice della faccia che il renderer portera' davanti alla camera. */
 internal fun resultFaceIndex(sides: Int, value: Int): Int =
     if (sides == 10 && value == 0) 0 else (value - 1).mod(sides)
+
+/** Diagnostica deterministica usata per garantire che l'esito sia davvero la faccia piu' frontale. */
+internal fun settledFrontFaceIndex(sides: Int, targetFaceIndex: Int): Int {
+    val geometry = dieGeometry(sides)
+    val target = targetOrientation(geometry, targetFaceIndex.mod(geometry.faces.size))
+    val transformed = geometry.vertices.map(target::rotate)
+    return geometry.faces.indices.maxBy { faceIndex ->
+        faceNormal(geometry.faces[faceIndex].map(transformed::get)).z
+    }
+}
+
+/**
+ * La faccia estratta deve essere parallela allo schermo e leggibile diritta.
+ * Verificare soltanto che fosse «la piu' frontale» permetteva ancora pose molto inclinate.
+ */
+internal fun settledDieFace(sides: Int, targetFaceIndex: Int): SettledDieFace {
+    val geometry = dieGeometry(sides)
+    val faceIndex = targetFaceIndex.mod(geometry.faces.size)
+    val target = targetOrientation(geometry, faceIndex)
+    val originalVertices = geometry.faces[faceIndex].map(geometry.vertices::get)
+    val vertices = geometry.faces[faceIndex].map { vertexIndex ->
+        target.rotate(geometry.vertices[vertexIndex])
+    }
+    return SettledDieFace(
+        normal = faceNormal(vertices),
+        up = target.rotate(faceLabelUpDirection(originalVertices)),
+    )
+}
 
 @Composable
 internal fun PolyhedralDie(
@@ -181,6 +229,9 @@ internal fun PolyhedralDie(
     val geometry = remember(sides) { dieGeometry(sides) }
     val target = remember(geometry, targetFaceIndex) {
         targetOrientation(geometry, targetFaceIndex.mod(geometry.faces.size))
+    }
+    val faceLabelUps = remember(geometry) {
+        geometry.faces.map { face -> faceLabelUpDirection(face.map(geometry.vertices::get)) }
     }
     val ready = remember(phaseOffset) {
         DieQuaternion.euler(
@@ -203,7 +254,7 @@ internal fun PolyhedralDie(
         )
     }
     val orientation = (spin * base).normalized()
-    val textMeasurer = rememberTextMeasurer(cacheSize = 32)
+    val textMeasurer = rememberTextMeasurer(cacheSize = 128)
 
     Canvas(modifier) {
         val transformed = geometry.vertices.map(orientation::rotate)
@@ -223,15 +274,19 @@ internal fun PolyhedralDie(
             val normal = faceNormal(vertices)
             if (normal.z <= 0.015) return@mapIndexedNotNull null
             val centre2d = project(centre3d)
-            val firstDirection = vertices.first() - centre3d
-            val upPoint = project(centre3d + firstDirection * 0.55)
+            // L'orientamento nasce nello spazio locale del solido e ruota con esso:
+            // ogni numero resta davvero stampato sulla propria faccia.
+            val up3d = orientation.rotate(faceLabelUps[index]).normalized()
             VisibleDieFace(
                 index = index,
                 depth = centre3d.z,
                 normal = normal,
+                centre3d = centre3d,
+                up3d = up3d,
+                right3d = up3d.cross(normal).normalized(),
+                radius3d = vertices.minOf { vertex -> (vertex - centre3d).length() },
                 points = vertices.map(::project),
                 centre = centre2d,
-                up = upPoint - centre2d,
             )
         }.sortedBy(VisibleDieFace::depth)
 
@@ -245,17 +300,40 @@ internal fun PolyhedralDie(
             val diffuse = max(0.0, face.normal.dot(light))
             val brightness = (0.22 + diffuse * 0.78).toFloat()
             val faceColor = lerp(palette.faceBottom, palette.faceTop, brightness)
-            drawPath(path, faceColor)
+            val minimumX = face.points.minOf(Offset::x)
+            val minimumY = face.points.minOf(Offset::y)
+            val maximumX = face.points.maxOf(Offset::x)
+            val maximumY = face.points.maxOf(Offset::y)
+            drawPath(
+                path = path,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        lerp(faceColor, Color.White, 0.10f),
+                        faceColor,
+                        lerp(faceColor, Color.Black, 0.20f),
+                    ),
+                    start = Offset(minimumX, minimumY),
+                    end = Offset(maximumX, maximumY),
+                ),
+            )
             if (diffuse > 0.78) {
                 drawPath(path, Color.White.copy(alpha = ((diffuse - 0.78) * 0.30).toFloat()))
             }
-            drawPath(path, Color.Black.copy(alpha = 0.52f), style = Stroke(size.minDimension * 0.018f))
-            drawPath(path, palette.edge.copy(alpha = 0.88f), style = Stroke(size.minDimension * 0.0065f))
+            val blackEdgeWidth = size.minDimension * if (sides == 100) 0.006f else 0.018f
+            val accentEdgeWidth = size.minDimension * if (sides == 100) 0.0022f else 0.0065f
+            drawPath(path, Color.Black.copy(alpha = 0.52f), style = Stroke(blackEdgeWidth))
+            drawPath(path, palette.edge.copy(alpha = 0.88f), style = Stroke(accentEdgeWidth))
 
             if (face.normal.z > 0.10) {
                 val label = faceLabels.getOrElse(face.index) { (face.index + 1).toString() }
-                val nearestEdge = face.points.minOf { point -> (point - face.centre).getDistance() }
-                val fontPixels = (nearestEdge * if (label.length > 1) 0.62f else 0.78f)
+                val centrePerspective = cameraDistance / (cameraDistance - face.centre3d.z)
+                val nominalRadiusPixels = face.radius3d * objectScale * centrePerspective
+                val labelScale = when (label.length) {
+                    1 -> 0.78f
+                    2 -> 0.62f
+                    else -> 0.46f
+                }
+                val fontPixels = (nominalRadiusPixels.toFloat() * labelScale)
                     .coerceIn(size.minDimension * 0.035f, size.minDimension * 0.13f)
                 val style = TextStyle(
                     color = palette.number,
@@ -264,15 +342,36 @@ internal fun PolyhedralDie(
                     shadow = Shadow(Color.Black.copy(alpha = 0.88f), blurRadius = 2.2f),
                 )
                 val layout = textMeasurer.measure(label, style = style)
-                val angle = Math.toDegrees(atan2(face.up.x.toDouble(), -face.up.y.toDouble())).toFloat()
-                withTransform({ rotate(angle, pivot = face.centre) }) {
-                    drawText(
-                        textLayoutResult = layout,
-                        topLeft = Offset(
-                            face.centre.x - layout.size.width / 2f,
-                            face.centre.y - layout.size.height / 2f,
-                        ),
-                    )
+                // Derivata prospettica centrata dei due assi della faccia. La matrice
+                // risultante inclina, comprime e taglia il numero esattamente come il
+                // piano su cui e' inciso; non rimane piu' un'etichetta verso la camera.
+                val sample = 0.18
+                val rightAxis = (
+                    project(face.centre3d + face.right3d * sample) -
+                        project(face.centre3d - face.right3d * sample)
+                    ) / (2.0 * objectScale * sample * centrePerspective).toFloat()
+                val upAxis = (
+                    project(face.centre3d + face.up3d * sample) -
+                        project(face.centre3d - face.up3d * sample)
+                    ) / (2.0 * objectScale * sample * centrePerspective).toFloat()
+                val faceTransform = Matrix().apply {
+                    this[0, 0] = rightAxis.x
+                    this[0, 1] = rightAxis.y
+                    this[1, 0] = -upAxis.x
+                    this[1, 1] = -upAxis.y
+                    this[3, 0] = face.centre.x
+                    this[3, 1] = face.centre.y
+                }
+                clipPath(path) {
+                    withTransform({ transform(faceTransform) }) {
+                        drawText(
+                            textLayoutResult = layout,
+                            topLeft = Offset(
+                                -layout.size.width / 2f,
+                                -layout.size.height / 2f,
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -282,17 +381,61 @@ internal fun PolyhedralDie(
 private fun targetOrientation(geometry: DieGeometry, faceIndex: Int): DieQuaternion {
     val face = geometry.faces[faceIndex]
     val vertices = face.map(geometry.vertices::get)
-    val centre = vertices.reduce(DieVector::plus) / vertices.size.toDouble()
     val normal = faceNormal(vertices)
-    val cameraFacing = DieVector(0.24, 0.20, 0.95).normalized()
+    // La camera guarda lungo +Z: la normale della faccia risultante deve coincidere
+    // esattamente con quell'asse, non soltanto essere la normale piu' vicina.
+    val cameraFacing = DieVector(0.0, 0.0, 1.0)
     val align = DieQuaternion.fromTo(normal, cameraFacing)
-    val rawUp = vertices.first() - centre
-    val tangentUp = (rawUp - normal * rawUp.dot(normal)).normalized()
+    val tangentUp = faceLabelUpDirection(vertices)
     val alignedUp = align.rotate(tangentUp)
     val worldUp = DieVector(0.0, 1.0, 0.0)
-    val desiredUp = (worldUp - cameraFacing * worldUp.dot(cameraFacing)).normalized()
-    val twist = DieQuaternion.fromTo(alignedUp, desiredUp)
+    // Il twist e' deliberatamente attorno alla direzione della camera: in questo
+    // modo raddrizzare il numero non puo' inclinare nuovamente la faccia.
+    val twistAngle = atan2(
+        cameraFacing.dot(alignedUp.cross(worldUp)),
+        alignedUp.dot(worldUp),
+    )
+    val twist = DieQuaternion.axisAngle(cameraFacing, twistAngle)
     return (twist * align).normalized()
+}
+
+/**
+ * Asse verticale convenzionale e stabile di una faccia.
+ *
+ * Il primo vertice di una mesh e' un dettaglio d'implementazione e non puo' decidere
+ * l'orientamento di una cifra. Proiettiamo invece un unico «nord» del dado sul piano
+ * della faccia e scegliamo l'asse di simmetria piu' vicino: vertice per triangoli e
+ * pentagoni, lato per quadrati. Le losanghe del d10 mantengono il proprio asse lungo.
+ * Il vettore ottenuto resta in coordinate locali e viene poi ruotato assieme al dado.
+ */
+private fun faceLabelUpDirection(vertices: List<DieVector>): DieVector {
+    val centre = vertices.reduce(DieVector::plus) / vertices.size.toDouble()
+    val directions = vertices.map { it - centre }
+    val shortest = directions.minOf(DieVector::length)
+    val longest = directions.maxOf(DieVector::length)
+    val candidates = if (vertices.size == 4) {
+        if (longest > shortest * 1.08) {
+            directions.filter { direction -> direction.length() >= longest * 0.999 }
+        } else {
+            vertices.indices.map { index ->
+                ((vertices[index] + vertices[(index + 1) % vertices.size]) / 2.0) - centre
+            }
+        }
+    } else {
+        directions
+    }
+    val normal = faceNormal(vertices)
+    val dieNorth = DieVector(0.173, 0.963, 0.207).normalized()
+    val projectedNorth = dieNorth - normal * dieNorth.dot(normal)
+    val reference = if (projectedNorth.length() > 0.12) {
+        projectedNorth.normalized()
+    } else {
+        val fallback = DieVector(0.811, -0.119, 0.573).normalized()
+        (fallback - normal * fallback.dot(normal)).normalized()
+    }
+    return candidates
+        .map { candidate -> (candidate - normal * candidate.dot(normal)).normalized() }
+        .maxBy { candidate -> candidate.dot(reference) }
 }
 
 private fun faceNormal(vertices: List<DieVector>): DieVector =
@@ -380,6 +523,97 @@ private fun pentagonalTrapezohedron(): DieGeometry {
         }
     }
     return dual(geometry(top + bottom, faces))
+}
+
+/**
+ * Costruisce un unico d100 quasi sferico come intersezione di cento piani tangenti.
+ *
+ * Le normali sono distribuite con una spirale aurea; ciascuna diventa una faccia
+ * reale del solido. Intersecare i relativi semispazi produce facce compatte e
+ * leggibili, invece delle losanghe estremamente strette di un trapezoedro a 100 lati.
+ */
+private fun hundredSidedDie(): DieGeometry {
+    val sides = 100
+    val goldenAngle = PI * (3.0 - sqrt(5.0))
+    val normals = List(sides) { index ->
+        val vertical = 1.0 - 2.0 * (index + 0.5) / sides
+        val horizontal = sqrt(1.0 - vertical * vertical)
+        val angle = index * goldenAngle
+        DieVector(
+            x = cos(angle) * horizontal,
+            y = vertical,
+            z = sin(angle) * horizontal,
+        )
+    }
+    val vertices = mutableListOf<DieVector>()
+    val faces = normals.mapIndexed { normalIndex, normal ->
+        val helper = if (abs(normal.y) < 0.9) {
+            DieVector(0.0, 1.0, 0.0)
+        } else {
+            DieVector(1.0, 0.0, 0.0)
+        }
+        val tangent = helper.cross(normal).normalized()
+        val bitangent = normal.cross(tangent).normalized()
+        var polygon = listOf(
+            DiePlanePoint(-4.0, -4.0),
+            DiePlanePoint(4.0, -4.0),
+            DiePlanePoint(4.0, 4.0),
+            DiePlanePoint(-4.0, 4.0),
+        )
+        normals.forEachIndexed { clippingIndex, clippingNormal ->
+            if (clippingIndex != normalIndex) {
+                polygon = clipDieFace(
+                    polygon = polygon,
+                    a = clippingNormal.dot(tangent),
+                    b = clippingNormal.dot(bitangent),
+                    boundary = 1.0 - clippingNormal.dot(normal),
+                )
+            }
+        }
+        polygon = polygon.filterIndexed { index, point ->
+            val previous = polygon[(index - 1).mod(polygon.size)]
+            val dx = point.x - previous.x
+            val dy = point.y - previous.y
+            dx * dx + dy * dy > 1e-14
+        }
+        require(polygon.size >= 3) { "Invalid d100 face" }
+        polygon.map { point ->
+            val vertex = normal + tangent * point.x + bitangent * point.y
+            val existing = vertices.indexOfFirst { candidate ->
+                (candidate - vertex).dot(candidate - vertex) < 1e-12
+            }
+            if (existing >= 0) existing else vertices.size.also { vertices += vertex }
+        }
+    }
+    return geometry(vertices, faces)
+}
+
+/** Taglio di Sutherland-Hodgman nel piano locale di una faccia. */
+private fun clipDieFace(
+    polygon: List<DiePlanePoint>,
+    a: Double,
+    b: Double,
+    boundary: Double,
+): List<DiePlanePoint> {
+    if (polygon.isEmpty()) return emptyList()
+    val clipped = mutableListOf<DiePlanePoint>()
+    polygon.indices.forEach { index ->
+        val current = polygon[index]
+        val next = polygon[(index + 1) % polygon.size]
+        val currentDistance = a * current.x + b * current.y - boundary
+        val nextDistance = a * next.x + b * next.y - boundary
+        val currentInside = currentDistance <= 1e-10
+        val nextInside = nextDistance <= 1e-10
+        if (currentInside) clipped += current
+        if (currentInside != nextInside) {
+            val amount = currentDistance / (currentDistance - nextDistance)
+            clipped += DiePlanePoint(
+                x = current.x + (next.x - current.x) * amount,
+                y = current.y + (next.y - current.y) * amount,
+            )
+        }
+    }
+    return clipped
 }
 
 /** Costruisce d10 e d12 come duali, ordinando le facce attorno a ogni vertice. */

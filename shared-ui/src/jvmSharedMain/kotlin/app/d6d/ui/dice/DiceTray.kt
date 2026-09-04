@@ -386,22 +386,17 @@ private fun DiceResult(
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     roll.values.take(MAX_ANIMATED_DICE).forEachIndexed { index, value ->
-                        val selected = rolling || roll.selectedValue == null ||
-                            roll.mode == D20Mode.NORMAL || value == roll.selectedValue
-                        if (roll.sides == 100) {
-                            PercentileDice(value, skin, rolling, reducedEffects, selected && (rolling || roll.kept))
-                        } else {
-                            DicePiece(
-                                sides = roll.sides,
-                                label = if (rolling) "?" else value.toString(),
-                                skin = skin,
-                                rolling = rolling,
-                                reducedEffects = reducedEffects,
-                                kept = selected && (rolling || roll.kept),
-                                phaseOffset = index,
-                                compact = compact,
-                            )
-                        }
+                        val selected = rolling || roll.keepsDieAt(index)
+                        DicePiece(
+                            sides = roll.sides,
+                            label = if (rolling) "?" else value.toString(),
+                            skin = skin,
+                            rolling = rolling,
+                            reducedEffects = reducedEffects,
+                            kept = selected,
+                            phaseOffset = index,
+                            compact = compact,
+                        )
                     }
                     val remainder = roll.values.size - MAX_ANIMATED_DICE
                     if (remainder > 0) Chip(words.diceMore(remainder), skinPalette(skin).number)
@@ -413,28 +408,6 @@ private fun DiceResult(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun PercentileDice(
-    value: Int,
-    skin: DiceSkinId,
-    rolling: Boolean,
-    reducedEffects: Boolean,
-    kept: Boolean,
-) {
-    val normalized = if (value == 100) 0 else value
-    val tens = (normalized / 10) * 10
-    val ones = normalized % 10
-    Row(
-        Modifier.semantics { contentDescription = "d100: $value" },
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        DicePiece(10, if (rolling) "?" else tens.toString().padStart(2, '0'), skin, rolling,
-            reducedEffects, kept, 0, compact = true)
-        DicePiece(10, if (rolling) "?" else ones.toString(), skin, rolling,
-            reducedEffects, kept, 1, compact = true)
     }
 }
 
@@ -545,6 +518,7 @@ internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDieShape(
         10 -> 6
         12 -> 5
         20 -> 6
+        100 -> 20
         else -> 6
     }
     val start = when (sides) {
@@ -576,7 +550,7 @@ internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDieShape(
             drawLine(palette.edge.copy(alpha = 0.30f), points[1], points[3], 1.1f)
         }
         8 -> points.forEach { drawLine(palette.edge.copy(alpha = 0.42f), center, it, 1.1f) }
-        10, 20 -> points.forEachIndexed { index, point ->
+        10, 20, 100 -> points.forEachIndexed { index, point ->
             if (index % 2 == 0) drawLine(palette.edge.copy(alpha = 0.38f), center, point, 1.1f, StrokeCap.Round)
         }
         12 -> {

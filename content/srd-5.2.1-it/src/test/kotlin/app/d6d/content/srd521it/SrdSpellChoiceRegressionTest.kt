@@ -7,6 +7,7 @@ import app.d6d.rules.character.ChoiceSelection
 import app.d6d.rules.character.ClassLevelState
 import app.d6d.rules.character.ExperienceProgression
 import app.d6d.rules.character.LevelUpRequest
+import app.d6d.rules.character.SubclassSelection
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.GuidedCharacterService
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -150,10 +151,15 @@ class SrdSpellChoiceRegressionTest {
         nextClassLevel: Int,
     ): CharacterSheet = CharacterSheet(
         experiencePoints = ExperienceProgression.thresholdForLevel(nextClassLevel),
-        progression = CharacterProgression(
-            contentPackId = pack.manifest.id,
-            contentPackVersion = pack.manifest.version,
-            classLevels = listOf(ClassLevelState(classId, nextClassLevel - 1)),
-        ),
+            progression = CharacterProgression(
+                contentPackId = pack.manifest.id,
+                contentPackVersion = pack.manifest.version,
+                classLevels = listOf(ClassLevelState(classId, nextClassLevel - 1)),
+                subclasses = if (nextClassLevel > 3) {
+                    listOf(SubclassSelection(classId, pack.classDefinition(classId).subclassIds.single()))
+                } else {
+                    emptyList()
+                },
+            ),
     )
 }

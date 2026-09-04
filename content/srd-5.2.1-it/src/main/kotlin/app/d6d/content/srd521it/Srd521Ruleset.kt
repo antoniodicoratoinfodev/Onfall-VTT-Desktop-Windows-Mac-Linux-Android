@@ -321,6 +321,7 @@ object Srd521Ruleset {
             "multiclassArmorTrainingHeavy" to it.multiclassArmorTraining.heavy.toString(),
             "multiclassArmorTrainingShields" to it.multiclassArmorTraining.shields.toString(),
             "subclassIds" to it.subclassIds.joinToString(","),
+            "subclassLevel" to it.subclassLevel.toString(),
             "weaponTraining" to it.weaponTraining,
             "startingEquipment" to it.startingEquipment,
             "levelFeatureIds" to it.levels.joinToString(";") { level ->
@@ -350,6 +351,7 @@ object Srd521Ruleset {
                     "${value.classId.name}:${value.minimumLevel}"
                 })
             }
+            it.requiredOptionId?.let { requiredOptionId -> put("requiredOptionId", requiredOptionId) }
             it.spell?.let { spell ->
                 put("spellLevel", spell.level.toString())
                 put("school", spell.school)

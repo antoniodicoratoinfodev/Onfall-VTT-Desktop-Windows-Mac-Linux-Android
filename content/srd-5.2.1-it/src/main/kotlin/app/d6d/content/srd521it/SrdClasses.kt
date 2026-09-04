@@ -6,6 +6,7 @@ import app.d6d.rules.character.ArmorTrainingGrant
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.ChoiceKind
+import app.d6d.rules.character.ChoiceReplacementWindow
 import app.d6d.rules.character.ClassDefinition
 import app.d6d.rules.character.ClassLevelDefinition
 import app.d6d.rules.character.EffectCondition
@@ -340,6 +341,8 @@ private fun bard(): ClassDefinition {
                         count = 2,
                         poolId = "$PREFIX:pool:spells:bardo:magical-discoveries",
                         description = "Incantesimi da chierico, druido o mago di un livello lanciabile.",
+                        requiredOptionId = subclass,
+                        replacementWindow = ChoiceReplacementWindow.CLASS_LEVEL_UP,
                     ),
                     9 to expertiseChoice(classSlug, level = 9, count = 2),
                 ),
@@ -620,6 +623,8 @@ private fun druid(): ClassDefinition {
                             "terra-tropicale",
                         ),
                         description = "La scelta può essere cambiata al termine di un riposo lungo.",
+                        requiredOptionId = subclass,
+                        replacementWindow = ChoiceReplacementWindow.LONG_REST,
                     ),
                     4 to poolChoice(
                         id = choiceId(classSlug, 4, "forme-bestiali"),
@@ -822,6 +827,7 @@ private fun fighter(): ClassDefinition {
                         classSlug,
                         level = 7,
                         slug = "stile-di-combattimento-aggiuntivo",
+                        requiredOptionId = subclass,
                     ),
                     10 to weaponMasteryChoice(classSlug, level = 10, count = 1),
                     16 to weaponMasteryChoice(classSlug, level = 16, count = 1),
@@ -1039,13 +1045,21 @@ private fun wizard(): ClassDefinition {
                         ),
                     )
                     add(3 to subclassChoice(classSlug, 3, subclass))
-                    add(3 to evocationSpellChoice(level = 3, count = 2, maximumSpellLevel = 2))
+                    add(
+                        3 to evocationSpellChoice(
+                            level = 3,
+                            count = 2,
+                            maximumSpellLevel = 2,
+                            requiredOptionId = subclass,
+                        ),
+                    )
                     listOf(5, 7, 9, 11, 13, 15, 17).forEach { level ->
                         add(
                             level to evocationSpellChoice(
                                 level = level,
                                 count = 1,
                                 maximumSpellLevel = (level + 1) / 2,
+                                requiredOptionId = subclass,
                             ),
                         )
                     }
@@ -1504,6 +1518,8 @@ private fun ranger(): ClassDefinition {
                         ),
                         description = "Puoi sostituire l'opzione con l'altra al termine di un " +
                             "riposo breve o lungo.",
+                        requiredOptionId = subclass,
+                        replacementWindow = ChoiceReplacementWindow.SHORT_OR_LONG_REST,
                     ),
                     7 to choice(
                         classSlug,
@@ -1518,6 +1534,8 @@ private fun ranger(): ClassDefinition {
                         ),
                         description = "Puoi sostituire l'opzione con l'altra al termine di un " +
                             "riposo breve o lungo.",
+                        requiredOptionId = subclass,
+                        replacementWindow = ChoiceReplacementWindow.SHORT_OR_LONG_REST,
                     ),
                     9 to expertiseChoice(classSlug, level = 9, count = 2),
                 ),
@@ -1640,6 +1658,7 @@ private fun sorcerer(): ClassDefinition {
                             "affinita-fuoco",
                             "affinita-veleno",
                         ),
+                        requiredOptionId = subclass,
                     ),
                     10 to metamagicChoice(classSlug, level = 10, count = 2),
                     17 to metamagicChoice(classSlug, level = 17, count = 2),
@@ -1811,6 +1830,8 @@ private fun warlock(): ClassDefinition {
                         count = 1,
                         optionIds = fiendResilienceDamageIds,
                         description = "Puoi cambiare il tipo al termine di un riposo breve o lungo.",
+                        requiredOptionId = subclass,
+                        replacementWindow = ChoiceReplacementWindow.SHORT_OR_LONG_REST,
                     ),
                     11 to arcanumChoice(level = 11, spellLevel = 6),
                     12 to invocationChoice(classSlug, level = 12, count = 1),
@@ -2035,6 +2056,8 @@ private fun choice(
     count: Int,
     optionIds: List<String>,
     description: String = "",
+    requiredOptionId: String? = null,
+    replacementWindow: ChoiceReplacementWindow = ChoiceReplacementWindow.NEVER,
 ): ChoiceDefinition = ChoiceDefinition(
     id = choiceId(classSlug, level, slug),
     title = title,
@@ -2042,6 +2065,8 @@ private fun choice(
     count = count,
     optionIds = optionIds,
     description = description,
+    requiredOptionId = requiredOptionId,
+    replacementWindow = replacementWindow,
 )
 
 private fun poolChoice(
@@ -2051,6 +2076,8 @@ private fun poolChoice(
     count: Int,
     poolId: String,
     description: String = "",
+    requiredOptionId: String? = null,
+    replacementWindow: ChoiceReplacementWindow = ChoiceReplacementWindow.NEVER,
 ): ChoiceDefinition = ChoiceDefinition(
     id = id,
     title = title,
@@ -2058,6 +2085,8 @@ private fun poolChoice(
     count = count,
     poolId = poolId,
     description = description,
+    requiredOptionId = requiredOptionId,
+    replacementWindow = replacementWindow,
 )
 
 private fun skillChoice(
@@ -2149,6 +2178,7 @@ private fun fightingStyleChoice(
     level: Int,
     slug: String = "stile-di-combattimento",
     additionalOptionIds: List<String> = emptyList(),
+    requiredOptionId: String? = null,
 ): ChoiceDefinition = choice(
     classSlug = classSlug,
     level = level,
@@ -2158,6 +2188,7 @@ private fun fightingStyleChoice(
     count = 1,
     optionIds = fightingStyleIds + additionalOptionIds,
     description = "Uno stile già posseduto non può essere scelto di nuovo.",
+    requiredOptionId = requiredOptionId,
 )
 
 private fun metamagicChoice(
@@ -2200,6 +2231,7 @@ private fun evocationSpellChoice(
     level: Int,
     count: Int,
     maximumSpellLevel: Int,
+    requiredOptionId: String,
 ): ChoiceDefinition = poolChoice(
     id = choiceId("mago", level, "invocatore-sapiente"),
     title = if (count == 1) {
@@ -2212,6 +2244,7 @@ private fun evocationSpellChoice(
     kind = ChoiceKind.SPELLBOOK_SPELL,
     count = count,
     poolId = "$PREFIX:pool:spells:mago:evocation",
+    requiredOptionId = requiredOptionId,
 )
 
 private fun spellGrant(

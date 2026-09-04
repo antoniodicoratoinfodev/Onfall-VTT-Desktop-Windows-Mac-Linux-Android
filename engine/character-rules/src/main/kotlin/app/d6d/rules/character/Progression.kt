@@ -255,6 +255,12 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         }
         val level = definition.level(nextClassLevel)
         val previous = if (nextClassLevel == 1) null else definition.level(nextClassLevel - 1)
+        val activeOptionIds = buildSet {
+            progression.selections.forEach { addAll(it.optionIds) }
+            progression.subclasses.forEach { add(it.subclassId) }
+            addAll(progression.selectedFeatureIds)
+            provisionalSelections.forEach { addAll(it.optionIds) }
+        }
         val provisionalBackground = provisionalSelections
             .asSequence()
             .flatMap { it.optionIds.asSequence() }
@@ -325,7 +331,59 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                         ?: definition.startingWeaponChoice?.let(::add)
                 }
             }
-            addAll(level.choices)
+            addAll(
+                level.choices.filter { choice ->
+                    choice.requiredOptionId == null || choice.requiredOptionId in activeOptionIds
+                },
+            )
+            definition.levels
+                .take(nextClassLevel - 1)
+                .flatMap { it.choices }
+                .filter { it.replacementWindow == ChoiceReplacementWindow.CLASS_LEVEL_UP }
+                .filter { it.requiredOptionId == null || it.requiredOptionId in activeOptionIds }
+                .forEach { acquiredChoice ->
+                    val acquiredSelection = progression.selections
+                        .singleOrNull { it.choiceId == acquiredChoice.id }
+                        ?.optionIds
+                        .orEmpty()
+                    if (acquiredSelection.isEmpty()) return@forEach
+                    val replacementPrefix = "${acquiredChoice.id}:replacement:$nextClassLevel"
+                    val targetChoiceId = "$replacementPrefix:old"
+                    add(
+                        ChoiceDefinition(
+                            id = targetChoiceId,
+                            title = say(
+                                "${acquiredChoice.title}: sostituisci un'opzione (facoltativo)",
+                                "${acquiredChoice.title}: replace one option (optional)",
+                            ),
+                            kind = ChoiceKind.REPLACEMENT_TARGET,
+                            count = 1,
+                            minimumCount = 0,
+                            optionIds = acquiredSelection,
+                            description = say(
+                                "Lascia vuoto per conservare le opzioni attuali.",
+                                "Leave empty to keep the current options.",
+                            ),
+                            replacesChoiceId = acquiredChoice.id,
+                        ),
+                    )
+                    val replacedOptionId = provisionalSelections
+                        .firstOrNull { it.choiceId == targetChoiceId }
+                        ?.optionIds
+                        ?.singleOrNull()
+                    if (replacedOptionId != null) {
+                        add(
+                            acquiredChoice.copy(
+                                id = "$replacementPrefix:new",
+                                title = say("Scegli la nuova opzione", "Choose the new option"),
+                                count = 1,
+                                minimumCount = 1,
+                                replacementWindow = ChoiceReplacementWindow.NEVER,
+                                replacesChoiceId = acquiredChoice.id,
+                            ),
+                        )
+                    }
+                }
             val newCantrips = level.cantripsKnown - (previous?.cantripsKnown ?: 0)
             if (newCantrips > 0) {
                 add(
@@ -597,6 +655,17 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             }
         }
 
+        val duplicateChoiceIds = request.selections
+            .groupingBy { it.choiceId }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
+        if (duplicateChoiceIds.isNotEmpty()) {
+            issues += ProgressionIssue(
+                "DUPLICATE_CHOICE_ID",
+                say("Scelte ripetute: ", "Duplicate choices: ") + duplicateChoiceIds.joinToString() + ".",
+            )
+        }
         val selectionsById = request.selections.associateBy { it.choiceId }
         val requirements = runCatching {
             requirementsFor(progression, request.classId, request.selections)
@@ -610,13 +679,20 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             }
         requirements.forEach { choice ->
             val selected = selectionsById[choice.id]?.optionIds.orEmpty()
-            if (selected.size != choice.count) {
+            if (selected.size !in choice.minimumCount..choice.count) {
                 issues += ProgressionIssue(
                     "CHOICE_COUNT",
-                    say(
-                        "«${choice.title}» richiede esattamente ${choice.count} scelte.",
-                        "“${choice.title}” requires exactly ${choice.count} selections.",
-                    ),
+                    if (choice.minimumCount == choice.count) {
+                        say(
+                            "«${choice.title}» richiede esattamente ${choice.count} scelte.",
+                            "“${choice.title}” requires exactly ${choice.count} selections.",
+                        )
+                    } else {
+                        say(
+                            "«${choice.title}» richiede da ${choice.minimumCount} a ${choice.count} scelte.",
+                            "“${choice.title}” requires ${choice.minimumCount} to ${choice.count} selections.",
+                        )
+                    },
                 )
             }
             if (!choice.allowDuplicates && selected.distinct().size != selected.size) {
@@ -984,12 +1060,34 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         val definition = pack.classDefinition(request.classId)
         val nextClassLevel = progression.levelIn(request.classId) + 1
         val nextTotalLevel = progression.totalLevel + 1
+        val requestRequirements = requirementsFor(progression, request.classId, request.selections)
+        val requestChoicesById = requestRequirements.associateBy { it.id }
+        val replacementPairs = request.selections
+            .filter { selection -> requestChoicesById[selection.choiceId]?.kind == ChoiceKind.REPLACEMENT_TARGET }
+            .mapNotNull { targetSelection ->
+                val targetDefinition = requestChoicesById.getValue(targetSelection.choiceId)
+                val sourceChoiceId = targetDefinition.replacesChoiceId ?: return@mapNotNull null
+                val oldOptionId = targetSelection.optionIds.singleOrNull() ?: return@mapNotNull null
+                val newOptionId = request.selections
+                    .firstOrNull { selection ->
+                        val definition = requestChoicesById[selection.choiceId]
+                        definition?.replacesChoiceId == sourceChoiceId &&
+                            definition.kind != ChoiceKind.REPLACEMENT_TARGET
+                    }
+                    ?.optionIds
+                    ?.singleOrNull()
+                    ?: return@mapNotNull null
+                Triple(sourceChoiceId, oldOptionId, newOptionId)
+            }
         val newClassLevels = progression.classLevels
             .filterNot { it.classId == request.classId } +
             ClassLevelState(request.classId, nextClassLevel)
         val levelDefinition = definition.level(nextClassLevel)
-        val allSelections = progression.selections + request.selections
-        val allSelectedOptionIds = allSelections.flatMapTo(mutableSetOf()) { it.optionIds }
+        val persistedRequestSelections = request.selections.filter { selection ->
+            requestChoicesById[selection.choiceId]?.replacesChoiceId == null
+        }
+        val allSelections = progression.selections + persistedRequestSelections
+        val allSelectedOptionIds = (allSelections + request.selections).flatMapTo(mutableSetOf()) { it.optionIds }
             .apply {
                 addAll(progression.subclasses.map { it.subclassId })
                 addAll(progression.selectedFeatureIds)
@@ -997,6 +1095,12 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
         val cumulativeLevelDefinitions = newClassLevels.flatMap { classLevel ->
             pack.classDefinition(classLevel.classId).levels.take(classLevel.level)
         }
+        val activeCumulativeFeatureIds = cumulativeLevelDefinitions
+            .flatMap { it.featureIds }
+            .filter { featureId ->
+                val requirement = pack.element(featureId)?.requiredOptionId
+                requirement == null || requirement in allSelectedOptionIds
+            }
         val newlyGrantedSpells = cumulativeLevelDefinitions
             .flatMap { it.spellGrants }
             .filter { it.requiredOptionId == null || it.requiredOptionId in allSelectedOptionIds }
@@ -1004,7 +1108,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             .plus(
                 (
                     progression.selectedFeatureIds +
-                        cumulativeLevelDefinitions.flatMap { it.featureIds } +
+                        activeCumulativeFeatureIds +
                         request.selections.flatMap { it.optionIds }
                     )
                     .distinct()
@@ -1013,8 +1117,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             )
         val subclassOption = request.selections
             .firstOrNull { selection ->
-                requirementsFor(progression, request.classId, request.selections)
-                    .firstOrNull { it.id == selection.choiceId }?.kind == ChoiceKind.SUBCLASS
+                requestChoicesById[selection.choiceId]?.kind == ChoiceKind.SUBCLASS
             }
             ?.optionIds
             ?.singleOrNull()
@@ -1025,8 +1128,7 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                 SubclassSelection(request.classId, subclassOption)
         }
         val selectedIdsByKind = request.selections.flatMap { selection ->
-            val kind = requirementsFor(progression, request.classId, request.selections)
-                .first { it.id == selection.choiceId }.kind
+            val kind = requestChoicesById.getValue(selection.choiceId).kind
             selection.optionIds.map { kind to it }
         }
         val selectedBackgroundId = selectedIdsByKind
@@ -1059,7 +1161,10 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
             selections = allSelections,
             selectedFeatureIds = (
                 progression.selectedFeatureIds +
-                    levelDefinition.featureIds +
+                    levelDefinition.featureIds.filter { featureId ->
+                        val requirement = pack.element(featureId)?.requiredOptionId
+                        requirement == null || requirement in allSelectedOptionIds
+                    } +
                     selectedIdsByKind.filter { it.first in featureChoiceKinds }.map { it.second }
                 ).distinct(),
             featIds = (
@@ -1130,9 +1235,123 @@ class CharacterProgressionEngine(private val pack: RulesContentPack) {
                     .coerceAtMost(advancementCap(ability, absoluteIncrease))
             }
         }
-        return updated.copy(
-            resourcePools = deriveResourcePools(updated, scoresAfterAdvancement),
-            effects = deriveEffects(updated),
+        val updatedAfterReplacements = replacementPairs.fold(updated) { current, (sourceChoiceId, oldId, newId) ->
+            fun List<String>.withReplacement(): List<String> = map { id ->
+                if (id == oldId) newId else id
+            }.distinct()
+            current.copy(
+                selections = current.selections.map { selection ->
+                    if (selection.choiceId == sourceChoiceId) {
+                        selection.copy(optionIds = selection.optionIds.withReplacement())
+                    } else {
+                        selection
+                    }
+                },
+                selectedFeatureIds = current.selectedFeatureIds.withReplacement(),
+                featIds = current.featIds.withReplacement(),
+                knownCantripIds = current.knownCantripIds.withReplacement(),
+                preparedSpellIds = current.preparedSpellIds.withReplacement(),
+                alwaysPreparedSpellIds = current.alwaysPreparedSpellIds.withReplacement(),
+                spellbookSpellIds = current.spellbookSpellIds.withReplacement(),
+            )
+        }
+        return refreshDerivedState(updatedAfterReplacements, scoresAfterAdvancement)
+    }
+
+    /**
+     * Ricalcola tutto ciò che dipende dalle opzioni attualmente attive.
+     *
+     * Serve sia dopo un passaggio di livello sia quando una regola permette di
+     * sostituire una scelta al riposo. In particolare rimuove privilegi e
+     * incantesimi della vecchia opzione prima di applicare quelli della nuova.
+     */
+    fun refreshDerivedState(
+        progression: CharacterProgression,
+        abilityScores: Map<Ability, Int>,
+    ): CharacterProgression {
+        val allLevelFeatureIds = pack.classes
+            .flatMap { definition -> definition.levels.flatMap { it.featureIds } }
+            .toSet()
+        val retainedChosenFeatures = progression.selectedFeatureIds
+            .filterNot { it in allLevelFeatureIds }
+        val optionIdsBeforeLevelFeatures = buildSet {
+            progression.selections.forEach { addAll(it.optionIds) }
+            progression.subclasses.forEach { add(it.subclassId) }
+            addAll(retainedChosenFeatures)
+        }
+        val attainedLevelFeatureIds = progression.classLevels.flatMap { classLevel ->
+            pack.classDefinition(classLevel.classId)
+                .levels
+                .take(classLevel.level)
+                .flatMap { it.featureIds }
+        }
+        val activeLevelFeatureIds = buildList {
+            var changed: Boolean
+            do {
+                changed = false
+                attainedLevelFeatureIds.forEach { featureId ->
+                    if (featureId in this) return@forEach
+                    val requirement = pack.element(featureId)?.requiredOptionId
+                    if (requirement == null || requirement in optionIdsBeforeLevelFeatures || requirement in this) {
+                        add(featureId)
+                        changed = true
+                    }
+                }
+            } while (changed)
+        }
+        val selectedFeatureIds = (activeLevelFeatureIds + retainedChosenFeatures).distinct()
+        val activeOptionIds = buildSet {
+            progression.selections.forEach { addAll(it.optionIds) }
+            progression.subclasses.forEach { add(it.subclassId) }
+            addAll(selectedFeatureIds)
+            addAll(progression.featIds)
+        }
+        val attainedLevels = progression.classLevels.flatMap { classLevel ->
+            pack.classDefinition(classLevel.classId).levels.take(classLevel.level)
+        }
+        val activeGrantedSpellIds = attainedLevels
+            .flatMap { it.spellGrants }
+            .filter { it.requiredOptionId == null || it.requiredOptionId in activeOptionIds }
+            .flatMap { it.spellIds }
+            .plus(
+                activeOptionIds
+                    .mapNotNull(pack::element)
+                    .filter { it.requiredOptionId == null || it.requiredOptionId in activeOptionIds }
+                    .flatMap { it.grantedSpellIds },
+            )
+        val everyGeneratedSpellId = buildSet {
+            pack.classes.forEach { definition ->
+                definition.levels.forEach { level ->
+                    level.spellGrants.forEach { addAll(it.spellIds) }
+                }
+            }
+            pack.elements.forEach { addAll(it.grantedSpellIds) }
+        }
+        val choicesById = pack.classes
+            .flatMap { it.levels }
+            .flatMap { it.choices }
+            .associateBy { it.id }
+        val explicitlyAlwaysPrepared = progression.selections.flatMap { selection ->
+            when (choicesById[selection.choiceId]?.kind) {
+                ChoiceKind.ALWAYS_PREPARED_SPELL -> selection.optionIds
+                ChoiceKind.MAGICAL_DISCOVERY -> selection.optionIds.filter { id ->
+                    pack.element(id)?.spell?.level != 0
+                }
+                else -> emptyList()
+            }
+        }
+        val alwaysPreparedSpellIds = (
+            progression.alwaysPreparedSpellIds.filterNot { it in everyGeneratedSpellId } +
+                explicitlyAlwaysPrepared +
+                activeGrantedSpellIds
+            ).distinct()
+        val refreshed = progression.copy(
+            selectedFeatureIds = selectedFeatureIds,
+            alwaysPreparedSpellIds = alwaysPreparedSpellIds,
+        )
+        return refreshed.copy(
+            resourcePools = deriveResourcePools(refreshed, abilityScores),
+            effects = deriveEffects(refreshed),
         )
     }
 

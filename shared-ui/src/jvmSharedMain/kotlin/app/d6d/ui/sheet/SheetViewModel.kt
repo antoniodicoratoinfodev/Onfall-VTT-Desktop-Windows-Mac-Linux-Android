@@ -39,6 +39,8 @@ import app.d6d.ui.i18n.literalText
 import app.d6d.sheet.CharacterSheet
 import app.d6d.sheet.GuidedCharacterService
 import app.d6d.sheet.MonsterStatBlock
+import app.d6d.sheet.RestChoiceReplacement
+import app.d6d.sheet.recoveredAfter
 import app.d6d.sheet.RuleDrivenSheetProjector
 import app.d6d.sheet.SheetLibrary
 import app.d6d.sheet.SheetStore
@@ -92,6 +94,13 @@ enum class SheetNavigationResult {
     NOT_FOUND,
     FAILED,
 }
+
+data class RestReplaceableChoice(
+    val classId: CharacterClassId,
+    val choice: ChoiceDefinition,
+    val selectedOptions: List<SrdChoiceOption>,
+    val replacementOptions: List<SrdChoiceOption>,
+)
 
 /**
  * Stato dell'archivio di schede.
@@ -854,6 +863,74 @@ class SheetViewModel(
         )
     }
 
+    /** Scelte di classe che possono essere aggiornate al termine di questo riposo. */
+    fun restReplaceableChoices(period: RecoveryPeriod): List<RestReplaceableChoice> =
+        if (!characterRulesetAvailable) {
+            emptyList()
+        } else {
+            guidedCharacters.replaceableChoicesAfterRest(character, period).mapNotNull { (classId, choice) ->
+                val selectedIds = character.progression.selections
+                    .singleOrNull { it.choiceId == choice.id }
+                    ?.optionIds
+                    .orEmpty()
+                if (selectedIds.isEmpty()) return@mapNotNull null
+                RestReplaceableChoice(
+                    classId = classId,
+                    choice = choice,
+                    selectedOptions = selectedIds.map { SrdChoiceResolver.option(it, AppLocale.language, activePack) },
+                    replacementOptions = SrdChoiceResolver.options(
+                        choice = choice,
+                        classId = classId,
+                        classLevel = character.progression.levelIn(classId),
+                        sheet = character,
+                        language = AppLocale.language,
+                        pack = activePack,
+                    ),
+                )
+            }
+        }
+
+    /** Applica più cambi consentiti dallo stesso riposo e recupera le risorse una volta sola. */
+    fun restAndReplaceProgressionChoices(
+        period: RecoveryPeriod,
+        replacements: Map<String, String>,
+    ): Boolean = if (!characterRulesetAvailable) {
+        reportMissingCharacterRuleset()
+        false
+    } else runCatching {
+        val choices = restReplaceableChoices(period).associateBy { it.choice.id }
+        val commands = replacements.map { (choiceId, newOptionId) ->
+            val acquired = requireNotNull(choices[choiceId]) { "Scelta non modificabile: $choiceId." }
+            val oldOptionId = acquired.selectedOptions.singleOrNull()?.id
+                ?: error("La scelta $choiceId non contiene un'opzione univoca.")
+            require(acquired.replacementOptions.any { it.id == newOptionId }) {
+                "Opzione non disponibile per ${acquired.choice.title}."
+            }
+            RestChoiceReplacement(acquired.classId, choiceId, oldOptionId, newOptionId)
+        }
+        guidedCharacters.restAndReplaceSelectedOptions(character, period, commands)
+    }.fold(
+        onSuccess = { updated ->
+            character = guidedCharacters.withRefreshedEffects(updated, abilityCatalog)
+            say(
+                if (period == RecoveryPeriod.LONG_REST) {
+                    LocalizedText { it.sheet.longRestResourcesRecovered }
+                } else {
+                    LocalizedText { it.sheet.shortRestResourcesRecovered }
+                },
+            )
+            true
+        },
+        onFailure = { failure ->
+            say(
+                LocalizedText {
+                    localizedSheetError(failure.message.orEmpty(), it.language)
+                },
+            )
+            false
+        },
+    )
+
     /** Forme attualmente apprese tramite le scelte di Forma selvatica. */
     fun knownWildShapeForms(): List<SrdBeastForm> =
         character.progression.selectedFeatureIds.mapNotNull { id ->
@@ -908,31 +985,6 @@ class SheetViewModel(
                 false
             },
         )
-
-    private fun CharacterSheet.recoveredAfter(period: RecoveryPeriod): CharacterSheet {
-        val restored = progression.resourcePools.map { it.recoveredAfter(period) }
-        val casting = spellcasting
-        return copy(
-            progression = progression.copy(resourcePools = restored),
-            spellcasting = casting?.copy(
-                slots = if (period == RecoveryPeriod.LONG_REST) {
-                    casting.slots.map { it.copy(spent = 0) }
-                } else {
-                    casting.slots
-                },
-                pactSlots = casting.pactSlots?.let {
-                    if (
-                        period == RecoveryPeriod.SHORT_REST ||
-                        period == RecoveryPeriod.LONG_REST
-                    ) {
-                        it.copy(spent = 0)
-                    } else {
-                        it
-                    }
-                },
-            ),
-        )
-    }
 
     fun progressionRequirements(
         classId: CharacterClassId,
@@ -1046,6 +1098,14 @@ class SheetViewModel(
      * stesse regole sui talenti validate dalla progressione guidata.
      */
     fun characterTraitIsCompatible(ability: CatalogAbility): Boolean {
+        val activeOptionIds = buildSet {
+            character.progression.selections.forEach { addAll(it.optionIds) }
+            character.progression.subclasses.forEach { add(it.subclassId) }
+            addAll(character.progression.selectedFeatureIds)
+        }
+        if (ability.requiredOptionId != null && ability.requiredOptionId !in activeOptionIds) {
+            return false
+        }
         if (
             ability.classEligibility.isNotEmpty() &&
             ability.classEligibility.none { eligibility ->

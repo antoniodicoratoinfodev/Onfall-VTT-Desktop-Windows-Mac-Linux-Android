@@ -665,7 +665,11 @@ class SrdEnglishPackTest {
                     language = language,
                 )
                 selected[choice.id] = overrides[choice.id]
-                    ?: options.take(choice.count).map { it.id }
+                    ?: if (choice.minimumCount == 0) {
+                        emptyList()
+                    } else {
+                        options.take(choice.count).map { it.id }
+                    }
             }
         }
         return service.requirements(

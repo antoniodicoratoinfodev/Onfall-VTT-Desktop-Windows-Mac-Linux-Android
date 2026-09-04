@@ -366,7 +366,11 @@ class SrdRulesetCharacterAdapterTest {
                 )
                 selected[choice.id] = when (choice.kind) {
                     ChoiceKind.BACKGROUND -> listOf("srd521-it:background:soldato")
-                    else -> options.take(choice.count).map { it.id }
+                    else -> if (choice.minimumCount == 0) {
+                        emptyList()
+                    } else {
+                        options.take(choice.count).map { it.id }
+                    }
                 }
             }
         }

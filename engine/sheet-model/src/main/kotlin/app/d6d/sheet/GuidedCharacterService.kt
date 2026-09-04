@@ -6,10 +6,13 @@ import app.d6d.domain.combat.DamageType
 import app.d6d.rules.character.Ability
 import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.CharacterProgressionEngine
+import app.d6d.rules.character.ChoiceDefinition
 import app.d6d.rules.character.ChoiceKind
+import app.d6d.rules.character.ChoiceReplacementWindow
 import app.d6d.rules.character.ClassDefinition
 import app.d6d.rules.character.LevelUpRequest
 import app.d6d.rules.character.ProgressionIssue
+import app.d6d.rules.character.RecoveryPeriod
 import app.d6d.rules.character.RuleEffect
 import app.d6d.rules.character.RuleElementKind
 import app.d6d.rules.character.RulesContentPack
@@ -20,6 +23,13 @@ import app.d6d.rules.character.WeaponProperty
 import app.d6d.rules.character.WeaponReach
 import app.d6d.sheet.i18n.distanceUnit
 import app.d6d.sheet.i18n.distanceValue
+
+data class RestChoiceReplacement(
+    val classId: CharacterClassId,
+    val choiceId: String,
+    val oldOptionId: String,
+    val newOptionId: String,
+)
 
 /**
  * Applica una creazione/avanzamento validato alla scheda senza duplicare le
@@ -612,6 +622,7 @@ class GuidedCharacterService(
         oldOptionId: String,
         newOptionId: String,
         allowedOptionIds: Set<String>,
+        choiceId: String? = null,
     ): CharacterSheet {
         require(sheet.progression.configured) {
             say("La progressione guidata non è configurata.", "Guided progression isn't configured.")
@@ -638,7 +649,9 @@ class GuidedCharacterService(
             )
         }
 
-        val containingSelections = sheet.progression.selections.count { oldOptionId in it.optionIds }
+        val containingSelections = sheet.progression.selections.count { selection ->
+            oldOptionId in selection.optionIds && (choiceId == null || selection.choiceId == choiceId)
+        }
         require(containingSelections == 1) {
             say(
                 "La scelta da sostituire non è rappresentata in modo univoco nella progressione.",
@@ -647,7 +660,7 @@ class GuidedCharacterService(
         }
         val updatedProgression = sheet.progression.copy(
             selections = sheet.progression.selections.map { selection ->
-                if (oldOptionId in selection.optionIds) {
+                if (oldOptionId in selection.optionIds && (choiceId == null || selection.choiceId == choiceId)) {
                     selection.copy(
                         optionIds = selection.optionIds.map { id ->
                             if (id == oldOptionId) newOptionId else id
@@ -660,16 +673,106 @@ class GuidedCharacterService(
             selectedFeatureIds = sheet.progression.selectedFeatureIds.map { id ->
                 if (id == oldOptionId) newOptionId else id
             },
+            knownCantripIds = sheet.progression.knownCantripIds.map { id ->
+                if (id == oldOptionId) newOptionId else id
+            }.distinct(),
+            preparedSpellIds = sheet.progression.preparedSpellIds.map { id ->
+                if (id == oldOptionId) newOptionId else id
+            }.distinct(),
+            alwaysPreparedSpellIds = sheet.progression.alwaysPreparedSpellIds.map { id ->
+                if (id == oldOptionId) newOptionId else id
+            }.distinct(),
+            spellbookSpellIds = sheet.progression.spellbookSpellIds.map { id ->
+                if (id == oldOptionId) newOptionId else id
+            }.distinct(),
         )
+        val refreshedProgression = progressionEngine.refreshDerivedState(
+            updatedProgression,
+            pack.stats.associate { it.id to it.defaultScore } + sheet.abilityScores,
+        )
+        val fiendResistance = refreshedProgression.selections
+            .firstOrNull { it.choiceId.endsWith(":resilienza-immonda") }
+            ?.optionIds
+            ?.singleOrNull()
+            ?.substringAfterLast(':')
+            ?.toDamageTypeOrNull()
         return sheet.copy(
-            progression = updatedProgression,
+            progression = refreshedProgression,
             abilityIds = sheet.abilityIds.map { id ->
                 if (id == oldOptionId) newOptionId else id
             }.distinct(),
             excludedTraitIds = sheet.excludedTraitIds.map { id ->
                 if (id == oldOptionId) newOptionId else id
             }.toSet(),
+            fiendishResilienceDamageType = fiendResistance,
+            spellcasting = deriveSpellcasting(sheet.spellcasting, refreshedProgression),
         )
+    }
+
+    /** Scelte già acquisite che il riposo indicato permette di modificare. */
+    fun replaceableChoicesAfterRest(
+        sheet: CharacterSheet,
+        period: RecoveryPeriod,
+    ): List<Pair<CharacterClassId, ChoiceDefinition>> {
+        if (!sheet.progression.configured) return emptyList()
+        val selectedChoiceIds = sheet.progression.selections.mapTo(mutableSetOf()) { it.choiceId }
+        val activeOptionIds = buildSet {
+            sheet.progression.selections.forEach { addAll(it.optionIds) }
+            sheet.progression.subclasses.forEach { add(it.subclassId) }
+            addAll(sheet.progression.selectedFeatureIds)
+        }
+        return sheet.progression.classLevels.flatMap { classLevel ->
+            pack.classDefinition(classLevel.classId)
+                .levels
+                .take(classLevel.level)
+                .flatMap { it.choices }
+                .filter { it.id in selectedChoiceIds }
+                .filter { it.requiredOptionId == null || it.requiredOptionId in activeOptionIds }
+                .filter { choice -> choice.replacementWindow.allows(period) }
+                .map { classLevel.classId to it }
+        }
+    }
+
+    /** Sostituisce tutte le scelte indicate e completa un solo riposo. */
+    fun restAndReplaceSelectedOptions(
+        sheet: CharacterSheet,
+        period: RecoveryPeriod,
+        replacements: List<RestChoiceReplacement>,
+    ): CharacterSheet {
+        require(replacements.isNotEmpty()) {
+            say("Seleziona almeno una sostituzione.", "Select at least one replacement.")
+        }
+        require(replacements.map { it.choiceId }.distinct().size == replacements.size) {
+            say(
+                "Ogni scelta può essere modificata una sola volta nello stesso riposo.",
+                "Each choice can be changed only once during the same rest.",
+            )
+        }
+        val replaceableByKey = replaceableChoicesAfterRest(sheet, period)
+            .associateBy { (classId, choice) -> classId to choice.id }
+        val updated = replacements.fold(sheet) { current, replacement ->
+            val choice = replaceableByKey[replacement.classId to replacement.choiceId]?.second
+                ?: error(
+                    say(
+                        "Questa scelta non può essere cambiata con il riposo indicato.",
+                        "This choice can't be changed with the specified rest.",
+                    ),
+                )
+            require(replacement.newOptionId in choice.optionIds) {
+                say(
+                    "La nuova opzione non appartiene alla scelta.",
+                    "The new option doesn't belong to the choice.",
+                )
+            }
+            replaceSelectedOption(
+                sheet = current,
+                oldOptionId = replacement.oldOptionId,
+                newOptionId = replacement.newOptionId,
+                allowedOptionIds = choice.optionIds.toSet(),
+                choiceId = replacement.choiceId,
+            )
+        }
+        return updated.recoveredAfter(period)
     }
 
     private fun deriveSpellcasting(
@@ -887,6 +990,15 @@ private fun String.toDamageTypeOrNull(): DamageType? = when (this) {
     "tagliente" -> DamageType.SLASHING
     "tuono" -> DamageType.THUNDER
     else -> null
+}
+
+private fun ChoiceReplacementWindow.allows(period: RecoveryPeriod): Boolean = when (this) {
+    ChoiceReplacementWindow.SHORT_OR_LONG_REST ->
+        period == RecoveryPeriod.SHORT_REST || period == RecoveryPeriod.LONG_REST
+    ChoiceReplacementWindow.LONG_REST -> period == RecoveryPeriod.LONG_REST
+    ChoiceReplacementWindow.NEVER,
+    ChoiceReplacementWindow.CLASS_LEVEL_UP,
+    -> false
 }
 
 private fun appendDistinctText(existing: String, addition: String): String =

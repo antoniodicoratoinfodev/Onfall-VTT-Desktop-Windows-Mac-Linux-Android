@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,35 +36,49 @@ class DiceRenderPreviewTest {
 
     @Test
     fun `genera la tavola di controllo visivo dei solidi`() = runComposeUiTest {
-        val sides = listOf(4, 6, 8, 10, 12, 20)
+        val sides = listOf(4, 6, 8, 10, 12, 20, 100)
         setContent {
             AppTheme {
-                Row(
+                Column(
                     Modifier
                         .testTag("dice-preview")
-                        .width(1_200.dp)
-                        .height(250.dp)
+                        .width(900.dp)
+                        .height(410.dp)
                         .background(Palette.Abyss)
-                        .padding(20.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically,
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.SpaceEvenly,
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    sides.forEachIndexed { index, dieSides ->
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
-                                PolyhedralDie(
-                                    sides = dieSides,
-                                    faceLabels = (1..dieSides).map(Int::toString),
-                                    targetFaceIndex = dieSides - 1,
-                                    progress = 1f,
-                                    phaseOffset = index,
-                                    reducedEffects = false,
-                                    palette = skinPalette(DiceSkinId.DRAGONFORGE),
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                    Row(
+                        Modifier.fillMaxWidth().height(190.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        sides.forEachIndexed { index, dieSides ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(Modifier.size(105.dp), contentAlignment = Alignment.Center) {
+                                    PolyhedralDie(
+                                        sides = dieSides,
+                                        faceLabels = (1..dieSides).map(Int::toString),
+                                        targetFaceIndex = dieSides - 1,
+                                        progress = 1f,
+                                        phaseOffset = index,
+                                        reducedEffects = false,
+                                        palette = skinPalette(DiceSkinId.DRAGONFORGE),
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+                                Text("d$dieSides = $dieSides", color = Color.White)
                             }
-                            Text("d$dieSides = $dieSides", color = Color.White)
                         }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().height(190.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ChoicePreview("Vantaggio · 7 / 18 → 18", keepFirst = false, animationId = 101)
+                        ChoicePreview("Svantaggio · 7 / 18 → 7", keepFirst = true, animationId = 102)
                     }
                 }
             }
@@ -71,7 +87,9 @@ class DiceRenderPreviewTest {
         waitForIdle()
         val bitmap = onNodeWithTag("dice-preview").captureToImage()
         val pixels = bitmap.toPixelMap()
-        val output = BufferedImage(bitmap.width, bitmap.height, BufferedImage.TYPE_INT_ARGB)
+        // La tavola ha gia' un fondale opaco: eliminare l'alfa evita che alcuni
+        // visualizzatori interpretino i pixel Compose premoltiplicati come trasparenti.
+        val output = BufferedImage(bitmap.width, bitmap.height, BufferedImage.TYPE_INT_RGB)
         for (y in 0 until bitmap.height) {
             for (x in 0 until bitmap.width) {
                 val color = pixels[x, y]
@@ -79,5 +97,31 @@ class DiceRenderPreviewTest {
             }
         }
         ImageIO.write(output, "png", File("/private/tmp/onfall-dice-preview.png"))
+    }
+}
+
+@Composable
+private fun ChoicePreview(label: String, keepFirst: Boolean, animationId: Long) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf(7, 18).forEachIndexed { index, value ->
+                CinematicDie(
+                    spec = CinematicDieSpec(
+                        sides = 20,
+                        faceLabels = (1..20).map(Int::toString),
+                        targetFaceIndex = value - 1,
+                        kept = (index == 0) == keepFirst,
+                        competing = true,
+                    ),
+                    skin = DiceSkinId.DRAGONFORGE,
+                    rollPhase = ForegroundRollPhase.RESULT,
+                    reducedEffects = false,
+                    animationId = animationId,
+                    phase = index,
+                    dieSize = 110.dp,
+                )
+            }
+        }
+        Text(label, color = Color.White)
     }
 }

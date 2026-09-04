@@ -414,9 +414,19 @@ enum class ChoiceKind(val italianLabel: String) {
     SPELL_LIST("Lista degli incantesimi"),
     STARTING_WEAPON("Arma iniziale"),
     FEATURE_TARGET("Bersaglio del privilegio"),
+    REPLACEMENT_TARGET("Opzione da sostituire"),
     ABILITY_SCORE_INCREASE("Aumento dei punteggi di caratteristica"),
     BACKGROUND("Background"),
     STARTING_EQUIPMENT("Equipaggiamento iniziale"),
+}
+
+/** Momento in cui una scelta acquisita può essere sostituita. */
+@Serializable
+enum class ChoiceReplacementWindow {
+    NEVER,
+    CLASS_LEVEL_UP,
+    SHORT_OR_LONG_REST,
+    LONG_REST,
 }
 
 @Serializable
@@ -592,18 +602,29 @@ data class ChoiceDefinition(
     val title: String,
     val kind: ChoiceKind,
     val count: Int,
+    /** Minimo selezionabile; coincide con [count] salvo le scelte facoltative. */
+    val minimumCount: Int = count,
     /** Opzioni finite. Vuoto quando la scelta usa [poolId]. */
     val optionIds: List<String> = emptyList(),
     /** Pool dinamico, per esempio `spells:bardo:cantrip` o `feats:general`. */
     val poolId: String? = null,
     val allowDuplicates: Boolean = false,
     val description: String = "",
+    /** Opzione o sottoclasse che deve essere attiva perché questa scelta compaia. */
+    val requiredOptionId: String? = null,
+    /** Quando una delle opzioni già scelte può essere sostituita. */
+    val replacementWindow: ChoiceReplacementWindow = ChoiceReplacementWindow.NEVER,
+    /** Scelta acquisita che questo controllo sta sostituendo. */
+    val replacesChoiceId: String? = null,
 ) {
     init {
         require(id.isNotBlank())
         require(title.isNotBlank())
         require(count >= 0)
+        require(minimumCount in 0..count)
         require(optionIds.isNotEmpty() || !poolId.isNullOrBlank() || count == 0)
+        require(requiredOptionId == null || requiredOptionId.isNotBlank())
+        require(replacesChoiceId == null || replacesChoiceId.isNotBlank())
     }
 }
 
@@ -848,6 +869,8 @@ data class ClassDefinition(
     val multiclassWeaponTraining: String = "",
     val multiclassArmorTraining: ArmorTrainingGrant = ArmorTrainingGrant(),
     val subclassIds: List<String>,
+    /** Livello della classe al quale viene effettuata la scelta della sottoclasse. */
+    val subclassLevel: Int = 3,
     val spellcastingAbility: Ability? = null,
     val spellcastingKind: SpellcastingKind = SpellcastingKind.NONE,
     val levels: List<ClassLevelDefinition>,
@@ -862,6 +885,10 @@ data class ClassDefinition(
         require(fixedHitPointsPerLevel >= 1)
         require(levels.isNotEmpty())
         require(levels.map { it.level } == (1..levels.size).toList())
+        require(subclassLevel >= 1)
+        require(subclassIds.isEmpty() || subclassLevel <= levels.size)
+        require(subclassIds.all { it.isNotBlank() })
+        require(subclassIds.distinct().size == subclassIds.size)
         require(spellcastingKind == SpellcastingKind.NONE || spellcastingAbility != null)
     }
 
@@ -900,6 +927,8 @@ data class RuleElementDefinition(
     val kind: RuleElementKind,
     val description: String,
     val classEligibility: List<ClassEligibility> = emptyList(),
+    /** Opzione o sottoclasse necessaria perché il privilegio sia attivo. */
+    val requiredOptionId: String? = null,
     val spell: SpellDetails? = null,
     val prerequisite: String = "",
     val sourcePage: Int = 0,
@@ -922,6 +951,7 @@ data class RuleElementDefinition(
         require(description.isNotBlank())
         require(sourcePage >= 0)
         require(resourceCost >= 0)
+        require(requiredOptionId == null || requiredOptionId.isNotBlank())
         require(grantedSpellIds.all { it.isNotBlank() })
         require((kind == RuleElementKind.CANTRIP || kind == RuleElementKind.SPELL) == (spell != null))
         require(spell?.level != 0 || kind != RuleElementKind.SPELL)

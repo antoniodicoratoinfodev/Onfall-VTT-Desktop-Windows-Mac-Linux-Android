@@ -64,6 +64,9 @@ internal fun ProgressionOverview(
     }
 
     var showWildShapeReplacement by remember(sheet.id) { mutableStateOf(false) }
+    var replacementRest by remember(sheet.id) { mutableStateOf<RecoveryPeriod?>(null) }
+    val shortRestChoices = viewModel.restReplaceableChoices(RecoveryPeriod.SHORT_REST)
+    val longRestChoices = viewModel.restReplaceableChoices(RecoveryPeriod.LONG_REST)
 
     SheetBox(words.srdProgressionTitle, Modifier.fillMaxWidth()) {
         FlowRow(
@@ -184,6 +187,22 @@ internal fun ProgressionOverview(
                     dense = true,
                     onClick = { viewModel.recoverCharacterResources(RecoveryPeriod.LONG_REST) },
                 )
+                if (shortRestChoices.isNotEmpty()) {
+                    GameButton(
+                        language.pick("Riposo breve + modifica scelte", "Short rest + change choices"),
+                        accent = Palette.Gold,
+                        dense = true,
+                        onClick = { replacementRest = RecoveryPeriod.SHORT_REST },
+                    )
+                }
+                if (longRestChoices.isNotEmpty()) {
+                    GameButton(
+                        language.pick("Riposo lungo + modifica scelte", "Long rest + change choices"),
+                        accent = Palette.Gold,
+                        dense = true,
+                        onClick = { replacementRest = RecoveryPeriod.LONG_REST },
+                    )
+                }
                 if (
                     viewModel.knownWildShapeForms().isNotEmpty() &&
                     viewModel.wildShapeReplacementOptions().isNotEmpty()
@@ -209,6 +228,18 @@ internal fun ProgressionOverview(
                 }
             },
             onDismiss = { showWildShapeReplacement = false },
+        )
+    }
+    replacementRest?.let { period ->
+        RestChoiceReplacementDialog(
+            period = period,
+            choices = if (period == RecoveryPeriod.LONG_REST) longRestChoices else shortRestChoices,
+            onConfirm = { replacements ->
+                if (viewModel.restAndReplaceProgressionChoices(period, replacements)) {
+                    replacementRest = null
+                }
+            },
+            onDismiss = { replacementRest = null },
         )
     }
 }
@@ -246,6 +277,97 @@ private fun LargeResourceEditor(
 }
 
 private const val MAX_EDITABLE_RESOURCE_PIPS = 9
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RestChoiceReplacementDialog(
+    period: RecoveryPeriod,
+    choices: List<RestReplaceableChoice>,
+    onConfirm: (Map<String, String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val language = currentLanguage
+    var replacements by remember(period, choices) {
+        mutableStateOf<Map<String, String>>(emptyMap())
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Palette.Surface,
+        title = {
+            DialogTitle(
+                if (period == RecoveryPeriod.LONG_REST) {
+                    language.pick("Scelte del riposo lungo", "Long-rest choices")
+                } else {
+                    language.pick("Scelte del riposo breve", "Short-rest choices")
+                },
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    language.pick(
+                        "Puoi modificare una o più scelte consentite e poi completare un solo riposo.",
+                        "You can change one or more eligible choices, then finish a single rest.",
+                    ),
+                    color = Palette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                choices.forEach { acquired ->
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Eyebrow(acquired.choice.title.uppercase())
+                        Text(
+                            language.pick("Attuale: ", "Current: ") +
+                                acquired.selectedOptions.joinToString { it.label },
+                            color = Palette.Text,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            acquired.replacementOptions.forEach { option ->
+                                val selected = replacements[acquired.choice.id] == option.id
+                                GameButton(
+                                    option.label,
+                                    accent = if (selected) Palette.Heal else Palette.TextMuted,
+                                    selected = selected,
+                                    dense = true,
+                                    onClick = {
+                                        replacements = if (selected) {
+                                            replacements - acquired.choice.id
+                                        } else {
+                                            replacements + (acquired.choice.id to option.id)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        replacements[acquired.choice.id]
+                            ?.let { selectedId -> acquired.replacementOptions.firstOrNull { it.id == selectedId } }
+                            ?.description
+                            ?.takeIf(String::isNotBlank)
+                            ?.let { description ->
+                                Text(
+                                    description,
+                                    color = Palette.TextMuted,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            GameButton(
+                language.pick("Applica e completa il riposo", "Apply and finish rest"),
+                accent = Palette.Heal,
+                enabled = replacements.isNotEmpty(),
+                onClick = { onConfirm(replacements) },
+            )
+        },
+        dismissButton = { GameButton(strings.common.cancel, onClick = onDismiss) },
+    )
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

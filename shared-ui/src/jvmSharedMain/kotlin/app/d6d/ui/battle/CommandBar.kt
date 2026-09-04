@@ -730,8 +730,7 @@ fun CommandBar(
                 }
                 GameButton(
                     label = "◆ ${strings.dice.title}",
-                    accent = Palette.Gold,
-                    selected = viewModel.diceTrayOpen,
+                    accent = Palette.TextMuted,
                     dense = true,
                     onClick = viewModel::openDiceTray,
                 )

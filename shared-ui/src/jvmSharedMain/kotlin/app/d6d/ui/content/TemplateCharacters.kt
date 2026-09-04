@@ -167,7 +167,7 @@ internal object TemplateCharacters {
             // richieste vanno tolte, altrimenti l'avanzamento le rifiuta.
             chosen = LinkedHashMap(chosen.filterKeys { it in live })
             requirements.forEach { choice ->
-                if (chosen[choice.id]?.size == choice.count) return@forEach
+                if (chosen[choice.id].orEmpty().size in choice.minimumCount..choice.count) return@forEach
                 val options = SrdChoiceResolver.options(
                     choice,
                     plan.classId,
@@ -207,6 +207,7 @@ internal object TemplateCharacters {
         sheet: CharacterSheet,
         language: AppLanguage,
     ): List<String> {
+        if (choice.minimumCount == 0) return emptyList()
         if (choice.kind == ChoiceKind.BACKGROUND) {
             val id = plannedBackground(plan, language).id
             return options.firstOrNull { it.id == id }?.let { listOf(it.id) }.orEmpty()
@@ -223,7 +224,7 @@ internal object TemplateCharacters {
         val owned = ownedOptionIds(sheet)
         val taken = LinkedHashSet<String>()
         wanted.forEach { fragment ->
-            if (taken.size == choice.count) return@forEach
+            if (taken.size in choice.minimumCount..choice.count) return@forEach
             options
                 .filter { it.id.contains(fragment) && it.id.isWorthTakingAgain(owned) }
                 .forEach { option -> if (taken.size < choice.count) taken += option.id }

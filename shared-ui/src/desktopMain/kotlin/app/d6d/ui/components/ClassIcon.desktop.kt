@@ -23,19 +23,9 @@ internal actual fun decodeClassIcon(bytes: ByteArray, maximumSide: Int): ImageBi
     }
     val pixels = IntArray(width * height)
     reduced.getRGB(0, 0, width, height, pixels, 0, width)
-    pixels.indices.forEach { index -> pixels[index] = withoutPreviewGrid(pixels[index]) }
+    pixels.indices.forEach { index -> pixels[index] = withoutClassIconPreviewGrid(pixels[index]) }
     reduced.setRGB(0, 0, width, height, pixels, 0, width)
     return reduced.toComposeImageBitmap()
-}
-
-/** Le due tinte della scacchiera sono quasi bianche e perfettamente neutre. */
-private fun withoutPreviewGrid(argb: Int): Int {
-    val red = argb ushr 16 and 0xff
-    val green = argb ushr 8 and 0xff
-    val blue = argb and 0xff
-    val lightest = maxOf(red, green, blue)
-    val darkest = minOf(red, green, blue)
-    return if (darkest >= 242 && lightest - darkest <= 5) argb and 0x00ffffff else argb
 }
 
 private inline fun <T : java.awt.Graphics2D, R> T.use(block: (T) -> R): R =

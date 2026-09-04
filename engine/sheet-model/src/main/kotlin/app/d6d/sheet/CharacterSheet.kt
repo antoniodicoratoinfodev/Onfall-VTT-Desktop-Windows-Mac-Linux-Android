@@ -17,11 +17,13 @@ import app.d6d.domain.combat.DamageType
 import app.d6d.domain.combat.ResolutionMethod
 import app.d6d.domain.combat.SaveAbility
 import app.d6d.rules.character.CharacterProgression
+import app.d6d.rules.character.CharacterClassId
 import app.d6d.rules.character.CharacterSkillDefinition
 import app.d6d.rules.character.CharacterStatDefinition
 import app.d6d.rules.character.EffectCondition
 import app.d6d.rules.character.EffectTarget
 import app.d6d.rules.character.ExperienceProgression
+import app.d6d.rules.character.RecoveryPeriod
 import app.d6d.rules.character.RuleEffect
 import app.d6d.rules.model.RuleFormula
 import kotlinx.serialization.Serializable
@@ -1061,6 +1063,33 @@ data class CharacterSheet(
             }
             .filterNot { it.id() in weaponIds }
 
+        val selectedProgressionOptionIds = progression.selections
+            .flatMapTo(mutableSetOf()) { it.optionIds }
+        val circleOfLandWardActive =
+            progression.levelIn(CharacterClassId.DRUID) >= 10 &&
+                progression.subclassFor(CharacterClassId.DRUID)
+                    ?.endsWith(":circolo-della-terra") == true
+        val subclassChoiceResistances = buildSet {
+            if (circleOfLandWardActive) {
+                selectedProgressionOptionIds
+                    .firstOrNull { it.contains(":feature:druido:terra-") }
+                    ?.toCircleOfLandResistanceOrNull()
+                    ?.let(::add)
+            }
+            if (
+                progression.levelIn(CharacterClassId.SORCERER) >= 6 &&
+                progression.subclassFor(CharacterClassId.SORCERER)
+                    ?.endsWith(":stregoneria-draconica") == true
+            ) {
+                selectedProgressionOptionIds
+                    .firstOrNull { it.contains(":feature:stregone:affinita-") }
+                    ?.substringAfterLast(':')
+                    ?.removePrefix("affinita-")
+                    ?.toSrdDamageTypeOrNull()
+                    ?.let(::add)
+            }
+        }
+
         return ActorDefinition(
             id,
             "1.0.0",
@@ -1074,10 +1103,10 @@ data class CharacterSheet(
             initiativeModifier,
             initiativeScore,
             saveBonus(Ability.CONSTITUTION),
-            damageResistances + listOfNotNull(fiendishResilienceDamageType),
+            damageResistances + subclassChoiceResistances + listOfNotNull(fiendishResilienceDamageType),
             emptySet<DamageType>(),
             emptySet<DamageType>(),
-            emptySet<ConditionType>(),
+            if (circleOfLandWardActive) setOf(ConditionType.POISONED) else emptySet(),
             combatAbilities + catalogAbilities,
             savingThrowBonusMap(::saveBonus),
             spellSaveDc ?: 0,
@@ -1107,6 +1136,53 @@ data class CharacterSheet(
         const val MELEE_REACH_FEET = 5
         val STRENGTH_OR_DEXTERITY = setOf(Ability.STRENGTH, Ability.DEXTERITY)
     }
+}
+
+/** Recupera in modo uniforme risorse di classe e slot associati a un riposo. */
+fun CharacterSheet.recoveredAfter(period: RecoveryPeriod): CharacterSheet {
+    val restored = progression.resourcePools.map { it.recoveredAfter(period) }
+    val casting = spellcasting
+    return copy(
+        progression = progression.copy(resourcePools = restored),
+        spellcasting = casting?.copy(
+            slots = if (period == RecoveryPeriod.LONG_REST) {
+                casting.slots.map { it.copy(spent = 0) }
+            } else {
+                casting.slots
+            },
+            pactSlots = casting.pactSlots?.let {
+                if (period == RecoveryPeriod.SHORT_REST || period == RecoveryPeriod.LONG_REST) {
+                    it.copy(spent = 0)
+                } else {
+                    it
+                }
+            },
+        ),
+    )
+}
+
+private fun String.toSrdDamageTypeOrNull(): DamageType? = when (this) {
+    "acido" -> DamageType.ACID
+    "contundente" -> DamageType.BLUDGEONING
+    "freddo" -> DamageType.COLD
+    "fuoco" -> DamageType.FIRE
+    "fulmine" -> DamageType.LIGHTNING
+    "necrotico" -> DamageType.NECROTIC
+    "perforante" -> DamageType.PIERCING
+    "veleno" -> DamageType.POISON
+    "psichico" -> DamageType.PSYCHIC
+    "radioso" -> DamageType.RADIANT
+    "tagliente" -> DamageType.SLASHING
+    "tuono" -> DamageType.THUNDER
+    else -> null
+}
+
+private fun String.toCircleOfLandResistanceOrNull(): DamageType? = when {
+    endsWith(":terra-arida") -> DamageType.FIRE
+    endsWith(":terra-polare") -> DamageType.COLD
+    endsWith(":terra-temperata") -> DamageType.LIGHTNING
+    endsWith(":terra-tropicale") -> DamageType.POISON
+    else -> null
 }
 
 /** Nome italiano dei tipi di danno, usato anche dalla scheda. */

@@ -116,7 +116,7 @@ class SrdGuidedProgressionMatrixTest {
             val unresolved = requirements
                 .filter { choice ->
                     !selected.containsKey(choice.id) ||
-                        selected[choice.id].orEmpty().size != choice.count
+                        selected[choice.id].orEmpty().size !in choice.minimumCount..choice.count
                 }
                 .sortedWith(
                     compareBy<ChoiceDefinition>(
@@ -146,6 +146,7 @@ class SrdGuidedProgressionMatrixTest {
                 )
 
                 val chosen = when {
+                    choice.minimumCount == 0 -> emptyList()
                     isInitialOriginFeat(choice) -> {
                         val skilled = options.firstOrNull {
                             it.id == "srd521-it:feat:origin:abile"
@@ -205,11 +206,11 @@ class SrdGuidedProgressionMatrixTest {
                     }
                     else -> options.take(choice.count).map { it.id }
                 }
-                assertEquals(
-                    choice.count,
-                    chosen.distinct().size,
+                assertTrue(
+                    chosen.distinct().size in choice.minimumCount..choice.count,
                     "${classId.italianLabel} $classLevel: «${choice.title}» " +
-                        "non produce ${choice.count} scelte distinte.",
+                        "produce ${chosen.distinct().size} scelte, attese " +
+                        "${choice.minimumCount}..${choice.count}.",
                 )
                 selected[choice.id] = chosen
             }
@@ -219,7 +220,7 @@ class SrdGuidedProgressionMatrixTest {
         val unresolved = service.requirements(sheet, classId, provisional)
             .filter {
                 !selected.containsKey(it.id) ||
-                    selected[it.id].orEmpty().size != it.count
+                    selected[it.id].orEmpty().size !in it.minimumCount..it.count
             }
         throw AssertionError(
             "${classId.italianLabel} $classLevel: risoluzione non stabilizzata dopo " +

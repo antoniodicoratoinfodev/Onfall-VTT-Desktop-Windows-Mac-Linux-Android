@@ -46,6 +46,24 @@ private object ClassIconCache {
 /** Decodifica, riduce e rende trasparente la scacchiera chiara dell'anteprima. */
 internal expect fun decodeClassIcon(bytes: ByteArray, maximumSide: Int): ImageBitmap?
 
+/**
+ * Rimuove le due tinte quasi bianche della scacchiera impressa nei PNG sorgente.
+ *
+ * Alcune risorse, in particolare quella del mago, usano per i quadrati grigi
+ * valori attorno a 239 anziche' 242: la vecchia soglia cancellava soltanto la
+ * meta' bianca e lasciava quindi un riquadro a scacchi visibile nella scheda.
+ * La bassa escursione fra i canali evita di confondere i bagliori colorati del
+ * simbolo con lo sfondo neutro.
+ */
+internal fun withoutClassIconPreviewGrid(argb: Int): Int {
+    val red = argb ushr 16 and 0xff
+    val green = argb ushr 8 and 0xff
+    val blue = argb and 0xff
+    val lightest = maxOf(red, green, blue)
+    val darkest = minOf(red, green, blue)
+    return if (darkest >= 232 && lightest - darkest <= 8) argb and 0x00ffffff else argb
+}
+
 /** Simbolo della classe, con nome accessibile nella lingua corrente. */
 @Composable
 fun ClassIcon(

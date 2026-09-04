@@ -108,6 +108,32 @@ object SrdRulesetCharacterAdapter {
             definition
         }.sortedWith(compareBy<ClassDefinition> { it.id.ordinal }.thenBy { it.id.value })
 
+        val selectableOptionIds = buildSet {
+            addAll(elementsById.keys)
+            classes.forEach { definition ->
+                addAll(definition.subclassIds)
+                definition.levels.forEach { level ->
+                    level.choices.forEach { addAll(it.optionIds) }
+                }
+            }
+        }
+        elements.forEach { element ->
+            element.requiredOptionId?.let { requiredOptionId ->
+                require(requiredOptionId in selectableOptionIds) {
+                    "${element.id}.requiredOptionId references missing option $requiredOptionId"
+                }
+            }
+        }
+        classes.forEach { definition ->
+            definition.levels.flatMap { it.choices }.forEach { choice ->
+                choice.requiredOptionId?.let { requiredOptionId ->
+                    require(requiredOptionId in selectableOptionIds) {
+                        "${choice.id}.requiredOptionId references missing option $requiredOptionId"
+                    }
+                }
+            }
+        }
+
         val statIds = stats.mapTo(mutableSetOf()) { it.id }
         classes.forEach { definition ->
             val referenced = definition.primaryAbilities + definition.savingThrowProficiencies +
@@ -379,6 +405,9 @@ object SrdRulesetCharacterAdapter {
                         ClassEligibility(CharacterClassId.of(rawId), level)
                     }
                     ?: baseElement?.classEligibility.orEmpty(),
+                requiredOptionId = attributes["requiredOptionId"]
+                    ?.takeIf(String::isNotBlank)
+                    ?: baseElement?.requiredOptionId,
                 spell = spell,
                 prerequisite = attributes["prerequisite"] ?: baseElement?.prerequisite.orEmpty(),
                 sourcePage = entity.sourcePage(),
@@ -445,13 +474,53 @@ object SrdRulesetCharacterAdapter {
             base?.maximumLevel ?: 20,
             minimum = 1,
         )
+        val subclassIds = attributes["subclassIds"]?.splitCsv() ?: base?.subclassIds.orEmpty()
+        val subclassLevel = attributes.int(
+            "subclassLevel",
+            entity,
+            base?.subclassLevel ?: 3,
+            minimum = 1,
+        )
+        require(subclassIds.isEmpty() || subclassLevel <= maximumLevel) {
+            "${entity.id()}.subclassLevel exceeds maximumLevel $maximumLevel"
+        }
+        val inheritedSubclassChoice = base
+            ?.levels
+            ?.asSequence()
+            ?.flatMap { it.choices.asSequence() }
+            ?.firstOrNull { it.kind == ChoiceKind.SUBCLASS }
         val featureIdsByLevel = attributes["levelFeatureIds"]
             ?.parseLevelFeatures(entity, maximumLevel)
         val levels = (1..maximumLevel).map { level ->
             val inherited = base?.levels?.getOrNull(level - 1) ?: ClassLevelDefinition(level)
+            val hadSubclassChoice = inherited.choices.any { it.kind == ChoiceKind.SUBCLASS }
+            val choices = inherited.choices.mapNotNullTo(mutableListOf()) { choice ->
+                if (choice.kind != ChoiceKind.SUBCLASS) {
+                    choice
+                } else if (level == subclassLevel && subclassIds.isNotEmpty()) {
+                    choice.copy(optionIds = subclassIds)
+                } else {
+                    null
+                }
+            }
+            if (level == subclassLevel && subclassIds.isNotEmpty() && !hadSubclassChoice) {
+                choices += inheritedSubclassChoice?.copy(optionIds = subclassIds)
+                    ?: ChoiceDefinition(
+                        id = "${id.value}:choice:$level:subclass",
+                        title = if (language == AppLanguage.ITALIAN) {
+                            "Scegli la sottoclasse"
+                        } else {
+                            "Choose the subclass"
+                        },
+                        kind = ChoiceKind.SUBCLASS,
+                        count = 1,
+                        optionIds = subclassIds,
+                    )
+            }
             inherited.copy(
                 level = level,
                 featureIds = featureIdsByLevel?.get(level) ?: inherited.featureIds,
+                choices = choices,
                 effects = (
                     inherited.effects +
                         modifiers.filter { it.minimumLevel == level }.map { it.effect }
@@ -534,7 +603,8 @@ object SrdRulesetCharacterAdapter {
                 "multiclassArmorTraining",
                 base?.multiclassArmorTraining ?: ArmorTrainingGrant(),
             ),
-            subclassIds = attributes["subclassIds"]?.splitCsv() ?: base?.subclassIds.orEmpty(),
+            subclassIds = subclassIds,
+            subclassLevel = subclassLevel,
             spellcastingAbility = spellcastingAbility,
             spellcastingKind = spellcastingKind,
             levels = levels,

@@ -160,6 +160,13 @@ private fun ClassFeatureRecord.toRuleElement(
             id.endsWith(":feature:druido:custode") -> SrdWords.of(language).martialWeapons
         else -> ""
     }
+    val requiredSubclassId = if (ruleKind == RuleElementKind.SUBCLASS_FEATURE) {
+        checkNotNull(classDefinition.subclassIds.singleOrNull()) {
+            "Il privilegio di sottoclasse $id richiede una sottoclasse univoca per ${classDefinition.name}."
+        }
+    } else {
+        null
+    }
     val grantedSpellNames = when {
         id.endsWith(":feature:druido:compagno-selvatico") -> listOf("Trova famiglio")
         id.endsWith(":feature:warlock:patto-della-catena") -> listOf("Trova famiglio")
@@ -182,6 +189,7 @@ private fun ClassFeatureRecord.toRuleElement(
         kind = ruleKind,
         description = description,
         classEligibility = listOf(ClassEligibility(classId, effectiveMinimumLevel.coerceIn(1, 20))),
+        requiredOptionId = requiredSubclassId,
         prerequisite = effectivePrerequisite,
         sourcePage = page,
         activation = if (id.endsWith(":feature:guerriero:azione-impetuosa")) "" else activation.orEmpty(),

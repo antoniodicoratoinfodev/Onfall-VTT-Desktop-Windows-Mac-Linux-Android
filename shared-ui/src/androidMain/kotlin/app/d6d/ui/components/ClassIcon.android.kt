@@ -18,16 +18,7 @@ internal actual fun decodeClassIcon(bytes: ByteArray, maximumSide: Int): ImageBi
     if (reduced !== source) source.recycle()
     val pixels = IntArray(width * height)
     reduced.getPixels(pixels, 0, width, 0, 0, width, height)
-    pixels.indices.forEach { index -> pixels[index] = withoutPreviewGrid(pixels[index]) }
+    pixels.indices.forEach { index -> pixels[index] = withoutClassIconPreviewGrid(pixels[index]) }
     reduced.setPixels(pixels, 0, width, 0, 0, width, height)
     return reduced.asImageBitmap()
-}
-
-private fun withoutPreviewGrid(argb: Int): Int {
-    val red = argb ushr 16 and 0xff
-    val green = argb ushr 8 and 0xff
-    val blue = argb and 0xff
-    val lightest = maxOf(red, green, blue)
-    val darkest = minOf(red, green, blue)
-    return if (darkest >= 242 && lightest - darkest <= 5) argb and 0x00ffffff else argb
 }

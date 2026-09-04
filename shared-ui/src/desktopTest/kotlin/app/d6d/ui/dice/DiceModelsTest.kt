@@ -49,6 +49,22 @@ class DiceModelsTest {
     }
 
     @Test
+    fun `in parita vantaggio e svantaggio evidenziano un solo dado`() {
+        listOf(D20Mode.ADVANTAGE, D20Mode.DISADVANTAGE).forEach { mode ->
+            val roll = PresentedDiceRoll(
+                purpose = DiceRollPurpose.FREE,
+                sides = 20,
+                values = listOf(12, 12),
+                total = 12,
+                mode = mode,
+                selectedValue = 12,
+            )
+
+            assertEquals(listOf(true, false), roll.values.indices.map(roll::keepsDieAt), mode.name)
+        }
+    }
+
+    @Test
     fun `un evento di danno ricava le facce dalla formula`() {
         val event = CombatEvent(
             2,

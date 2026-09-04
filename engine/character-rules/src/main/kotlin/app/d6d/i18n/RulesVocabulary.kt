@@ -157,6 +157,7 @@ val ChoiceKind.englishLabel: String
         ChoiceKind.SPELL_LIST -> "Spell list"
         ChoiceKind.STARTING_WEAPON -> "Starting weapon"
         ChoiceKind.FEATURE_TARGET -> "Feature target"
+        ChoiceKind.REPLACEMENT_TARGET -> "Option to replace"
         ChoiceKind.ABILITY_SCORE_INCREASE -> "Ability score increase"
         ChoiceKind.BACKGROUND -> "Background"
         ChoiceKind.STARTING_EQUIPMENT -> "Starting equipment"

@@ -99,6 +99,17 @@ data class PresentedDiceRoll(
         }
 }
 
+/**
+ * Dice effettivamente conservato dopo una scelta con vantaggio o svantaggio.
+ * In caso di parita' viene scelto deterministicamente il primo, come fa il motore.
+ */
+internal fun PresentedDiceRoll.keepsDieAt(index: Int): Boolean {
+    if (!kept || index !in values.indices) return false
+    if (mode == D20Mode.NORMAL || selectedValue == null) return true
+    val selectedIndex = values.indexOfFirst { it == selectedValue }
+    return selectedIndex < 0 || index == selectedIndex
+}
+
 /** Stato transitorio di un'azione che non ha ancora toccato la sessione viva. */
 data class PendingLinkedRoll(
     val id: Long,

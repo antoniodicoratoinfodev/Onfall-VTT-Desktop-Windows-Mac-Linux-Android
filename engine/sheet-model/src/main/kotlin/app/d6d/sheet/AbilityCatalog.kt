@@ -82,6 +82,8 @@ data class CatalogAbility(
     /** Metadati del contenuto: vuoti per le capacità private create dall'utente. */
     val category: RuleElementKind = RuleElementKind.CUSTOM,
     val classEligibility: List<ClassEligibility> = emptyList(),
+    /** Opzione o sottoclasse che deve essere attiva per rendere proponibile la voce. */
+    val requiredOptionId: String? = null,
     val sourcePackId: String? = null,
     val sourcePackVersion: String = "1.0.0",
     val sourcePage: Int = 0,

@@ -303,7 +303,11 @@ class SrdLimitedResourcesRegressionTest {
                     provisionalSelections = selected.toSelections(),
                 ).map { it.id }
                 val forced = forcedOptionIds.filter { it in options }
-                selected[choice.id] = (forced + options).distinct().take(choice.count)
+                selected[choice.id] = if (choice.minimumCount == 0 && forced.isEmpty()) {
+                    emptyList()
+                } else {
+                    (forced + options).distinct().take(choice.count)
+                }
             }
         }
         val requirements = service.requirements(sheet, classId, selected.toSelections())

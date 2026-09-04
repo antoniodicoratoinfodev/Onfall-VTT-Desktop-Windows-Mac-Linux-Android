@@ -66,6 +66,7 @@ fun RuleElementDefinition.toCatalogAbility(manifest: ContentPackManifest): Catal
         rulesText = description.reflowRulesText(),
         category = kind,
         classEligibility = classEligibility,
+        requiredOptionId = requiredOptionId,
         sourcePackId = manifest.id,
         sourcePackVersion = manifest.version,
         sourcePage = sourcePage,

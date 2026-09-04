@@ -447,7 +447,11 @@ class GuidedCharacterServiceTest {
                             else -> "srd521-it:background:soldato"
                         },
                     )
-                    else -> options.take(choice.count).map { it.id }
+                    else -> if (choice.minimumCount == 0) {
+                        emptyList()
+                    } else {
+                        options.take(choice.count).map { it.id }
+                    }
                 }
                 selected[choice.id] = chosen
             }

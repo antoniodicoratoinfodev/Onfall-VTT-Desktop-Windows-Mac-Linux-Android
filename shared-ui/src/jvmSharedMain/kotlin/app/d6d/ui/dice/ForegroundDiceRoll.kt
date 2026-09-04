@@ -9,6 +9,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -70,7 +71,7 @@ private const val REDUCED_RESULT_HOLD_MILLIS = 2_200L
 private const val EXIT_MILLIS = 320
 private const val MAX_CINEMATIC_DICE = 3
 
-private enum class ForegroundRollPhase {
+internal enum class ForegroundRollPhase {
     READY,
     ROLLING,
     RESULT,
@@ -151,37 +152,58 @@ internal fun ForegroundDiceRollHost(
     }
 }
 
-private data class CinematicDieSpec(
+internal data class CinematicDieSpec(
     val sides: Int,
     val faceLabels: List<String>,
     val targetFaceIndex: Int,
     val kept: Boolean = true,
+    val competing: Boolean = false,
 )
 
+internal data class CinematicDiceSelection(
+    val primary: PresentedDiceRoll,
+    val dice: List<CinematicDieSpec>,
+    val remaining: Int,
+)
+
+/**
+ * Traduce i due modi con cui il motore rappresenta vantaggio e svantaggio:
+ *
+ * - un Linked d20 contiene due valori nello stesso [PresentedDiceRoll];
+ * - un Unlinked contiene due pool alternativi, uno tenuto e uno scartato.
+ *
+ * In entrambi i casi il primo piano deve animare tutte e due le alternative prima
+ * di evidenziare quella scelta dal motore.
+ */
+internal fun cinematicDiceSelection(result: DiceTrayResult): CinematicDiceSelection {
+    val primary = result.rolls.firstOrNull { it.kept } ?: result.rolls.first()
+    val alternativePools = result.linkMode == DiceLinkMode.UNLINKED &&
+        primary.mode != D20Mode.NORMAL &&
+        result.rolls.size == 2 &&
+        result.rolls.all { roll ->
+            roll.mode == primary.mode &&
+                roll.sides == primary.sides &&
+                roll.purpose == primary.purpose &&
+                roll.values.size == primary.values.size
+        }
+    val sourceRolls = if (alternativePools) result.rolls else listOf(primary)
+    val allDice = sourceRolls.flatMap(::cinematicDice)
+    return CinematicDiceSelection(
+        primary = primary,
+        dice = allDice.take(MAX_CINEMATIC_DICE),
+        remaining = (allDice.size - MAX_CINEMATIC_DICE).coerceAtLeast(0),
+    )
+}
+
 private fun cinematicDice(roll: PresentedDiceRoll): List<CinematicDieSpec> {
-    if (roll.sides == 100) {
-        val value = roll.values.first()
-        val normalized = if (value == 100) 0 else value
-        return listOf(
-            CinematicDieSpec(
-                sides = 10,
-                faceLabels = (0..9).map { (it * 10).toString().padStart(2, '0') },
-                targetFaceIndex = normalized / 10,
-            ),
-            CinematicDieSpec(
-                sides = 10,
-                faceLabels = (0..9).map(Int::toString),
-                targetFaceIndex = normalized % 10,
-            ),
-        )
-    }
-    return roll.values.take(MAX_CINEMATIC_DICE).map { value ->
-        val selected = roll.selectedValue == null || roll.mode == D20Mode.NORMAL || value == roll.selectedValue
+    val competing = roll.mode != D20Mode.NORMAL
+    return roll.values.take(MAX_CINEMATIC_DICE).mapIndexed { index, value ->
         CinematicDieSpec(
             sides = roll.sides,
             faceLabels = (1..roll.sides).map(Int::toString),
             targetFaceIndex = resultFaceIndex(roll.sides, value),
-            kept = selected && roll.kept,
+            kept = roll.keepsDieAt(index),
+            competing = competing,
         )
     }
 }
@@ -199,8 +221,9 @@ private fun ForegroundDiceRoll(
     onDismiss: () -> Unit,
 ) {
     val words = strings.dice
-    val primary = result.rolls.firstOrNull { it.kept } ?: result.rolls.first()
-    val dice = cinematicDice(primary)
+    val selection = cinematicDiceSelection(result)
+    val primary = selection.primary
+    val dice = selection.dice
     val actor = primary.actorId.takeIf(String::isNotBlank)?.let(nameOf).orEmpty()
     val target = primary.targetId.takeIf(String::isNotBlank)?.let(nameOf).orEmpty()
 
@@ -285,10 +308,9 @@ private fun ForegroundDiceRoll(
                         modifier = Modifier.offset(horizontal.dp, vertical.dp),
                     )
                 }
-                val remaining = primary.values.size - MAX_CINEMATIC_DICE
-                if (remaining > 0) {
+                if (selection.remaining > 0) {
                     Chip(
-                        words.diceMore(remaining),
+                        words.diceMore(selection.remaining),
                         skinPalette(skin).number,
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )
@@ -381,7 +403,7 @@ private fun ForegroundLight(
 }
 
 @Composable
-private fun CinematicDie(
+internal fun CinematicDie(
     spec: CinematicDieSpec,
     skin: DiceSkinId,
     rollPhase: ForegroundRollPhase,
@@ -410,7 +432,30 @@ private fun CinematicDie(
     val skid = if (reducedEffects) 0f else sin(value * PI * 2f).toFloat() * (1f - value)
     val density = LocalDensity.current
     val dieSizePx = with(density) { dieSize.toPx() }
-    val visible = rollPhase != ForegroundRollPhase.RESULT || spec.kept
+    val resolvedChoice = rollPhase == ForegroundRollPhase.RESULT && spec.competing
+    val resolvedScale by animateFloatAsState(
+        targetValue = when {
+            !resolvedChoice -> 1f
+            spec.kept -> 1.08f
+            else -> 0.82f
+        },
+        animationSpec = tween(260, easing = LinearOutSlowInEasing),
+        label = "foregroundDieSelectionScale",
+    )
+    val resolvedAlpha by animateFloatAsState(
+        targetValue = if (resolvedChoice && !spec.kept) 0.30f else 1f,
+        animationSpec = tween(260),
+        label = "foregroundDieSelectionAlpha",
+    )
+    val resolvedOffset by animateFloatAsState(
+        targetValue = when {
+            !resolvedChoice -> 0f
+            spec.kept -> -0.08f
+            else -> 0.08f
+        },
+        animationSpec = tween(260, easing = LinearOutSlowInEasing),
+        label = "foregroundDieSelectionOffset",
+    )
 
     Box(modifier.size(dieSize), contentAlignment = Alignment.Center) {
         Canvas(
@@ -420,7 +465,7 @@ private fun CinematicDie(
                     translationY = dieSizePx * 0.34f
                     scaleX = 0.44f + 0.24f * (1f - jump)
                     scaleY = 0.13f + 0.05f * (1f - jump)
-                    alpha = 0.58f - jump * 0.28f
+                    alpha = (0.58f - jump * 0.28f) * resolvedAlpha
                 },
         ) {
             drawOval(Color.Black.copy(alpha = 0.88f), topLeft = Offset.Zero, size = size)
@@ -429,12 +474,12 @@ private fun CinematicDie(
         Box(
             Modifier
                 .size(dieSize)
-                .alpha(if (visible) 1f else 0.36f)
+                .alpha(resolvedAlpha)
                 .graphicsLayer {
                     translationX = skid * dieSizePx * 0.12f * if (phase % 2 == 0) 1f else -1f
-                    translationY = -jump * dieSizePx * 0.30f
-                    scaleX = 1f + bounce * 0.07f
-                    scaleY = 1f - bounce * 0.06f
+                    translationY = (-jump * 0.30f + resolvedOffset) * dieSizePx
+                    scaleX = (1f + bounce * 0.07f) * resolvedScale
+                    scaleY = (1f - bounce * 0.06f) * resolvedScale
                 },
             contentAlignment = Alignment.Center,
         ) {

@@ -44,7 +44,7 @@ class SrdRuleEffectsTest {
         repeat(4) {
             val provisional = chosen.map { ChoiceSelection(it.key, it.value) }
             service.requirements(current, classId, provisional).forEach { choice ->
-                if (chosen[choice.id]?.size == choice.count) return@forEach
+                if (chosen[choice.id].orEmpty().size in choice.minimumCount..choice.count) return@forEach
                 val options = SrdChoiceResolver.options(
                     choice,
                     classId,

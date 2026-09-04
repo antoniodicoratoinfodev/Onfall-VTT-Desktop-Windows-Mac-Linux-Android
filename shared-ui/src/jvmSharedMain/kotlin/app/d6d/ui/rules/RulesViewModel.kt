@@ -1069,6 +1069,7 @@ class RulesViewModel(dataDirectory: Path) {
             "spellcastingKind" to "NONE",
             "spellcastingAbility" to "",
             "subclassIds" to "",
+            "subclassLevel" to "3",
             "levelFeatureIds" to "",
             "progressionEntityRef" to "",
             "maximumLevel" to defaultMaximumLevel,
@@ -1111,8 +1112,14 @@ class RulesViewModel(dataDirectory: Path) {
                 "group" to "",
             )
         }
-        RuleKind.FEATURE, RuleKind.SUBCLASS -> linkedMapOf(
-            "elementKind" to if (kind == RuleKind.SUBCLASS) "SUBCLASS_FEATURE" else "CLASS_FEATURE",
+        RuleKind.FEATURE -> linkedMapOf(
+            "elementKind" to "CLASS_FEATURE",
+            "activation" to "Passiva",
+            "prerequisite" to "",
+            "requiredOptionId" to "",
+        )
+        RuleKind.SUBCLASS -> linkedMapOf(
+            "elementKind" to "CLASS_OPTION",
             "activation" to "Passiva",
             "prerequisite" to "",
         )

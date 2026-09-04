@@ -17,6 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,13 +89,26 @@ fun SrdProgressionDialog(
     val activeSelections = draft.selections
     val provisionalSelections = activeSelections.toChoiceSelections()
     val requirements = draft.requirements
+    val soleSubclassSelections = requirements
+        .filter { it.kind == ChoiceKind.SUBCLASS && it.optionIds.size == 1 }
+        .associate { it.id to it.optionIds }
+    LaunchedEffect(sheet.id, sheet.effectiveLevel, selectedClass, soleSubclassSelections) {
+        val missingDefaults = soleSubclassSelections.filter { (choiceId, _) ->
+            activeSelections[choiceId].orEmpty().isEmpty()
+        }
+        if (missingDefaults.isNotEmpty()) {
+            selected = stabilizeProgressionDraft(activeSelections + missingDefaults, ::requirementsFor).selections
+        }
+    }
     val firstLevel = !sheet.progression.configured
     val selectedBackground = activeSelections.values
         .asSequence()
         .flatten()
         .mapNotNull(viewModel::backgroundDefinition)
         .firstOrNull()
-    val complete = requirements.all { activeSelections[it.id].orEmpty().size == it.count }
+    val complete = requirements.all {
+        activeSelections[it.id].orEmpty().size in it.minimumCount..it.count
+    }
     val hasAbilityScoreIncrease = activeSelections.values.flatten().any {
         it.endsWith(":aumento-punteggi-caratteristica")
     }
@@ -408,7 +422,11 @@ private fun ChoicePicker(
             .background(Palette.Night, RoundedCornerShape(8.dp))
             .border(
                 1.dp,
-                if (selectedIds.size == choice.count) Palette.Heal.copy(alpha = 0.65f) else Palette.Line,
+                if (selectedIds.size in choice.minimumCount..choice.count) {
+                    Palette.Heal.copy(alpha = 0.65f)
+                } else {
+                    Palette.Line
+                },
                 RoundedCornerShape(8.dp),
             )
             .padding(8.dp),
@@ -417,7 +435,7 @@ private fun ChoicePicker(
         Text(choice.title, color = Palette.Text, style = MaterialTheme.typography.bodyMedium)
         Text(
             words.choicesMade(selectedIds.size, choice.count),
-            color = if (selectedIds.size == choice.count) Palette.Heal else Palette.Gold,
+            color = if (selectedIds.size in choice.minimumCount..choice.count) Palette.Heal else Palette.Gold,
             style = MaterialTheme.typography.labelSmall,
         )
         if (options.size > 18) {

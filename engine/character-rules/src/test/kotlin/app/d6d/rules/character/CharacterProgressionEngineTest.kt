@@ -53,6 +53,26 @@ class CharacterProgressionEngineTest {
     }
 
     @Test
+    fun `una scelta salvata prima delle sostituzioni usa default retrocompatibili`() {
+        val decoded = Json.decodeFromString<ChoiceDefinition>(
+            """
+            {
+              "id": "test:legacy-choice",
+              "title": "Scelta legacy",
+              "kind": "CLASS_OPTION",
+              "count": 2,
+              "optionIds": ["test:a", "test:b"]
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(2, decoded.minimumCount)
+        assertEquals(null, decoded.requiredOptionId)
+        assertEquals(ChoiceReplacementWindow.NEVER, decoded.replacementWindow)
+        assertEquals(null, decoded.replacesChoiceId)
+    }
+
+    @Test
     fun `il riposo breve recupera solo la quantita prevista dalla risorsa`() {
         val partial = ResourcePoolState(
             resourceId = "test:partial",
@@ -233,6 +253,167 @@ class CharacterProgressionEngineTest {
         }
     }
 
+    @Test
+    fun `una richiesta non puo contenere due righe con lo stesso id scelta`() {
+        val validation = engine.validateLevelUp(
+            progression = CharacterProgression(),
+            experiencePoints = 0,
+            abilityScores = scores(strength = 15, intelligence = 13),
+            request = LevelUpRequest(
+                classId = CharacterClassId.FIGHTER,
+                hitPointIncrease = 10,
+                usedFixedHitPoints = true,
+                selections = listOf(
+                    ChoiceSelection("guerriero:skills", listOf("ATLETICA", "PERCEZIONE")),
+                    ChoiceSelection("guerriero:1:style", listOf("style:difesa")),
+                    ChoiceSelection("guerriero:1:style", listOf("style:duello")),
+                ),
+            ),
+        )
+
+        assertTrue(validation.issues.any { it.code == "DUPLICATE_CHOICE_ID" })
+    }
+
+    @Test
+    fun `la sottoclasse scelta abilita soltanto privilegi e scelte dipendenti`() {
+        val subclassA = "test:subclass:a"
+        val subclassB = "test:subclass:b"
+        val subclassChoice = ChoiceDefinition(
+            id = "test:choice:subclass",
+            title = "Sottoclasse",
+            kind = ChoiceKind.SUBCLASS,
+            count = 1,
+            optionIds = listOf(subclassA, subclassB),
+        )
+        val choiceA = ChoiceDefinition(
+            id = "test:choice:a",
+            title = "Scelta A",
+            kind = ChoiceKind.CLASS_OPTION,
+            count = 1,
+            optionIds = listOf("test:option:a"),
+            requiredOptionId = subclassA,
+        )
+        val choiceB = ChoiceDefinition(
+            id = "test:choice:b",
+            title = "Scelta B",
+            kind = ChoiceKind.CLASS_OPTION,
+            count = 1,
+            optionIds = listOf("test:option:b"),
+            requiredOptionId = subclassB,
+        )
+        val conditionalPack = minimalPack(
+            levels = listOf(
+                ClassLevelDefinition(1),
+                ClassLevelDefinition(2),
+                ClassLevelDefinition(
+                    level = 3,
+                    featureIds = listOf("test:feature:base", "test:feature:a", "test:feature:b"),
+                    choices = listOf(subclassChoice, choiceA, choiceB),
+                ),
+            ),
+            subclassIds = listOf(subclassA, subclassB),
+            elements = listOf(
+                testFeature("test:feature:base"),
+                testFeature("test:feature:a", requiredOptionId = subclassA),
+                testFeature("test:feature:b", requiredOptionId = subclassB),
+            ),
+        )
+        val conditionalEngine = CharacterProgressionEngine(conditionalPack)
+        val before = CharacterProgression(
+            classLevels = listOf(ClassLevelState(CharacterClassId.FIGHTER, 2)),
+        )
+
+        assertEquals(
+            listOf(subclassChoice.id),
+            conditionalEngine.requirementsFor(before, CharacterClassId.FIGHTER).map { it.id },
+        )
+        val provisionalSubclass = listOf(ChoiceSelection(subclassChoice.id, listOf(subclassB)))
+        assertEquals(
+            listOf(subclassChoice.id, choiceB.id),
+            conditionalEngine.requirementsFor(
+                before,
+                CharacterClassId.FIGHTER,
+                provisionalSubclass,
+            ).map { it.id },
+        )
+
+        val request = LevelUpRequest(
+            classId = CharacterClassId.FIGHTER,
+            hitPointIncrease = 6,
+            usedFixedHitPoints = true,
+            selections = provisionalSubclass + ChoiceSelection(choiceB.id, listOf("test:option:b")),
+        )
+        assertTrue(conditionalEngine.validateLevelUp(before, 900, scores(15, 10), request).valid)
+
+        val after = conditionalEngine.applyLevelUp(before, 900, scores(15, 10), request)
+        assertEquals(subclassB, after.subclassFor(CharacterClassId.FIGHTER))
+        assertTrue("test:feature:base" in after.selectedFeatureIds)
+        assertTrue("test:feature:b" in after.selectedFeatureIds)
+        assertTrue("test:option:b" in after.selectedFeatureIds)
+        assertFalse("test:feature:a" in after.selectedFeatureIds)
+        assertFalse("test:option:a" in after.selectedFeatureIds)
+    }
+
+    @Test
+    fun `al livello successivo una scelta sostituibile aggiorna la fonte senza salvare i controlli`() {
+        val oldCantrip = testSpell("test:spell:old", level = 0)
+        val newCantrip = testSpell("test:spell:new", level = 0)
+        val retainedSpell = testSpell("test:spell:retained", level = 1)
+        val acquiredChoice = ChoiceDefinition(
+            id = "test:choice:discovery",
+            title = "Scoperte magiche",
+            kind = ChoiceKind.MAGICAL_DISCOVERY,
+            count = 2,
+            optionIds = listOf(oldCantrip.id, newCantrip.id, retainedSpell.id),
+            replacementWindow = ChoiceReplacementWindow.CLASS_LEVEL_UP,
+        )
+        val replacementPack = minimalPack(
+            levels = listOf(
+                ClassLevelDefinition(1, choices = listOf(acquiredChoice)),
+                ClassLevelDefinition(2),
+            ),
+            elements = listOf(oldCantrip, newCantrip, retainedSpell),
+        )
+        val replacementEngine = CharacterProgressionEngine(replacementPack)
+        val before = CharacterProgression(
+            classLevels = listOf(ClassLevelState(CharacterClassId.FIGHTER, 1)),
+            selections = listOf(
+                ChoiceSelection(acquiredChoice.id, listOf(oldCantrip.id, retainedSpell.id)),
+            ),
+            knownCantripIds = listOf(oldCantrip.id),
+            alwaysPreparedSpellIds = listOf(retainedSpell.id),
+        )
+        val initialRequirements = replacementEngine.requirementsFor(before, CharacterClassId.FIGHTER)
+        val target = initialRequirements.single { it.kind == ChoiceKind.REPLACEMENT_TARGET }
+        assertEquals(0, target.minimumCount)
+        val provisionalTarget = ChoiceSelection(target.id, listOf(oldCantrip.id))
+        val replacementChoice = replacementEngine.requirementsFor(
+            before,
+            CharacterClassId.FIGHTER,
+            listOf(provisionalTarget),
+        ).single { it.replacesChoiceId == acquiredChoice.id && it.kind == ChoiceKind.MAGICAL_DISCOVERY }
+        val request = LevelUpRequest(
+            classId = CharacterClassId.FIGHTER,
+            hitPointIncrease = 6,
+            usedFixedHitPoints = true,
+            selections = listOf(
+                provisionalTarget,
+                ChoiceSelection(replacementChoice.id, listOf(newCantrip.id)),
+            ),
+        )
+
+        assertTrue(replacementEngine.validateLevelUp(before, 300, scores(15, 10), request).valid)
+        val after = replacementEngine.applyLevelUp(before, 300, scores(15, 10), request)
+
+        assertEquals(
+            listOf(newCantrip.id, retainedSpell.id),
+            after.selections.single { it.choiceId == acquiredChoice.id }.optionIds,
+        )
+        assertEquals(listOf(newCantrip.id), after.knownCantripIds)
+        assertEquals(listOf(retainedSpell.id), after.alwaysPreparedSpellIds)
+        assertTrue(after.selections.none { it.choiceId == target.id || it.choiceId == replacementChoice.id })
+    }
+
     private fun testClass(id: CharacterClassId): ClassDefinition {
         val name = id.italianLabel
         val isWizard = id == CharacterClassId.WIZARD
@@ -305,6 +486,63 @@ class CharacterProgressionEngineTest {
             },
         )
     }
+
+    private fun minimalPack(
+        levels: List<ClassLevelDefinition>,
+        subclassIds: List<String> = emptyList(),
+        elements: List<RuleElementDefinition> = emptyList(),
+    ): RulesContentPack = RulesContentPack(
+        manifest = pack.manifest.copy(id = "conditional-test-pack"),
+        classes = listOf(
+            ClassDefinition(
+                id = CharacterClassId.FIGHTER,
+                name = "Guerriero di prova",
+                primaryAbilities = setOf(Ability.STRENGTH),
+                hitDieSides = 10,
+                fixedHitPointsPerLevel = 6,
+                savingThrowProficiencies = setOf(Ability.STRENGTH, Ability.CONSTITUTION),
+                skillChoice = ChoiceDefinition(
+                    id = "test:skills",
+                    title = "Competenze",
+                    kind = ChoiceKind.SKILL_PROFICIENCY,
+                    count = 0,
+                ),
+                weaponTraining = "Nessuna",
+                subclassIds = subclassIds,
+                subclassLevel = 3,
+                levels = levels,
+            ),
+        ),
+        elements = elements,
+        maximumCharacterLevel = levels.size,
+        experienceThresholds = ExperienceProgression.thresholds.take(levels.size),
+    )
+
+    private fun testFeature(
+        id: String,
+        requiredOptionId: String? = null,
+    ): RuleElementDefinition = RuleElementDefinition(
+        id = id,
+        name = id,
+        kind = RuleElementKind.CLASS_FEATURE,
+        description = "Privilegio di prova.",
+        requiredOptionId = requiredOptionId,
+    )
+
+    private fun testSpell(id: String, level: Int): RuleElementDefinition = RuleElementDefinition(
+        id = id,
+        name = id,
+        kind = if (level == 0) RuleElementKind.CANTRIP else RuleElementKind.SPELL,
+        description = "Incantesimo di prova.",
+        spell = SpellDetails(
+            level = level,
+            school = "Invocazione",
+            castingTime = "azione",
+            range = "18 metri",
+            components = "V",
+            duration = "istantanea",
+        ),
+    )
 
     private fun scores(
         strength: Int = 10,

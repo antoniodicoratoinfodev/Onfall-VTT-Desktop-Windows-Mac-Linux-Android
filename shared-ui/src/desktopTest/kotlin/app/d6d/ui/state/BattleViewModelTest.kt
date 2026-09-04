@@ -1789,10 +1789,25 @@ class BattleViewModelTest {
         assertEquals(DiceLinkMode.UNLINKED, result.linkMode)
         assertEquals(2, result.rolls.size)
         assertEquals(1, result.rolls.count { it.kept })
+        assertEquals(result.rolls.maxOf { it.total }, result.rolls.single { it.kept }.total)
         assertTrue(result.rolls.all { roll -> roll.values.size == 3 && roll.values.all { it in 1..100 } })
         assertEquals(stateBefore, model.state)
         assertEquals(eventsBefore, model.events)
         assertEquals(listOf(result), model.unlinkedDiceHistory)
+    }
+
+    @Test
+    fun `un tiro libero con svantaggio conserva il pool col totale piu basso`() {
+        val model = guaranteedHitViewModel()
+
+        model.rollUnlinkedDice(
+            DicePoolSpec(count = 1, sides = 20, mode = D20Mode.DISADVANTAGE),
+        )
+
+        val result = model.diceTrayResult!!
+        assertEquals(2, result.rolls.size)
+        assertEquals(1, result.rolls.count { it.kept })
+        assertEquals(result.rolls.minOf { it.total }, result.rolls.single { it.kept }.total)
     }
 
     @Test
